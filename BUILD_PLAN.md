@@ -779,3 +779,196 @@ honest measurement harness — is what makes the whole repo defensible.
 - Yale Insights "Wisdom of the Few — prediction markets driven by a small number of skilled
   traders."
 - Polymarket docs: Maker Rebates + Liquidity Rewards programs.
+
+---
+
+# PHASE 8 — Forecasting & calibration module (the "out-predict the market" deliverable)
+
+### Why
+Every edge so far is **structural** (arbitrage, law-of-one-price) or **behavioral**
+(longshot fade). This phase tests whether you can generate **your own calibrated
+probabilities that beat the market price** — the highest-ceiling, most interview-legible
+claim you can make. The deliverable is not P&L; it is a **Brier score / log loss / calibration
+curve / CLV** showing you out-forecast the market over a real sample. That number is more
+defensible in a first round than any return figure, because it can't be faked by a lucky run.
+
+Keep the same discipline as everything else: append-only ledger, optimistic-vs-confirmed
+fills, per-category scoring gate, dated pre-registration before data accumulates.
+
+### Core principle
+For every question you forecast, log a triple at decision time T:
+`(p_you, p_market, t)` → at settlement compute your score **and the market's score on the
+same question**, then compare. You only get to claim "out-predicting" if you beat the market's
+Brier on N≥100 settled questions with a bootstrap CI excluding zero.
+
+---
+
+## 8.1 — Market-selection screener (do this first; it's 80% of the edge)
+
+### Why
+You cannot out-predict deep, sharp-traded markets (election toplines, Fed). Edge lives in
+**neglected, low-liquidity, niche** markets. Build the screener before any model.
+
+### Files
+New `arb/forecast/screener.py`; CLI `arb forecast-screen`.
+
+### Steps
+1. For every open market, compute an **attention/efficiency score** from data you already
+   pull: `liquidity_usd`, recent quote/trade count, number of distinct price levels, spread.
+2. Rank markets by `efficiency = f(liquidity, activity, spread)`. **Target the bottom
+   tranche** (thin, low-activity, wide-spread) within categories where you have or can build
+   domain knowledge.
+3. Output a daily watchlist of "forecastable" markets (neglected + settle within horizon +
+   in a vertical you cover).
+
+### Config additions
+```yaml
+forecast_screener:
+  enabled: true
+  max_liquidity_usd: 5000        # ABOVE this = too efficient to out-predict, skip
+  min_days_to_settle: 1
+  max_days_to_settle: 30
+  target_categories: [weather, niche_sports]   # your chosen lane(s)
+```
+
+### Acceptance
+`arb forecast-screen` prints a ranked watchlist of neglected markets in your target vertical.
+
+---
+
+## 8.2 — Base-rate library (the outside view)
+
+### Why
+Most long-tail mispricing comes from people anchoring on narrative, not base rates. A
+maintained reference-class library is cheap and is where retail error concentrates.
+
+### Files
+New `data/base_rates.yaml` (human-curated, versioned in git); `arb/forecast/baserates.py`.
+
+### Steps
+1. For each question type in your vertical, record a reference class and its historical
+   frequency with source + date (e.g. "home underdog +7 in league X wins outright: 18% over
+   last 4 seasons, source, date").
+2. The forecaster starts from the base rate, then applies documented adjustments. Log both
+   `p_base` and `p_final` so you can later measure how much your adjustments helped or hurt
+   (a great diagnostic: are you adding signal or noise on top of base rates?).
+
+### Acceptance
+`base_rates.yaml` is populated for your vertical; forecasts record `p_base` and `p_final`.
+
+---
+
+## 8.3 — One niche model (depth beats breadth)
+
+### Why
+Profitable traders have a lane. Build the best probability model you can in **one** vertical.
+
+### Concrete starting points
+- **Weather (most accessible edge for a student):** public NWS/ECMWF **ensemble** forecasts
+  already output calibrated probabilities that often beat Kalshi weather prices. Ingest the
+  ensemble, map to the market's exact threshold/timestamp, output `p_you`. Verify the data
+  source and record a fixture first (hard rule #5).
+- **Niche sports:** Elo or Massey-type ratings + home/rest/injury adjustments, blended with
+  market-implied probability; focus on a **less-covered league** where the market is thin.
+- Blend rule: `p_you = w·p_model + (1−w)·p_market`, with `w` fit on historical calibration,
+  never hand-picked.
+
+### Files
+`arb/forecast/models/<vertical>.py` (one module per vertical), fixtures under `tests/fixtures/`.
+
+### Config additions
+```yaml
+forecast_model:
+  vertical: weather
+  blend_weight_model: 0.5        # fit from backtest, not guessed
+  data_source: ecmwf_ensemble    # verify endpoint + record fixture before coding
+```
+
+### Acceptance
+Given a fixture, the model emits a `Decimal` `p_you` for a specific market threshold; blend
+weight was fit, not assumed.
+
+---
+
+## 8.4 — Forecast ledger + proper scoring (the citable result)
+
+### Why
+This is the artifact. It turns "I'm good at predicting" into a measured number versus the
+market on identical questions.
+
+### Files
+New `arb/forecast/ledger.py`, `arb/forecast/scoring.py`; CLI `arb forecast-log`,
+`arb forecast-report`.
+
+### Steps
+1. **Log a forecast** as an append-only row: `p_you`, `p_base`, `p_market` (mid at T),
+   `executable_price` (best ask at T, for CLV), category, vertical, settle horizon.
+2. **At settlement**, outcome `y ∈ {0,1}`. Compute, per forecast, both for you and for the
+   market:
+   - **Brier** `= (p − y)^2` (lower is better).
+   - **Log loss** `= −[y·ln(p) + (1−y)·ln(1−p)]` (clip p to [1e-6, 1−1e-6]).
+3. **Headline metrics** (recomputed from the raw log, like the rest of the project):
+   - Your mean Brier vs market mean Brier; **Brier skill score** `= 1 − Brier_you/Brier_market`.
+   - Same for log loss.
+   - **Calibration curve:** bin forecasts by `p_you` (deciles); plot realized frequency vs
+     predicted; report calibration error (ECE).
+   - **CLV:** did `executable_price` at T beat the venue's closing mid? Mean CLV + CI.
+   - All with **bootstrap 95% CIs** once N≥30 (reuse your existing bootstrap method).
+4. **Combine-with-crowd betting rule:** only record a *paper bet* (flat-$1, `kind='FORECAST'`)
+   when `|p_you − p_market| ≥ edge_min` AND the market passed the 8.1 screener AND the
+   vertical's Phase-2 segment score isn't blocked. Otherwise log the forecast for scoring but
+   place no bet. (You can be a good forecaster on a question yet have no tradable edge — keep
+   the two measurements separate.)
+5. **Pre-register** (dated append to PREREGISTRATION.md, before data): "in vertical V, my
+   forecasts beat the market's Brier with a bootstrap 95% CI excluding 0 over N≥100 settled
+   questions; calibration error < target." Kill criterion: Brier skill ≤ 0 over N≥100.
+
+### Config additions
+```yaml
+forecast:
+  enabled: true
+  edge_min: 0.05                 # |p_you − p_market| needed to place a paper bet
+  min_n_for_claim: 100           # no "out-predict" claim below this
+  logloss_clip: 0.000001
+  calibration_bins: 10
+```
+
+### Schema/DDL
+```sql
+CREATE TABLE IF NOT EXISTS forecasts (
+  id INTEGER PRIMARY KEY, made_at TEXT, vertical TEXT, category TEXT, market TEXT,
+  p_base TEXT, p_you TEXT, p_market TEXT, executable_price TEXT,   -- Decimal strings
+  settle_by TEXT, settled_at TEXT, outcome INTEGER,
+  brier_you REAL, brier_market REAL, logloss_you REAL, logloss_market REAL,
+  clv REAL
+);  -- append-only; report recomputes all aggregates from these rows
+-- tradable forecasts also create a flat_bets row with kind='FORECAST' (flat-$1).
+```
+
+### Tests (exact)
+- Brier: `p=0.7, y=1` → `0.09`; `p=0.7, y=0` → `0.49`.
+- Log loss: `p=0.7, y=1` → `−ln(0.7)=0.356675`.
+- Brier skill: your Brier 0.18, market 0.20 → skill `= 1 − 0.18/0.20 = 0.10`.
+- Calibration: feed 100 forecasts at `p_you=0.6` that resolve YES 58% of the time → decile
+  bin 0.6 shows realized 0.58, calibration error 0.02.
+- A forecast with `|p_you − p_market| = 0.03 < edge_min` → scored but **no** `FORECAST` bet.
+
+### Acceptance
+`arb forecast-report` prints: your vs market mean Brier + skill score, log loss, a 10-bin
+calibration table, mean CLV, all with bootstrap CIs once N≥30. Below `min_n_for_claim` the
+report explicitly says "insufficient sample to claim out-performance." A pre-registration
+entry exists. When N≥100 and skill>0 with CI excluding 0, **this is your headline result.**
+
+---
+
+## 8.5 — How to present it (RESULTS.md addition)
+Add a "Forecasting" section to RESULTS.md with: the calibration plot, the Brier skill score
+vs market with CI, the sample size and vertical, and an honest statement of where you do and
+don't beat the market. A single well-calibrated curve that beats market Brier on 100+
+neglected-market questions is the strongest "I out-predict" evidence you can hand a recruiter
+— stronger than any return number, because it is hard to fake and easy to scrutinize.
+
+### Build order
+8.1 screener → 8.2 base rates → 8.3 one model → 8.4 ledger+scoring (the core) → 8.5 writeup.
+Do **not** chase a second vertical until the first shows a positive, pre-registered Brier
+skill score. One proven niche beats five unproven ones.

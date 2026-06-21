@@ -37,6 +37,8 @@ def build_parser() -> argparse.ArgumentParser:
     political.add_argument("--once", action="store_true", help="run a single pass and exit")
     hot = sub.add_parser("hot", help="per-bet watchers: re-quote each fresh arb's books every ~1s for its lifetime")
     hot.add_argument("--once", action="store_true", help="adopt current bets, watch to completion, exit")
+    negrisk = sub.add_parser("negrisk", help="intra-Polymarket negative-risk basket arbs (S1, no settlement risk)")
+    negrisk.add_argument("--once", action="store_true", help="run a single pass and exit")
     annotate = sub.add_parser("annotate", help="attach an immutable tag+reason to a bet (never edits the bet)")
     annotate.add_argument("bet_id", type=int)
     annotate.add_argument("tag", help="e.g. bug:in-play-pricing, settler-error, match-suspect")
@@ -68,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_political(args, config)
     if args.command == "hot":
         return run_hot(args, config)
+    if args.command == "negrisk":
+        return run_negrisk(args, config)
     if args.command == "annotate":
         from arb.experimental.annotations import annotate as annotate_bet
 
@@ -205,6 +209,25 @@ def run_hot(args: argparse.Namespace, config) -> int:
             print("hot: stop flag found, exiting cleanly.")
             return 0
         time.sleep(int(hcfg["poll_secs"]))
+
+
+def run_negrisk(args: argparse.Namespace, config) -> int:
+    from arb.experimental.negrisk_sweep import run_negrisk_pass
+
+    store = Store(config.database_path)
+    print("Negative-risk basket sweep: intra-Polymarket, single resolution, no cross-venue risk.")
+    while True:
+        try:
+            n_events, found = run_negrisk_pass(store, config)
+            print(f"{datetime.now(timezone.utc).isoformat()} negrisk: {n_events} events, {found} basket arbs.")
+        except (RuntimeError, requests.RequestException) as exc:
+            print(f"negrisk: pass failed, retrying: {exc}")
+        if args.once:
+            return 0
+        if stop_requested("negrisk"):
+            print("negrisk: stop flag found, exiting cleanly.")
+            return 0
+        time.sleep(180)
 
 
 def run_nonsports_suggest(config) -> int:

@@ -1,0 +1,37 @@
+{
+ "id": "351751",
+ "title": "Spain vs. Saudi Arabia",
+ "negRisk": true,
+ "negRiskMarketID": "0x7affbd36b3873d0851055372041e3fc1273b607dff59b62f99fa6feed5244200",
+ "enableNegRisk": true,
+ "markets": [
+  {
+   "question": "Will Spain win on 2026-06-21?",
+   "groupItemTitle": "Spain",
+   "outcomes": "[\"Yes\", \"No\"]",
+   "clobTokenIds": "[\"73510205866448375978164321647457824822309414197359016110940718743916953674850\", \"38686085996874030150277436308557693774277527751085400335092971054310974741556\"]",
+   "yes_best_ask": "0.89",
+   "yes_ask_depth": "125083.05",
+   "yes_best_bid": "0.88"
+  },
+  {
+   "question": "Will Spain vs. Saudi Arabia end in a draw?",
+   "groupItemTitle": "Draw (Spain vs. Saudi Arabia)",
+   "outcomes": "[\"Yes\", \"No\"]",
+   "clobTokenIds": "[\"82898292053233796019218455463083153847413990945759207495147091875359141826965\", \"35192471952906796616869100144761394124029479301770069438109014237036923934326\"]",
+   "yes_best_ask": "0.08",
+   "yes_ask_depth": "12159.37",
+   "yes_best_bid": "0.07"
+  },
+  {
+   "question": "Will Saudi Arabia win on 2026-06-21?",
+   "groupItemTitle": "Saudi Arabia",
+   "outcomes": "[\"Yes\", \"No\"]",
+   "clobTokenIds": "[\"34595222436901694034568466087145334098073564547697700427928775408006876228602\", \"39284493768138051556088866366373242298772844993029066793016338222505905309489\"]",
+   "yes_best_ask": "0.038",
+   "yes_ask_depth": "544.98",
+   "yes_best_bid": "0.037"
+  }
+ ],
+ "_note": "exhaustive+exclusive: 3-way soccer result (home/draw/away). negRisk=True per Gamma."
+}
