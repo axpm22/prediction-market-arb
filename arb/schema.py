@@ -140,5 +140,17 @@ MIGRATION_COLUMNS = {
         "fingerprint": "TEXT",
         "category": "TEXT NOT NULL DEFAULT 'sports'",
     },
+    "flat_bets": {
+        # Phase 1: NULL = clean; else 'suspect-edge' | 'thin-book' | 'one-sided'.
+        "quality_flag": "TEXT",
+        # Phase 3: parallel fractional-Kelly sizing (projection, never the headline).
+        "kelly_f_star": "TEXT",
+        "kelly_stake_usd": "TEXT",
+        "pnl_kelly_optimistic": "TEXT",
+        "pnl_kelly_confirmed": "TEXT",
+        # S1: negative-risk basket metadata.
+        "basket_n": "INTEGER",
+        "basket_sum": "TEXT",
+    },
 }
 

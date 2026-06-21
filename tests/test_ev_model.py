@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from arb.cli import detect_ev_from_consensus
+from arb.config import load_config
 from arb.models import Quote
 from arb.pricing import clv_points, edge_points, kelly_fraction, q6
 from arb.store import Store
@@ -42,14 +43,16 @@ def test_clv_points_sign() -> None:
 # ---- detection: floor, review, kelly/capturable notes ----
 
 def test_ev_flag_below_emin_recorded_but_tagged() -> None:
+    config = load_config()
     consensus = {(EVENT, "kansas city royals"): (Decimal("0.52"), datetime.now(timezone.utc))}
     [opp] = detect_ev_from_consensus([quote("0.50")], consensus, 8, set(),
-                                     e_min=Decimal("0.05"), kelly_fraction_mult=Decimal("0.25"))
+                                     e_min=Decimal("0.05"), config=config)
     # 0.52 - 0.50 = 2 points < 5pt floor: recorded, tagged below-e-min, and EV's killer.
     assert "below-e-min" in opp.notes
     assert "event-match-review" in opp.notes
     assert opp.status == "REVIEW"
-    assert any(n.startswith("kelly:") for n in opp.notes)
+    assert opp.kelly_f_star is not None      # Phase 3 projection attached
+    assert opp.quality_flag is None          # 0.50 ask, $500 depth, 2pt edge → clean
     assert any(n.startswith("capturable:") for n in opp.notes)
 
 

@@ -50,6 +50,9 @@ class AppConfig:
     consensus_max_age_hours: int
     ev_e_min: Decimal
     ev_kelly_fraction: Decimal
+    ev_edge_suspect_above: Decimal
+    ev_enforce_depth_floor: bool
+    ev_reject_one_sided: bool
     auto_fill: bool
     trusted_pairs: set[str]
     fuzzy_match_threshold: int
@@ -61,6 +64,15 @@ class AppConfig:
     odds_api_abort_below_credits: int
     parlay_enabled: bool
     parlay_divergence_threshold: Decimal
+    sizing_kelly_fraction: Decimal
+    sizing_max_fraction: Decimal
+    scoring: dict
+    negrisk_min_edge: Decimal
+    negrisk_require_exhaustive: bool
+    negrisk_max_outcomes: int
+    btc_window_match_secs: int
+    btc_max_window_minutes: int
+    btc_trusted: bool
     odds_api_key: str | None
     database_path: Path = Path("data/arb.sqlite")
 
@@ -112,6 +124,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     sx = raw.get("sx", {})
     _warn_stale_fees(raw, {"kalshi": kalshi, "polymarket": polymarket, "sx": sx})
     parlay = raw.get("parlay", {})
+    sizing = raw.get("sizing", {})
+    negrisk = raw.get("negrisk", {})
+    btc = raw.get("btc_arb", {})
     database_path = Path(raw.get("database_path", "data/arb.sqlite"))
     sx_fee = sx.get("fee_rate")
     return AppConfig(
@@ -142,6 +157,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         consensus_max_age_hours=int(raw["consensus_max_age_hours"]),
         ev_e_min=_decimal(ev.get("e_min", "0.05")),
         ev_kelly_fraction=_decimal(ev.get("kelly_fraction", "0.25")),
+        ev_edge_suspect_above=_decimal(ev.get("edge_suspect_above", "0.25")),
+        ev_enforce_depth_floor=bool(ev.get("enforce_depth_floor", True)),
+        ev_reject_one_sided=bool(ev.get("reject_one_sided_books", True)),
         auto_fill=bool(raw["auto_fill"]),
         trusted_pairs=set(raw["trusted_pairs"]),
         fuzzy_match_threshold=int(raw["fuzzy_match_threshold"]),
@@ -153,6 +171,15 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         odds_api_abort_below_credits=int(odds_api["abort_below_credits"]),
         parlay_enabled=bool(parlay["enabled"]),
         parlay_divergence_threshold=_decimal(parlay["divergence_threshold"]),
+        sizing_kelly_fraction=_decimal(sizing.get("kelly_fraction", "0.25")),
+        sizing_max_fraction=_decimal(sizing.get("max_kelly_fraction_of_bankroll", "0.05")),
+        scoring=dict(raw.get("scoring", {})),
+        negrisk_min_edge=_decimal(negrisk.get("min_edge", "0.005")),
+        negrisk_require_exhaustive=bool(negrisk.get("require_exhaustive_exclusive", True)),
+        negrisk_max_outcomes=int(negrisk.get("max_outcomes", 30)),
+        btc_window_match_secs=int(btc.get("window_match_secs", 5)),
+        btc_max_window_minutes=int(btc.get("max_window_minutes", 15)),
+        btc_trusted=bool(btc.get("trusted", False)),
         odds_api_key=os.environ.get("ODDS_API_KEY") or None,
         database_path=database_path,
     )

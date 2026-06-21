@@ -68,6 +68,11 @@ class Opportunity:
     status: OpportunityStatus
     notes: tuple[str, ...] = field(default_factory=tuple)
     fingerprint: str = ""
+    # Phase 1 quality: None = clean; else 'suspect-edge' | 'thin-book' | 'one-sided'.
+    quality_flag: str | None = None
+    # Phase 3 fractional-Kelly projection (never the headline stake).
+    kelly_f_star: Decimal | None = None
+    kelly_stake: Decimal | None = None
 
     def __post_init__(self) -> None:
         if self.fingerprint:

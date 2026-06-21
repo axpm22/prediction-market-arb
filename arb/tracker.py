@@ -117,8 +117,9 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
                               live, edge, stake_usd, legs_json, optimistic_cost, confirmed_cost,
-                              pnl_optimistic, pnl_confirmed, status, placed_at, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              pnl_optimistic, pnl_confirmed, status, placed_at, notes,
+                              quality_flag, kelly_f_star, kelly_stake_usd)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             current_opp.fingerprint,
@@ -139,6 +140,9 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
             status,
             datetime.now(timezone.utc).isoformat(),
             notes,
+            current_opp.quality_flag,
+            None if current_opp.kelly_f_star is None else str(current_opp.kelly_f_star),
+            None if current_opp.kelly_stake is None else str(current_opp.kelly_stake),
         ),
     )
 

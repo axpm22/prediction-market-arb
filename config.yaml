@@ -89,6 +89,9 @@ consensus_max_age_hours: 8
 ev:
   e_min: 0.05            # §3.2 edge floor in probability points (4–6pt); tune vs CLV
   kelly_fraction: 0.25   # §7.2 quarter-Kelly projection (p estimated, not known)
+  edge_suspect_above: 0.25   # Phase 1: EV edge above this = stale/thin-book, quarantined
+  enforce_depth_floor: true  # require depth >= min_executable_usd to be 'clean'
+  reject_one_sided_books: true
 scan_times: ["10:00", "15:00", "19:00"]
 daily_report_time: "23:59"
 settle_time: "09:30"
@@ -113,3 +116,27 @@ sx:
   confirmed_on: 2026-06-10
 odds_api: { region: us, warn_below_credits: 100, abort_below_credits: 50 }
 parlay: { enabled: false, divergence_threshold: 0.05 }
+# Phase 3 parallel Kelly sizing (projection only; flat-$1 stays the headline).
+sizing:
+  kelly_fraction: 0.25                  # quarter-Kelly
+  max_kelly_fraction_of_bankroll: 0.05  # hard per-bet cap regardless of f*
+# Phase 2 per-segment edge scorer (computed from settled clean bets only).
+scoring:
+  weights: { roi: 0.40, trend: 0.25, sample: 0.20, win_rate: 0.15 }
+  n_cap: 100             # sample-size component saturates here
+  score_min_n: 30        # below this -> INSUFFICIENT_DATA, no allocation
+  block_below: 30        # score < 30 -> segment hard-blocked
+  recent_window: 10      # bets in the recency-weighted trend term
+  tiers: { full: 80, high: 60, low: 40, minimal: 30 }
+# S1 intra-Polymarket negative-risk basket arb (single venue, no settlement mismatch).
+negrisk:
+  enabled: true
+  min_edge: 0.005                  # 0.5% after fees
+  require_exhaustive_exclusive: true
+  max_outcomes: 30
+# S3 / Phase 4 same-oracle BTC short-horizon cross-venue arb.
+btc_arb:
+  enabled: true
+  window_match_secs: 5             # exact window end-time match (never interpolate)
+  max_window_minutes: 15
+  trusted: false                   # REVIEW until both rulebooks confirm identical oracle

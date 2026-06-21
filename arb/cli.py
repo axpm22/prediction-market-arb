@@ -15,7 +15,9 @@ from .arbitrage import build_event, detect_divergences, detect_true_arbs, split_
 from .config import load_config
 from .models import Opportunity, Quote
 from .paper import fill_opportunity
-from .pricing import consensus_outcome_key, consensus_probabilities, edge_points, expected_value, kelly_fraction, q6
+from .pricing import consensus_outcome_key, consensus_probabilities, edge_points, expected_value, q6
+from .quality import classify_quality
+from .sizing import kelly_f_star, kelly_stake
 from .report import print_opportunities, print_positions, print_report
 from .settlement import settle_manual, settle_sports
 from .store import Store
@@ -145,7 +147,7 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
                 max_age_hours=config.consensus_max_age_hours,
                 trusted_pairs=config.trusted_pairs,
                 e_min=config.ev_e_min,
-                kelly_fraction_mult=config.ev_kelly_fraction,
+                config=config,
             )
         )
     opportunities, suspects = split_match_suspects(opportunities)
@@ -279,7 +281,7 @@ def detect_ev_from_consensus(
     max_age_hours: int,
     trusted_pairs: set[str],
     e_min: Decimal | None = None,
-    kelly_fraction_mult: Decimal | None = None,
+    config=None,
 ) -> list[Opportunity]:
     stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
     opportunities: list[Opportunity] = []
@@ -298,33 +300,38 @@ def detect_ev_from_consensus(
         status, notes = status_for_legs([quote], trusted_pairs)
         edge = edge_points(p_hat, quote.effective_cost)
         notes = (*notes, f"edge_pts:{edge}")
-        # EV_SPEC §3.2: edge must clear fees + estimate error + slippage. Below E_min it is
-        # recorded but tagged sub-threshold (noise in p), never advanced toward a bet.
         if e_min is not None and edge < e_min:
             notes = (*notes, "below-e-min")
         # EV_SPEC §4: EV's own killer — consensus event vs contract event may differ.
-        # Cross-source by nature, so every EV flag is REVIEW until a rulebook whitelist.
         status = "REVIEW"
         notes = (*notes, "event-match-review")
         if computed_at < stale_cutoff:
             notes = (*notes, "stale-consensus")
-        if kelly_fraction_mult is not None:
-            notes = (*notes, f"kelly:{kelly_fraction(p_hat, quote.effective_cost, kelly_fraction_mult)}")
         if quote.depth_usd is not None:
             notes = (*notes, f"capturable:{q6(quote.depth_usd * edge)}")
-        opportunities.append(
-            Opportunity(
-                kind="EV",
-                category="sports",
-                event=build_event(quote.event_key, [quote]),
-                legs=[quote],
-                edge=ev,
-                stakes={quote.outcome_label: Decimal("1.00")},
-                status=status,  # type: ignore[arg-type]
-                notes=notes,
-            )
+        opp = Opportunity(
+            kind="EV",
+            category="sports",
+            event=build_event(quote.event_key, [quote]),
+            legs=[quote],
+            edge=ev,
+            stakes={quote.outcome_label: Decimal("1.00")},
+            status=status,  # type: ignore[arg-type]
+            notes=notes,
         )
+        if config is not None:
+            opp = _annotate_quality_and_kelly(opp, p_hat, quote.effective_cost, config)
+        opportunities.append(opp)
     return opportunities
+
+
+def _annotate_quality_and_kelly(opp: Opportunity, p_hat: Decimal, effective_cost: Decimal, config) -> Opportunity:
+    """Attach Phase 1 quality flag and Phase 3 Kelly projection to an EV opportunity."""
+    quality = classify_quality(opp, config.min_executable_usd, config.ev_edge_suspect_above)
+    f_star = kelly_f_star(p_hat, effective_cost)
+    stake = kelly_stake(p_hat, effective_cost, config.sizing_kelly_fraction,
+                        config.bankroll_usd, config.sizing_max_fraction)
+    return replace(opp, quality_flag=quality, kelly_f_star=f_star, kelly_stake=stake)
 
 
 def apply_opportunity_filters(opportunities: list[Opportunity], config) -> tuple[list[Opportunity], list[Opportunity]]:
