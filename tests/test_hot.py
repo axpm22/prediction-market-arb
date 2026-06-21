@@ -5,7 +5,7 @@ from arb.config import load_config
 from arb.models import Event, Opportunity, Quote
 from arb.store import Store
 from arb.tracker import record_tracker_poll
-from arbnext.hot import run_hot_pass, unwatched_bets, watch_bet
+from arb.experimental.hot import run_hot_pass, unwatched_bets, watch_bet
 
 EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers:3"
 HCFG = {"poll_secs": 2, "check_interval_secs": 0.01, "watch_duration_secs": 1.0,

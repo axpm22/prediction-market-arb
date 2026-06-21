@@ -1,7 +1,7 @@
 """Political sweep loop: fetch open markets for cached series, detect intra-market arbs,
 persist every market scanned (research data) and every arb to the append-only ledger.
 
-Cross-venue political arbitrage stays manual-map-only (see arbnext/nonsports.py): the
+Cross-venue political arbitrage stays manual-map-only (see arb.experimental/nonsports.py): the
 settlement-wording risk is the whole danger. This sweep only does the risk-free
 intra-market play, so its flags are recorded trusted=1 (one rulebook, one market).
 """
@@ -17,8 +17,8 @@ import requests
 
 from arb.store import Store
 
-from arbnext.political.intramarket import IntraMarketArb, find_intramarket_arb
-from arbnext.political.series import load_series
+from arb.experimental.political.intramarket import IntraMarketArb, find_intramarket_arb
+from arb.experimental.political.series import load_series
 
 KALSHI_URL = "https://api.elections.kalshi.com/trade-api/v2"
 HEADERS = {"User-Agent": "arb-paper-scanner/0.1 (public read-only)"}

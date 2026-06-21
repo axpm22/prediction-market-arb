@@ -10,7 +10,7 @@ echo "================ ARBITRAGE MODEL STATUS  ($(date -u +%H:%M:%SZ)) =========
 
 # Health: exactly one of each process, no duplicates (duplicates = double-counted bets)
 echo "--- processes (each should appear once) ---"
-for p in "arb daemon" "arbnext focus" "arbnext verify" "arbnext hot" "arbnext political"; do
+for p in "arb daemon" "arb.experimental focus" "arb.experimental verify" "arb.experimental hot" "arb.experimental political"; do
   n=$(ps -Ao command | grep -- "$p" | grep -v grep | grep -v caffeinate | wc -l | tr -d ' ')
   flag=""; [ "$n" -gt 1 ] && flag="  <-- DUPLICATE, double-counting!"
   [ "$n" -eq 0 ] && flag="  <-- not running"
@@ -50,5 +50,5 @@ SELECT '  last scan credits remaining: ' || COALESCE((SELECT credits_remaining F
 
 echo ""
 echo "--- EV THESIS (CLV verdict) ---"
-$PY -m arbnext.ev.clv --min-depth 50 2>&1 | sed 's/^/  /'
+$PY -m arb.experimental.ev.clv --min-depth 50 2>&1 | sed 's/^/  /'
 echo "=============================================================================="

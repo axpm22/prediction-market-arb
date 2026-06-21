@@ -3,8 +3,8 @@ from decimal import Decimal
 from arb.config import load_config
 from arb.pricing import q6
 from arb.store import Store
-from arbnext.political.intramarket import find_intramarket_arb
-from arbnext.political.sweep import run_political_pass
+from arb.experimental.political.intramarket import find_intramarket_arb
+from arb.experimental.political.sweep import run_political_pass
 
 FEE = Decimal("0.07")
 
@@ -41,7 +41,7 @@ def test_sweep_persists_arbs_trusted_and_dedupes(tmp_path, monkeypatch) -> None:
     config = load_config()
     pcfg = {"watch_interval_secs": 180, "categories": ["Politics"]}
 
-    import arbnext.political.sweep as sweep
+    import arb.experimental.political.sweep as sweep
     monkeypatch.setattr(sweep, "load_series", lambda cats: [{"ticker": "KXFED", "category": "Politics"}])
     fetcher = lambda ticker: [market("KXFED-A", "0.45", "0.45"), market("KXFED-B", "0.55", "0.50")]
 

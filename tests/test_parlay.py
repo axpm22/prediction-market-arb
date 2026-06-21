@@ -2,8 +2,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from arb.models import Quote
-from arbnext.parlay import classify_parlay_ask, classify_parlay_bid, frechet_bounds, independence_fair
-from arbnext.timing import split_by_timing
+from arb.experimental.parlay import classify_parlay_ask, classify_parlay_bid, frechet_bounds, independence_fair
+from arb.experimental.timing import split_by_timing
 
 LEGS = [Decimal("0.60"), Decimal("0.55")]
 

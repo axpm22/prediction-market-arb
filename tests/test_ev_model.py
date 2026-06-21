@@ -5,7 +5,7 @@ from arb.cli import detect_ev_from_consensus
 from arb.models import Quote
 from arb.pricing import clv_points, edge_points, kelly_fraction, q6
 from arb.store import Store
-from arbnext.ev.clv import grade_clv, venue_close
+from arb.experimental.ev.clv import grade_clv, venue_close
 
 EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers:3"
 

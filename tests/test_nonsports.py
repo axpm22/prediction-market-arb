@@ -4,7 +4,7 @@ from pathlib import Path
 
 from arb.config import load_config
 from arb.models import Quote
-from arbnext.nonsports import detect_nonsports, load_map, suggest_candidates, write_candidates
+from arb.experimental.nonsports import detect_nonsports, load_map, suggest_candidates, write_candidates
 
 EVENT_KEY = "nonsports:fed-cut-2026-06"
 

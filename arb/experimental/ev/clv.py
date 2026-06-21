@@ -104,7 +104,7 @@ def _bootstrap_ci(values: list[float], resamples: int = 10000) -> tuple[float, f
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m arbnext.ev.clv")
+    parser = argparse.ArgumentParser(prog="python -m arb.experimental.ev.clv")
     parser.add_argument("--min-depth", type=float, default=50.0)
     args = parser.parse_args(argv)
     store = Store(load_config().database_path)

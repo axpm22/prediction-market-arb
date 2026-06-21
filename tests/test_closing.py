@@ -4,7 +4,7 @@ from decimal import Decimal
 from arb.config import load_config
 from arb.models import Quote
 from arb.store import Store
-from arbnext.closing import events_in_window, latest_quotes, record_closing_bets, unused_events
+from arb.experimental.closing import events_in_window, latest_quotes, record_closing_bets, unused_events
 
 EVENT_KEY = "baseball_mlb:2026-06-10:kansas city royals:texas rangers:3"
 NOW = datetime(2026, 6, 10, 23, 36, tzinfo=timezone.utc)
@@ -62,7 +62,7 @@ def test_one_bet_per_outcome_even_with_multiple_venues(tmp_path) -> None:
     closing_cfg = {"window_open_mins": 5, "window_close_mins": 3, "max_quote_age_secs": 360, "sports": ["baseball_mlb"]}
     schedule = {EVENT_KEY: ("baseball_mlb", START)}
 
-    import arbnext.closing as closing_module
+    import arb.experimental.closing as closing_module
     original = closing_module.OddsApiAdapter
 
     class FixtureAdapter(original):
@@ -97,7 +97,7 @@ def test_record_closing_bets_snapshots_once_and_records_ev(tmp_path) -> None:
         def __getattr__(self, name):
             return getattr(config, name)
 
-    import arbnext.closing as closing_module
+    import arb.experimental.closing as closing_module
     original = closing_module.OddsApiAdapter
 
     class FixtureAdapter(original):

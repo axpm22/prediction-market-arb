@@ -7,7 +7,7 @@ from arb.arbitrage import (
     has_unverifiable_leg,
 )
 from arb.models import Quote
-from arbnext.analysis.leadlag import _moves
+from arb.experimental.analysis.leadlag import _moves
 
 EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers:3"
 

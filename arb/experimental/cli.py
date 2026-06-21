@@ -11,7 +11,7 @@ from arb.config import load_config
 from arb.store import Store
 from arb.venues.oddsapi import OddsApiCreditsLow
 
-from arbnext.closing import record_closing_bets
+from arb.experimental.closing import record_closing_bets
 
 try:
     import yaml
@@ -22,7 +22,7 @@ CHECK_INTERVAL_SECS = 60  # schedule granularity; the window itself comes from c
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m arbnext")
+    parser = argparse.ArgumentParser(prog="python -m arb.experimental")
     sub = parser.add_subparsers(dest="command", required=True)
     closing = sub.add_parser("closing", help="closing-line EV recorder (one snapshot per event, minutes before start)")
     closing.add_argument("--once", action="store_true", help="run a single pass and exit")
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "hot":
         return run_hot(args, config)
     if args.command == "annotate":
-        from arbnext.annotations import annotate as annotate_bet
+        from arb.experimental.annotations import annotate as annotate_bet
 
         annotation_id = annotate_bet(Store(config.database_path), args.bet_id, args.tag, " ".join(args.reason))
         print(f"Annotation {annotation_id} added to bet {args.bet_id} [{args.tag}].")
@@ -100,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def run_nonsports(args: argparse.Namespace, config) -> int:
-    from arbnext.nonsports import run_nonsports_once
+    from arb.experimental.nonsports import run_nonsports_once
 
     ncfg = extras_config("nonsports")
     store = Store(config.database_path)
@@ -120,7 +120,7 @@ def run_nonsports(args: argparse.Namespace, config) -> int:
 
 
 def run_verify(args: argparse.Namespace, config) -> int:
-    from arbnext.verify import run_verify_once
+    from arb.experimental.verify import run_verify_once
 
     vcfg = extras_config("verify")
     store = Store(config.database_path)
@@ -141,7 +141,7 @@ def run_verify(args: argparse.Namespace, config) -> int:
 
 
 def run_focus(args: argparse.Namespace, config) -> int:
-    from arbnext.focus import run_focus_pass
+    from arb.experimental.focus import run_focus_pass
 
     fcfg = extras_config("focus")
     store = Store(config.database_path)
@@ -164,7 +164,7 @@ def run_focus(args: argparse.Namespace, config) -> int:
 
 
 def run_political(args: argparse.Namespace, config) -> int:
-    from arbnext.political.sweep import run_political_pass
+    from arb.experimental.political.sweep import run_political_pass
 
     pcfg = extras_config("political")
     store = Store(config.database_path)
@@ -184,7 +184,7 @@ def run_political(args: argparse.Namespace, config) -> int:
 
 
 def run_hot(args: argparse.Namespace, config) -> int:
-    from arbnext.hot import run_hot_pass
+    from arb.experimental.hot import run_hot_pass
 
     hcfg = extras_config("hot")
     store = Store(config.database_path)
@@ -208,7 +208,7 @@ def run_hot(args: argparse.Namespace, config) -> int:
 
 
 def run_nonsports_suggest(config) -> int:
-    from arbnext.nonsports import (
+    from arb.experimental.nonsports import (
         fetch_kalshi_series_titles,
         fetch_polymarket_titles,
         suggest_candidates,

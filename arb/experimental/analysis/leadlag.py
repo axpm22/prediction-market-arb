@@ -96,7 +96,7 @@ def lead_lag(store: Store, move_threshold: float = 0.01, max_lag_secs: float = 3
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m arbnext.analysis.leadlag")
+    parser = argparse.ArgumentParser(prog="python -m arb.experimental.analysis.leadlag")
     parser.add_argument("--move-threshold", type=float, default=0.01)
     parser.add_argument("--max-lag-secs", type=float, default=300.0)
     args = parser.parse_args(argv)

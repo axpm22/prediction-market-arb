@@ -4,7 +4,7 @@ from decimal import Decimal
 from arb.config import load_config
 from arb.models import Quote
 from arb.store import Store
-from arbnext.focus import build_bet_map, run_focus_pass
+from arb.experimental.focus import build_bet_map, run_focus_pass
 
 EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers:3"
 FCFG = {"rotation_pause_secs": 0, "map_max_age_mins": 30, "sports": ["baseball_mlb", "basketball_nba"]}
