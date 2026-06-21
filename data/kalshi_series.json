@@ -1,0 +1,51 @@
+{
+  "baseball_mlb": {
+    "winner": [
+      "KXMLBGAME"
+    ],
+    "totals": [
+      "KXMLBTOTAL"
+    ]
+  },
+  "basketball_nba": {
+    "winner": [
+      "KXNBAGAME"
+    ],
+    "totals": [
+      "KXNBATOTAL"
+    ]
+  },
+  "soccer": {
+    "winner": [
+      "KXEPLGAME",
+      "KXLALIGAGAME",
+      "KXSERIEAGAME",
+      "KXUCLGAME",
+      "KXWCGAME",
+      "KXINTLFRIENDLYGAME",
+      "KXUSLCUPGAME",
+      "KXLALIGA2GAME",
+      "KXBOLPDIVGAME"
+    ],
+    "totals": [
+      "KXEPLTOTAL",
+      "KXLALIGATOTAL",
+      "KXSERIEATOTAL",
+      "KXUCLTOTAL",
+      "KXWCTOTAL"
+    ]
+  },
+  "tennis": {
+    "winner": [
+      "KXATPMATCH",
+      "KXWTAMATCH"
+    ],
+    "totals": []
+  },
+  "mma": {
+    "winner": [
+      "KXUFCFIGHT"
+    ],
+    "totals": []
+  }
+}

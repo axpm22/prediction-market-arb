@@ -1,0 +1,2861 @@
+{
+ "generated_at": "2026-06-11T22:41:44.347026+00:00",
+ "series": [
+  {
+   "ticker": "KXTRUMPSLAUGHTERVOTE",
+   "title": "SCOTUS vote in Trump vs Slaughter",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXMAMDANIEO",
+   "title": "Will Mamdani sign an executive order?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXPAHLAVIHEAD",
+   "title": "Will Pahlavi lead Iran?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXCANCARBON",
+   "title": "Canadian carbon tax repeal",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTARIFFRATEINDIA",
+   "title": "Tariff Rate on India",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAGCONF",
+   "title": "When will Trump's AG pick be confirmed?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCORPTAXCUT",
+   "title": "Corporate tax cut",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXUSTAKEOVER",
+   "title": "US takeover of AI",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXSOCIALSECURITYDEPLETE",
+   "title": "Will Social Security\u2019s retirement trust fund be depleted?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNATLEMERGENCY",
+   "title": "declare national emergency",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXACAEXT",
+   "title": "ACA Credit extension",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRAVELDOWNGRADE",
+   "title": "Which countries will receive a lower US Travel Advisory level in 2026?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCAFRAUD",
+   "title": "Will any CA state executive be federally charged with fraud?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXSTOPTRADE",
+   "title": "Will Trump embargo a new country?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXFTAPRC",
+   "title": "PRC FTA",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRUMPPASSPORT",
+   "title": "When will a Trump passport be issued?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFREEBUSES",
+   "title": "Will NYC buses become free before 2027?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXJAPANFOODTAX",
+   "title": "Will Japan reduce, suspend, or lower its food consumption tax?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXFLIGHTSRUSSIA",
+   "title": "Flights Russia",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXLEAVEPOWELLGOV",
+   "title": "jerome powell leave as Fed governor",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXVOTEBLANCHE",
+   "title": "Which Senators will vote for Todd Blanche?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXHOWMANYSPEAKERHOUSE",
+   "title": "How many people will be Speaker of the House?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXPARDONSTRUMP",
+   "title": "Trump pardons monthly",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFTA",
+   "title": "Any free trade agreement ",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNYCDEPTSAFETY",
+   "title": "Will Mamdani establish a Department of Community Safety before 2027?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXCONGESTIONEND",
+   "title": "Congestion pricing ending",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXACAREPEAL",
+   "title": "ACA repeal",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXHEGSETHOUT",
+   "title": "Hegseth out by...?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXTRADEDEALCUBA",
+   "title": "Trade deal with Cuba",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXTRUMPFIRE",
+   "title": "Trump firings",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSCOTUSCHANGE",
+   "title": "SCOTUS size change",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXGABBARDOUT",
+   "title": "Tulsi Gabbard out as DNI?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXTRUMPUAP",
+   "title": "Will the President order the release of UFO files?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXFULLTERMSKPRES",
+   "title": "Full term SK Pres",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXPUTINDJTLOCATION",
+   "title": "Putin DJT meeting location",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPPHOTO",
+   "title": "Trump photos",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNEWSCOTUSCONF",
+   "title": "SCOTUS confirmations",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPTALKSCOTUS",
+   "title": "Will Trump talk to a sitting Supreme Court justice?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXUSFUND",
+   "title": "US Sovereign wealth fund",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXFETTERMANSWITCH",
+   "title": "Fetterman Party switch",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSCOTUSAICOPYRIGHT",
+   "title": "SCOTUS AI copyright",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXGAMBLINGREPEAL",
+   "title": "Gambling Repeal",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXPERUINVALIDATE",
+   "title": "Will the Peruvian presidential election be invalidated?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXUSFUNDHEAD",
+   "title": "US Sovereign wealth fund",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXFTCNEXT",
+   "title": "FTC next",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSTARMERCABLEAVE",
+   "title": "Who will leave Starmer's Cabinet before July?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUNSEC",
+   "title": "UN seceretary",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLABORSECCONF",
+   "title": "When will Trump's Labor Secretary pick be confirmed?",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXABRAHAMQ",
+   "title": "Abraham Accord Qatar",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXSCOURT",
+   "title": "Next SCOTUS justice",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRANSGENDERSPORTSBAN",
+   "title": "Will the Supreme Court uphold transgender sports bans?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXSPACEDATACENTER",
+   "title": "Data centers in space",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLUTNICKANNOUNCEOUT",
+   "title": "Howard Lutnick announces he's leaving as Commerce Secretary?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXNOBELPEACE",
+   "title": "Nobel Peace Prize",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAMEND25",
+   "title": "25th Amendment",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXKANYEISRAEL",
+   "title": "WILL KANYE VISIT AREA?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRUMPTIME",
+   "title": "Will Trump post this hour?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXTARIFFRATEEU",
+   "title": "EU tariff rate",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXBTCRESERVE",
+   "title": "Bitcoin Reserve",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXELECTIONEMERGENCY",
+   "title": "Will Trump declare an election emergency?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXBLANCHEJUDICIARY",
+   "title": "Will Todd Blanche make it past the judiciary committee?",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXUSMCA",
+   "title": "USMCA withdrawal",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXTREASBLOCKCHAIN",
+   "title": "Treasury transaction on blockchain",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXLEAVETISCH",
+   "title": "Jessica Tisch leave office",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXANTHROPICRESCIND",
+   "title": "Will the government rescind the Anthropic ban?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXVISITIRAN",
+   "title": "Who will visit Iran?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPBALLROOM",
+   "title": "When will the White House Ballroom be completed?",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXNEXTAG",
+   "title": "Next AG",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCRUDEEXPORTBAN",
+   "title": "US Crude Oil Export Ban",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXLEAVECONGRESS",
+   "title": "Will a member of Congress resign or be expelled?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXSOTHLEAVE",
+   "title": "Speaker of the House leaving",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXACAHSAFSA",
+   "title": "Will a bill pass to let ACA enrollees put subsidies into HSAs/FSAs this year?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNJGOLFVISITCOUNT",
+   "title": "NJ golf visits",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXPERUIMPEACH",
+   "title": "Will Jos\u00e9 Mar\u00eda Balc\u00e1zar be impeached?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXH1B",
+   "title": "H1B cap lifted",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXWATSONRNC",
+   "title": "Will the Supreme Court prohibit states from counting post-Election Day mail ballots?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXLEAVEHOUSE",
+   "title": "Who will leave the House?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPVH",
+   "title": "Trump Votehub approval rating",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXKATZOUT",
+   "title": "Israel Katz out as defense minister this year?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXAILEGISLATION",
+   "title": "AI regulation",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXZELENSKYYOUT",
+   "title": "Volodymyr Zelenskyy out as President of Ukraine?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXLEAVEOPEC",
+   "title": "Will another country leave OPEC?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXABRAHAMSA",
+   "title": "Abraham Accord Saudi Arabia",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFARMBILL",
+   "title": "Farm Bill",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXMIFEPRISTONEMAIL",
+   "title": "Will mail-order mifepristone access be restricted nationwide?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXNEWROLEJP",
+   "title": "JP Morgan Chase new CEO ",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPMEET",
+   "title": "Who will Trump meet?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXARREST",
+   "title": "ARRESTS",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNYQSBS",
+   "title": "Will New York tax QSBS gains?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXLEAVEWALZ",
+   "title": "Tim Walz out as Governor of Minnesota?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXTRUMPPARDONS",
+   "title": "Who will Trump pardon?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXMICHELINSEA",
+   "title": "Michelin star Seattle",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRYFIREPOWELL",
+   "title": "try to fire powell",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXKOSA",
+   "title": "KOSA",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXCBPAIRPORT",
+   "title": "Will Trump pull CBP from a sanctuary city airport?",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXSECSTATEVISIT",
+   "title": "Secretary of State visits",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCDCCONF",
+   "title": "When will Erica Schwartz be confirmed as CDC director?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXKASHOUT",
+   "title": "Kash Patel out as FBI Director?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXDCEILEND",
+   "title": "Debt ceiling abolished",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRUMPDOLLAR",
+   "title": "Will the US Mint finalize a design for the Trump dollar?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRUMPCOUNTRIES",
+   "title": "What countries will Trump visit this year?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXBLANCHECOUNT",
+   "title": "Senate votes for Todd Blanche",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPRESIGN",
+   "title": "Trump resign",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXIMPEACH",
+   "title": "President impeached",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXICEREFORM",
+   "title": "Which ICE reforms will become law?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNYCMINWAGE",
+   "title": "Will Mamdani raise the minimum wage to $30 before 2027?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXFCCBIG4",
+   "title": "FCC revokes an ABC/CBS/NBC/Fox station license?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXLAKECONF",
+   "title": "When will Kari Lake be confirmed as Ambassador to Jamaica?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXDOJPOWELL",
+   "title": "Will the DOJ reopen its investigation into Jerome Powell?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXDUTERTEOUT",
+   "title": "Sara Duterte out?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXNATIONALIZESPACEX",
+   "title": "Nationalize SpaceX",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXJUDGECOUNT",
+   "title": "Judges confirmed",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCRYPTOCAPGAIN",
+   "title": "Crypto cap gains",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXPARTYLEAVE",
+   "title": "Congress party change",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNORDSTREAM2",
+   "title": "Nord Stream 2 ",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNYCCHILDCARE",
+   "title": "Will Mamdani establish universal child care before 2027?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXPOTUSTWEETS",
+   "title": "POTUS tweets",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXFREYOUT",
+   "title": "Jacob Frey out as Mayor of Minneapolis?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXJAN6CASES",
+   "title": "January 6th liability",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRDBAN",
+   "title": "Congress banned from trading stocks",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXAFRICALEADEROUT",
+   "title": "Next African leader out",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLIPATURNERLOCATION",
+   "title": "WHERE WILL DUA LIPA AND CALLUM TURNERS WEDDING ME LOCATED",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFEDREFORM",
+   "title": "Which Federal Reserve precedents will be broken in 2026?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXDEMOCRACYUS",
+   "title": "US democratic backsliding",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXHBUDGETRES",
+   "title": "House budget resolution",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXSPAINBULLFIGHTING",
+   "title": "Spain bans bullfighting",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KX14AMENDCASE",
+   "title": "Trump birthright citizenship case",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXGREENLAND",
+   "title": "Greenland purchase",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXUAPFILES",
+   "title": "UAP files",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXMACRONOWENSLONG",
+   "title": "Macron vs Owens",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXEUEXIT",
+   "title": "EU exit",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXMOCTRUMP25",
+   "title": "Will any Republican member of Congress call for the 25th Amendment to be used on Trump?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXMARTIAL",
+   "title": "Martial law",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTERMLIMITS",
+   "title": "Term Limits amendment",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNBAATTEND",
+   "title": "Who will attend the NBA game?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXPULTEDNI",
+   "title": "Will Pulte become Acting Director of National Intelligence?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXVOTEMILLSEXPEL",
+   "title": "Will Congress vote on a resolution to expel Cory Mills?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXTARIFFRATEPRC",
+   "title": "Tariff rate China",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLEAVESOCOMCOMMANDER",
+   "title": "US SOCOM Commander leaves office?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXTARIFFRATECAN",
+   "title": "tariff rate canada",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNEWROLEGS",
+   "title": "Goldman Sachs new CEO ",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPACT",
+   "title": "Will Trump do anything today?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXIMPEACHCABINET",
+   "title": "Impeach a member of Trump's cabinet",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXAIREVIEW",
+   "title": "Will Trump order pre-release federal review of AI models?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXCANAL",
+   "title": "Panama Canal retaken",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXVETOCOUNT",
+   "title": "Trump vetoes",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNYCGROCERY",
+   "title": "NYC grocery story",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXELECTIONBILL",
+   "title": "Will proof of citizenship be required for federal voter registration?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXCAPCONTROL",
+   "title": "Capital controls",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXSUSPENDGASTAX",
+   "title": "Will the federal gas tax be suspended?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXVACCINEREC",
+   "title": "Vaccine rec ended",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUKRENEWOB",
+   "title": "UK Renewables Obligation scheme changes",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXWHPRESSBRIEFING",
+   "title": "Who will attend a White House Press Briefing?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSENPARL",
+   "title": "Senate Parl",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXFEDGOVNOM",
+   "title": "Fed governor nominee",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXDATACENTERMORATORIUM",
+   "title": "Will any US state pass a data center moratorium?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXHFHOUSING",
+   "title": "Bill taxing/banning hedge funds owning single-family homes",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXDOJPARDONS",
+   "title": "DOJ pardon claim",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXMARALAGO",
+   "title": "Who will visit Mar-a-Lago this year? ",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPAGCOUNT",
+   "title": "Trump Attorneys General",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXPERSONPUBLIC",
+   "title": "Who will publicly appear?",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXNETANYAHUPARDON",
+   "title": "Will Benjamin Netanyahu be pardoned?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXTRUMPAPPROVALYEAR",
+   "title": "How high will Trump's approval get this year?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNYTHEAD",
+   "title": "Major news story this month?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCABOUT",
+   "title": "Next Cabinet memeber out",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXRECOGSOMALI",
+   "title": "Somaliland recognition",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXRECOGROC",
+   "title": "Trump recognize Taiwan",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXRECOGPALESTINE",
+   "title": "Palestine recognition",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXPERMIT",
+   "title": "Permitting reform",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXWHCDATTEND",
+   "title": "Who will attend the White House Correspondents' Dinner?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXDEFAPPROP",
+   "title": "Will the House pass additional defense funding?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXDODRENAME",
+   "title": "Will the Department of Defense be officially renamed?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNEWROLEFAZE",
+   "title": "Who will be the next CEO of FaZe Media, Inc",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSNAPRESTRICT",
+   "title": "Bill limiting food SNAP benefits can buy",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXANTIWEPTAX",
+   "title": "Will any state pass a 100% tax on Trump's anti-weaponization fund?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXBIDENTAPES",
+   "title": "Will DOJ release the Biden ghostwriter tapes?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXRELEASEMAXWELL",
+   "title": "Ghislaine",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRUMPSTATES",
+   "title": "Which states will Trump visit this year?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXKNESSET",
+   "title": "Knesset dissolution",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXDJTATTACKWARSH",
+   "title": "Will Trump publicly criticize Kevin Warsh?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXUKRAINEEU",
+   "title": "Will Ukraine become an EU associate member?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXELONMARS",
+   "title": "Elon Mars",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXSCHUMEROUT",
+   "title": "Will Schumer no longer be Senate Minority leader",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXLEAVEDUNN",
+   "title": "Neal Dunn leaves office before the midterms?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXWHCA2",
+   "title": "Will another White House Correspondents' Dinner be held in 2026?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXBILLS",
+   "title": "Bills become law this year?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFREEIVF",
+   "title": "Free IVF",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXCONGRESSPAYINCREASE",
+   "title": "Will Congressional pay increase?",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXSCOTUSCERTFLAG",
+   "title": "SCOTUS cert flag burning",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXJONESACTREPEAL",
+   "title": "Jones act repealed",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNEWDEAL",
+   "title": "New trade deal announced",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXUSAIRANAGREEMENT",
+   "title": "US Iran nuclear deal",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSTOCKBANHOUSE",
+   "title": "House passes bill to ban stock trading",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXINDJUDICIARY",
+   "title": "US judiciary weakened",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXPATIENTSMONOPOLIES",
+   "title": "Patients before Monopolies Act becomes law",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXFRAUD2020",
+   "title": "Will any court rule that the 2020 election was fraudulent?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTARIFFCHECKS",
+   "title": "Will Americans receive tariff dividends in 2025?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXAMAZONFTC",
+   "title": "Courts consider Amazon a monopoly",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXALIENS",
+   "title": "Aliens",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUTHSOCIAL",
+   "title": "Number of Trump Truth Social posts this week?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPAPOLOGY",
+   "title": "Will Trump apologize?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXPUTINZELENSKYYLOCATION",
+   "title": "Where will Zelenskyy and Putin meet next?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXBOLIBRARYOPEN",
+   "title": "Barack Obama library opening",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXSCOTUSN",
+   "title": "New Supreme Court Justice",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXAMBMALAY",
+   "title": "Nick Adams",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXIMPEACHJUDGE",
+   "title": "Impeach judge",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXEOTRUMPTERM",
+   "title": "EOs in Trump's second term",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXBOUGAINVILLEIND",
+   "title": "Will Papua New Guinea ratify Bougainville independence?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXPOLISOUT",
+   "title": "Jared Polis out as Governor of Colorado?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXPARDONSYEAR",
+   "title": "How many pardons will be issued by the President in the year?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPATTEND",
+   "title": "Will Trump attend event",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXDISAPPROVETARIFF",
+   "title": "Will the House vote to disapprove tariffs?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXSAFEBANK",
+   "title": "Will cannabis banking insurance protections become law?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXGALLEGOOUT",
+   "title": "Ruben Gallego out as Senator?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXCBDCBAN",
+   "title": "Will the US ban CBDC?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXSULYOKOUT",
+   "title": "Tamas Sulyok out as Hungarian president?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXLUTNICKOUT",
+   "title": "Howard Lutnick out as Commerce Secretary?",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXCONCEALEDRECIPROCITY",
+   "title": "Nationwide concealed carry reciprocity becomes law",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXPLATNERCOLLINSDEBATE",
+   "title": "Platner and Collins debate",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRUMPDELETE",
+   "title": "How many Truth Social posts will Trump delete?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCARROUT",
+   "title": "Brendan Carr out",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXEXPELL",
+   "title": "Expelled MOC this year?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNICKELSTOP",
+   "title": "Will the nickel be discontinued?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXLEAVELISACOOK",
+   "title": "Will lisa cook leave office",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXMAJORPROTEST",
+   "title": "Major protest?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRUMPAPPROVALBELOW",
+   "title": "How low will Trump's approval get this year?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXMUSKNASA",
+   "title": "Musk NASA contracts",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNYCPROPERTYTAX",
+   "title": "Will Mamdani raise property taxes?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXRECOGPERSONIRAN",
+   "title": "Recognize Reza Pahlavi",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXSANCTIONRUSSIA",
+   "title": "Will a bill sanctioning Russia become law?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXBIDENAMBIEN",
+   "title": "Biden Ambien",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXSOCIALMEDIABAN",
+   "title": "Will the US ban social media for children?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXFISAEXTEND",
+   "title": "Will Congress reauthorize FISA before it expires?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSCOTUSRESIGN",
+   "title": "SCOTUS members resigning",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPWEP",
+   "title": "Will anyone receive payment from Trump\u2019s Anti-Weaponization Fund?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCABLEAVE",
+   "title": "Cabinet member leaving",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSENATECONFIRM",
+   "title": "Who will the Senate confirm?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTSLAYOFF",
+   "title": "Will Tesla announce layoffs by [date]?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXRECCOUNT",
+   "title": "Reconciliation count",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXINSURRECTION",
+   "title": "Insurrection",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXHEGSETHANNOUNCEOUT",
+   "title": "Hegseth announces he's leaving as Secretary of Defense",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXDNIANNOUNCE",
+   "title": "Trump announces DNI pick",
+   "category": "Politics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXTRUMPVSLAUGHTER",
+   "title": "Will the Supreme Court overturn Humphrey's Executor?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRUMPPARDON",
+   "title": "Trump pardons",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXVPBREAKS",
+   "title": "VP tiebreaks",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFEDEND",
+   "title": "Fed ended",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXNYCTAXMILLIONS",
+   "title": "Will Mamdani tax incomes over $1M ",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXSAMSUNGSTRIKE",
+   "title": "Samsung Electronics labor union strike",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXVENEZDEFACTO",
+   "title": "Who will de facto lead Venezuela at the end of 2026?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUSMDLFRDM",
+   "title": " Presidential Medal of Freedom",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXVOTECLARITY",
+   "title": "How many Senators will vote for the Clarity Act?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSECQUARTERLY",
+   "title": "Will the SEC eliminate the quarterly reporting requirement?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXJOINTRUMPADMIN",
+   "title": "Who will join the Trump administration?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPENDORSEMENTS",
+   "title": "How many people will Trump endorse this week?",
+   "category": "Politics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXMARIJUANA280E",
+   "title": "Will the Treasury grant\u00a0retroactive cannabis tax relief?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNEXTDEF",
+   "title": "Next Defense Sec",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTAXWAIVE",
+   "title": "Taxes waived",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNEXTSTATE",
+   "title": "Next State Sec",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXPOPCHANGENYC",
+   "title": "Mamdani population change in NYC ",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUMPARCH",
+   "title": "Will construction begin on Trump\u2019s triumphal arch?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXUSAKIM",
+   "title": "Kim Jong-Un presidential visit",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXDNC28HOST",
+   "title": "Who will host the 2028 Democratic national convention?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNEXTLABORSEC",
+   "title": "Next Labor Sec",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLEAVEHOUSECOMBO",
+   "title": "Leave House Combo",
+   "category": "Politics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXPAHLAVIVISITA",
+   "title": "Will Reza Pahlavi enter Iran before September?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXEUEXITCOUNTRY",
+   "title": "EU countries exiting",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXDJTBBC",
+   "title": "Will Trump win his BBC lawsuit",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNYCTAXBILLIONS",
+   "title": "Will Mamdani tax billionaires before 2027?",
+   "category": "Politics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXHORMUZNORM",
+   "title": "When will traffic at the Strait of Hormuz return to normal?",
+   "category": "Politics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCHGDPYOY",
+   "title": "China GDP Growth Rate YoY (quarterly)",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAAAGASMAXTX",
+   "title": "Texas highest gas price yearly",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXRATECUT",
+   "title": "Fed rate cut",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXITGDPYOYA",
+   "title": "Italy GDP Growth Rate YoY Adv (quarterly)",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSKEXPYOY",
+   "title": "South Korea exports YoY",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXDEFGDP",
+   "title": "U.S. federal deficit-to-GDP above/below X% in year",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXUSTM",
+   "title": "USTM",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUKCPIYOY",
+   "title": "United Kingdom Inflation Rate YoY",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXH200CHINA",
+   "title": "Nvidia H200 chips delivered to China before 2027?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXCBDECISIONAUSTRALIA",
+   "title": "Bank Of AUSTRALIA policy interest rate decision",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXIMFRECESS",
+   "title": "IMF global recession",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXMUSKTRILLION",
+   "title": "Musk trillionaire",
+   "category": "Economics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXBANKRUPTCY",
+   "title": "Bankruptcy",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFRGDPQOQP",
+   "title": "France GDP Growth Rate QoQ Prel (quarterly)",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNGDPQ",
+   "title": "Quarterly NGDP growth",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXECONSTATU3",
+   "title": "UNEMPLOYMENT RATE MONTHLY",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTORCONDO",
+   "title": "Toronto condo price below $X in [year]?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXFEDCHGCOUNT",
+   "title": "Number of rate changes",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNETWORTHROYLEE",
+   "title": "Will Roy Lee become a Billionaire by 2029",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXCANCUTS",
+   "title": "Number of BoC rate cuts in [year]?",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFRGDPYOYP",
+   "title": "France GDP Growth Rate YoY Prel (quarterly)",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUMICHOVR",
+   "title": "Michigan consumer sentiment above X in [year]?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXPCECORE",
+   "title": "US Core PCE inflation",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXEMERCUTS",
+   "title": "Emergency rate cuts",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXPAYROLLS",
+   "title": "Jobs numbers",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXDEBTGROWTH",
+   "title": "U.S. debt growth",
+   "category": "Economics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXPOWERKWH",
+   "title": "Average US electricity price this month",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSAHM",
+   "title": "Will the Sahm Rule trigger in [year]?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXMORTGAGERATE",
+   "title": "Mortgage Rate",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNGASMAX",
+   "title": "Natural gas price peak",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAAAGASMAXNY",
+   "title": "NEW YORK highest gas price yearly",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXIRSCOLLECT",
+   "title": "IRS tax collection",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXCANUSTRIPS",
+   "title": "Canadian trips to U.S. down X% in [year]?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRUMPTRADEGAP",
+   "title": "Will Trump close the China trade gap?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXUSPPIYOY",
+   "title": "US PPI YoY in [month]",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUSTYLD",
+   "title": "Treasury note yield on date",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSAMSUNGSTRIKE",
+   "title": "Samsung Electronics labor union strike",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXCBDECISIONKOREA",
+   "title": "Bank Of KOREA policy interest rate decision",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXBRAZILINF",
+   "title": "Brazil inflation",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXGDP",
+   "title": "US GDP growth",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCHCUTS",
+   "title": "US Challenger job cuts in [month]",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUFTSA",
+   "title": "Number of Airport Passenger Screened",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXU3",
+   "title": "Unemployment",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFED",
+   "title": "Fed funds rate",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAAAGASMIN",
+   "title": "US lowest gas price yearly",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCANHOME",
+   "title": "Will Canada\u2019s national average home price exceed X in [month]?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNETWORTHKAICENAT",
+   "title": "WILL KAI CENAT BECOME A BILLIONAIRE THIS YEAR",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXFM30YMTG",
+   "title": "Freddie Mac 30Y mortgage rate below x% in [year]",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXCBDECISIONBRAZIL",
+   "title": "Brazil",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUSDIRR",
+   "title": "USD/IRR exchange rate",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXMUSKWEALTH",
+   "title": "Musk wealth",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAMSAVO",
+   "title": "Hass avocado prices this week",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXMANUCON",
+   "title": "U.S. manufacturing construction spending",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTARIFFREVENUE",
+   "title": "Tariff revenue",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXEFFR",
+   "title": "Fed Funds (EFFR) above/below",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCANOREOY",
+   "title": "Bank of Canada overnight rate on [date]",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAAAGASD",
+   "title": "US gas price up",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCNIMPORT",
+   "title": "US imports of goods from China",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLCPIMAXYOY",
+   "title": "Inflation surge this year",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUFHOUCPI",
+   "title": "Truflation US CPI Housing Inflation Index",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXDEIFO",
+   "title": "Germany Ifo Business Climate",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUFPDEBT",
+   "title": "Total Public Debt",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLAYOFFSYINFO",
+   "title": "Tech layoffs",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXUST30",
+   "title": "UST30",
+   "category": "Economics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXJOBLESSCLAIMS",
+   "title": "Weekly initial jobless claims",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXDEFAULT",
+   "title": "US defaults",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXWRECSS",
+   "title": "World recessions",
+   "category": "Economics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXAAAGASMAX",
+   "title": "US highest gas price yearly",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFEDEMPLOYEES",
+   "title": "Federal government employee count",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAAAGASMAXCA",
+   "title": "California highest gas price yearly",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXJPCONCONF",
+   "title": "Japan Consumer Confidence",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUST2",
+   "title": "UST2Y",
+   "category": "Economics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXWHCA2",
+   "title": "Will another White House Correspondents' Dinner be held in 2026?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXUSEDCARCPI",
+   "title": "US used cars and trucks CPI in [month]",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCHINAUSGDP",
+   "title": "China overtakes US GDP",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXWAGESAT",
+   "title": "Will wage satisfaction hit a new low in [year]?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXZERORATE",
+   "title": "Zero rates",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXADP",
+   "title": "ADP employment change",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFEDHIKE",
+   "title": "Next Fed rate hike",
+   "category": "Economics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXTRADEDEFICIT",
+   "title": "Trade Deficit by Date",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCBDSA",
+   "title": "South Africa rate decision",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCPICOREYOY",
+   "title": "Core inflation",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUST5",
+   "title": "UST5",
+   "category": "Economics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXAAAGASMAXFL",
+   "title": "Florida highest gas price yearly",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXEHSALES",
+   "title": "Existing home sales in time period",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUE",
+   "title": "Monthly Unemployment",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTOPBUSINESS",
+   "title": "CNBC TOP STATES FOR BUSINESS",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXESGDPYOYF",
+   "title": "Spain GDP Growth Rate YoY",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXVANCONDO",
+   "title": "Will the average Vancouver condo price fall below X by year-end?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXCREDITC",
+   "title": "SOFR spike: Credit crunch",
+   "category": "Economics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXSHELTERCPI",
+   "title": "US shelter CPI in [month]",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXGDPYEAR",
+   "title": "Annual GDP",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNYSECIRCUIT",
+   "title": "NYSE circuit breaker day",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXHIGHINFLATION",
+   "title": "Highest Inflation",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXGOVTCUTS",
+   "title": "Government budget cuts",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCPICORE",
+   "title": "CPI core",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXESGDPQOQF",
+   "title": "Spain GDP Growth Rate QoQ Flash (quarterly)",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAIRFARECPI",
+   "title": "US airline fares CPI in [month]",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXGDPUSMAX",
+   "title": "US GDP peak ",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNYCRENTSY",
+   "title": "NYC rent yearly increase",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFEDMEET",
+   "title": "Fed emergency meeting",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXNYCBILLIONAIRES",
+   "title": "Billionaires lost",
+   "category": "Economics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXCBDECISIONMEXICO",
+   "title": "Bank Of MEXICO policy interest rate decision",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXISMPMI",
+   "title": "ISM PMI",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCBDECISIONRUSSIA",
+   "title": "Russia",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSOLAR",
+   "title": "Solar capcity installation",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAAAGASMINTX",
+   "title": "Texas lowest gas price yearly",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXJETFUEL",
+   "title": "US Gulf Coast jet fuel price weekly",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUFCCI",
+   "title": "Truflation US Consumer Confidence Index",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAAAGASMINCA",
+   "title": "California lowest gas price yearly",
+   "category": "Economics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXNHSALES",
+   "title": "New home sales in time period",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTEMPHELP",
+   "title": "Will temporary-help employment increase in [month]?",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUSMICHCSP",
+   "title": "United States Michigan Consumer Sentiment Prel ",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXRATECUTCOUNT",
+   "title": "Number of rate cuts",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTRUEV",
+   "title": "Truflation EV",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXECONPATH",
+   "title": "State of the economy",
+   "category": "Economics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXOILRIGS",
+   "title": "Oil rigs",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTSLAYOFF",
+   "title": "Will Tesla announce layoffs by [date]?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXAUTODELQ",
+   "title": "Auto-loan delinquencies in QX?",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXGOVTSPEND",
+   "title": "Government budget increases",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAAAGASMINFL",
+   "title": "Florida lowest gas price yearly",
+   "category": "Economics",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXDOTPLOT",
+   "title": "fed dot plot",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAAAGASMINNY",
+   "title": "NEW YORK LOWEST gas price yearly",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXBUILDPERMS",
+   "title": "Building permits for month",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCBDECISIONENGLAND",
+   "title": "Bank Of ENGLAND policy interest rate decision",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNFPROD",
+   "title": "US nonfarm productivity exceeds X% YoY in any quarter reported during [year]",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRUFEGGS",
+   "title": "Truflation US CPI Eggs Index",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCPIYOY",
+   "title": "Inflation",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNBERRECESSQ",
+   "title": "Next recession start",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXDEGDPYOYF",
+   "title": "Germany GDP Growth Rate YoY Flash (quarterly)",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAAAGASED",
+   "title": "US gas price on Election Day",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLAYOFFSYPBS",
+   "title": "Professional and Business Services layoffs",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXFEDDECISION",
+   "title": "Fed meeting",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUST10",
+   "title": "UST10",
+   "category": "Economics",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXECONSTATCPI",
+   "title": "month over month inflation",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNGASMIN",
+   "title": "Natural gas yearly low",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXECONSTATCPIYOY",
+   "title": "year over year inflation",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCALHOME",
+   "title": "Calgary home price below X in [year]",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXCPI",
+   "title": "CPI",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXAAAGASM",
+   "title": "US gas price",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXYOUTHUN",
+   "title": "Youth unemployment below X% in [year]?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXFAOFPI",
+   "title": "FAO Food Price Index in [month]?",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXRECSSNBER",
+   "title": "Recession",
+   "category": "Economics",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXCACPIYOY",
+   "title": "Canada Inflation Rate YoY",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXBRAZILGDP",
+   "title": "Brazilian GDP Growth",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXIRANIMPORTS",
+   "title": "U.S. imports from Iran in [time period]",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXILPENDEBT",
+   "title": "Illinois pension debt above X in fiscal year X?",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXPSAVERT",
+   "title": "US personal saving rate below x% in [year]?",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXECONSTATCORECPIYOY",
+   "title": "year over year core inflation",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSAGDPQOQ",
+   "title": "South Africa GDP growth QoQ",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUKRETAIL",
+   "title": "UK retail sales MoM",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSATRADEBAL",
+   "title": "South Africa balance of trade for [month]",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXECONSTATCPICORE",
+   "title": "month over month core inflation",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXDEGDPQOQF",
+   "title": "Germany GDP Growth Rate QoQ Flash (quarterly)",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFOMCDISSENTCOUNT",
+   "title": "FOMC dissent count",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCBDISRAEL",
+   "title": "Bank of Israel interest rate decision",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXBRAZILU",
+   "title": "Brazil unemployment",
+   "category": "Economics",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXTRUFBPPI",
+   "title": "Truflation Bitcoin Purchasing Power Index",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCBDECISIONCANADA",
+   "title": "Bank Of Canada policy interest rate decision",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXUSFLYCAN",
+   "title": "US flight cancellations this week",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFERT",
+   "title": "Fertilizer prices",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXSAMOMINF",
+   "title": "South Africa MoM inflation",
+   "category": "Economics",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXMEAD",
+   "title": "Lake Mead water levels",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXHIGHTHOU",
+   "title": "Daily High Temperature Houston",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTROPSTORM",
+   "title": "Number of tropical storms",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXRAINHOUM",
+   "title": "Rain Houston",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLOWTLAX",
+   "title": "Lowest Temperature in LA",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXHURRICANE",
+   "title": "Hurricanes",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXHIGHTATL",
+   "title": "Atlanta Max Temperature",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXHIGHTNOLA",
+   "title": "New Orleans Max temp Daily",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXEARTHQUAKECALIFORNIA",
+   "title": "Earthquake in California",
+   "category": "Climate and Weather",
+   "open_markets": 3
+  },
+  {
+   "ticker": "KXHIGHTPHX",
+   "title": "Phoenix High Temperature Daily",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLOWTSATX",
+   "title": "Lowest Temperature SATX",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXDROUGHTLEVEL",
+   "title": "Drought level",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXHIGHMIA",
+   "title": "Highest temperature in Miami",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLOWTDEN",
+   "title": "Lowest temperature in Denver",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLOWTMIN",
+   "title": "Low  temperature Minnesota",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXHIGHTOKC",
+   "title": "Oklahoma City Maximum High Temperature",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLOWTCHI",
+   "title": "Lowest Temperature Chicago",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXELNINO",
+   "title": "Will El Ni\u00f1o conditions be declared?",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXRAINSEAM",
+   "title": "RAIN SEATTLE",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLOWTLV",
+   "title": "Las Vegas Daily Low Temperature",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLOWTNOLA",
+   "title": "NOLA Low Temperature",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXNAMEDSTORM",
+   "title": "Named Storms",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXRAINCHIM",
+   "title": "Rain Chicago",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXFIRSTHURRICANE",
+   "title": "First Hurricane",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXHIGHTMIN",
+   "title": "Minneapolis Daily High Temperature",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXERUPTSUPER",
+   "title": "Supervolcano",
+   "category": "Climate and Weather",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXRAINDENM",
+   "title": "RAIN DENVER",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLOWTSFO",
+   "title": "Lowest Temperature San Francisco",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXEVSHARE",
+   "title": "EV market share",
+   "category": "Climate and Weather",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXEARTHQUAKEJAPAN",
+   "title": "Earthquake in Japan",
+   "category": "Climate and Weather",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXHIGHTBOS",
+   "title": "Boston Maximum Daily Temperature",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXHIGHTDAL",
+   "title": "Dallas Maximum Temperature",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXWARMING",
+   "title": "Global warming",
+   "category": "Climate and Weather",
+   "open_markets": 1
+  },
+  {
+   "ticker": "KXHURRICANENAMES",
+   "title": "Hurricane Names",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXHURCTOT",
+   "title": "Number of hurricanes",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXHIGHTDC",
+   "title": "Washington DC Daily Max Temp",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXRAINLAXM",
+   "title": "Rain Los Angeles",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXCO2LEVEL",
+   "title": "CO2 level",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXRAINNYCM",
+   "title": "Monthly rain in New York",
+   "category": "Climate and Weather",
+   "open_markets": 4
+  },
+  {
+   "ticker": "KXUSCLIMATE",
+   "title": "US climate goals",
+   "category": "Climate and Weather",
+   "open_markets": 2
+  },
+  {
+   "ticker": "KXHIGHLAX",
+   "title": "Highest temperature in Los Angeles",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXLOWTMIA",
+   "title": "Lowest temperature in Miami",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXRAINDALM",
+   "title": "Rain Dallas",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXTORNADO",
+   "title": "Number of Tornadoes",
+   "category": "Climate and Weather",
+   "open_markets": 5
+  },
+  {
+   "ticker": "KXVEI4",
+   "title": "VEI 4",
+   "category": "Climate and Weather",
+   "open_markets": 3
+  }
+ ]
+}

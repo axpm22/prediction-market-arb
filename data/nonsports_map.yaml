@@ -1,0 +1,14 @@
+# Manual non-sports event map. NOTHING is matched automatically — review BOTH venues'
+# resolution wording before adding an entry, then set enabled: true.
+# Settle by hand when resolved:  python -m arb settle --manual nonsports:<id> <YES|NO>
+#
+# - id: fed-cut-2026-06                  # event_key becomes "nonsports:fed-cut-2026-06"
+#   enabled: false
+#   question: "Fed cuts rates at the June 2026 meeting?"
+#   kalshi_series: KXFEDDECISION         # series to fetch (SPEC §3.1 endpoint)
+#   kalshi_ticker: KXFEDDECISION-26JUN-CUT   # exact market within that series
+#   polymarket_tokens:                   # CLOB token id per outcome
+#     YES: "123456..."
+#     NO: "654321..."
+#   close_by: 2026-06-18                 # must be within nonsports_max_days to be scanned
+[]

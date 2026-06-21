@@ -1,0 +1,115 @@
+timezone: America/New_York
+bankroll_usd: 1000
+max_stake_pct: 0.10
+ev_threshold: 0.02
+divergence_threshold: 0.03
+arb_stale_warn: 0.04
+# Cross-venue legs fetched further apart than this were never simultaneously available;
+# the flag is recorded but forced REVIEW with a time-skew note (flash verify re-quotes
+# all legs within seconds and gives the simultaneous answer).
+max_leg_skew_secs: 60
+# Match sanity gates: venues listing "the same game" must agree on start time, and the
+# same outcome must not be priced wildly apart — a 20-point gap is a matching error,
+# not an arb. Suspect groups are never flagged as ARB (divergences get match-suspect).
+max_start_drift_mins: 30
+match_suspect_prob_diff: 0.15
+min_books_for_consensus: 3
+min_liquidity_usd: 500
+min_executable_usd: 50
+max_days_to_settlement: 14
+nonsports_max_days: 7
+sports: [baseball_mlb, basketball_nba, soccer, tennis, mma]
+# Sports the consensus scan sends to The Odds API. Only keys valid there belong here;
+# soccer/tennis/mma need per-league key discovery and would exceed the 500/mo budget.
+# 2 sports x 2 credits x 3 scans/day = 12/day, ~360/mo.
+consensus_sports: [baseball_mlb, basketball_nba]
+scan_breaks: true
+break_windows:
+  basketball_nba: [48, 15]
+  soccer: [45, 15]
+watch_interval_secs: 60
+# MEASUREMENT MODE (2026-06-12): true so scans generate EV flags for the CLV experiment
+# (EV_SPEC §5). Betting is still NOT enabled — every EV flag is forced REVIEW via
+# event-match-review and never advanced to a bet until the CLV gate + whitelist pass.
+consensus_enabled: true
+
+# Closing-line EV recorder (python -m arbnext closing) — separate process, main daemon
+# untouched. One consensus snapshot per event, taken in the final minutes before start;
+# the stored consensus row is the used-once guard. ~2 credits per start-wave per sport.
+closing_ev:
+  window_open_mins: 5      # window opens N minutes before scheduled start
+  window_close_mins: 3     # ...and closes M minutes before start
+  max_quote_age_secs: 360  # venue quotes older than this are not compared
+  sports: [baseball_mlb]   # schedule source is SX; only these sports are snapshotted
+
+# Non-sports (politics/econ/weather) — python -m arbnext nonsports. Manual-only matching:
+# `nonsports-suggest` writes candidates to logs/nonsports_candidates.log; a human promotes
+# them into data/nonsports_map.yaml. Never auto-matched (settlement wording risk).
+nonsports:
+  watch_interval_secs: 300
+  candidate_threshold: 85
+  kalshi_categories: ["Politics", "Economics", "Climate and Weather"]
+  polymarket_tags: [politics, economy, weather]
+
+# Flash verification (python -m arbnext verify): re-quote a fresh ARB's legs seconds
+# after the flag instead of waiting for the next full sweep. Appends VERIFIED/VANISHED
+# rows to the ledger; SX legs cannot be fast-checked and are marked unverifiable.
+verify:
+  poll_secs: 10
+  max_bet_age_secs: 900
+
+# Hot watchers (python -m arbnext hot): a dedicated thread per fresh ARB bet re-quotes
+# ITS books every ~1s for its whole lifetime → 1-second-resolution edge track + a
+# lifetime summary row. max_watchers bounds venue request rates, not CPU.
+hot:
+  poll_secs: 2               # how often to look for new bets to adopt
+  check_interval_secs: 1.0   # per-bet re-quote cadence
+  watch_duration_secs: 120   # give up after this long
+  dead_checks: 3             # consecutive dead checks = arb lifetime over
+  max_watchers: 3
+
+# Focused bet-by-bet rotation (python -m arbnext focus): re-quote one event's books on
+# all venues back-to-back (seconds apart) instead of venue-by-venue (minutes apart).
+# The bet map comes from the wide sweep's recent persisted quotes; Kalshi+Polymarket
+# legs only (SX outcome sides cannot be re-derived from stored rows).
+focus:
+  rotation_pause_secs: 2     # pause between events in a rotation
+  map_max_age_mins: 30       # how recent sweep quotes must be to define the bet map
+  sports: [baseball_mlb, basketball_nba]
+
+# Political/econ/weather hunter (python -m arbnext political). Intra-market arb only
+# (YES+NO < $1 on one contract — no matching, no cross-venue settlement risk), so flags
+# are trusted=1. Cross-venue politics stays manual-map-only via `arbnext nonsports`.
+political:
+  watch_interval_secs: 180
+  categories: ["Politics", "Economics", "Climate and Weather"]
+consensus_max_age_hours: 8
+# EV model (EV_SPEC.md). Betting stays OFF (consensus_enabled: false); these govern the
+# measurement-only instrument that proves/kills the EV thesis on CLV before a dollar.
+ev:
+  e_min: 0.05            # §3.2 edge floor in probability points (4–6pt); tune vs CLV
+  kelly_fraction: 0.25   # §7.2 quarter-Kelly projection (p estimated, not known)
+scan_times: ["10:00", "15:00", "19:00"]
+daily_report_time: "23:59"
+settle_time: "09:30"
+settle_days_from: 2    # scores lookback window; 2 credits/sport/settle
+auto_fill: false
+trusted_pairs: []
+fuzzy_match_threshold: 92
+# Fees are dated facts: each carries where it came from and when it was confirmed.
+# Older than fee_stale_days → load-time warning + stale-fee badge; never a halt.
+fee_stale_days: 30
+kalshi:
+  fee_rate: 0.07
+  source_url: "https://kalshi.com/docs (fee schedule; ceil(0.07*C*P*(1-P)))"
+  confirmed_on: 2026-06-10
+polymarket:
+  fee_rate: 0.0   # explicitly pinned: no trading fee; gas/relayer costs not yet modeled
+  source_url: "https://docs.polymarket.com"
+  confirmed_on: 2026-06-10
+sx:
+  fee_rate: 0.0   # taker 0%, maker 0%, parlays 5% (fees only on winning bets)
+  source_url: "https://docs.sx.bet/user-guides/trading/fees"
+  confirmed_on: 2026-06-10
+odds_api: { region: us, warn_below_credits: 100, abort_below_credits: 50 }
+parlay: { enabled: false, divergence_threshold: 0.05 }

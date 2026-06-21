@@ -1,0 +1,50 @@
+[
+ {
+  "id": "558664",
+  "title": "Texas Rangers vs. Kansas City Royals",
+  "liquidity": 237803.12222,
+  "endDate": "2026-06-17T23:40:00Z",
+  "markets": [
+   {
+    "id": "2481226",
+    "question": "Texas Rangers vs. Kansas City Royals: O/U 9.5",
+    "outcomes": "[\"Over\", \"Under\"]",
+    "outcomePrices": "[\"0.725\", \"0.275\"]",
+    "clobTokenIds": "[\"61337223685446021000456005244509001182908445891555302000773881402332311444482\", \"36846263619598518732179694660377787990703393834515840609419621659960467313884\"]",
+    "endDate": "2026-06-10T23:40:00Z",
+    "liquidity": "1385.897",
+    "gameStartTime": "2026-06-10 23:40:00+00",
+    "sportsMarketType": "totals",
+    "line": 9.5,
+    "clobAskPrices": [
+     "",
+     "0.001"
+    ],
+    "clobAskDepths": [
+     "0",
+     "33.2"
+    ]
+   },
+   {
+    "id": "2435994",
+    "question": "Texas Rangers vs. Kansas City Royals",
+    "outcomes": "[\"Texas Rangers\", \"Kansas City Royals\"]",
+    "outcomePrices": "[\"0.675\", \"0.325\"]",
+    "clobTokenIds": "[\"6813724962764633781845994431521218616124047172084118890384820723580256262039\", \"96175833715612960604335213778883806954937503239081998818889959664578047080576\"]",
+    "endDate": "2026-06-17T23:40:00Z",
+    "liquidity": "39762.6456",
+    "gameStartTime": "2026-06-10 23:40:00+00",
+    "sportsMarketType": "moneyline",
+    "line": null,
+    "clobAskPrices": [
+     "0.65",
+     "0.36"
+    ],
+    "clobAskDepths": [
+     "3568.6",
+     "792.05"
+    ]
+   }
+  ]
+ }
+]

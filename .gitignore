@@ -1,0 +1,25 @@
+# Secrets — never commit
+.env
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Database (240MB+) and its WAL/SHM sidecars — never enter history
+data/*.sqlite
+data/*.sqlite-wal
+data/*.sqlite-shm
+data/.fuse_hidden*
+
+# Local runtime artifacts
+logs/*.log
+reports/daily/*.csv
+reports/daily/*.md
+reports/dashboard.json
+data/test_baseline.txt
+data/stop-*
+
+# Kept intentionally (small seed/config files, NOT ignored):
+#   .env.example, data/aliases.json, data/*_series.json, data/nonsports_map.yaml
