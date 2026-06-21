@@ -145,3 +145,13 @@ flb:
   min_samples_per_band: 200
   flb_min_edge: 0.02
   bands: [0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0]
+# Phase 5 whale-flow tracker (Polymarket on-chain; measurement/debunk only).
+whale_tracker:
+  enabled: true
+  min_trades: 100
+  min_history_days: 120
+  wr_floor: 0.60
+  wr_ceiling: 0.72                 # above this -> suspect (zombie-order inflation)
+  min_category_share: 0.50
+  skip_categories: [btc_15m, eth_15m]
+  copy_fill: next_executable
