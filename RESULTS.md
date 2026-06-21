@@ -72,6 +72,26 @@ The cross-venue mirage motivated three lower-risk strategies, each pre-registere
   reverse), but the result is confounded by Polymarket's 9× higher move density and is not
   trusted until null-corrected.
 
+## Lessons learned
+
+**A signal is worthless until you've proven the input isn't garbage.** The EV engine looked
+like it was finding huge edges; it was finding empty books. Before the Phase 1 quality
+layer, the largest recorded EV "edge" was **~54,500%** (a ROI of 545×) — a ~$0.018 ask
+against a ~0.50 consensus, i.e. a one-sided/stale Kalshi book leaking into the math
+(SPEC §12). After labeling (never deleting) the contaminants, the largest *clean* EV edge
+is **18.2%**. That ~3000× collapse is the entire lesson: depth floors, one-sided-book
+rejection, and an
+edge-sanity cap are not polish — they are the precondition for any downstream sizing or
+scoring to mean anything. We built the scorer (Phase 2) and Kelly column (Phase 3) only
+*after* the input was clean, and gated both on the clean column.
+
+**The honest negative is the valuable result.** Three theses the harness has weakened or
+killed so far — riskless cross-venue arb (≈$0 confirmed), blind whale-copy (adverse
+selection), de-vigged EV (CLV not cleared) — each cost nothing but electricity to
+establish, because the instrument was built to disprove cheaply. The append-only ledger and
+the frozen pre-registration are what make a null result *citable* instead of just
+disappointing.
+
 ## Limitations (stated plainly — honesty is the point)
 
 - **Paper fills.** Optimistic−confirmed is a slippage *proxy*, not real execution; latency
