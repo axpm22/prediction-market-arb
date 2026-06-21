@@ -23,3 +23,7 @@ data/stop-*
 
 # Kept intentionally (small seed/config files, NOT ignored):
 #   .env.example, data/aliases.json, data/*_series.json, data/nonsports_map.yaml
+
+# Claude Code local settings (may record commands/keys)
+.claude/
+**/.claude/
