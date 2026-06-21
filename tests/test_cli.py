@@ -6,7 +6,14 @@ from decimal import Decimal
 import json
 from pathlib import Path
 
-from arb.cli import apply_opportunity_filters, compute_consensus, detect_ev_from_consensus, run_scan, split_pregame
+from arb.cli import (
+    apply_opportunity_filters,
+    apply_segment_gates,
+    compute_consensus,
+    detect_ev_from_consensus,
+    run_scan,
+    split_pregame,
+)
 from arb.config import load_config
 from arb.models import Quote
 from arb.pricing import kalshi_fee_cost
@@ -77,6 +84,55 @@ def test_filters_count_left_on_table() -> None:
     kept, left = apply_opportunity_filters(deep + shallow + far_out, config)
     assert len(kept) == 1
     assert len(left) == 2
+
+
+def seed_settled_segment(store: Store, sport: str, kind: str, n: int, wins: int) -> None:
+    with store.connect() as con:
+        for i in range(n):
+            won = i < wins
+            con.execute(
+                """INSERT INTO flat_bets(fingerprint, opened_poll_id, category, sport, kind, trusted, live,
+                       edge, stake_usd, legs_json, status, placed_at, result, pnl_optimistic, quality_flag, notes)
+                   VALUES (?, 1, 'sports', ?, ?, 1, 0, '0.05', '1.00', '[]', 'SETTLED', ?, ?, ?, NULL, '')""",
+                (
+                    f"{sport}:{kind}:{i}",
+                    sport,
+                    kind,
+                    datetime.now(timezone.utc).isoformat(),
+                    "WON" if won else "LOST",
+                    "0.90" if won else "-1.00",
+                ),
+            )
+
+
+def ev_for_segment_gate(config) -> object:
+    quote = kalshi_quote("0.50")
+    consensus = {(EVENT_KEY, "kansas city royals"): (Decimal("0.56"), datetime.now(timezone.utc))}
+    [opp] = detect_ev_from_consensus([quote], consensus, max_age_hours=8, trusted_pairs=set(), config=config)
+    assert opp.kelly_stake is not None and opp.kelly_stake > 0
+    return opp
+
+
+def test_segment_gate_zeroes_kelly_when_data_is_insufficient(tmp_path) -> None:
+    config = replace(load_config(), database_path=tmp_path / "arb.sqlite")
+    store = Store(config.database_path)
+    [gated] = apply_segment_gates([ev_for_segment_gate(config)], store, config)
+
+    assert gated.kelly_stake == Decimal("0.00")
+    assert "segment-insufficient-data" in gated.notes
+    assert gated.quality_flag is None
+
+
+def test_segment_gate_blocks_proven_bad_segment(tmp_path) -> None:
+    config = replace(load_config(), database_path=tmp_path / "arb.sqlite")
+    store = Store(config.database_path)
+    seed_settled_segment(store, "baseball_mlb", "EV", n=40, wins=0)
+    [gated] = apply_segment_gates([ev_for_segment_gate(config)], store, config)
+
+    assert gated.kelly_stake == Decimal("0.00")
+    assert gated.status == "REVIEW"
+    assert gated.quality_flag == "segment-blocked"
+    assert "segment-blocked" in gated.notes
 
 
 def test_started_events_are_marked_live_and_split_out() -> None:

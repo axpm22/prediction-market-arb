@@ -53,6 +53,21 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("scores", help="per-segment edge scores from settled clean bets (Phase 2)")
     sub.add_parser("backtest-flb", help="favorite-longshot calibration over settled clean bets (S2)")
     sub.add_parser("dashboard", help="regenerate reports/dashboard.json from the ledger (Phase 6)")
+    forecast_log = sub.add_parser("forecast-log", help="append a forecast probability triple (Phase 8)")
+    forecast_log.add_argument("--vertical", required=True)
+    forecast_log.add_argument("--category", required=True)
+    forecast_log.add_argument("--market", required=True)
+    forecast_log.add_argument("--p-you", required=True)
+    forecast_log.add_argument("--p-market", required=True)
+    forecast_log.add_argument("--p-base")
+    forecast_log.add_argument("--executable-price")
+    forecast_log.add_argument("--settle-by")
+    forecast_log.add_argument("--paper-bet", action="store_true")
+    forecast_settle = sub.add_parser("forecast-settle", help="settle a logged forecast by id")
+    forecast_settle.add_argument("forecast_id", type=int)
+    forecast_settle.add_argument("outcome", type=int, choices=[0, 1])
+    forecast_settle.add_argument("--closing-price")
+    sub.add_parser("forecast-report", help="score settled forecasts against market probabilities")
     sub.add_parser("daemon", help="watch loop + scheduled scans + settlement + daily report writer")
     return parser
 
@@ -98,6 +113,49 @@ def main(argv: list[str] | None = None) -> int:
 
         path = write_dashboard(store, config)
         print(f"Wrote {path}")
+        return 0
+    if args.command == "forecast-log":
+        from .forecast.ledger import log_forecast
+
+        forecast_cfg = config.forecast
+        forecast_id = log_forecast(
+            store,
+            vertical=args.vertical,
+            category=args.category,
+            market=args.market,
+            p_you=Decimal(args.p_you),
+            p_market=Decimal(args.p_market),
+            p_base=None if args.p_base is None else Decimal(args.p_base),
+            executable_price=None if args.executable_price is None else Decimal(args.executable_price),
+            settle_by=args.settle_by,
+            edge_min=Decimal(str(forecast_cfg.get("edge_min", "0.05"))),
+            record_paper_bet=args.paper_bet,
+        )
+        print(f"Logged forecast {forecast_id}")
+        return 0
+    if args.command == "forecast-settle":
+        from .forecast.ledger import settle_forecast
+
+        forecast_cfg = config.forecast
+        settle_forecast(
+            store,
+            args.forecast_id,
+            args.outcome,
+            closing_price=None if args.closing_price is None else Decimal(args.closing_price),
+            clip=float(forecast_cfg.get("logloss_clip", 0.000001)),
+        )
+        print(f"Settled forecast {args.forecast_id}")
+        return 0
+    if args.command == "forecast-report":
+        from .forecast.ledger import format_report, report_data
+
+        forecast_cfg = config.forecast
+        data = report_data(
+            store,
+            bins=int(forecast_cfg.get("calibration_bins", 10)),
+            clip=float(forecast_cfg.get("logloss_clip", 0.000001)),
+        )
+        print(format_report(data, int(forecast_cfg.get("min_n_for_claim", 100))))
         return 0
     if args.command == "settle":
         if args.manual:
@@ -187,6 +245,7 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
     if left_on_table:
         left_edge = sum((opp.edge for opp in left_on_table), Decimal("0"))
         print(f"Left on table: {len(left_on_table)} flags (summed edge {left_edge}) killed by liquidity/depth/horizon filters.")
+    kept = apply_segment_gates(kept, store, config)
     print_opportunities(kept, ev_display_threshold=config.ev_threshold)
 
     if args.dry_run:
@@ -362,6 +421,42 @@ def _annotate_quality_and_kelly(opp: Opportunity, p_hat: Decimal, effective_cost
     stake = kelly_stake(p_hat, effective_cost, config.sizing_kelly_fraction,
                         config.bankroll_usd, config.sizing_max_fraction)
     return replace(opp, quality_flag=quality, kelly_f_star=f_star, kelly_stake=stake)
+
+
+def apply_segment_gates(opportunities: list[Opportunity], store: Store, config) -> list[Opportunity]:
+    """Phase 2/3 gate: blocked segments stay logged, but not eligible for headline/Kelly.
+
+    The scorer is intentionally conservative. Missing score data is INSUFFICIENT_DATA:
+    the row still enters the measurement ledger, but directional Kelly allocation is zero.
+    """
+    if not opportunities:
+        return []
+    from .scoring import BLOCKED, INSUFFICIENT, score_segments
+
+    scores = {score.segment: score for score in score_segments(store, config.scoring)}
+    gated: list[Opportunity] = []
+    for opp in opportunities:
+        segment = f"{opp.event.sport or 'unknown'}:{opp.kind}"
+        score = scores.get(segment)
+        tier = score.tier if score is not None else INSUFFICIENT
+        notes = list(opp.notes)
+        quality = opp.quality_flag
+        status = opp.status
+        kelly_stake_value = opp.kelly_stake
+        if tier == BLOCKED:
+            if "segment-blocked" not in notes:
+                notes.append("segment-blocked")
+            quality = quality or "segment-blocked"
+            status = "REVIEW"
+            if kelly_stake_value is not None:
+                kelly_stake_value = Decimal("0.00")
+        elif tier == INSUFFICIENT:
+            if "segment-insufficient-data" not in notes:
+                notes.append("segment-insufficient-data")
+            if kelly_stake_value is not None:
+                kelly_stake_value = Decimal("0.00")
+        gated.append(replace(opp, status=status, notes=tuple(notes), quality_flag=quality, kelly_stake=kelly_stake_value))
+    return gated
 
 
 def apply_opportunity_filters(opportunities: list[Opportunity], config) -> tuple[list[Opportunity], list[Opportunity]]:

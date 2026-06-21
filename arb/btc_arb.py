@@ -12,11 +12,13 @@ interpolate windows — exact end-time match only (mirrors the totals exact-line
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
-from .pricing import q6
+from .pricing import money, q6
+from .store import Store
 
 
 @dataclass(frozen=True)
@@ -67,3 +69,61 @@ def find_btc_arb(legs: list[BtcLeg], window_match_secs: int, trusted: bool) -> l
             arbs.append(BtcArb(up.asset, up.window_end_utc, up, down, total,
                                q6(Decimal("1") / total - Decimal("1")), same_oracle, status))
     return arbs
+
+
+def persist_btc_arbs(store: Store, poll_id: int, arbs: list[BtcArb]) -> int:
+    """Append ARB_BTC rows to the flat ledger; duplicates remain a single open paper bet."""
+    inserted = 0
+    with store.connect() as con:
+        for arb in arbs:
+            fingerprint = _fingerprint(arb)
+            if con.execute(
+                "SELECT 1 FROM flat_bets WHERE fingerprint = ? AND status = 'OPEN' LIMIT 1",
+                (fingerprint,),
+            ).fetchone():
+                continue
+            quality_flag = None if arb.status == "OK" else "oracle-review"
+            con.execute(
+                """INSERT INTO flat_bets(fingerprint, opened_poll_id, category, sport, kind, trusted, live,
+                       edge, stake_usd, legs_json, optimistic_cost, pnl_optimistic, status, placed_at,
+                       notes, quality_flag)
+                   VALUES (?, ?, 'nonsports', 'btc_15m', 'ARB_BTC', ?, 0, ?, '1.00', ?, ?, ?,
+                           'OPEN', ?, ?, ?)""",
+                (
+                    fingerprint,
+                    poll_id,
+                    int(arb.status == "OK"),
+                    str(arb.edge),
+                    json.dumps([_leg_json(arb.up_leg), _leg_json(arb.down_leg)]),
+                    str(arb.total_cost),
+                    str(money(arb.edge)),
+                    datetime.now(timezone.utc).isoformat(),
+                    _notes(arb),
+                    quality_flag,
+                ),
+            )
+            inserted += 1
+    return inserted
+
+
+def _fingerprint(arb: BtcArb) -> str:
+    return (
+        f"btc:{arb.asset}:{arb.window_end_utc.astimezone(timezone.utc).isoformat()}:"
+        f"{arb.up_leg.venue}:UP:{arb.down_leg.venue}:DOWN"
+    )
+
+
+def _leg_json(leg: BtcLeg) -> dict[str, str]:
+    return {
+        "venue": leg.venue,
+        "asset": leg.asset,
+        "direction": leg.direction,
+        "window_end_utc": leg.window_end_utc.astimezone(timezone.utc).isoformat(),
+        "effective_cost": str(leg.effective_cost),
+        "oracle": leg.oracle,
+    }
+
+
+def _notes(arb: BtcArb) -> str:
+    oracle_note = "same-oracle" if arb.same_oracle else "oracle-mismatch"
+    return f"btc-window={arb.window_end_utc.astimezone(timezone.utc).isoformat()} | {oracle_note} | {arb.status}"

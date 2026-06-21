@@ -39,6 +39,8 @@ def build_parser() -> argparse.ArgumentParser:
     hot.add_argument("--once", action="store_true", help="adopt current bets, watch to completion, exit")
     negrisk = sub.add_parser("negrisk", help="intra-Polymarket negative-risk basket arbs (S1, no settlement risk)")
     negrisk.add_argument("--once", action="store_true", help="run a single pass and exit")
+    web = sub.add_parser("web", help="serve the read-only live dashboard")
+    web.add_argument("--port", type=int, default=8787, help="local port to bind, default: 8787")
     annotate = sub.add_parser("annotate", help="attach an immutable tag+reason to a bet (never edits the bet)")
     annotate.add_argument("bet_id", type=int)
     annotate.add_argument("tag", help="e.g. bug:in-play-pricing, settler-error, match-suspect")
@@ -72,6 +74,11 @@ def main(argv: list[str] | None = None) -> int:
         return run_hot(args, config)
     if args.command == "negrisk":
         return run_negrisk(args, config)
+    if args.command == "web":
+        from arb.experimental.webserver import serve
+
+        serve(args.port)
+        return 0
     if args.command == "annotate":
         from arb.experimental.annotations import annotate as annotate_bet
 

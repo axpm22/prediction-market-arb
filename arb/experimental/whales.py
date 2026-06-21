@@ -15,7 +15,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
+import json
+
+from arb.pricing import q6
+from arb.store import Store
 
 
 @dataclass(frozen=True)
@@ -23,9 +28,11 @@ class WalletStat:
     address: str
     n_trades: int
     win_rate: float
+    top_category: str
     top_category_share: float
     qualified: bool
     suspect: bool         # win rate above ceiling -> likely zombie-order illusion
+    pnl_usd: Decimal = Decimal("0")
 
 
 def wallet_stats(trades: list[dict], settled_results: dict[str, bool], categories: dict[str, str],
@@ -53,15 +60,141 @@ def wallet_stats(trades: list[dict], settled_results: dict[str, bool], categorie
         cat_counts: dict[str, int] = defaultdict(int)
         for t in ts:
             cat_counts[categories.get(str(t["conditionId"]), "unknown")] += 1
-        top_share = max(cat_counts.values()) / n if n else 0.0
+        top_category = max(cat_counts, key=cat_counts.get) if cat_counts else "unknown"
+        top_share = cat_counts[top_category] / n if n else 0.0
         suspect = win_rate > wr_ceiling
         qualified = (
             n >= min_trades
-            and wr_floor <= win_rate <= wr_ceiling
+            and win_rate >= wr_floor
             and top_share >= min_share
         )
-        out.append(WalletStat(addr, n, round(win_rate, 4), round(top_share, 4), qualified, suspect))
+        out.append(
+            WalletStat(
+                address=addr,
+                n_trades=n,
+                win_rate=round(win_rate, 4),
+                top_category=top_category,
+                top_category_share=round(top_share, 4),
+                qualified=qualified,
+                suspect=suspect,
+            )
+        )
     return out
+
+
+def persist_wallet_stats(store: Store, stats: list[WalletStat]) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with store.connect() as con:
+        con.executemany(
+            """INSERT INTO wallets(address, first_seen, n_trades, win_rate, pnl_usd,
+                       top_category, category_share, qualified, suspect)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(address) DO UPDATE SET
+                   n_trades = excluded.n_trades,
+                   win_rate = excluded.win_rate,
+                   pnl_usd = excluded.pnl_usd,
+                   top_category = excluded.top_category,
+                   category_share = excluded.category_share,
+                   qualified = excluded.qualified,
+                   suspect = excluded.suspect""",
+            [
+                (
+                    stat.address,
+                    now,
+                    stat.n_trades,
+                    stat.win_rate,
+                    str(stat.pnl_usd),
+                    stat.top_category,
+                    stat.top_category_share,
+                    int(stat.qualified),
+                    int(stat.suspect),
+                )
+                for stat in stats
+            ],
+        )
+
+
+def record_wallet_trades(store: Store, trades: list[dict]) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    rows = []
+    for trade in trades:
+        rows.append(
+            (
+                str(trade["proxyWallet"]),
+                str(trade.get("observed_at") or trade.get("timestamp") or now),
+                str(trade["conditionId"]),
+                str(trade.get("side", "")),
+                str(Decimal(str(trade.get("price", "0")))),
+                str(Decimal(str(trade.get("size", trade.get("size_usd", "0"))))),
+                int(bool(trade.get("settled", False))),
+                None if trade.get("result") is None else str(trade["result"]),
+            )
+        )
+    with store.connect() as con:
+        con.executemany(
+            """INSERT INTO wallet_trades(address, observed_at, market, side, price, size_usd, settled, result)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            rows,
+        )
+    return len(rows)
+
+
+def record_copy_bet(
+    store: Store,
+    poll_id: int,
+    *,
+    address: str,
+    condition_id: str,
+    category: str,
+    side: str,
+    whale_price: Decimal,
+    next_executable_price: Decimal,
+    size_usd: Decimal,
+    market_title: str = "",
+    suspect: bool = False,
+) -> int:
+    """Log the honest copy experiment: whale price optimistic, post-move fill confirmed."""
+    slippage = copy_fill_slippage(whale_price, next_executable_price)
+    fingerprint = (
+        f"copy:{address}:{condition_id}:{side}:{whale_price}:"
+        f"{next_executable_price}:{size_usd}"
+    )
+    leg = {
+        "venue": "polymarket",
+        "book": condition_id,
+        "wallet": address,
+        "category": category,
+        "outcome_label": side,
+        "whale_price": str(whale_price),
+        "confirmed_price": str(next_executable_price),
+        "slippage": str(slippage),
+    }
+    with store.connect() as con:
+        if con.execute(
+            "SELECT 1 FROM flat_bets WHERE fingerprint = ? AND status = 'OPEN' LIMIT 1",
+            (fingerprint,),
+        ).fetchone():
+            return 0
+        con.execute(
+            """INSERT INTO flat_bets(fingerprint, opened_poll_id, category, sport, kind, trusted, live,
+                   edge, stake_usd, legs_json, optimistic_cost, confirmed_cost, status, placed_at,
+                   notes, quality_flag)
+               VALUES (?, ?, 'nonsports', ?, 'COPY', 0, 0, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?)""",
+            (
+                fingerprint,
+                poll_id,
+                category,
+                str(q6(-slippage)),
+                str(size_usd),
+                json.dumps([leg]),
+                str(whale_price),
+                str(next_executable_price),
+                datetime.now(timezone.utc).isoformat(),
+                f"wallet={address} | slippage={slippage} | {market_title[:80]}",
+                "suspect-wallet" if suspect else None,
+            ),
+        )
+    return 1
 
 
 def copy_fill_slippage(whale_price: Decimal, next_executable_price: Decimal) -> Decimal:

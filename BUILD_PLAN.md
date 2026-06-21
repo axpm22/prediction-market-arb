@@ -364,8 +364,10 @@ fee-adjusted, **on settled markets only**: trade count, win rate, holding time, 
 concentration, realized P&L. Keep only wallets with:
 - `>= min_trades` (default 100),
 - `>= min_history_days` (default 120),
-- win rate in `[wr_floor, wr_ceiling]` (default 0.60–0.72; above 0.72 is usually
-  zombie-order illusion — treat as suspect),
+- win rate `>= wr_floor` (default 0.60). Wallets **above** `wr_ceiling` (0.72) stay qualified
+  but are **flagged `suspect`** (usually zombie-order illusion) — kept on purpose so you can
+  test whether the "too good" cohort actually underperforms after slippage, rather than
+  silently dropping them,
 - single-category concentration `>= min_category_share` (they have a lane).
 
 5.3 **Signal, not autopilot.** When a qualifying wallet opens a position, log a **paper**

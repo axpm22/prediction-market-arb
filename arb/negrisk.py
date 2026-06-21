@@ -14,7 +14,6 @@ never on our own enumeration (an incomplete set fakes an arb).
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -34,14 +33,18 @@ class NegRiskArb:
     min_depth_usd: Decimal
     capturable_usd: Decimal
     exhaustive_exclusive: bool
+    legs: list[dict[str, str]]
+    quality_flag: str | None = None
 
 
-def _json_list(value) -> list:
-    return json.loads(value) if isinstance(value, str) else list(value)
-
-
-def find_negrisk_arb(event: dict, fee_rate: Decimal, min_edge: Decimal,
-                     require_exhaustive: bool, max_outcomes: int) -> NegRiskArb | None:
+def find_negrisk_arb(
+    event: dict,
+    fee_rate: Decimal,
+    min_edge: Decimal,
+    require_exhaustive: bool,
+    max_outcomes: int,
+    min_executable_usd: Decimal | None = None,
+) -> NegRiskArb | None:
     """Detect a convert or overshoot arb in one negative-risk event. None if none."""
     markets = event.get("markets", [])
     if not 2 <= len(markets) <= max_outcomes:
@@ -52,32 +55,66 @@ def find_negrisk_arb(event: dict, fee_rate: Decimal, min_edge: Decimal,
 
     asks: list[Decimal] = []
     ask_depths: list[Decimal] = []
+    ask_legs: list[dict[str, str]] = []
     bids: list[Decimal] = []
-    for m in markets:
+    bid_depths: list[Decimal] = []
+    bid_legs: list[dict[str, str]] = []
+    for index, m in enumerate(markets):
         ask = _dec(m.get("yes_best_ask"))
         bid = _dec(m.get("yes_best_bid"))
         if ask is None or bid is None:
             return None  # an incomplete set cannot be a real basket arb
-        asks.append(ask)
-        ask_depths.append(_dec(m.get("yes_ask_depth")) or Decimal("0"))
-        bids.append(bid)
+        ask_fee = q6(fee_rate * ask * (Decimal("1") - ask))
+        bid_fee = q6(fee_rate * bid * (Decimal("1") - bid))
+        ask_depth = _dec(m.get("yes_ask_depth")) or Decimal("0")
+        bid_depth = _dec(m.get("yes_bid_depth")) or Decimal("0")
+        asks.append(q6(ask + ask_fee))
+        ask_depths.append(ask_depth)
+        ask_legs.append(_leg_json(m, index, "BUY_YES", ask, ask_fee, q6(ask + ask_fee), ask_depth))
+        bids.append(q6(bid - bid_fee))
+        bid_depths.append(bid_depth)
+        bid_legs.append(_leg_json(m, index, "SELL_YES", bid, bid_fee, q6(bid - bid_fee), bid_depth))
 
     # Convert: buy every YES.
-    ask_sum = q6(sum(asks, Decimal("0")) + sum((fee_rate * a * (Decimal("1") - a) for a in asks), Decimal("0")))
+    ask_sum = q6(sum(asks, Decimal("0")))
     if ask_sum < Decimal("1"):
         roi = q6(Decimal("1") / ask_sum - Decimal("1"))
         if roi >= min_edge:
             min_depth = min(ask_depths) if ask_depths else Decimal("0")
+            quality_flag = _quality_flag(min_depth, min_executable_usd)
             return NegRiskArb(str(event.get("id", "")), str(event.get("title", "")), "convert",
-                              len(markets), ask_sum, roi, min_depth, q6(min_depth * roi), exhaustive)
+                              len(markets), ask_sum, roi, min_depth, q6(min_depth * roi), exhaustive,
+                              ask_legs, quality_flag)
 
     # Overshoot: sell every YES (proceeds = Σ bids − fees).
-    bid_sum = q6(sum(bids, Decimal("0")) - sum((fee_rate * b * (Decimal("1") - b) for b in bids), Decimal("0")))
+    bid_sum = q6(sum(bids, Decimal("0")))
     if bid_sum > Decimal("1"):
         edge = q6(bid_sum - Decimal("1"))
         if edge >= min_edge:
+            min_depth = min(bid_depths) if bid_depths else Decimal("0")
+            quality_flag = _quality_flag(min_depth, min_executable_usd)
             return NegRiskArb(str(event.get("id", "")), str(event.get("title", "")), "overshoot",
-                              len(markets), bid_sum, edge, Decimal("0"), Decimal("0"), exhaustive)
+                              len(markets), bid_sum, edge, min_depth, q6(min_depth * edge), exhaustive,
+                              bid_legs, quality_flag)
+    return None
+
+
+def _leg_json(market: dict, index: int, side: str, price: Decimal, fee: Decimal,
+              effective_price: Decimal, depth_usd: Decimal) -> dict[str, str]:
+    return {
+        "market_id": str(market.get("id") or market.get("conditionId") or index),
+        "outcome": str(market.get("outcome") or market.get("question") or f"outcome-{index + 1}"),
+        "side": side,
+        "price": str(price),
+        "fee": str(fee),
+        "effective_price": str(effective_price),
+        "depth_usd": str(depth_usd),
+    }
+
+
+def _quality_flag(min_depth: Decimal, min_executable_usd: Decimal | None) -> str | None:
+    if min_executable_usd is not None and min_depth < min_executable_usd:
+        return "thin-leg"
     return None
 
 

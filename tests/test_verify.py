@@ -21,7 +21,7 @@ def leg(venue: str, outcome: str, cost: str) -> Quote:
     )
 
 
-def arb_bet(store: Store) -> None:
+def arb_bet(store: Store) -> Opportunity:
     legs = [leg("kalshi", "kansas city royals", "0.48"), leg("polymarket", "texas rangers", "0.48")]
     event = Event(event_key=EVENT_KEY, category="sports", sport="baseball_mlb",
                   home="kansas city royals", away="texas rangers",
@@ -29,6 +29,7 @@ def arb_bet(store: Store) -> None:
     opp = Opportunity(kind="ARB", category="sports", event=event, legs=legs,
                       edge=Decimal("0.041667"), stakes={}, status="REVIEW")
     record_tracker_poll(store, store.start_poll("watch"), [opp])
+    return opp
 
 
 def settle_statuses(store: Store) -> list[tuple[str, str, str]]:
@@ -77,6 +78,19 @@ def test_each_bet_verified_once_and_old_bets_skipped(tmp_path) -> None:
     assert run_verify_once(store, config, VCFG, fetchers) == 0  # already has a verdict row
     future = datetime.now(timezone.utc) + timedelta(seconds=2000)
     assert unverified_arb_bets(store, future, VCFG["max_bet_age_secs"]) == []  # too old to bother
+
+
+def test_flash_verdict_does_not_reopen_same_active_fingerprint(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    opp = arb_bet(store)
+    fetchers = {"kalshi": lambda l: Decimal("0.49"), "polymarket": lambda l: Decimal("0.49")}
+    run_verify_once(store, load_config(), VCFG, fetchers)
+
+    record_tracker_poll(store, store.start_poll("watch"), [opp])
+
+    with store.connect() as con:
+        statuses = [r["status"] for r in con.execute("SELECT status FROM flat_bets ORDER BY id")]
+    assert statuses == ["OPEN", "VERIFIED", "CONFIRMED"]
 
 
 def test_sx_legs_are_marked_unverifiable(tmp_path) -> None:

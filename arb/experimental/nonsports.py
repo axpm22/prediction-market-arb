@@ -18,7 +18,7 @@ import requests
 import yaml
 
 from arb.arbitrage import detect_divergences, detect_true_arbs
-from arb.matching import token_ratio
+from arb.matching import normalize_name, token_ratio
 from arb.models import Opportunity, Quote
 from arb.pricing import kalshi_fee_cost
 from arb.store import Store
@@ -98,7 +98,10 @@ def suggest_candidates(
     matches = []
     for k_ticker, k_title in kalshi_titles:
         for pm_id, pm_title in polymarket_titles:
-            score = token_ratio(k_title.lower(), pm_title.lower())
+            score = token_ratio(
+                normalize_name(k_title, "nonsports", aliases={}),
+                normalize_name(pm_title, "nonsports", aliases={}),
+            )
             if score >= threshold:
                 matches.append((score, k_ticker, k_title, pm_id, pm_title))
     return sorted(matches, reverse=True)

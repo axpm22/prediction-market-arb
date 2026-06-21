@@ -145,6 +145,13 @@ flb:
   min_samples_per_band: 200
   flb_min_edge: 0.02
   bands: [0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0]
+# Phase 8 forecast calibration ledger.
+forecast:
+  enabled: true
+  edge_min: 0.05
+  min_n_for_claim: 100
+  logloss_clip: 0.000001
+  calibration_bins: 10
 # Phase 5 whale-flow tracker (Polymarket on-chain; measurement/debunk only).
 whale_tracker:
   enabled: true

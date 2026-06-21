@@ -1,8 +1,12 @@
 import json
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
+from arb.config import load_config
+from arb.experimental.negrisk_sweep import run_negrisk_pass
 from arb.negrisk import find_negrisk_arb
+from arb.store import Store
 
 ARGS = dict(fee_rate=Decimal("0"), min_edge=Decimal("0.005"), require_exhaustive=True, max_outcomes=30)
 
@@ -26,6 +30,9 @@ def test_convert_arb_vector() -> None:
     assert arb.basket_sum == Decimal("0.950000")
     assert arb.edge == (Decimal("1") / Decimal("0.95") - Decimal("1")).quantize(Decimal("0.000001"))
     assert arb.basket_n == 3
+    assert len(arb.legs) == 3
+    assert arb.legs[0]["side"] == "BUY_YES"
+    assert arb.legs[0]["effective_price"] == "0.300000"
 
 
 def test_overshoot_arb_vector() -> None:
@@ -49,6 +56,16 @@ def test_thin_leg_caps_capturable() -> None:
     assert arb.capturable_usd == (Decimal("10") * arb.edge).quantize(Decimal("0.000001"))
 
 
+def test_thin_leg_is_flagged_against_executable_floor() -> None:
+    arb = find_negrisk_arb(
+        event([Decimal("0.30"), Decimal("0.30"), Decimal("0.35")], depths=[Decimal("500"), Decimal("500"), Decimal("10")]),
+        **ARGS,
+        min_executable_usd=Decimal("50"),
+    )
+    assert arb is not None
+    assert arb.quality_flag == "thin-leg"
+
+
 def test_non_exhaustive_set_is_rejected() -> None:
     # negRisk metadata false → cannot prove exhaustive+exclusive → no auto arb.
     assert find_negrisk_arb(event([Decimal("0.30"), Decimal("0.30"), Decimal("0.35")], neg=False), **ARGS) is None
@@ -58,3 +75,23 @@ def test_recorded_real_fixture_parses_and_is_no_arb() -> None:
     ev = json.loads(Path("tests/fixtures/polymarket_negrisk_event.json").read_text())
     # Real Spain vs Saudi Arabia: Σ asks = 1.008 > 1 → correctly NOT a convert arb.
     assert find_negrisk_arb(ev, **ARGS) is None
+
+
+def test_sweep_persists_executable_legs_and_quality_flag(tmp_path) -> None:
+    config = replace(load_config(), database_path=tmp_path / "arb.sqlite")
+    store = Store(config.database_path)
+    thin_event = event(
+        [Decimal("0.30"), Decimal("0.30"), Decimal("0.35")],
+        depths=[Decimal("500"), Decimal("500"), Decimal("10")],
+    )
+
+    assert run_negrisk_pass(store, config, fetcher=lambda: [thin_event], book_filler=lambda e: e) == (1, 1)
+    with store.connect() as con:
+        [row] = list(con.execute("SELECT * FROM flat_bets WHERE kind='NEGRISK'"))
+
+    legs = json.loads(row["legs_json"])
+    assert len(legs) == 3
+    assert row["optimistic_cost"] == "0.950000"
+    assert row["pnl_optimistic"] == "0.05"
+    assert row["quality_flag"] == "thin-leg"
+    assert "thin-leg" in row["notes"]

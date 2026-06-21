@@ -73,8 +73,9 @@ def _append_arb_resolved_row(con: sqlite3.Connection, bet: sqlite3.Row) -> None:
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
                               live, edge, stake_usd, legs_json, optimistic_cost, pnl_optimistic, pnl_confirmed,
-                              status, placed_at, settled_at, result, notes)
-        VALUES (?, ?, ?, ?, ?, 'ARB', ?, ?, ?, ?, ?, ?, ?, ?, 'SETTLED', ?, ?, 'RESOLVED', ?)
+                              pnl_kelly_optimistic, pnl_kelly_confirmed, status, placed_at, settled_at,
+                              result, notes, quality_flag, kelly_f_star, kelly_stake_usd)
+        VALUES (?, ?, ?, ?, ?, 'ARB', ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'SETTLED', ?, ?, 'RESOLVED', ?, ?, ?, ?)
         """,
         (
             bet["fingerprint"], bet["id"], bet["opened_poll_id"], bet["category"], bet["sport"],
@@ -82,6 +83,7 @@ def _append_arb_resolved_row(con: sqlite3.Connection, bet: sqlite3.Row) -> None:
             bet["optimistic_cost"], bet["pnl_optimistic"], bet["pnl_confirmed"],
             bet["placed_at"], datetime.now(timezone.utc).isoformat(),
             "score-settled; realized=provisional; venue-resolution-cross-check-pending",
+            bet["quality_flag"], bet["kelly_f_star"], bet["kelly_stake_usd"],
         ),
     )
 
@@ -158,12 +160,16 @@ def _append_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, 
     ).fetchone()
     pnl_optimistic = _flat_pnl(bet["optimistic_cost"], result)
     pnl_confirmed = _flat_pnl(confirmed["confirmed_cost"], result) if confirmed else None
+    pnl_kelly_optimistic = _sized_pnl(bet["optimistic_cost"], result, bet["kelly_stake_usd"])
+    pnl_kelly_confirmed = _sized_pnl(confirmed["confirmed_cost"], result, bet["kelly_stake_usd"]) if confirmed else None
     con.execute(
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
                               live, edge, stake_usd, legs_json, optimistic_cost, confirmed_cost,
-                              pnl_optimistic, pnl_confirmed, status, placed_at, settled_at, result, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SETTLED', ?, ?, ?, ?)
+                              pnl_optimistic, pnl_confirmed, pnl_kelly_optimistic, pnl_kelly_confirmed,
+                              status, placed_at, settled_at, result, notes,
+                              quality_flag, kelly_f_star, kelly_stake_usd)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SETTLED', ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             bet["fingerprint"],
@@ -181,24 +187,37 @@ def _append_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, 
             None if not confirmed else confirmed["confirmed_cost"],
             None if pnl_optimistic is None else str(pnl_optimistic),
             None if pnl_confirmed is None else str(pnl_confirmed),
+            None if pnl_kelly_optimistic is None else str(pnl_kelly_optimistic),
+            None if pnl_kelly_confirmed is None else str(pnl_kelly_confirmed),
             # P&L attributes to the day the bet was placed (SPEC §9); report restates that day.
             bet["placed_at"],
             datetime.now(timezone.utc).isoformat(),
             result,
             note,
+            bet["quality_flag"],
+            bet["kelly_f_star"],
+            bet["kelly_stake_usd"],
         ),
     )
 
 
 def _flat_pnl(effective_cost: str | None, result: str) -> Decimal | None:
     """$1 flat stake at effective cost c: win pays (1-c)/c, loss pays -1, void pays 0."""
-    if effective_cost is None:
+    return _sized_pnl(effective_cost, result, Decimal("1.00"))
+
+
+def _sized_pnl(effective_cost: str | None, result: str, stake_usd: str | Decimal | None) -> Decimal | None:
+    """Stake-sized P&L at effective cost c; $1 stake is the flat-bet special case."""
+    if effective_cost is None or stake_usd in (None, ""):
         return None
+    stake = Decimal(str(stake_usd))
+    if stake <= 0:
+        return Decimal("0.00")
     if result == "VOID":
         return Decimal("0.00")
     if result == "LOST":
-        return Decimal("-1.00")
+        return money(-stake)
     cost = Decimal(effective_cost)
     if cost <= 0:
         return None
-    return money((Decimal("1") - cost) / cost)
+    return money(stake * (Decimal("1") - cost) / cost)

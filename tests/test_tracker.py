@@ -1,9 +1,10 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from arb.models import Event, Opportunity, Quote
 from arb.store import Store
-from arb.tracker import record_tracker_poll, tracker_bet_view
+from arb.tracker import record_tracker_poll, tracker_bet_view, write_daily_report
 
 
 def arb_opp(cost_a: str, cost_b: str) -> Opportunity:
@@ -102,3 +103,39 @@ def test_tracker_arb_optimistic_and_confirmed_append_only(tmp_path) -> None:
     assert bet["optimistic"] == Decimal("0.04")
     assert bet["confirmed"] == Decimal("0.03")
 
+
+def test_daily_report_summarizes_base_bets_not_append_rows(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    poll1 = store.start_poll("watch")
+    record_tracker_poll(store, poll1, [arb_opp("0.48", "0.48")])
+    poll2 = store.start_poll("watch")
+    record_tracker_poll(store, poll2, [arb_opp("0.485", "0.485")])
+
+    csv_path, md_path = write_daily_report(store, datetime.now(timezone.utc).date(), tmp_path)
+
+    # One base bet was placed; the CONFIRMED append row should enrich it, not count as
+    # a second daily bet.
+    assert len(csv_path.read_text().strip().splitlines()) == 2
+    md = md_path.read_text()
+    assert "## Class x Fill x Trust" in md
+    assert "## Kelly" in md
+    assert "| ARB | optimistic | trusted | 1 |" in md
+    assert "| ARB | confirmed | trusted | 1 |" in md
+
+
+def test_tracker_persists_opportunity_notes_with_lifecycle_note(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    poll1 = store.start_poll("watch")
+    opp = replace(
+        ev_opp("0.50"),
+        notes=("segment-blocked",),
+        quality_flag="segment-blocked",
+        kelly_stake=Decimal("0.00"),
+    )
+    record_tracker_poll(store, poll1, [opp])
+
+    with store.connect() as con:
+        [row] = list(con.execute("SELECT notes, quality_flag, kelly_stake_usd FROM flat_bets"))
+    assert row["notes"] == "first-observed,segment-blocked"
+    assert row["quality_flag"] == "segment-blocked"
+    assert row["kelly_stake_usd"] == "0.00"

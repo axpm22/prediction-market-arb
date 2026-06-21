@@ -56,7 +56,7 @@ def test_focus_pass_detects_on_simultaneous_requotes_and_confirms_existing(tmp_p
     with store.connect() as con:
         first = [dict(r) for r in con.execute("SELECT * FROM flat_bets WHERE kind='ARB' ORDER BY id")]
     assert first[0]["status"] == "OPEN"
-    assert first[0]["notes"] == "focus-simultaneous"
+    assert "focus-simultaneous" in first[0]["notes"].split(",")
 
     # Second pass re-finds the same fingerprint → CONFIRMED at simultaneous prices,
     # and never closes anything it didn't open.
@@ -64,7 +64,7 @@ def test_focus_pass_detects_on_simultaneous_requotes_and_confirms_existing(tmp_p
     with store.connect() as con:
         rows = [dict(r) for r in con.execute("SELECT * FROM flat_bets WHERE kind='ARB' ORDER BY id")]
     assert [r["status"] for r in rows] == ["OPEN", "CONFIRMED"]
-    assert rows[1]["notes"] == "focus-confirmed-simultaneous"
+    assert "focus-confirmed-simultaneous" in rows[1]["notes"].split(",")
     assert rows[1]["pnl_confirmed"] is not None
     with store.connect() as con:
         closes = list(con.execute("SELECT * FROM flat_bets WHERE kind='CLOSE'"))

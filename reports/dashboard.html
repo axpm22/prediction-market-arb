@@ -1,11 +1,13 @@
 <!doctype html><html><head><meta charset="utf-8">
-<title>ArbitrageModel — read-only dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<title>ArbitrageModel - read-only dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
 <style>body{font-family:system-ui;margin:2rem;max-width:900px}
 table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style></head>
 <body><h1>ArbitrageModel</h1><p>Read-only. Paper measurement; no orders placed.</p>
-<canvas id="eq"></canvas><h2>ARB grades</h2><pre id="grades"></pre>
-<h2>Segment scores</h2><div id="scores"></div>
+<canvas id="eq"></canvas><canvas id="kelly"></canvas><canvas id="buckets"></canvas>
+<h2>Risk</h2><pre id="risk"></pre><h2>ARB grades</h2><pre id="grades"></pre>
+<h2>CLV</h2><pre id="clv"></pre><h2>Segment scores</h2><div id="scores"></div>
 <script>
 fetch('dashboard.json').then(r=>r.json()).then(d=>{
  const mk=(c,l)=>({label:l,data:c.map(p=>({x:p.t,y:p.cum})),fill:false});
@@ -13,8 +15,21 @@ fetch('dashboard.json').then(r=>r.json()).then(d=>{
    mk(d.equity.optimistic_raw,'optimistic raw'),mk(d.equity.optimistic_clean,'optimistic clean'),
    mk(d.equity.confirmed_raw,'confirmed raw'),mk(d.equity.confirmed_clean,'confirmed clean')]},
    options:{parsing:false,scales:{x:{type:'time'}}}});
+ new Chart(document.getElementById('kelly'),{type:'line',data:{datasets:[
+   mk(d.kelly_equity.optimistic_raw,'Kelly optimistic raw'),mk(d.kelly_equity.optimistic_clean,'Kelly optimistic clean'),
+   mk(d.kelly_equity.confirmed_raw,'Kelly confirmed raw'),mk(d.kelly_equity.confirmed_clean,'Kelly confirmed clean')]},
+   options:{parsing:false,scales:{x:{type:'time'}}}});
+ const labels=Object.keys(d.ev_edge_buckets);
+ new Chart(document.getElementById('buckets'),{type:'bar',data:{labels,datasets:[
+   {label:'EV raw count',data:labels.map(k=>d.ev_edge_buckets[k].raw.n)},
+   {label:'EV clean count',data:labels.map(k=>d.ev_edge_buckets[k].clean.n)}]}});
+ document.getElementById('risk').textContent=JSON.stringify({
+   drawdowns:d.drawdowns,kelly_drawdowns:d.kelly_drawdowns,
+   optimistic_confirmed_gap:d.optimistic_confirmed_gap,left_on_table:d.left_on_table
+ },null,1);
  document.getElementById('grades').textContent=JSON.stringify(d.arb_grades,null,1)+
    '\nopen: '+JSON.stringify(d.arb_open);
+ document.getElementById('clv').textContent=JSON.stringify(d.copy_trade_clv,null,1);
  let h='<table><tr><th>segment</th><th>n</th><th>WR</th><th>ROI</th><th>score</th><th>tier</th></tr>';
  d.segment_scores.forEach(s=>h+=`<tr><td>${s.segment}</td><td>${s.n}</td><td>${(s.win_rate*100).toFixed(1)}%</td><td>${(s.roi*100).toFixed(1)}%</td><td>${s.score}</td><td>${s.tier}</td></tr>`);
  document.getElementById('scores').innerHTML=h+'</table>';

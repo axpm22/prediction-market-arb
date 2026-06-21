@@ -13,7 +13,15 @@ SETTLED_EVENT = "baseball_mlb:2026-06-09:kansas city royals:texas rangers:3"
 START = datetime(2026, 6, 9, 23, 41, tzinfo=timezone.utc)
 
 
-def ev_opp(outcome: str, cost: str, market_type: str = "WINNER", line: str | None = None) -> Opportunity:
+def ev_opp(
+    outcome: str,
+    cost: str,
+    market_type: str = "WINNER",
+    line: str | None = None,
+    *,
+    quality_flag: str | None = None,
+    kelly_stake: str | None = None,
+) -> Opportunity:
     quote = Quote(
         event_key=SETTLED_EVENT,
         venue="kalshi",
@@ -36,6 +44,9 @@ def ev_opp(outcome: str, cost: str, market_type: str = "WINNER", line: str | Non
     return Opportunity(
         kind="EV", category="sports", event=event, legs=[quote],
         edge=Decimal("0.03"), stakes={}, status="OK",
+        quality_flag=quality_flag,
+        kelly_f_star=None if kelly_stake is None else Decimal("0.10"),
+        kelly_stake=None if kelly_stake is None else Decimal(kelly_stake),
     )
 
 
@@ -91,6 +102,28 @@ def test_confirmed_fill_settles_from_second_observation_price(tmp_path) -> None:
     assert row["pnl_optimistic"] == "0.93"   # entry at 0.5175 effective
     assert row["pnl_confirmed"] == "1.40"    # confirmed at 0.4175 effective: (1-c)/c
     assert row["placed_at"] is not None
+
+
+def test_settlement_records_kelly_pnl_from_base_sizing(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    place_bets(store, [ev_opp("kansas city royals", "0.50", kelly_stake="10.00")])
+    place_bets(store, [ev_opp("kansas city royals", "0.40", kelly_stake="20.00")])
+    config = load_config()
+    assert settle_sports(store, config, Path("tests/fixtures")) == 1
+    row = settled_rows(store)[0]
+    assert row["pnl_kelly_optimistic"] == "9.32"
+    # Confirmed P&L uses the second-observation cost, but the base row's Kelly size.
+    assert row["pnl_kelly_confirmed"] == "13.95"
+    assert row["kelly_stake_usd"] == "10.00"
+
+
+def test_settlement_carries_quality_flag_to_scoring_row(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    place_bets(store, [ev_opp("kansas city royals", "0.50", quality_flag="suspect-edge")])
+    config = load_config()
+    assert settle_sports(store, config, Path("tests/fixtures")) == 1
+    row = settled_rows(store)[0]
+    assert row["quality_flag"] == "suspect-edge"
 
 
 def test_manual_settlement(tmp_path) -> None:

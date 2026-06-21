@@ -14,6 +14,7 @@ from typing import Any, Callable
 import requests
 
 from arb.negrisk import NegRiskArb, find_negrisk_arb
+from arb.pricing import money, q6
 from arb.store import Store
 
 GAMMA = "https://gamma-api.polymarket.com"
@@ -39,18 +40,33 @@ def attach_books(event: dict) -> dict:
         resp = requests.get(f"{CLOB}/book", params={"token_id": tokens[0]}, headers=HEADERS, timeout=30)
         if resp.status_code == 404:
             m["yes_best_ask"] = m["yes_best_bid"] = ""
+            m["yes_ask_depth"] = m["yes_bid_depth"] = "0"
             continue
         resp.raise_for_status()
         book = resp.json()
-        asks = [(float(l["price"]), float(l["size"])) for l in book.get("asks", []) if float(l["price"]) > 0]
-        bids = [(float(l["price"]), float(l["size"])) for l in book.get("bids", []) if float(l["price"]) > 0]
+        asks = _levels(book.get("asks", []))
+        bids = _levels(book.get("bids", []))
         if asks:
             p, s = min(asks)
-            m["yes_best_ask"], m["yes_ask_depth"] = str(p), str(round(p * s, 2))
+            m["yes_best_ask"], m["yes_ask_depth"] = str(p), str(q6(p * s))
         else:
             m["yes_best_ask"], m["yes_ask_depth"] = "", "0"
-        m["yes_best_bid"] = str(max(bids)[0]) if bids else ""
+        if bids:
+            p, s = max(bids)
+            m["yes_best_bid"], m["yes_bid_depth"] = str(p), str(q6(p * s))
+        else:
+            m["yes_best_bid"], m["yes_bid_depth"] = "", "0"
     return event
+
+
+def _levels(raw_levels: list[dict[str, Any]]) -> list[tuple[Decimal, Decimal]]:
+    levels: list[tuple[Decimal, Decimal]] = []
+    for level in raw_levels:
+        price = Decimal(str(level["price"]))
+        size = Decimal(str(level["size"]))
+        if price > 0 and size > 0:
+            levels.append((price, size))
+    return levels
 
 
 def run_negrisk_pass(store: Store, config, fetcher: Callable[[], list[dict]] | None = None,
@@ -60,8 +76,14 @@ def run_negrisk_pass(store: Store, config, fetcher: Callable[[], list[dict]] | N
     events = fetcher()
     found: list[NegRiskArb] = []
     for event in events:
-        arb = find_negrisk_arb(book_filler(event), Decimal("0"), config.negrisk_min_edge,
-                               config.negrisk_require_exhaustive, config.negrisk_max_outcomes)
+        arb = find_negrisk_arb(
+            book_filler(event),
+            config.polymarket_fee_rate,
+            config.negrisk_min_edge,
+            config.negrisk_require_exhaustive,
+            config.negrisk_max_outcomes,
+            config.min_executable_usd,
+        )
         if arb is not None:
             found.append(arb)
     poll_id = store.start_poll("negrisk")
@@ -78,10 +100,25 @@ def _persist(store: Store, poll_id: int, arbs: list[NegRiskArb]) -> None:
                 continue
             con.execute(
                 """INSERT INTO flat_bets(fingerprint, opened_poll_id, category, sport, kind, trusted, live,
-                       edge, stake_usd, legs_json, optimistic_cost, status, placed_at, notes, basket_n, basket_sum)
-                   VALUES (?, ?, 'nonsports', 'negrisk', 'NEGRISK', ?, 0, ?, '1.00', '[]', ?, 'OPEN', ?, ?, ?, ?)""",
-                (fp, poll_id, int(a.exhaustive_exclusive), str(a.edge), str(a.basket_sum),
+                       edge, stake_usd, legs_json, optimistic_cost, pnl_optimistic, status, placed_at,
+                       notes, quality_flag, basket_n, basket_sum)
+                   VALUES (?, ?, 'nonsports', 'negrisk', 'NEGRISK', ?, 0, ?, '1.00', ?, ?, ?, 'OPEN', ?, ?, ?, ?, ?)""",
+                (fp, poll_id, int(a.exhaustive_exclusive), str(a.edge), json.dumps(a.legs),
+                 str(a.basket_sum), str(money(a.edge)),
                  datetime.now(timezone.utc).isoformat(),
-                 f"{a.kind} basket n={a.basket_n} sum={a.basket_sum} capturable=${a.capturable_usd} | {a.title[:50]}",
+                 _notes(a),
+                 a.quality_flag,
                  a.basket_n, str(a.basket_sum)),
             )
+
+
+def _notes(arb: NegRiskArb) -> str:
+    parts = [
+        f"{arb.kind} basket n={arb.basket_n}",
+        f"sum={arb.basket_sum}",
+        f"capturable=${arb.capturable_usd}",
+    ]
+    if arb.quality_flag:
+        parts.append(arb.quality_flag)
+    parts.append(arb.title[:50])
+    return " | ".join(parts)

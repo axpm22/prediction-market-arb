@@ -124,6 +124,49 @@ CREATE TABLE IF NOT EXISTS ledger(
     balance_after TEXT NOT NULL,
     FOREIGN KEY(position_id) REFERENCES positions(id)
 );
+CREATE TABLE IF NOT EXISTS wallets(
+    address TEXT PRIMARY KEY,
+    first_seen TEXT,
+    n_trades INTEGER,
+    win_rate REAL,
+    pnl_usd TEXT,
+    top_category TEXT,
+    category_share REAL,
+    qualified INTEGER,
+    suspect INTEGER
+);
+CREATE TABLE IF NOT EXISTS wallet_trades(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    address TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    market TEXT NOT NULL,
+    side TEXT NOT NULL,
+    price TEXT NOT NULL,
+    size_usd TEXT NOT NULL,
+    settled INTEGER NOT NULL DEFAULT 0,
+    result TEXT
+);
+CREATE TABLE IF NOT EXISTS forecasts(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    made_at TEXT NOT NULL,
+    vertical TEXT NOT NULL,
+    category TEXT NOT NULL,
+    market TEXT NOT NULL,
+    p_base TEXT,
+    p_you TEXT NOT NULL,
+    p_market TEXT NOT NULL,
+    executable_price TEXT,
+    settle_by TEXT,
+    settled_at TEXT,
+    outcome INTEGER,
+    brier_you REAL,
+    brier_market REAL,
+    logloss_you REAL,
+    logloss_market REAL,
+    clv REAL
+);
+CREATE INDEX IF NOT EXISTS idx_quotes_close_lookup
+ON quotes(event_key, venue, book, outcome, live, fetched_at);
 """
 
 MIGRATION_COLUMNS = {
@@ -153,4 +196,3 @@ MIGRATION_COLUMNS = {
         "basket_sum": "TEXT",
     },
 }
-
