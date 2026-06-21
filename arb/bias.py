@@ -53,11 +53,17 @@ def calibration(store: Store, bands: list[float], min_samples: int, flb_min_edge
         in_band = [won for c, won in data if lo <= c < hi]
         n = len(in_band)
         implied_mid = (lo + hi) / 2.0
+        # Always report the true realized win rate and edge; only the actionable SIGNAL is
+        # gated on sample size (an under-powered band is observed, just not yet trusted).
+        wr = sum(1 for w in in_band if w) / n if n else 0.0
+        edge = wr - implied_mid if n else 0.0
         if n < min_samples:
-            stats.append(BandStat(lo, hi, n, implied_mid, 0.0, 0.0, "INSUFFICIENT_DATA"))
-            continue
-        wr = sum(1 for w in in_band if w) / n
-        edge = wr - implied_mid
-        signal = "back" if edge >= flb_min_edge else ("avoid" if edge <= -flb_min_edge else "neutral")
+            signal = "INSUFFICIENT_DATA"
+        elif edge >= flb_min_edge:
+            signal = "back"
+        elif edge <= -flb_min_edge:
+            signal = "avoid"
+        else:
+            signal = "neutral"
         stats.append(BandStat(lo, hi, n, implied_mid, round(wr, 4), round(edge, 4), signal))
     return stats
