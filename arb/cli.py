@@ -50,6 +50,8 @@ def build_parser() -> argparse.ArgumentParser:
     settle.add_argument("--manual", nargs=2, metavar=("EVENT_KEY", "WINNING_OUTCOME"),
                         help="settle one event by hand (required for non-sports)")
     settle.add_argument("--fixtures", action="store_true", help="use recorded scores fixtures")
+    sub.add_parser("scores", help="per-segment edge scores from settled clean bets (Phase 2)")
+    sub.add_parser("dashboard", help="regenerate reports/dashboard.json from the ledger (Phase 6)")
     sub.add_parser("daemon", help="watch loop + scheduled scans + settlement + daily report writer")
     return parser
 
@@ -68,6 +70,23 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "positions":
         print_positions(store)
+        return 0
+    if args.command == "scores":
+        from .scoring import persist_scores, score_segments
+
+        scores = score_segments(store, config.scoring)
+        persist_scores(store, scores)
+        print(f"{'SEGMENT':28s} {'N':>4} {'WR':>6} {'ROI':>8} {'SCORE':>6}  TIER")
+        for s in scores:
+            print(f"{s.segment:28s} {s.n:>4} {s.win_rate:>6.1%} {s.roi:>8.2%} {s.score:>6.1f}  {s.tier}")
+        if not scores:
+            print("(no settled clean bets yet — INSUFFICIENT_DATA across the board)")
+        return 0
+    if args.command == "dashboard":
+        from .experimental.dashboard import write_dashboard
+
+        path = write_dashboard(store, config)
+        print(f"Wrote {path}")
         return 0
     if args.command == "settle":
         if args.manual:

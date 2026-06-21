@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>ArbitrageModel — read-only dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>body{font-family:system-ui;margin:2rem;max-width:900px}
+table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style></head>
+<body><h1>ArbitrageModel</h1><p>Read-only. Paper measurement; no orders placed.</p>
+<canvas id="eq"></canvas><h2>ARB grades</h2><pre id="grades"></pre>
+<h2>Segment scores</h2><div id="scores"></div>
+<script>
+fetch('dashboard.json').then(r=>r.json()).then(d=>{
+ const mk=(c,l)=>({label:l,data:c.map(p=>({x:p.t,y:p.cum})),fill:false});
+ new Chart(document.getElementById('eq'),{type:'line',data:{datasets:[
+   mk(d.equity.optimistic_raw,'optimistic raw'),mk(d.equity.optimistic_clean,'optimistic clean'),
+   mk(d.equity.confirmed_raw,'confirmed raw'),mk(d.equity.confirmed_clean,'confirmed clean')]},
+   options:{parsing:false,scales:{x:{type:'time'}}}});
+ document.getElementById('grades').textContent=JSON.stringify(d.arb_grades,null,1)+
+   '\nopen: '+JSON.stringify(d.arb_open);
+ let h='<table><tr><th>segment</th><th>n</th><th>WR</th><th>ROI</th><th>score</th><th>tier</th></tr>';
+ d.segment_scores.forEach(s=>h+=`<tr><td>${s.segment}</td><td>${s.n}</td><td>${(s.win_rate*100).toFixed(1)}%</td><td>${(s.roi*100).toFixed(1)}%</td><td>${s.score}</td><td>${s.tier}</td></tr>`);
+ document.getElementById('scores').innerHTML=h+'</table>';
+});
+</script></body></html>
