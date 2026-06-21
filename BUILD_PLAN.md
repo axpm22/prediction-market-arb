@@ -234,10 +234,17 @@ a second, sizing-aware P&L curve. This is an interview talking point, not a stra
 ### Files
 New `arb/sizing.py`; columns in `flat_bets`; wire into `arb/tracker.py`, `arb/report.py`.
 
+> **Scope (logic note).** Kelly needs a probability `p̂` and a payout variance, so it applies
+> only to **directional probabilistic** bets: `EV`, `FLB`, `FORECAST`. **Locked arbitrage**
+> (`ARB`, `NEGRISK`, `ARB_BTC`) has no `p̂` and (in principle) no variance — size those by the
+> depth-limited basket, not Kelly, and leave the Kelly columns NULL for them. Don't blend the
+> two in the Kelly equity curve.
+
 ### Steps
 
-3.1 **Kelly for a $1-payout binary.** For a contract bought at effective cost `c` with model
-probability `p̂` (consensus for EV bets), net odds `b = (1 − c) / c`, `q = 1 − p̂`:
+3.1 **Kelly for a $1-payout binary** (directional bets only). For a contract bought at
+effective cost `c` with model probability `p̂` (consensus for EV; model blend for FORECAST;
+realized-rate for FLB), net odds `b = (1 − c) / c`, `q = 1 − p̂`:
 ```
 f* = (b * p̂ − q) / b      # clip to [0, max_kelly_fraction_of_bankroll]
 stake = kelly_fraction * f* * bankroll_usd
@@ -562,8 +569,11 @@ New `arb/negrisk.py`; new Polymarket discovery for multi-outcome events in
 1. **Discover negative-risk event groups.** In Gamma, multi-outcome events expose the member
    markets and a `negRisk`/`negRiskMarketID` style grouping. Record one real response to
    `tests/fixtures/polymarket_negrisk_event.json`. **Verify the group is exhaustive AND
-   mutually exclusive** from the event metadata — if you cannot prove exhaustive+exclusive,
-   it is REVIEW, never auto-filled (hard rule #6 logic applies intra-venue too).
+   mutually exclusive** from the event metadata. This is the intra-venue analogue of hard
+   rule #6: rule #6 itself is about *cross-venue* settlement mismatch, but the same caution
+   applies here — the failure mode is a set that looks exhaustive/exclusive but isn't (a
+   missing outcome, or two that can both resolve YES). If you cannot prove
+   exhaustive+exclusive from metadata, it is REVIEW, never auto-filled.
 2. **Pull executable books** for every member outcome from the CLOB (`/book`), never Gamma
    mids (SPEC §3.2). You need best ask for convert, best bid for the overshoot side.
 3. **Detect (Decimal):**
@@ -634,6 +644,15 @@ New `arb/bias.py`; a backtest entry `arb backtest-flb`; forward signal in detect
    strength differs by category — sports vs politics vs crypto).
 4. **Pre-register** the price bands and `flb_min_edge` before forward data accumulates.
 
+> **Execution caveats (logic note — the bias is real but not free to harvest):**
+> (a) **You can't short** on these venues. "Fade the longshot" means *buying NO* on the cheap
+> outcome — i.e. buying the **expensive** ($0.90+) side. (b) That collides with the **fee death
+> zone** (see Part III): a flat per-contract fee is a large % tax near $0 and the thin upside
+> near $1 is easily eaten by fees. So the *tradable* FLB bands are the mid-priced ones, not the
+> extreme tails where the bias is largest. Add a price floor/ceiling and run the **verified**
+> Kalshi fee through every band's break-even before betting it. The calibration *curve* is the
+> citable result; the *tradable* slice is narrower than the bias suggests.
+
 ### Config additions
 ```yaml
 flb:
@@ -642,6 +661,8 @@ flb:
   flb_min_edge: 0.02          # realized−implied required to bet a band
   bands: [0.0,0.05,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95,1.0]
   per_category: true          # fit the curve separately per category
+  price_floor: 0.15           # fee death-zone guard (verify Kalshi fee first)
+  price_ceiling: 0.85
 ```
 
 ### Tests
@@ -756,6 +777,15 @@ note that this is theoretical capture, not executed.
   data shows ~−65% ROI. Do not allocate. If you want an LLM in the loop, use it as *one
   feature* feeding the EV/FLB models, never as a standalone "pick the winner."
 
+> **Open tension to resolve, not assume (logic note).** S9 says macro is efficient, yet the
+> Phase-8.2 base-rate work and some practitioners claim retail *over-prices uncertainty* on
+> macro vs historical base rates (e.g. fading an over-hyped "Fed cut" market). These are not
+> flatly contradictory: the **topline, heavily-traded** macro contract is efficient (don't try
+> to out-forecast the Fed), but a **specific retail-dominated framing** may misprice relative
+> to a base rate. Treat this as a *testable hypothesis inside the Phase-8 forecast ledger*, not
+> a settled fact: log base-rate-vs-market divergences on macro framings, score Brier vs market,
+> and let N≥100 settle it. Until then, allocate nothing to macro — measure only.
+
 ---
 
 ## Build order for Part II
@@ -864,10 +894,11 @@ New `data/base_rates.yaml` (human-curated, versioned in git); `arb/forecast/base
 Profitable traders have a lane. Build the best probability model you can in **one** vertical.
 
 ### Concrete starting points
-- **Weather (most accessible edge for a student):** public NWS/ECMWF **ensemble** forecasts
-  already output calibrated probabilities that often beat Kalshi weather prices. Ingest the
-  ensemble, map to the market's exact threshold/timestamp, output `p_you`. Verify the data
-  source and record a fixture first (hard rule #5).
+- **Weather (most *accessible* edge — but not the easiest to profit from):** public
+  NWS/ECMWF/GEFS **ensemble** forecasts are free and world-class, and Kalshi settles on
+  objective station data. The catch: the naive version is a documented loser (fat-tailed
+  errors, a fee death zone, and fast arb bots). Build it the honest way per **Part III** —
+  empirical error model, price floor, neglected-city/slow-horizon focus. Fixture first.
 - **Niche sports:** Elo or Massey-type ratings + home/rest/injury adjustments, blended with
   market-implied probability; focus on a **less-covered league** where the market is thin.
 - Blend rule: `p_you = w·p_model + (1−w)·p_market`, with `w` fit on historical calibration,
@@ -971,4 +1002,121 @@ neglected-market questions is the strongest "I out-predict" evidence you can han
 ### Build order
 8.1 screener → 8.2 base rates → 8.3 one model → 8.4 ledger+scoring (the core) → 8.5 writeup.
 Do **not** chase a second vertical until the first shows a positive, pre-registered Brier
-skill score. One proven niche beats five unproven ones.
+skill score. One proven niche beats five unproven ones. The chosen first vertical is
+**weather** — see Part III for the deep dive and its honest caveats.
+
+---
+
+# PART III — WEATHER VERTICAL DEEP DIVE (the chosen Phase-8 niche)
+
+### Why weather — and the honest caveat
+World-class probabilistic forecasts are **public and free** (NWS, ECMWF, GFS/GEFS
+ensembles), and Kalshi weather markets settle on **objective NWS station data** — no oracle
+ambiguity, no settlement-rule risk (the thing that kills your cross-venue sports arbs). That
+is the appeal. **But the naive version is a documented loser:** a public 0-for-32 postmortem
+lays out exactly why. Treat weather as a *hard forecasting problem with a free data edge*, not
+as easy money. The path below is what makes it a credible vertical rather than a fee donation.
+
+### The three structural traps (and the fix for each)
+1. **Gaussian blindness.** Temperature forecast errors have **fat tails**: the "2σ event" a
+   normal model says is 5% actually happens ~10–12%. A Gaussian model understates tail risk,
+   so it mislabels 75–80% bets as "90% locks."
+   **Fix:** build **empirical** error distributions from historical forecast-vs-actual data
+   per city (Open-Meteo Historical Forecast API, coverage since ~2021). `p_you` comes from the
+   empirical CDF of past errors, never from `norm.cdf`.
+
+2. **The fee death zone.** Kalshi fees bite hardest at low prices: on a $0.05 contract a
+   ~$0.01 fee is a 20% tax — you'd need the event to hit >83% just to break even before
+   slippage.
+   **Fix:** a hard **price floor** (never trade below ~$0.15) and a ceiling (~$0.85). **Verify
+   Kalshi's exact weather fee schedule first** — it may differ from the proportional
+   `0.07·P·(1−P)` formula in SPEC §3.1; put the *measured* fee model in `config.yaml`, then
+   simulate the break-even win-rate at every price tier before any paper bet.
+
+3. **You are exit liquidity.** Weather books are populated by arb bots reacting within seconds
+   of each NWS model-cycle update. A 15–60 min polling loop trades on stale signals and feeds
+   those bots.
+   **Fix:** do **not** race them. Either (a) trade only the *slower* slice — multi-day
+   horizons and **less-covered cities** the bots ignore — or (b) keep it measurement-only and
+   score your forecast against the *closing* line (CLV), accepting you won't capture the fast
+   move. Report capturability honestly.
+
+### Where the edge actually is (synthesis)
+Not the headline NY/Chicago near-term markets (bot-dominated, efficient). Look at
+**less-covered cities**, **multi-day horizons** (thin books, ensembles still informative),
+and **mid-price contracts ($0.15–0.85)**. Your edge is *better-calibrated tails from an
+empirical error model* vs a crowd anchoring on the single deterministic forecast.
+
+### Data sources (verify + fixture before coding — hard rule #5)
+- **Open-Meteo Ensemble API** — free, no key, CC-BY. ECMWF IFS ENS, GFS ENS (GEFS, ~31–62
+  members), ICON EPS, GEM EPS; up to 51 members / 35-day horizon. Member spread → empirical
+  threshold-exceedance probability.
+- **Open-Meteo Historical Forecast API** — reconstructed past forecasts (since ~2021) to build
+  the empirical error distribution and backtest calibration.
+- **NWS CLI / ASOS station data** — the official settlement source. Verify the exact station
+  per Kalshi city (e.g. NYC = KNYC Central Park) and the LST day window.
+
+### Build steps (maps onto Phase 8)
+1. **8.3 model:** ingest the ensemble for the market's exact station + threshold + settlement
+   day; convert member distribution → `p_you` via the **empirical** error model (per-city bias
+   correction). Fixture first.
+2. **Fee / break-even simulator:** before any bet, compute the required win-rate per price tier
+   with the *verified* Kalshi fee; enforce the price floor/ceiling.
+3. **8.4 ledger + scoring:** log `p_you` vs `p_market`, settle on the CLI, score Brier /
+   log-loss **vs the market**, calibration curve, CLV — segmented by city and horizon (some
+   will beat market, some won't; that split *is* the finding).
+4. **Pre-register** (dated): "empirical-distribution weather forecasts beat market Brier on
+   {less-covered cities, ≥2-day horizon} over N≥100 settled contracts." **Kill criteria (learn
+   from the 0-32): kill at 10 consecutive losing paper trades, or Brier-skill ≤ 0 at N≥30 — do
+   not wait for 32.**
+
+### Config additions
+```yaml
+weather:
+  enabled: true
+  stations: { nyc: KNYC, chi: KORD, mia: KMIA, aus: KAUS, lax: KLAX, den: KDEN, phl: KPHL }
+  ensemble_source: open_meteo_ensemble     # verify + fixture first
+  members_min: 30
+  error_model: empirical                   # NEVER gaussian
+  history_since: "2021-01-01"
+  price_floor: 0.15                         # fee death-zone guard
+  price_ceiling: 0.85
+  target_cities_first: [aus, den, phl]      # less-covered, less bot-dominated
+  min_horizon_days: 1
+  kill_after_consecutive_losses: 10
+```
+
+### Honest verdict
+Weather is the most *accessible* forecasting edge (free, world-class data; objective
+settlement) but **not the easiest to profit from** (fat tails, fees, fast bots). For your goal
+it is ideal as a **calibration study**: even if you only beat market Brier on the slow,
+neglected slice, that is a clean, citable "I out-forecast the market here — and here is exactly
+where I don't." Build it as measurement, kill fast, and let the calibration curve, not P&L, be
+the result.
+
+### Sources (weather, for RESULTS.md)
+- North Lake Labs "What I Learned Losing Money on Kalshi Weather Markets" (0-32 postmortem:
+  Gaussian blindness, fee death zone, exit-liquidity).
+- Kalshi Help Center — Weather Markets (CLI/ASOS settlement, stations).
+- Open-Meteo Ensemble API + Historical Forecast API docs.
+
+---
+
+# UNIFIED MASTER SEQUENCE (how Phases 0–8 and Strategies S1–S9 interleave)
+
+The doc has two numbering schemes (Phases = infrastructure/deliverables; S1–S9 = strategy
+catalog, where **S3 = Phase 4**). Execute in this single order:
+
+1. **Phase 0** repo hygiene.
+2. **Phase 1** EV de-contamination (blocks everything downstream).
+3. **Phase 2** category scorer → **Phase 3** Kelly column.
+4. **S1** negative-risk arb (highest-value strategy add).
+5. **S2** favorite-longshot fade (backtests on existing data).
+6. **Phase 6** dashboard (parallelizable; existing data only).
+7. **Phase 8 + Part III** forecasting/calibration on the weather vertical (your "out-predict"
+   result).
+8. **Phase 4 (=S3)** BTC same-oracle arb; **Phase 5 (=S8)** whale-copy debunk; **S4** news-lag;
+   **S6** MM simulator — time-permitting experiments.
+9. **Phase 7** writeup, ongoing throughout.
+
+Minimum recruiter-grade artifact = steps 1–7. Steps 8 add novelty before sophomore recruiting.

@@ -56,3 +56,20 @@ fixes) may change freely with dated changelog entries — fixing a parser is not
     longshots. Per-book p_i are persisted so flags can be re-graded under another de-vig
     method without re-running the experiment. This is instrumentation, not an analysis-rule
     change.
+
+- **2026-06-12 — BUILD_PLAN strategy experiments, hypotheses frozen before their data.**
+  - **H-S1 (negative-risk basket):** intra-Polymarket convert/overshoot flags with edge ≥
+    `negrisk.min_edge` produce positive CONFIRMED P&L over n ≥ 50 flags. Single venue,
+    single resolution → no settlement-mismatch escape hatch. Also report the flag
+    *lifetime* distribution (how fast the basket closes) — itself a result. Kill: confirmed
+    median ≤ 0.
+  - **H-S2 (favorite-longshot):** on settled clean bets, realized win rate diverges from
+    the implied band midpoint in the literature direction (longshots overpriced, favorites
+    underpriced) by ≥ `flb.flb_min_edge`, with ≥ `flb.min_samples_per_band` per band.
+    Forward FLB bets are flat-$1, bands fitted before forward data. Kill: no band shows a
+    significant divergence after n is reached.
+  - **H-Phase4 (BTC same-oracle):** same-oracle short-horizon BTC cross-venue arb produces
+    positive CONFIRMED P&L over n ≥ 100 flags — AND ONLY IF Kalshi and Polymarket are first
+    proven to settle off the identical index (probed 2026-06: they are NOT, so the pair
+    stays REVIEW and this hypothesis is dormant until the oracle match is documented). Kill:
+    confirmed median ≤ 0, or oracles never provably identical.
