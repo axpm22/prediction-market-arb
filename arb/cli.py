@@ -51,6 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="settle one event by hand (required for non-sports)")
     settle.add_argument("--fixtures", action="store_true", help="use recorded scores fixtures")
     sub.add_parser("scores", help="per-segment edge scores from settled clean bets (Phase 2)")
+    sub.add_parser("backtest-flb", help="favorite-longshot calibration over settled clean bets (S2)")
     sub.add_parser("dashboard", help="regenerate reports/dashboard.json from the ledger (Phase 6)")
     sub.add_parser("daemon", help="watch loop + scheduled scans + settlement + daily report writer")
     return parser
@@ -81,6 +82,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{s.segment:28s} {s.n:>4} {s.win_rate:>6.1%} {s.roi:>8.2%} {s.score:>6.1f}  {s.tier}")
         if not scores:
             print("(no settled clean bets yet — INSUFFICIENT_DATA across the board)")
+        return 0
+    if args.command == "backtest-flb":
+        from .bias import calibration
+
+        flb = config.flb
+        stats = calibration(store, list(flb.get("bands", [])), int(flb.get("min_samples_per_band", 200)),
+                            float(flb.get("flb_min_edge", 0.02)))
+        print(f"{'BAND':>14} {'N':>6} {'IMPLIED':>8} {'REALIZED':>9} {'EDGE':>8}  SIGNAL")
+        for s in stats:
+            print(f"  [{s.lo:.2f},{s.hi:.2f}) {s.n:>6} {s.implied_mid:>8.1%} {s.realized_win_rate:>9.1%} {s.edge:>+8.1%}  {s.signal}")
         return 0
     if args.command == "dashboard":
         from .experimental.dashboard import write_dashboard

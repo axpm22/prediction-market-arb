@@ -140,3 +140,8 @@ btc_arb:
   window_match_secs: 5             # exact window end-time match (never interpolate)
   max_window_minutes: 15
   trusted: false                   # REVIEW until both rulebooks confirm identical oracle
+# S2 favorite-longshot bias backtest (over settled clean bets you already store).
+flb:
+  min_samples_per_band: 200
+  flb_min_edge: 0.02
+  bands: [0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0]

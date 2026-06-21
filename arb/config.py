@@ -73,6 +73,7 @@ class AppConfig:
     btc_window_match_secs: int
     btc_max_window_minutes: int
     btc_trusted: bool
+    flb: dict
     odds_api_key: str | None
     database_path: Path = Path("data/arb.sqlite")
 
@@ -180,6 +181,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         btc_window_match_secs=int(btc.get("window_match_secs", 5)),
         btc_max_window_minutes=int(btc.get("max_window_minutes", 15)),
         btc_trusted=bool(btc.get("trusted", False)),
+        flb=dict(raw.get("flb", {})),
         odds_api_key=os.environ.get("ODDS_API_KEY") or None,
         database_path=database_path,
     )
