@@ -7,6 +7,12 @@ public, unauthenticated GET endpoints (plus a The Odds API key for optional spor
 consensus). The core question it answers: **if I had put $1 on every flag, where would
 I be today — and how much of the claimed edge survived contact with reality?**
 
+**Start here:** [RESULTS.md](RESULTS.md) (the findings) ·
+[PREREGISTRATION.md](PREREGISTRATION.md) (frozen methodology) ·
+[INTERVIEW_NOTES.md](INTERVIEW_NOTES.md) (the short version). Headline finding: cross-venue
+sports arbitrage nets **≈$0 on confirmed fills** — the mirage the harness was built to
+measure honestly.
+
 ## The strategy
 
 ### 1. Prices are probabilities, and the same bet trades in three stores
@@ -78,9 +84,9 @@ simulated (sequential edge), and capital constraints are excluded.
 | Process | Cadence | Role |
 |---|---|---|
 | `python -m arb daemon` | sweep ~4.5 min | discover markets, persist every quote, wide detection, daily settle + report |
-| `python -m arbnext focus` | rotation ~1–2 min | same bet, all books, at one time — simultaneous detection + confirmations |
-| `python -m arbnext verify` | poll 10s | flash VERIFIED/VANISHED verdicts on fresh arbs |
-| `python -m arbnext closing` | check 60s | one closing-line EV snapshot per game (off while EV is disabled) |
+| `python -m arb.experimental focus` | rotation ~1–2 min | same bet, all books, at one time — simultaneous detection + confirmations |
+| `python -m arb.experimental verify` | poll 10s | flash VERIFIED/VANISHED verdicts on fresh arbs |
+| `python -m arb.experimental closing` | check 60s | one closing-line EV snapshot per game (off while EV is disabled) |
 
 ## Setup
 
@@ -109,15 +115,15 @@ python -m arb scan --fixtures --dry-run --sport baseball_mlb
 ```bash
 # the full loop, detached, sleep-resistant:
 nohup env PYTHONUNBUFFERED=1 caffeinate -i .venv/bin/python -m arb daemon >> logs/daemon.log 2>&1 &
-nohup env PYTHONUNBUFFERED=1 .venv/bin/python -m arbnext focus  >> logs/focus.log  2>&1 &
-nohup env PYTHONUNBUFFERED=1 .venv/bin/python -m arbnext verify >> logs/verify.log 2>&1 &
+nohup env PYTHONUNBUFFERED=1 .venv/bin/python -m arb.experimental focus  >> logs/focus.log  2>&1 &
+nohup env PYTHONUNBUFFERED=1 .venv/bin/python -m arb.experimental verify >> logs/verify.log 2>&1 &
 
 python -m arb report                  # ledger totals
 python -m arb report --daily          # the $1-per-flag daily answer
 python -m arb settle                  # resolve open bets against final scores now
-python -m arbnext annotate ID TAG R…  # immutable bet annotation (reason mandatory)
-python -m arbnext nonsports-suggest   # fuzzy candidates for the manual non-sports map
-pkill -f "arb daemon"                 # stop (same pattern for arbnext processes)
+python -m arb.experimental annotate ID TAG R…  # immutable bet annotation (reason mandatory)
+python -m arb.experimental nonsports-suggest   # fuzzy candidates for the manual non-sports map
+pkill -f "arb daemon"                 # stop (same pattern for arb.experimental processes)
 ```
 
 Daily files land in `reports/daily/YYYY-MM-DD.csv` and `.md`. Credit budget when EV is
