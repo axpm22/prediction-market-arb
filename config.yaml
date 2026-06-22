@@ -13,6 +13,10 @@ max_leg_skew_secs: 60
 # not an arb. Suspect groups are never flagged as ARB (divergences get match-suspect).
 max_start_drift_mins: 30
 match_suspect_prob_diff: 0.15
+# Opportunity cost of locking capital to settlement. A locked arb ROI below this
+# annualized rate (pro-rated over days-to-settlement) is tagged 'uneconomic' — recorded
+# but separated from real edges in the report. 0.05 = 5%/yr (roughly cash/T-bills).
+capital_charge_annual: 0.05
 min_books_for_consensus: 3
 min_liquidity_usd: 500
 min_executable_usd: 50
@@ -72,7 +76,9 @@ verify:
 hot:
   poll_secs: 2               # how often to look for new bets to adopt
   check_interval_secs: 1.0   # per-bet re-quote cadence
-  watch_duration_secs: 120   # give up after this long
+  watch_duration_secs: 900   # cap raised from 120s: at 120s nearly every arb hit the
+                             # ceiling, so lifetimes were right-censored and unmeasurable.
+                             # Rows that still hit this cap are tagged censored=true.
   dead_checks: 3             # consecutive dead checks = arb lifetime over
   max_watchers: 3
 

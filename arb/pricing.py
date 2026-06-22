@@ -120,3 +120,17 @@ def clv_points(venue_close_mid: Decimal, entry_ask: Decimal) -> Decimal:
     the $1 unit. Positive means the venue drifted toward (past) your entry — the
     slow-gradient claim realized, measurable with zero settled games."""
     return q6(venue_close_mid - entry_ask)
+
+
+def capital_charge(days_to_settlement: float, annual_rate: Decimal) -> Decimal:
+    """Opportunity cost of locking capital until settlement. An arb's ROI is earned over
+    the holding period, so it must clear what the same capital would earn elsewhere over
+    those days; fees are already inside the cost, this adds the time-value of money."""
+    days = Decimal(str(max(0.0, days_to_settlement)))
+    return q6(annual_rate * days / Decimal("365"))
+
+
+def is_economic(roi: Decimal, days_to_settlement: float, annual_rate: Decimal) -> bool:
+    """An arb is economic only if its locked ROI beats the capital charge for its holding
+    period. A 0.2% lock held 14 days is worse than cash at 5%/yr."""
+    return roi > capital_charge(days_to_settlement, annual_rate)

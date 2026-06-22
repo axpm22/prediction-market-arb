@@ -206,3 +206,36 @@ def _depth_at_ask(orderbook: dict[str, Any], side: str, ask: Decimal) -> Decimal
         return None
     best = max(opposing, key=lambda level: Decimal(str(level[0])))
     return (Decimal(str(best[1])) * ask).quantize(Decimal("0.01"))
+
+
+def kalshi_leg_result(leg: dict) -> str | None:
+    """Venue-actual resolution for a Kalshi ARB leg (audit fix #1 resolver).
+
+    Reads the settled market's `result` ('yes'/'no'). The leg's YES contract wins iff
+    result == 'yes'. Returns None for non-Kalshi legs or markets not yet settled, so
+    reconciliation skips them rather than guessing. Polymarket legs need their own
+    resolver (conditionId resolution) before mixed-venue arbs fully reconcile.
+    """
+    if leg.get("venue") != "kalshi":
+        return None
+    ticker = leg.get("book")
+    if not ticker:
+        return None
+    try:
+        resp = requests.get(f"{BASE_URL}/markets/{ticker}",
+                            timeout=30, headers={"User-Agent": "arb-paper-scanner/0.1 (public read-only)"})
+        if resp.status_code != 200:
+            return None
+        market = resp.json().get("market", {})
+    except requests.RequestException:
+        return None
+    if str(market.get("status")) not in {"settled", "finalized"}:
+        return None
+    result = str(market.get("result", "")).lower()
+    if result == "yes":
+        return "WON"
+    if result == "no":
+        return "LOST"
+    if result in {"void", "voided", "cancelled", "canceled"}:
+        return "VOID"
+    return None

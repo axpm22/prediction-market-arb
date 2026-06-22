@@ -23,12 +23,11 @@ from arb.store import Store
 
 PROCESSES = [
     ("daemon", "arb daemon"),
-    ("focus", "arb.experimental focus"),
-    ("verify", "arb.experimental verify"),
-    ("hot", "arb.experimental hot"),
     ("negrisk", "arb.experimental negrisk"),
     ("political", "arb.experimental political"),
+    ("nonsports", "arb.experimental nonsports"),
     ("closing", "arb.experimental closing"),
+    ("btc", "arb.experimental btc"),
 ]
 
 LOG_FILES = {
@@ -57,40 +56,17 @@ SCANNERS = [
         "detail": "MLB now; also stores configured soccer, tennis, MMA quotes.",
     },
     {
-        "id": "focus",
-        "name": "Focused Recheck",
-        "process": "focus",
-        "stop": "focus",
-        "command": [sys.executable, "-m", "arb.experimental", "focus"],
-        "log": LOG_FILES["focus"],
-        "poll_kinds": ["focus"],
-        "next_where": "category='sports' AND kind IN ('EV','ARB')",
-        "return_where": "category='sports' AND kind IN ('EV','ARB')",
-        "detail": "Re-quotes active sports events across books within seconds.",
-    },
-    {
-        "id": "verify",
-        "name": "Flash Verify",
-        "process": "verify",
-        "stop": "verify",
-        "command": [sys.executable, "-m", "arb.experimental", "verify"],
-        "log": LOG_FILES["verify"],
-        "poll_kinds": [],
-        "next_where": "category='sports' AND kind='ARB'",
-        "return_where": "category='sports' AND kind='ARB'",
-        "detail": "Checks fresh ARB flags quickly; support process, not its own return stream.",
-    },
-    {
-        "id": "hot",
-        "name": "Hot Watchers",
-        "process": "hot",
-        "stop": "hot",
-        "command": [sys.executable, "-m", "arb.experimental", "hot"],
-        "log": LOG_FILES["hot"],
-        "poll_kinds": [],
-        "next_where": "category='sports' AND kind='ARB'",
-        "return_where": "category='sports' AND kind='ARB'",
-        "detail": "Tracks fresh ARBs every second through their short lifetime.",
+        "id": "micro_ev",
+        "name": "Micro EV",
+        "process": "daemon",
+        "stop": "daemon",
+        "command": None,
+        "log": LOG_FILES["daemon"],
+        "poll_kinds": ["watch"],
+        "next_where": "kind='EV' AND quality_flag='micro'",
+        "return_where": "kind='EV' AND quality_flag='micro'",
+        "detail": "Thin-book EV only; $5-$50 visible depth, stricter edge, depth-capped stake.",
+        "control": "parent",
     },
     {
         "id": "negrisk",
@@ -204,6 +180,7 @@ def _scanner_processes(ps: str | None = None) -> dict[str, dict[str, Any]]:
             "count": count,
             "status": status,
             "stopped": stopped,
+            "control": scanner.get("control", "direct"),
         }
     return out
 
@@ -214,7 +191,11 @@ def _process_health() -> list[dict[str, Any]]:
     nowm = time.monotonic()
     if nowm - float(_PS_CACHE["at"]) < _PS_TTL_SECS and _PS_CACHE["value"]:
         return _PS_CACHE["value"]
-    out = list(_scanner_processes().values())
+    out = [
+        row
+        for scanner_id, row in _scanner_processes().items()
+        if SCANNERS_BY_ID.get(scanner_id, {}).get("control") != "parent"
+    ]
     _PS_CACHE.update({"at": nowm, "value": out})
     return out
 
@@ -316,14 +297,18 @@ def _open_bet_payload(row, now: datetime) -> dict[str, Any]:
     if len(legs) > 4:
         leg_labels.append(f"+{len(legs) - 4} more")
     notes = [note for note in str(row["notes"] or "").split(",") if note]
+    quality = row["quality_flag"] or "clean"
+    lane = "MICRO_EV" if row["kind"] == "EV" and quality == "micro" else row["kind"]
     return {
         "id": int(row["id"]),
         "kind": row["kind"],
+        "lane": lane,
+        "display_kind": "MICRO EV" if lane == "MICRO_EV" else row["kind"],
         "status": row["status"],
         "edge": float(row["edge"] or 0),
         "sport": row["sport"],
         "category": row["category"],
-        "quality": row["quality_flag"] or "clean",
+        "quality": quality,
         "trusted": bool(row["trusted"]),
         "live": bool(row["live"]),
         "placed_at": row["placed_at"],
@@ -338,6 +323,7 @@ def _open_bet_payload(row, now: datetime) -> dict[str, Any]:
         "venue": first.get("venue"),
         "cost": first.get("cost"),
         "depth_usd": first.get("depth_usd"),
+        "stake_usd": row["stake_usd"],
         "market_type": first.get("market_type"),
         "line": first.get("line"),
         "legs": leg_labels,
@@ -469,7 +455,7 @@ def _scanner_summaries(con, processes: list[dict[str, Any]], now: datetime) -> l
     out = []
     for scanner in SCANNERS:
         scanner_id = str(scanner["id"])
-        proc = by_id.get(scanner_id, {})
+        proc = by_id.get(scanner_id) or by_id.get(str(scanner["process"]), {})
         returns = _scanner_returns(con, str(scanner["return_where"]))
         out.append(
             {
@@ -478,6 +464,7 @@ def _scanner_summaries(con, processes: list[dict[str, Any]], now: datetime) -> l
                 "status": proc.get("status", "down"),
                 "count": proc.get("count", 0),
                 "stopped": bool(proc.get("stopped")),
+                "control": scanner.get("control", "direct"),
                 "detail": scanner["detail"],
                 "next": _scanner_next_event(con, str(scanner["next_where"]), now),
                 "returns": returns,
@@ -536,6 +523,8 @@ def _send_json(handler: BaseHTTPRequestHandler, payload: dict[str, Any], status:
 
 
 def _launch_scanner(scanner: dict[str, Any]) -> dict[str, Any]:
+    if not scanner.get("command"):
+        return {"ok": False, "error": f"{scanner['name']} runs inside {scanner['process']} and is not a separate process"}
     process_info = _scanner_processes().get(str(scanner["id"]), {})
     if int(process_info.get("count") or 0) > 0:
         return {"ok": True, "message": "already running"}
@@ -560,6 +549,8 @@ def _set_scanner_state(scanner_id: str, action: str) -> dict[str, Any]:
         return {"ok": False, "error": f"unknown scanner {scanner_id!r}"}
     if action not in {"start", "stop"}:
         return {"ok": False, "error": "action must be start or stop"}
+    if scanner.get("control") == "parent":
+        return {"ok": False, "error": f"{scanner['name']} is a lane inside {SCANNERS_BY_ID[str(scanner['process'])]['name']}; start/stop that worker instead"}
     Path("data").mkdir(exist_ok=True)
     stop_path = _stop_path(str(scanner["stop"]))
     if action == "stop":
@@ -627,6 +618,28 @@ def build_state(store: Store, config) -> dict[str, Any]:
               FROM flat_bets
              WHERE kind='EV' AND status='SETTLED'
                AND result IN ('WON','LOST','VOID') AND quality_flag='suspect-edge'
+            """
+        ).fetchone()
+        # Micro EV is practical-but-thin: separate from clean EV so small-depth rows do
+        # not inflate the headline model while still showing whether tiny sizing works.
+        micro_ev = c.execute(
+            """
+            SELECT COUNT(*) settled,
+                   SUM(CASE WHEN result='WON' THEN 1 ELSE 0 END) won,
+                   SUM(CASE WHEN result='LOST' THEN 1 ELSE 0 END) lost,
+                   COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl,
+                   COALESCE(SUM(CAST(stake_usd AS REAL)),0) stake
+              FROM flat_bets
+             WHERE kind='EV' AND status='SETTLED'
+               AND result IN ('WON','LOST','VOID') AND quality_flag='micro'
+            """
+        ).fetchone()
+        micro_active = c.execute(
+            """
+            SELECT COUNT(*) n, COALESCE(SUM(CAST(stake_usd AS REAL)),0) stake
+              FROM flat_bets
+             WHERE kind='EV' AND quality_flag='micro'
+               AND status IN ('OPEN','REVIEW','VERIFIED','CONFIRMED','LIFETIME')
             """
         ).fetchone()
         # ARB gets its own lane: locked/provisional, includes RESOLVED. Never in EV totals.
@@ -843,6 +856,17 @@ def build_state(store: Store, config) -> dict[str, Any]:
             "win_rate": round(int(clean_ev["won"] or 0) / int(clean_ev["settled"]), 4) if int(clean_ev["settled"] or 0) else 0.0,
         },
         "suspect_ev": {"n": int(suspect_ev["n"] or 0), "pnl": _money(suspect_ev["pnl"])},
+        "micro_ev": {
+            "active": int(micro_active["n"] or 0),
+            "active_stake": _money(micro_active["stake"]),
+            "settled": int(micro_ev["settled"] or 0),
+            "won": int(micro_ev["won"] or 0),
+            "lost": int(micro_ev["lost"] or 0),
+            "pnl": _money(micro_ev["pnl"]),
+            "stake": _money(micro_ev["stake"]),
+            "roi": round((float(micro_ev["pnl"] or 0) / float(micro_ev["stake"])), 4) if float(micro_ev["stake"] or 0) else 0.0,
+            "win_rate": round(int(micro_ev["won"] or 0) / int(micro_ev["settled"]), 4) if int(micro_ev["settled"] or 0) else 0.0,
+        },
         # Locked ARB P&L — ARB's own lane (locked/provisional, includes RESOLVED).
         "locked_arb": {
             "settled": int(locked_arb["settled"] or 0),
@@ -991,6 +1015,7 @@ tr:last-child td{border-bottom:0}
 .badge.VANISHED,.badge.LOST,.badge.BLOCKED{color:var(--red);background:rgba(255,107,99,.14)}
 .badge.LIFETIME,.badge.SETTLED,.badge.RESOLVED{color:var(--violet);background:rgba(181,140,255,.13)}
 .badge.UNVERIFIABLE,.badge.INSUFFICIENT_DATA{color:var(--gold);background:rgba(224,173,59,.13)}
+.badge.MICRO_EV,.badge.micro{color:#5fe0c1;background:rgba(95,224,193,.14)}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
 .tab{height:28px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);padding:0 9px;cursor:pointer}
 .tab.active{color:var(--text);border-color:#555963;background:#2a2c33}
@@ -1011,6 +1036,7 @@ tr:last-child td{border-bottom:0}
 .scanner-toggle{height:30px;min-width:78px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);cursor:pointer}
 .scanner-toggle.stop{border-color:rgba(255,107,99,.45);color:var(--red)}
 .scanner-toggle.start{border-color:rgba(86,194,113,.45);color:var(--green)}
+.scanner-toggle.linked{border-color:var(--line);color:var(--muted);cursor:default}
 .scanner-toggle:disabled{opacity:.55;cursor:wait}
 .status-chip{display:inline-flex;align-items:center;gap:6px;height:24px;border:1px solid var(--line);border-radius:99px;padding:0 8px;color:var(--muted);font-size:11px}
 .status-chip .dot{width:7px;height:7px}
@@ -1128,10 +1154,12 @@ let activeLog = "daemon";
 let activeOpenKind = "EV";
 const colors = {raw:"#a4a6ad", clean:"#6aa8ff", confirmed:"#56c271", opps:"#e0ad3b"};
 const trackKey = "arb-dashboard-tracking-v1";
+const laneLabel = kind => ({MICRO_EV:"MICRO EV"}[kind] || kind);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const num = v => Number(v || 0);
 const compact = v => new Intl.NumberFormat(undefined,{notation:"compact",maximumFractionDigits:1}).format(num(v));
 const money = v => `${num(v) >= 0 ? "+$" : "-$"}${Math.abs(num(v)).toFixed(2)}`;
+const usd = v => `$${Math.abs(num(v)).toFixed(2)}`;
 const pct = v => `${(num(v) * 100).toFixed(1)}%`;
 const axisMoney = v => {
   const n = num(v), sign = n < 0 ? "-" : "";
@@ -1337,10 +1365,11 @@ function renderMetrics(d) {
   const workerDetail = unhealthy.length
     ? unhealthy.map(p => `${p.status}: ${p.name}`).join(" · ")
     : `${running}/${enabled || d.processes.length} enabled workers running`;
-  const ce = d.clean_ev || {pnl:0,won:0,lost:0,settled:0,roi:0}, se = d.suspect_ev || {n:0,pnl:0}, la = d.locked_arb || {pnl:0,resolved:0,settled:0};
+  const ce = d.clean_ev || {pnl:0,won:0,lost:0,settled:0,roi:0}, se = d.suspect_ev || {n:0,pnl:0}, me = d.micro_ev || {active:0,pnl:0,settled:0,roi:0,active_stake:0}, la = d.locked_arb || {pnl:0,resolved:0,settled:0};
   const suspectNote = se.n ? ` · suspect: ${se.n} (${money(se.pnl)})` : "";
   $("metrics").innerHTML = [
     metric("Clean EV P&L", `<span class="${valClass(ce.pnl)}">${money(ce.pnl)}</span>`, `${ce.won}W / ${ce.lost}L · ${ce.settled} settled · ${pct(ce.roi)} ROI${suspectNote}`),
+    metric("Micro EV", `<span class="${valClass(me.pnl)}">${money(me.pnl)}</span>`, `${me.active} open · ${me.settled} settled · ${pct(me.roi)} ROI · open stake ${usd(me.active_stake)}`, "blue"),
     metric("Locked ARB P&L", `<span class="${valClass(la.pnl)}">${money(la.pnl)}</span>`, `${la.settled} settled (${la.resolved} resolved) · provisional`),
     metric("Open Bets", compact(d.health.open_bets), `${compact(d.health.flat_bets)} ledger rows`, "blue"),
     metric("ARB Verification", `<span class="good">${d.arb.verified}</span><span class="muted"> / </span><span class="bad">${d.arb.vanished}</span>`, `${d.arb.unverifiable} unverifiable`),
@@ -1418,21 +1447,23 @@ function renderScanners(d) {
   const scanners = d.scanners || [];
   const running = scanners.filter(s => s.status === "ok").length;
   const disabled = scanners.filter(s => s.status === "disabled").length;
-  $("scanner-summary").textContent = `${running} running · ${disabled} disabled · ${scanners.length} controllable groups`;
+  const controllable = scanners.filter(s => s.control !== "parent").length;
+  $("scanner-summary").textContent = `${running} running · ${disabled} disabled · ${controllable} controllable workers · ${scanners.length - controllable} linked lane`;
   $("scanners").innerHTML = scanners.map(s => {
-    const canStop = s.status === "ok" || s.status === "duplicate" || s.status === "stopping";
+    const linked = s.control === "parent";
+    const canStop = !linked && (s.status === "ok" || s.status === "duplicate" || s.status === "stopping");
     const action = canStop ? "stop" : "start";
-    const buttonClass = canStop ? "stop" : "start";
-    const buttonText = canStop ? "Deactivate" : "Activate";
+    const buttonClass = linked ? "linked" : (canStop ? "stop" : "start");
+    const buttonText = linked ? "Linked" : (canStop ? "Deactivate" : "Activate");
     return `<div class="scanner-row">
-      <div><button class="scanner-toggle ${buttonClass}" data-scanner="${esc(s.id)}" data-action="${action}" type="button">${buttonText}</button></div>
+      <div><button class="scanner-toggle ${buttonClass}" data-scanner="${esc(s.id)}" data-action="${action}" type="button" ${linked ? "disabled" : ""}>${buttonText}</button></div>
       <div><div class="scanner-title">${scannerStatus(s)}<span>${esc(s.name)}</span></div><div class="scanner-meta">${esc(s.detail)}</div></div>
       <div>${scannerNext(s)}</div>
       <div>${scannerReturn(s)}</div>
       <div>${scannerLastPoll(s)}</div>
     </div>`;
   }).join("") || `<div class="muted">No scanners configured.</div>`;
-  $("scanners").querySelectorAll("button").forEach(btn => {
+  $("scanners").querySelectorAll("button:not(:disabled)").forEach(btn => {
     btn.onclick = () => setScanner(btn.dataset.scanner, btn.dataset.action, btn);
   });
 }
@@ -1440,15 +1471,15 @@ function renderScanners(d) {
 function renderOpenBets(d) {
   const counts = (d.open_bets || []).reduce((acc, bet) => {
     acc.ALL = (acc.ALL || 0) + 1;
-    acc[bet.kind] = (acc[bet.kind] || 0) + 1;
+    acc[bet.lane || bet.kind] = (acc[bet.lane || bet.kind] || 0) + 1;
     return acc;
   }, {});
   // DIVERGENCE is never an open bet (research only); NEGRISK only appears here if executable.
-  const kinds = ["EV", "ARB", "NEGRISK", "ALL"].filter(kind => counts[kind]);
+  const kinds = ["EV", "MICRO_EV", "ARB", "NEGRISK", "ALL"].filter(kind => counts[kind]);
   if (!kinds.includes(activeOpenKind)) activeOpenKind = kinds.includes("EV") ? "EV" : (kinds[0] || "ALL");
-  $("open-tabs").innerHTML = kinds.map(kind => `<button class="tab ${kind === activeOpenKind ? "active" : ""}" data-kind="${esc(kind)}">${esc(kind)} ${counts[kind]}</button>`).join("");
+  $("open-tabs").innerHTML = kinds.map(kind => `<button class="tab ${kind === activeOpenKind ? "active" : ""}" data-kind="${esc(kind)}">${esc(laneLabel(kind))} ${counts[kind]}</button>`).join("");
   $("open-tabs").querySelectorAll("button").forEach(btn => btn.onclick = () => { activeOpenKind = btn.dataset.kind; renderOpenBets(state); });
-  const shown = (d.open_bets || []).filter(bet => activeOpenKind === "ALL" || bet.kind === activeOpenKind);
+  const shown = (d.open_bets || []).filter(bet => activeOpenKind === "ALL" || (bet.lane || bet.kind) === activeOpenKind);
   const clean = shown.filter(bet => bet.quality === "clean").length;
   const hiddenNote = d.negrisk_hidden ? ` · ${d.negrisk_hidden} NEGRISK not executable (hidden)` : "";
   $("open-summary").textContent = `${shown.length} shown · ${clean} clean · grouped by event date${hiddenNote}`;
@@ -1458,7 +1489,7 @@ function renderOpenBets(d) {
     .map(key => [key, shown.filter(bet => bet.horizon === key)])
     .filter(([, bets]) => bets.length);
   if (!groups.length) {
-    $("open-bets").innerHTML = `<div class="muted">No open ${esc(activeOpenKind)} bets right now.</div>`;
+    $("open-bets").innerHTML = `<div class="muted">No open ${esc(laneLabel(activeOpenKind))} bets right now.</div>`;
     return;
   }
   $("open-bets").innerHTML = groups.map(([key, bets]) => {
@@ -1467,10 +1498,11 @@ function renderOpenBets(d) {
         bet.outcome ? `${bet.outcome}` : "",
         bet.venue ? `@${bet.venue}` : "",
         bet.cost ? `cost ${bet.cost}` : "",
+        bet.stake_usd && bet.quality === "micro" ? `stake $${bet.stake_usd}` : "",
         bet.depth_usd ? `depth $${bet.depth_usd}` : "",
       ].filter(Boolean).join(" ");
       const flags = [
-        bet.quality !== "clean" ? `<span class="badge UNVERIFIABLE">${esc(bet.quality)}</span>` : "",
+        bet.quality !== "clean" ? `<span class="badge ${esc(bet.quality)}">${esc(bet.quality)}</span>` : "",
         bet.confirmed ? `<span class="badge CONFIRMED">CONF</span>` : "",
         bet.verified ? `<span class="badge VERIFIED">V${bet.verified}</span>` : "",
         bet.vanished ? `<span class="badge VANISHED">X${bet.vanished}</span>` : "",
@@ -1478,7 +1510,7 @@ function renderOpenBets(d) {
       ].filter(Boolean).join(" ");
       return `<tr>
         <td class="muted mono">${bet.id}</td>
-        <td><span class="badge ${esc(bet.kind)}">${esc(bet.kind)}</span></td>
+        <td><span class="badge ${esc(bet.lane || bet.kind)}">${esc(bet.display_kind || bet.kind)}</span></td>
         <td><div class="open-event" title="${esc(bet.event_key || bet.event)}">${esc(bet.event)}</div><div class="subline">${esc(detail || bet.legs.join(", "))}</div></td>
         <td>${esc(bet.event_date || "unknown")}<div class="subline">${esc(horizonText(bet))}</div></td>
         <td class="${valClass(bet.edge)}">${pct(bet.edge)}</td>
@@ -1504,6 +1536,8 @@ function renderTracking(d) {
   const evCleanBase = base.quality["EV:clean"] || {};
   const evSuspectNow = current.quality["EV:suspect-edge"] || {};
   const evSuspectBase = base.quality["EV:suspect-edge"] || {};
+  const evMicroNow = current.quality["EV:micro"] || {};
+  const evMicroBase = base.quality["EV:micro"] || {};
   const cleanRows = Object.keys(current.quality)
     .filter(key => key.endsWith(":clean"))
     .reduce((sum, key) => sum + delta(current.quality[key], base.quality[key], "n"), 0);
@@ -1520,6 +1554,7 @@ function renderTracking(d) {
     deltaCard("Clean paper P&L", money(cleanPnl), "optimistic settled", valClass(cleanPnl)),
     deltaCard("Confirmed P&L", money(cleanConfirmed), "settled rows with recheck", valClass(cleanConfirmed)),
     deltaCard("Clean EV", `+${delta(evCleanNow, evCleanBase, "n")}`, `${money(delta(evCleanNow, evCleanBase, "pnl"))} paper`, valClass(delta(evCleanNow, evCleanBase, "pnl"))),
+    deltaCard("Micro EV", `+${delta(evMicroNow, evMicroBase, "n")}`, `${money(delta(evMicroNow, evMicroBase, "pnl"))} tiny-size paper`, valClass(delta(evMicroNow, evMicroBase, "pnl"))),
     deltaCard("ARB verify", `+${delta(current.grades, base.grades, "VERIFIED")} / +${delta(current.grades, base.grades, "VANISHED")}`, "verified / vanished"),
   ].join("");
   const kindNames = Array.from(new Set([...Object.keys(base.kinds), ...Object.keys(current.kinds)])).filter(k => k !== "CLOSE").sort();
@@ -1531,6 +1566,7 @@ function renderTracking(d) {
   });
   const evQualityRows = [
     ["EV clean", evCleanNow, evCleanBase],
+    ["EV micro", evMicroNow, evMicroBase],
     ["EV suspect", evSuspectNow, evSuspectBase],
   ].map(([label, now, then]) => {
     const pnl = delta(now, then, "pnl"), conf = delta(now, then, "confirmed_pnl");
@@ -1544,12 +1580,14 @@ function renderTracking(d) {
 }
 
 function renderKinds(d) {
-  const rows = d.kinds.map(k => {
-    const pnl = num(k.pnl);
-    const edge = (d.quality || []).find(q => q.kind === k.kind && q.quality === "clean")?.avg_edge ?? k.avg_edge;
-    return `<tr><td><b>${esc(k.kind)}</b></td><td>${k.n}</td><td>${k.active}</td><td>${k.settled}</td><td class="${valClass(pnl)}">${money(pnl)}</td><td>${edge == null ? "" : pct(edge)}</td></tr>`;
+  const rows = (d.quality || []).map(q => {
+    const label = q.kind === "EV"
+      ? (q.quality === "clean" ? "EV clean" : q.quality === "micro" ? "Micro EV" : `EV ${q.quality}`)
+      : (q.quality === "clean" ? q.kind : `${q.kind} ${q.quality}`);
+    const pnl = num(q.pnl);
+    return `<tr><td><b>${esc(label)}</b></td><td>${q.n}</td><td>${q.active}</td><td>${q.settled}</td><td class="${valClass(pnl)}">${money(pnl)}</td><td>${q.avg_edge == null ? "" : pct(q.avg_edge)}</td></tr>`;
   });
-  $("kinds").innerHTML = table(["Kind","Rows","Active","Settled","P&L","Clean Edge"], rows);
+  $("kinds").innerHTML = table(["Lane","Rows","Active","Settled","P&L","Avg Edge"], rows);
   const clv = d.ev.clv || {};
   $("clv").textContent = clv.n ? `CLV n=${clv.n}, mean ${num(clv.mean_clv).toFixed(4)}` : "CLV gathering";
 }

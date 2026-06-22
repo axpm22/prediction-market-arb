@@ -148,9 +148,13 @@ def _record_sample(store: Store, bet_id: int, total: Decimal | None, edge: Decim
 
 
 def _record_lifetime(store: Store, bet: sqlite3.Row, summary: dict[str, Any]) -> None:
+    # 'censored' makes it unmistakable that the edge OUTLIVED the watch window, so its
+    # alive_secs is a lower bound, not the true lifetime — lifetime stats must filter these
+    # out or treat them as right-censored, never average them as if they died at the cap.
+    censored = summary["survived_window"]
     note = (
         f"hot-watch: alive={summary['alive_secs']:.1f}s checks={summary['checks']} "
-        f"survived_window={summary['survived_window']} first={summary['first_edge']} "
+        f"censored={censored} survived_window={censored} first={summary['first_edge']} "
         f"best={summary['best_edge']} last={summary['last_edge']}"
     )
     with store.connect() as con:

@@ -56,6 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="settle MLB bets via the MLB Stats API (no 3-day window; rescues orphaned bets)")
     backfill.add_argument("--fixtures", action="store_true", help="use recorded mlbstats fixtures")
     sub.add_parser("settle-health", help="report overdue open EV/ARB bets and last settlement time")
+    sub.add_parser("reconcile", help="cross-check settled ARBs against venue-actual resolution (audit fix #1)")
     sub.add_parser("scores", help="per-segment edge scores from settled clean bets (Phase 2)")
     sub.add_parser("backtest-flb", help="favorite-longshot calibration over settled clean bets (S2)")
     sub.add_parser("dashboard", help="regenerate reports/dashboard.json from the ledger (Phase 6)")
@@ -92,6 +93,17 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "positions":
         print_positions(store)
+        return 0
+    if args.command == "reconcile":
+        from .reconcile import reconcile_settlements
+        from .venues.kalshi import kalshi_leg_result
+
+        counts = reconcile_settlements(store, kalshi_leg_result)
+        print(f"Reconciled settled ARBs vs venue-actual resolution: {counts}")
+        if counts["corrected"]:
+            print(f"  {counts['corrected']} SETTLER-ERROR(s) — realized P&L differed from the lock.")
+        if counts["skipped"]:
+            print(f"  {counts['skipped']} skipped (a leg's venue resolution not available yet).")
         return 0
     if args.command == "scores":
         from .scoring import persist_scores, score_segments
@@ -217,6 +229,7 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
     ]
     sports = args.sport or config.sports
     quotes = fetch_all_venues(adapters, sports)
+    _warn_if_no_cross_venue_overlap(quotes)
 
     pregame, in_play = split_pregame(quotes, datetime.now(timezone.utc))
     if in_play:
@@ -245,6 +258,7 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
         max_leg_skew_secs=config.max_leg_skew_secs,
         max_start_drift_mins=config.max_start_drift_mins,
         match_suspect_prob_diff=config.match_suspect_prob_diff,
+        capital_charge_annual=config.capital_charge_annual,
     )
     opportunities.extend(
         detect_divergences(
@@ -339,6 +353,24 @@ def run_scan(args: argparse.Namespace, config, store: Store) -> int:
     store.finish_poll(poll_id, adapter.credits_remaining, len(quotes), 0)
     print(f"Persisted scan poll {poll_id}: {len(quotes)} quotes, {len(consensus)} consensus outcomes.")
     return 1 if aborted else 0
+
+
+def cross_venue_overlap(quotes: list[Quote]) -> tuple[int, int]:
+    """(events priced on >=2 venues, total events). Zero overlap with non-trivial quote
+    volume means matching/canonicalization broke — the silent failure mode that makes
+    cross-venue arbs invisible (the '0 soccer overlap' audit finding)."""
+    venues_by_event: dict[str, set[str]] = defaultdict(set)
+    for q in quotes:
+        venues_by_event[q.event_key].add(q.venue)
+    overlap = sum(1 for venues in venues_by_event.values() if len(venues) >= 2)
+    return overlap, len(venues_by_event)
+
+
+def _warn_if_no_cross_venue_overlap(quotes: list[Quote], min_quotes_to_alert: int = 50) -> None:
+    overlap, events = cross_venue_overlap(quotes)
+    if overlap == 0 and len(quotes) >= min_quotes_to_alert:
+        print(f"ALERT: 0 cross-venue overlap across {events} events / {len(quotes)} quotes "
+              f"— matching/aliases likely broken; no cross-venue arb can be found this cycle.")
 
 
 def fetch_all_venues(adapters: list, sports: list[str]) -> list[Quote]:
@@ -596,6 +628,14 @@ def run_settle_job(config, store: Store) -> None:
         print(f"Daily settlement (MLB Stats backfill): {backfilled} flat bets resolved.")
     except Exception as exc:  # noqa: BLE001
         print(f"settle: MLB Stats backfill failed: {exc}")
+    try:
+        from .reconcile import reconcile_settlements
+        from .venues.kalshi import kalshi_leg_result
+
+        counts = reconcile_settlements(store, kalshi_leg_result)
+        print(f"Daily reconciliation (venue-actual vs lock): {counts}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"settle: reconciliation failed: {exc}")
 
 
 def run_daemon(config, store: Store) -> int:

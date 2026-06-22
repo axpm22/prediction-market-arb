@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from .models import Event, Opportunity, Quote
-from .pricing import implied_from_decimal_odds
+from .pricing import implied_from_decimal_odds, is_economic
 from .pricing import money, q6
 
 
@@ -102,6 +102,7 @@ def detect_true_arbs(
     max_leg_skew_secs: int | None = None,
     max_start_drift_mins: int | None = None,
     match_suspect_prob_diff: Decimal | None = None,
+    capital_charge_annual: Decimal | None = None,
 ) -> list[Opportunity]:
     # An arb must cover the outcomes of ONE market: group per event + market type + exact
     # line so team winners never blend with OVER/UNDER or with a different total line.
@@ -144,6 +145,13 @@ def detect_true_arbs(
             notes = tuple([*notes, f"time-skew:{int(leg_skew_secs(best_legs))}s"])
         # #6 capacity lower bound (top-of-book; books refill, so this is a floor).
         notes = tuple([*notes, f"capturable:{capturable_lower_bound(best_legs, roi)}"])
+        # Capital charge: a tiny lock held to a far settlement may not beat cash. Tag it
+        # 'uneconomic' (still recorded) so the daily report can separate real from trivial.
+        if capital_charge_annual is not None:
+            start = best_legs[0].start_utc
+            days = ((start - datetime.now(timezone.utc)).total_seconds() / 86400.0) if start else 0.0
+            if not is_economic(roi, days, capital_charge_annual):
+                notes = tuple([*notes, "uneconomic"])
         # #1 an arb with any unverifiable leg can never be confirmed → RESEARCH:
         # logged for the archive, but downstream never bets it or assigns a hot thread.
         if has_unverifiable_leg(best_legs):

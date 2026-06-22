@@ -90,7 +90,14 @@ def test_live_dashboard_exposes_scanner_controls(tmp_path) -> None:
     state = build_state(store, config)
 
     assert "scanners" in state
-    assert {scanner["id"] for scanner in state["scanners"]} >= {"daemon", "political", "nonsports"}
+    scanner_ids = {scanner["id"] for scanner in state["scanners"]}
+    assert scanner_ids >= {"daemon", "micro_ev", "political", "nonsports"}
+    assert not (scanner_ids & {"focus", "verify", "hot"})
+    micro = next(scanner for scanner in state["scanners"] if scanner["id"] == "micro_ev")
+    assert micro["control"] == "parent"
+    assert "Micro EV" in PAGE
+    assert len([process["name"] for process in state["processes"]]) == len({process["name"] for process in state["processes"]})
+    assert "micro_ev" in state
     assert all("returns" in scanner and "next" in scanner for scanner in state["scanners"])
     assert "Scanning Controls" in PAGE
     assert "/api/scanner" in PAGE
