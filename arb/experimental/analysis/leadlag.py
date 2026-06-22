@@ -15,6 +15,7 @@ A positive median lead for A→B means A tends to move first; B is the one to qu
 from __future__ import annotations
 
 import argparse
+import random
 from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
@@ -49,7 +50,8 @@ def _moves(series: list[tuple[datetime, float]], threshold: float) -> list[tuple
     return moves
 
 
-def lead_lag(store: Store, move_threshold: float = 0.01, max_lag_secs: float = 300.0) -> dict:
+def lead_lag(store: Store, move_threshold: float = 0.01, max_lag_secs: float = 300.0,
+             null_shuffles: int = 20, null_correct_margin: float = 5.0) -> dict:
     rows = _rows(store)
     # group cost series per (event,outcome,line) and venue
     series: dict[tuple, dict[str, list[tuple[datetime, float]]]] = defaultdict(lambda: defaultdict(list))
@@ -58,7 +60,9 @@ def lead_lag(store: Store, move_threshold: float = 0.01, max_lag_secs: float = 3
         series[key][r["venue"]].append((datetime.fromisoformat(r["fetched_at"]), float(r["eff"])))
 
     pair_leads: dict[tuple[str, str], list[float]] = defaultdict(list)
+    pair_null: dict[tuple[str, str], list[float]] = defaultdict(list)
     move_counts: dict[str, int] = defaultdict(int)
+    rng = random.Random(20260622)  # deterministic null baseline
     for venues in series.values():
         moves_by_venue = {v: _moves(s, move_threshold) for v, s in venues.items() if len(s) > 1}
         for v, ms in moves_by_venue.items():
@@ -68,31 +72,62 @@ def lead_lag(store: Store, move_threshold: float = 0.01, max_lag_secs: float = 3
             for b in present:
                 if a == b:
                     continue
-                for ta, da in moves_by_venue[a]:
-                    # nearest same-direction move on b strictly after ta, within max_lag
-                    following = [
-                        (tb - ta).total_seconds()
-                        for tb, db in moves_by_venue[b]
-                        if db == da and 0 < (tb - ta).total_seconds() <= max_lag_secs
-                    ]
-                    if following:
-                        pair_leads[(a, b)].append(min(following))
+                pair_leads[(a, b)].extend(_following_leads(moves_by_venue[a], moves_by_venue[b], max_lag_secs))
+                # Null: keep B's move COUNT and time span but randomize when they happen.
+                # A high-density B yields small "leads" by base rate alone; the observed
+                # lead only means something if it beats this null.
+                if null_shuffles:
+                    pair_null[(a, b)].extend(
+                        _null_leads(moves_by_venue[a], moves_by_venue[b], max_lag_secs, null_shuffles, rng)
+                    )
 
-    summary = {
+    pairs = {}
+    for (a, b), leads in sorted(pair_leads.items()):
+        if len(leads) < 5:
+            continue
+        obs = round(median(leads), 1)
+        null = pair_null.get((a, b))
+        null_med = round(median(null), 1) if null else None
+        # A real lead is meaningfully FASTER than the density-matched null.
+        corrected = round(obs - null_med, 1) if null_med is not None else None
+        pairs[f"{a}->{b}"] = {
+            "n": len(leads),
+            "median_lead_secs": obs,
+            "null_median_lead_secs": null_med,
+            "corrected_lead_secs": corrected,
+            "real_signal": bool(corrected is not None and corrected < -float(null_correct_margin)),
+        }
+    return {
         "move_threshold": move_threshold,
         "max_lag_secs": max_lag_secs,
         "moves_per_venue": dict(move_counts),
-        "pairs": {
-            f"{a}->{b}": {
-                "n": len(leads),
-                "median_lead_secs": round(median(leads), 1),
-                "mean_lead_secs": round(sum(leads) / len(leads), 1),
-            }
-            for (a, b), leads in sorted(pair_leads.items())
-            if len(leads) >= 5
-        },
+        "pairs": pairs,
     }
-    return summary
+
+
+def _following_leads(a_moves, b_moves, max_lag_secs: float) -> list[float]:
+    leads = []
+    for ta, da in a_moves:
+        following = [(tb - ta).total_seconds() for tb, db in b_moves
+                     if db == da and 0 < (tb - ta).total_seconds() <= max_lag_secs]
+        if following:
+            leads.append(min(following))
+    return leads
+
+
+def _null_leads(a_moves, b_moves, max_lag_secs: float, shuffles: int, rng) -> list[float]:
+    """Lead distribution if B's moves were randomly placed in B's own time span (same count,
+    same directions, no causal link to A) — the density-matched baseline."""
+    if not b_moves:
+        return []
+    times = [t for t, _ in b_moves]
+    lo, hi = min(times).timestamp(), max(times).timestamp()
+    dirs = [d for _, d in b_moves]
+    out: list[float] = []
+    for _ in range(shuffles):
+        shuffled = [(datetime.fromtimestamp(rng.uniform(lo, hi), tz=times[0].tzinfo), d) for d in dirs]
+        out.extend(_following_leads(a_moves, shuffled, max_lag_secs))
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -106,10 +141,13 @@ def main(argv: list[str] | None = None) -> int:
     if not summary["pairs"]:
         print("No venue pair has >= 5 co-moves yet; archive needs more overlapping observation.")
         return 0
-    print("Ordered lead times (A moves first, B follows; n >= 5):")
-    for pair, stats in sorted(summary["pairs"].items(), key=lambda kv: kv[1]["median_lead_secs"]):
-        print(f"  {pair:28s} median {stats['median_lead_secs']:6.1f}s  mean {stats['mean_lead_secs']:6.1f}s  (n={stats['n']})")
-    print("\nInterpretation: a small median lead for A->B means A tends to move first — quote B fast when A moves.")
+    print("Ordered lead times vs density-matched null (A moves first, B follows; n >= 5):")
+    print(f"  {'PAIR':28s} {'OBS':>7} {'NULL':>7} {'CORR':>7}  REAL?")
+    for pair, s in sorted(summary["pairs"].items(), key=lambda kv: kv[1]["median_lead_secs"]):
+        print(f"  {pair:28s} {s['median_lead_secs']:6.1f}s {s['null_median_lead_secs'] or 0:6.1f}s "
+              f"{s['corrected_lead_secs'] or 0:6.1f}s  {'YES' if s['real_signal'] else 'no (density artifact)'}  (n={s['n']})")
+    print("\nOBS = observed median lead; NULL = median lead if B's moves were random at the same")
+    print("density; CORR = OBS - NULL. Only 'REAL? YES' (OBS meaningfully below NULL) is a true lead.")
     return 0
 
 

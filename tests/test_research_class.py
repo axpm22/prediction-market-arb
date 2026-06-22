@@ -57,3 +57,37 @@ def test_leadlag_move_detection() -> None:
               (base + timedelta(seconds=90), 0.50)]                 # -0.02 move down
     moves = _moves(series, threshold=0.01)
     assert [d for _, d in moves] == [1, -1]
+
+
+def test_leadlag_null_correction_flags_density_artifact(tmp_path) -> None:
+    # A leader (A) whose moves are each followed ~10s later by B, vs a B that ALSO moves
+    # constantly. The null baseline should expose whether the lead beats random density.
+    from datetime import datetime, timedelta, timezone
+    from arb.experimental.analysis.leadlag import lead_lag
+    from arb.store import Store
+
+    store = Store(tmp_path / "arb.sqlite")
+    base = datetime(2026, 6, 22, 0, 0, tzinfo=timezone.utc)
+    rows = []
+    # A moves up every 60s; B mirrors 10s later (genuine A->B lead).
+    for i in range(40):
+        t_a = base + timedelta(seconds=i * 60)
+        rows.append(("kalshi", t_a, 0.40 + 0.02 * (i % 2)))
+        rows.append(("polymarket", t_a + timedelta(seconds=10), 0.40 + 0.02 * (i % 2)))
+    poll = store.start_poll("watch")
+    with store.connect() as con:
+        for venue, t, cost in rows:
+            con.execute(
+                """INSERT INTO quotes(poll_id, fetched_at, event_key, category, sport, venue, book,
+                       market_type, line, outcome, raw_price, cost, fee_cost, depth_usd, live)
+                   VALUES (?, ?, 'soccer:2026-06-22:a:b:0','sports','soccer',?, 'bk','WINNER',NULL,'a',
+                           ?, ?, '0', '500', 0)""",
+                (poll, t.isoformat(), venue, str(cost), str(cost)),
+            )
+    summary = lead_lag(store, move_threshold=0.01, max_lag_secs=120, null_shuffles=30)
+    kp = summary["pairs"].get("kalshi->polymarket")
+    assert kp is not None
+    assert kp["null_median_lead_secs"] is not None
+    # genuine 10s lead should beat the null (which is spread across the 120s window)
+    assert kp["median_lead_secs"] < kp["null_median_lead_secs"]
+    assert kp["real_signal"] is True
