@@ -42,7 +42,8 @@ def _settled_clean_bets(store: Store) -> list[dict]:
         rows = list(
             con.execute(
                 """
-                SELECT sport, kind, result, pnl_optimistic, stake_usd, placed_at, settled_at
+                SELECT sport, kind, result, pnl_optimistic, pnl_confirmed, stake_usd,
+                       placed_at, settled_at
                   FROM flat_bets
                  WHERE status = 'SETTLED' AND result IN ('WON','LOST','VOID','RESOLVED')
                    AND (quality_flag IS NULL)
@@ -75,19 +76,25 @@ def score_segments(store: Store, scoring_cfg: dict) -> list[SegmentScore]:
         n = len(bets)
         wins = sum(1 for b in bets if b["result"] == "WON")
         win_rate = wins / n if n else 0.0
-        pnl = sum(float(b["pnl_optimistic"] or 0) for b in bets)
+        # #6 score on the CONFIRMED (realistic) fill, not the optimistic "mirage". A bet
+        # that never confirmed (NULL) was uncapturable -> 0 P&L, which correctly drags ROI.
+        def _confirmed(b) -> float:
+            return float(b["pnl_confirmed"]) if b["pnl_confirmed"] is not None else 0.0
+        pnl = sum(_confirmed(b) for b in bets)
         staked = sum(float(b["stake_usd"] or 0) for b in bets) or 1.0
         roi = pnl / staked
-        # recency-weighted trend: mean signed P&L of the last `recent_window` bets.
+        # #10 trend distinct from win_rate: recency-weighted ROI MAGNITUDE over the recent
+        # window (not the sign of each bet, which was nearly collinear with win_rate).
         recent = bets[-recent_window:]
-        trend = sum((1.0 if (b["pnl_optimistic"] or 0) and float(b["pnl_optimistic"]) > 0 else -1.0)
-                    for b in recent) / len(recent) if recent else 0.0
+        recent_pnl = sum(_confirmed(b) for b in recent)
+        recent_stake = sum(float(b["stake_usd"] or 0) for b in recent) or 1.0
+        trend = recent_pnl / recent_stake
         if n < min_n:
             scores.append(SegmentScore(seg, n, round(win_rate, 4), round(roi, 4), 0.0, INSUFFICIENT))
             continue
         raw = 100.0 * (
             w_roi * _sigmoid_norm(roi)
-            + w_trend * ((trend + 1.0) / 2.0)
+            + w_trend * _sigmoid_norm(trend)
             + w_n * (min(n, n_cap) / n_cap)
             + w_wr * win_rate
         )

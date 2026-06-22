@@ -5,8 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from .models import Event, Opportunity, Quote
-from .pricing import implied_from_decimal_odds, is_economic
-from .pricing import money, q6
+from .pricing import is_economic, money, q6
 
 
 # Venues whose legs can be re-quoted to a verifiable cost. SX legs now carry an outcome-
@@ -20,10 +19,12 @@ def has_unverifiable_leg(legs: list[Quote]) -> bool:
 
 
 def capturable_lower_bound(legs: list[Quote], roi: Decimal) -> Decimal:
-    """Lower bound on dollars of locked profit available: min top-of-book depth across
-    legs × ROI. Top-of-book only — books refill, so this is a floor, not a ceiling."""
-    depths = [leg.depth_usd for leg in legs if leg.depth_usd is not None]
-    if not depths:
+    """Lower bound on dollars of locked profit: min top-of-book dollar-notional depth across
+    legs × ROI. Each adapter reports depth_usd as $-notional at the ask, so the min is the
+    binding leg. If ANY leg has unknown depth the bound is unknowable -> 0 (don't overstate
+    it by silently dropping that leg). Top-of-book only — books refill, so it's a floor."""
+    depths = [leg.depth_usd for leg in legs]
+    if not depths or any(d is None for d in depths):
         return Decimal("0")
     return q6(min(depths) * roi)
 
@@ -108,6 +109,9 @@ def detect_true_arbs(
     # line so team winners never blend with OVER/UNDER or with a different total line.
     by_market: dict[tuple[str, str, Decimal | None], list[Quote]] = defaultdict(list)
     for quote in quotes:
+        if quote.venue == "oddsapi":
+            continue  # The Odds API is consensus-only; you cannot bet there, so it is
+                      # never an arb leg (this also removes the dead _arb_cost oddsapi path).
         by_market[(quote.event_key, quote.market_type, quote.line)].append(quote)
 
     opportunities: list[Opportunity] = []
@@ -132,11 +136,14 @@ def detect_true_arbs(
         if match_suspect_prob_diff is not None and same_outcome_spread(event_quotes) > match_suspect_prob_diff:
             continue
         roi = q6(Decimal("1") / total_cost - Decimal("1"))
-        stakes = {
-            leg.outcome_label: money(budget * _arb_cost(leg) / total_cost)
-            for leg in best_legs
-        }
+        stakes, guaranteed_floor = equalized_arb_stakes(best_legs, budget, total_cost)
         status, notes = status_for_legs(best_legs, trusted_pairs)
+        # #8 report the REAL guaranteed worst-case profit after cent-rounding, not the
+        # idealized ROI. If rounding pushed the worst leg negative the lock didn't hold.
+        notes = tuple([*notes, f"floor:{guaranteed_floor}"])
+        if guaranteed_floor < 0:
+            status = "REVIEW"
+            notes = tuple([*notes, "rounding-broke-lock"])
         if roi > stale_warn:
             status = "REVIEW"
             notes = tuple([*notes, "likely-stale-quote"])
@@ -164,6 +171,7 @@ def detect_true_arbs(
                 event=build_event(event_key, event_quotes),
                 legs=best_legs,
                 edge=roi,
+                edge_points=q6(Decimal("1") - total_cost),  # margin below $1, comparable
                 stakes=stakes,
                 status=status,  # type: ignore[arg-type]
                 notes=notes,
@@ -237,7 +245,20 @@ def split_match_suspects(opportunities: list[Opportunity]) -> tuple[list[Opportu
     return clean, suspects
 
 
+def equalized_arb_stakes(legs: list[Quote], budget: Decimal, total_cost: Decimal) -> tuple[dict[str, Decimal], Decimal]:
+    """Stake each leg proportional to its cost (which equalizes per-outcome payout), round
+    to cents, then return the REAL guaranteed floor = min over outcomes of (that leg's
+    payout − total staked). Per-leg cent-rounding makes payouts slightly unequal, so the
+    locked profit is this worst-case floor, not budget·ROI — and it can go negative on a
+    small bankroll or many legs, which the caller flags."""
+    stakes = {leg.outcome_label: money(budget * _arb_cost(leg) / total_cost) for leg in legs}
+    total_staked = sum(stakes.values(), Decimal("0"))
+    # If outcome i wins, you collect stake_i / cost_i (each $1-payout contract).
+    payouts = [stakes[leg.outcome_label] / _arb_cost(leg) for leg in legs if _arb_cost(leg) > 0]
+    guaranteed_floor = money(min(payouts) - total_staked) if payouts else Decimal("0.00")
+    return stakes, guaranteed_floor
+
+
 def _arb_cost(quote: Quote) -> Decimal:
-    if quote.venue == "oddsapi":
-        return implied_from_decimal_odds(quote.raw_price) + quote.fee_cost
+    # oddsapi quotes never reach here (filtered in detection — consensus-only, not tradeable).
     return quote.effective_cost

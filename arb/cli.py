@@ -497,6 +497,7 @@ def detect_ev_from_consensus(
             event=build_event(quote.event_key, [quote]),
             legs=[quote],
             edge=ev,
+            edge_points=edge,  # #9 p-c, comparable across kinds (quality/ranking use this)
             stakes={quote.outcome_label: Decimal("1.00")},
             status=status,  # type: ignore[arg-type]
             notes=notes,

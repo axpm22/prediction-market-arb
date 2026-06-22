@@ -19,7 +19,10 @@ def classify_quality(opp: Opportunity, min_executable_usd: Decimal, edge_suspect
     Order matters: suspect-edge is the strongest signal (a 49.0 "edge" is a $0.02 ask),
     so it is checked first.
     """
-    if abs(opp.edge) > edge_suspect_above:
+    # Use the comparable probability-points edge (margin/p-c), not the kind-specific ratio:
+    # a cheap legitimate EV contract inflates (p-c)/c and was being falsely quarantined.
+    comparable = opp.edge_points if opp.edge_points is not None else opp.edge
+    if abs(comparable) > edge_suspect_above:
         return "suspect-edge"
     for leg in opp.legs:
         if leg.depth_usd is not None and leg.depth_usd < min_executable_usd:

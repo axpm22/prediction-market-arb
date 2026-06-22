@@ -125,14 +125,16 @@ def seed_settled_segment(store: Store, sport: str, kind: str, n: int, wins: int)
             won = i < wins
             con.execute(
                 """INSERT INTO flat_bets(fingerprint, opened_poll_id, category, sport, kind, trusted, live,
-                       edge, stake_usd, legs_json, status, placed_at, result, pnl_optimistic, quality_flag, notes)
-                   VALUES (?, 1, 'sports', ?, ?, 1, 0, '0.05', '1.00', '[]', 'SETTLED', ?, ?, ?, NULL, '')""",
+                       edge, stake_usd, legs_json, status, placed_at, result, pnl_optimistic,
+                       pnl_confirmed, quality_flag, notes)
+                   VALUES (?, 1, 'sports', ?, ?, 1, 0, '0.05', '1.00', '[]', 'SETTLED', ?, ?, ?, ?, NULL, '')""",
                 (
                     f"{sport}:{kind}:{i}",
                     sport,
                     kind,
                     datetime.now(timezone.utc).isoformat(),
                     "WON" if won else "LOST",
+                    "0.90" if won else "-1.00",
                     "0.90" if won else "-1.00",
                 ),
             )

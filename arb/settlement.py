@@ -276,8 +276,13 @@ def _leg_result(leg: dict[str, Any], scores: dict[str, Decimal]) -> str | None:
         return "WON" if (label == "OVER") is over_won else "LOST"
     best = max(scores.values())
     winners = [team for team, score in scores.items() if score == best]
-    if len(winners) != 1:  # tie — postponement/void rules differ per venue, leave pending
-        return None
+    is_draw = len(winners) != 1
+    # Soccer 1X2: a DRAW is a real, settleable outcome — not a permanent pending. The draw
+    # leg wins on a tie and loses otherwise; a team leg loses on a tie.
+    if label.lower() == "draw":
+        return "WON" if is_draw else "LOST"
+    if is_draw:
+        return "LOST"
     return "WON" if winners[0] == label else "LOST"
 
 

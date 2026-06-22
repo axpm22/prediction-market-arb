@@ -6,10 +6,11 @@ from arb.models import Quote
 from arb.pricing import implied_from_decimal_odds, q6
 
 
-def quote(outcome: str, book: str, odds: str, fetched_at: datetime | None = None) -> Quote:
+def quote(outcome: str, book: str, odds: str, fetched_at: datetime | None = None,
+          venue: str = "kalshi") -> Quote:
     return Quote(
         event_key="baseball_mlb:2026-06-20:los angeles dodgers:new york yankees",
-        venue="oddsapi",
+        venue=venue,
         book=book,
         market_type="WINNER",
         line=None,
@@ -34,11 +35,13 @@ def test_true_arb_vector() -> None:
         ],
         bankroll=Decimal("1000"),
         max_stake_pct=Decimal("0.10"),
-        trusted_pairs={"oddsapi+oddsapi"},
+        trusted_pairs=set(),
         stale_warn=Decimal("0.04"),
     )
     assert len(opportunities) == 1
-    assert opportunities[0].edge == Decimal("0.037349")
+    # ROI from q6-rounded effective costs (0.476190 + 0.487805 = 0.963995); 1/S - 1.
+    assert opportunities[0].edge == Decimal("0.037350")
+    assert opportunities[0].edge_points == Decimal("0.036005")  # #9 margin below $1 (1-S)
     assert opportunities[0].stakes == {
         "los angeles dodgers": Decimal("49.40"),
         "new york yankees": Decimal("50.60"),
@@ -57,7 +60,7 @@ def test_legs_fetched_minutes_apart_are_flagged_time_skew() -> None:
         ],
         bankroll=Decimal("1000"),
         max_stake_pct=Decimal("0.10"),
-        trusted_pairs={"oddsapi+oddsapi"},
+        trusted_pairs=set(),
         stale_warn=Decimal("0.04"),
         max_leg_skew_secs=60,
     )
@@ -72,7 +75,7 @@ def test_legs_fetched_minutes_apart_are_flagged_time_skew() -> None:
         ],
         bankroll=Decimal("1000"),
         max_stake_pct=Decimal("0.10"),
-        trusted_pairs={"oddsapi+oddsapi"},
+        trusted_pairs=set(),
         stale_warn=Decimal("0.04"),
         max_leg_skew_secs=60,
     )
@@ -87,7 +90,7 @@ def test_no_arb_vector() -> None:
         ],
         bankroll=Decimal("1000"),
         max_stake_pct=Decimal("0.10"),
-        trusted_pairs={"oddsapi+oddsapi"},
+        trusted_pairs=set(),
         stale_warn=Decimal("0.04"),
     )
     assert opportunities == []

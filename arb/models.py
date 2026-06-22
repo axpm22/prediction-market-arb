@@ -63,11 +63,15 @@ class Opportunity:
     category: Category
     event: Event
     legs: list[Quote]
-    edge: Decimal
+    edge: Decimal              # kind-specific: ARB ROI (1/S-1); EV ratio (p-c)/c
     stakes: dict[str, Decimal]
     status: OpportunityStatus
     notes: tuple[str, ...] = field(default_factory=tuple)
     fingerprint: str = ""
+    # #9 comparable across kinds: probability-points edge. ARB = 1-S (margin below $1);
+    # EV = p-c. Quality thresholds and cross-kind ranking use THIS, never `edge` (whose
+    # units differ — a cheap EV contract inflates the ratio and was falsely quarantined).
+    edge_points: Decimal | None = None
     # Phase 1 quality: None = clean; else labels such as 'suspect-edge', 'thin-book',
     # 'micro', or 'one-sided'.
     quality_flag: str | None = None
