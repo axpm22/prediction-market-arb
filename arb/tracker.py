@@ -10,11 +10,14 @@ from pathlib import Path
 from .models import Opportunity
 from .pricing import money, q6
 from .store import Store, quote_to_json
+from .validation import ValidationRule, classify_validation
 
 LIFECYCLE_STATUSES = {"OPEN", "CONFIRMED", "CLOSED", "SETTLED"}
 
 
-def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportunity]) -> None:
+def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportunity],
+                        validation_rule: ValidationRule | None = None) -> None:
+    validation_rule = validation_rule or ValidationRule()
     current = {opp.fingerprint: opp for opp in opportunities}
     with store.connect() as con:
         active = _active_rows(con)
@@ -32,6 +35,7 @@ def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportun
                     status="OPEN",
                     reappearance_of=prior_closed,
                     notes="first-observed" if prior_closed is None else "reappeared",
+                    validation_rule=validation_rule,
                 )
             elif row["status"] == "OPEN" and int(row["opened_poll_id"]) != poll_id:
                 _insert_tracker_row(
@@ -41,6 +45,7 @@ def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportun
                     status="CONFIRMED",
                     reappearance_of=int(row["id"]),
                     notes="second-consecutive-observation",
+                    validation_rule=validation_rule,
                 )
 
 
@@ -57,7 +62,7 @@ def write_daily_report(store: Store, report_date: date | None = None, output_dir
             "stake_usd", "optimistic_cost", "confirmed_cost", "pnl_optimistic",
             "pnl_confirmed", "pnl_kelly_optimistic", "pnl_kelly_confirmed",
             "result", "quality_flag", "kelly_f_star",
-            "kelly_stake_usd", "verdicts", "notes",
+            "kelly_stake_usd", "validation_rule", "validation_tag", "verdicts", "notes",
         ]
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -103,19 +108,24 @@ def _latest_closed_id(con, fingerprint: str) -> int | None:
     return None if row is None else int(row["id"])
 
 
-def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str, reappearance_of: int | None, notes: str) -> None:
+def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str,
+                        reappearance_of: int | None, notes: str,
+                        validation_rule: ValidationRule | None = None) -> None:
+    validation_rule = validation_rule or ValidationRule()
     cost = _opportunity_cost(current_opp)
     pnl = _optimistic_pnl(current_opp)
     confirmed_cost = cost if status == "CONFIRMED" else None
     confirmed_pnl = pnl if status == "CONFIRMED" else None
-    ledger_notes = _merge_notes(notes, current_opp.notes)
+    rule_id, validation_tag, validation_notes = classify_validation(current_opp, status, validation_rule)
+    ledger_notes = _merge_notes(notes, (*current_opp.notes, *validation_notes))
     con.execute(
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
                               live, edge, stake_usd, legs_json, optimistic_cost, confirmed_cost,
                               pnl_optimistic, pnl_confirmed, status, placed_at, notes,
-                              quality_flag, kelly_f_star, kelly_stake_usd)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              quality_flag, kelly_f_star, kelly_stake_usd,
+                              validation_rule, validation_tag)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             current_opp.fingerprint,
@@ -139,6 +149,8 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
             current_opp.quality_flag,
             None if current_opp.kelly_f_star is None else str(current_opp.kelly_f_star),
             None if current_opp.kelly_stake is None else str(current_opp.kelly_stake),
+            rule_id,
+            validation_tag,
         ),
     )
 
@@ -247,6 +259,8 @@ def _csv_record(record: dict[str, object]) -> dict[str, str | int | None]:
         "quality_flag": base["quality_flag"],
         "kelly_f_star": base["kelly_f_star"],
         "kelly_stake_usd": base["kelly_stake_usd"],
+        "validation_rule": _record_validation_rule(record),
+        "validation_tag": _record_validation_tag(record),
         "verdicts": ",".join(record["verdicts"]),
         "notes": base["notes"],
     }
@@ -286,6 +300,10 @@ def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulat
         "### EV Edge Buckets",
         "",
         *_table(["Bucket", "Bets", "Settled P&L", "Pending"], _ev_bucket_rows(records)),
+        "",
+        "### Validation Forward Test",
+        "",
+        *_table(["Rule", "Tag", "Bets", "Settled", "Settled P&L", "Pending"], _validation_rows(records)),
         "",
         "## Kelly",
         "",
@@ -402,6 +420,28 @@ def _ev_bucket_rows(records: list[dict[str, object]]) -> list[list[str]]:
     ]
 
 
+def _validation_rows(records: list[dict[str, object]]) -> list[list[str]]:
+    grouped: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
+    for record in records:
+        rule = _record_validation_rule(record)
+        tag = _record_validation_tag(record)
+        if rule is None or tag is None:
+            continue
+        grouped[(rule, tag)].append(record)
+    rows = []
+    for (rule, tag), group in sorted(grouped.items()):
+        settled = [record for record in group if _record_pnl(record, "confirmed") is not None]
+        rows.append([
+            rule,
+            tag,
+            str(len(group)),
+            str(len(settled)),
+            _fmt_money(_sum_pnl(settled, "confirmed")),
+            str(len(group) - len(settled)),
+        ])
+    return rows
+
+
 def _kelly_rows(records: list[dict[str, object]]) -> list[list[str]]:
     rows: list[list[str]] = []
     scopes = [
@@ -475,6 +515,22 @@ def _table(headers: list[str], rows: list[list[str]]) -> list[str]:
 
 def _sum_pnl(records: list[dict[str, object]], fill: str) -> Decimal:
     return sum((_record_pnl(record, fill) or Decimal("0") for record in records), Decimal("0"))
+
+
+def _record_validation_rule(record: dict[str, object]) -> str | None:
+    confirmed = record["confirmed"]
+    base = record["base"]
+    if confirmed is not None and confirmed["validation_rule"] is not None:
+        return confirmed["validation_rule"]
+    return base["validation_rule"]
+
+
+def _record_validation_tag(record: dict[str, object]) -> str | None:
+    confirmed = record["confirmed"]
+    base = record["base"]
+    if confirmed is not None and confirmed["validation_tag"] is not None:
+        return confirmed["validation_tag"]
+    return base["validation_tag"]
 
 
 def _record_pnl(record: dict[str, object], fill: str) -> Decimal | None:

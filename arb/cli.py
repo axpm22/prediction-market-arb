@@ -19,9 +19,10 @@ from .pricing import consensus_outcome_key, consensus_probabilities, edge_points
 from .quality import classify_quality
 from .sizing import kelly_f_star, kelly_stake
 from .report import print_opportunities, print_positions, print_report
-from .settlement import settle_manual, settle_sports
+from .settlement import settle_backfill_mlb, settle_manual, settle_sports
 from .store import Store
 from .tracker import record_tracker_poll, write_daily_report
+from .validation import load_validation_rule
 from .venues.kalshi import KalshiAdapter
 from .venues.oddsapi import OddsApiAdapter, OddsApiCreditsLow
 from .venues.polymarket import PolymarketAdapter
@@ -50,6 +51,10 @@ def build_parser() -> argparse.ArgumentParser:
     settle.add_argument("--manual", nargs=2, metavar=("EVENT_KEY", "WINNING_OUTCOME"),
                         help="settle one event by hand (required for non-sports)")
     settle.add_argument("--fixtures", action="store_true", help="use recorded scores fixtures")
+    backfill = sub.add_parser(
+        "settle-backfill",
+        help="settle MLB bets via the MLB Stats API (no 3-day window; rescues orphaned bets)")
+    backfill.add_argument("--fixtures", action="store_true", help="use recorded mlbstats fixtures")
     sub.add_parser("scores", help="per-segment edge scores from settled clean bets (Phase 2)")
     sub.add_parser("backtest-flb", help="favorite-longshot calibration over settled clean bets (S2)")
     sub.add_parser("dashboard", help="regenerate reports/dashboard.json from the ledger (Phase 6)")
@@ -165,6 +170,11 @@ def main(argv: list[str] | None = None) -> int:
             settled = settle_sports(store, config, fixture_dir)
         print(f"Settled {settled} flat bets.")
         return 0
+    if args.command == "settle-backfill":
+        fixture_dir = Path("tests/fixtures") if args.fixtures else None
+        settled = settle_backfill_mlb(store, fixture_dir)
+        print(f"Backfilled {settled} MLB flat bets via the MLB Stats API.")
+        return 0
     if args.command == "scan":
         return run_scan(args, config, store)
     if args.command == "watch":
@@ -256,7 +266,7 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
     store.save_poll_quotes(poll_id, [*pregame, *in_play])
     store.save_poll_opportunities(poll_id, kept)
     store.save_suspect_matches(poll_id, suspects)
-    record_tracker_poll(store, poll_id, kept)
+    record_tracker_poll(store, poll_id, kept, load_validation_rule(config))
     if config.auto_fill:
         for opportunity in kept:
             fill_opportunity(store, poll_id, opportunity, config.bankroll_usd, config.max_stake_pct)
@@ -476,8 +486,18 @@ def apply_opportunity_filters(opportunities: list[Opportunity], config) -> tuple
 
 
 def run_settle_job(config, store: Store) -> None:
-    settled = settle_sports(store, config)
-    print(f"Daily settlement: {settled} flat bets resolved.")
+    # Each source is isolated so one failing never blocks the other (the old failure mode:
+    # a silent settle error let bets age past the Odds API window and orphan forever).
+    try:
+        settled = settle_sports(store, config)
+        print(f"Daily settlement (Odds API): {settled} flat bets resolved.")
+    except Exception as exc:  # noqa: BLE001
+        print(f"settle: Odds API settlement failed: {exc}")
+    try:
+        backfilled = settle_backfill_mlb(store)
+        print(f"Daily settlement (MLB Stats backfill): {backfilled} flat bets resolved.")
+    except Exception as exc:  # noqa: BLE001
+        print(f"settle: MLB Stats backfill failed: {exc}")
 
 
 def run_daemon(config, store: Store) -> int:
@@ -501,6 +521,14 @@ def run_daemon(config, store: Store) -> int:
         try:
             schedule.run_pending()
             run_watch_once(watch_args, config, store)
+            # MLB Stats settlement is free and window-less, so settle finals every cycle —
+            # this is what stops bets aging out and orphaning between daily settle runs.
+            try:
+                n = settle_backfill_mlb(store)
+                if n:
+                    print(f"daemon: settled {n} MLB bets via MLB Stats backfill.")
+            except Exception as exc:  # noqa: BLE001
+                print(f"daemon: MLB settle failed this cycle: {exc}")
         except Exception as exc:  # noqa: BLE001
             print(f"daemon: cycle failed, retrying next interval: {exc}")
         if stop_requested("daemon"):

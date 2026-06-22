@@ -194,5 +194,8 @@ MIGRATION_COLUMNS = {
         # S1: negative-risk basket metadata.
         "basket_n": "INTEGER",
         "basket_sum": "TEXT",
+        # Validation playbook: frozen forward-test cohort labels.
+        "validation_rule": "TEXT",
+        "validation_tag": "TEXT",
     },
 }

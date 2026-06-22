@@ -1,0 +1,25 @@
+{
+  "totalGames": 1,
+  "dates": [
+    {
+      "date": "2026-06-09",
+      "games": [
+        {
+          "gamePk": 700001,
+          "gameDate": "2026-06-09T23:41:00Z",
+          "gameNumber": 1,
+          "doubleHeader": "N",
+          "status": {
+            "abstractGameState": "Final",
+            "codedGameState": "F",
+            "detailedState": "Final"
+          },
+          "teams": {
+            "home": { "score": 5, "team": { "name": "Kansas City Royals" } },
+            "away": { "score": 3, "team": { "name": "Texas Rangers" } }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -95,7 +95,10 @@ ev:
 scan_times: ["10:00", "15:00", "19:00"]
 daily_report_time: "23:59"
 settle_time: "09:30"
-settle_days_from: 2    # scores lookback window; 2 credits/sport/settle
+settle_days_from: 3    # scores lookback window (Odds API max is 3); 3 credits/sport/settle
+# MLB Stats API is the unlimited, no-window settlement source used by `settle-backfill`
+# (free, keyless, all history). It rescues bets the 3-day Odds API window misses.
+mlbstats_enabled: true
 auto_fill: false
 trusted_pairs: []
 fuzzy_match_threshold: 92
@@ -152,6 +155,17 @@ forecast:
   min_n_for_claim: 100
   logloss_clip: 0.000001
   calibration_bins: 10
+# Validation playbook frozen EV forward-test rule.
+validation:
+  ev_filter:
+    rule_id: H-EVFILTER
+    kind: EV
+    min_cost: 0.40
+    max_cost: 0.75
+    max_flagged_edge: 0.02
+    target_n: 190
+    halfway_n: 95
+    kill_consecutive_losses: 10
 # Phase 5 whale-flow tracker (Polymarket on-chain; measurement/debunk only).
 whale_tracker:
   enabled: true

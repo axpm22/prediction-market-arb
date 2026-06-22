@@ -75,6 +75,7 @@ class AppConfig:
     btc_trusted: bool
     flb: dict
     forecast: dict
+    validation: dict
     odds_api_key: str | None
     database_path: Path = Path("data/arb.sqlite")
 
@@ -184,6 +185,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         btc_trusted=bool(btc.get("trusted", False)),
         flb=dict(raw.get("flb", {})),
         forecast=dict(raw.get("forecast", {})),
+        validation=dict(raw.get("validation", {})),
         odds_api_key=os.environ.get("ODDS_API_KEY") or None,
         database_path=database_path,
     )

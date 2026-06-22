@@ -25,6 +25,7 @@ from arb.models import Opportunity, Quote
 from arb.pricing import kalshi_fee_cost, q6
 from arb.store import Store
 from arb.tracker import _active_rows, _insert_tracker_row
+from arb.validation import load_validation_rule
 from arb.venues.kalshi import BASE_URL as KALSHI_URL
 from arb.venues.kalshi import _depth_at_ask
 from arb.venues.polymarket import CLOB_URL, _best_ask
@@ -133,21 +134,21 @@ def run_focus_pass(store: Store, config, fcfg: dict[str, Any],
     store.save_poll_quotes(poll_id, quotes)
     store.save_poll_opportunities(poll_id, opportunities)
     store.save_suspect_matches(poll_id, suspects)
-    _record_focus(store, poll_id, opportunities)
+    _record_focus(store, poll_id, opportunities, load_validation_rule(config))
     store.finish_poll(poll_id, None, len(quotes), len(opportunities))
     return len(bet_map), len(opportunities)
 
 
-def _record_focus(store: Store, poll_id: int, opportunities: list[Opportunity]) -> None:
+def _record_focus(store: Store, poll_id: int, opportunities: list[Opportunity], validation_rule) -> None:
     with store.connect() as con:
         active = _active_rows(con)
         for opp in opportunities:
             row = active.get(opp.fingerprint)
             if row is None:
-                _insert_tracker_row(con, poll_id, opp, "OPEN", None, "focus-simultaneous")
+                _insert_tracker_row(con, poll_id, opp, "OPEN", None, "focus-simultaneous", validation_rule)
             elif row["status"] == "OPEN" and int(row["opened_poll_id"]) != poll_id:
                 # The daemon flagged it; focus re-found it at simultaneous prices.
-                _insert_tracker_row(con, poll_id, opp, "CONFIRMED", int(row["id"]), "focus-confirmed-simultaneous")
+                _insert_tracker_row(con, poll_id, opp, "CONFIRMED", int(row["id"]), "focus-confirmed-simultaneous", validation_rule)
 
 
 def live_fetchers() -> dict[str, Fetcher]:

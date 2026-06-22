@@ -83,7 +83,7 @@ def test_ev_reappearance_creates_new_linked_row_first_confirmed_null(tmp_path) -
     assert [row["status"] for row in rows] == ["OPEN", "CLOSED", "OPEN"]
     assert rows[0]["pnl_confirmed"] is None  # never observed twice → confirmed fill missed
     assert rows[2]["reappearance_of"] == rows[1]["id"]
-    assert rows[2]["notes"] == "reappeared"
+    assert "reappeared" in rows[2]["notes"].split(",")
 
 
 def test_tracker_arb_optimistic_and_confirmed_append_only(tmp_path) -> None:
@@ -136,6 +136,8 @@ def test_tracker_persists_opportunity_notes_with_lifecycle_note(tmp_path) -> Non
 
     with store.connect() as con:
         [row] = list(con.execute("SELECT notes, quality_flag, kelly_stake_usd FROM flat_bets"))
-    assert row["notes"] == "first-observed,segment-blocked"
+    notes = row["notes"].split(",")
+    assert "first-observed" in notes
+    assert "segment-blocked" in notes
     assert row["quality_flag"] == "segment-blocked"
     assert row["kelly_stake_usd"] == "0.00"
