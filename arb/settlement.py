@@ -311,8 +311,8 @@ def _append_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, 
             ORDER BY id LIMIT 1""",
         (bet["id"],),
     ).fetchone()
-    pnl_optimistic = _flat_pnl(bet["optimistic_cost"], result)
-    pnl_confirmed = _flat_pnl(confirmed["confirmed_cost"], result) if confirmed else None
+    pnl_optimistic = _sized_pnl(bet["optimistic_cost"], result, bet["stake_usd"])
+    pnl_confirmed = _sized_pnl(confirmed["confirmed_cost"], result, bet["stake_usd"]) if confirmed else None
     pnl_kelly_optimistic = _sized_pnl(bet["optimistic_cost"], result, bet["kelly_stake_usd"])
     pnl_kelly_confirmed = _sized_pnl(confirmed["confirmed_cost"], result, bet["kelly_stake_usd"]) if confirmed else None
     validation_rule = confirmed["validation_rule"] if confirmed and confirmed["validation_rule"] is not None else bet["validation_rule"]

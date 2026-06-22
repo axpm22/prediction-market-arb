@@ -16,6 +16,14 @@ match_suspect_prob_diff: 0.15
 min_books_for_consensus: 3
 min_liquidity_usd: 500
 min_executable_usd: 50
+# Thin books can still be worth measuring at tiny size, but they must not pollute the
+# main executable-depth model. The micro lane is EV-only, requires a larger edge, and
+# records a stake capped by visible depth.
+micro:
+  enabled: true
+  min_depth_usd: 5
+  max_stake_usd: 25
+  e_min: 0.08
 max_days_to_settlement: 14
 nonsports_max_days: 7
 sports: [baseball_mlb, basketball_nba, soccer, tennis, mma]

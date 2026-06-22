@@ -22,6 +22,7 @@ def ev_opp(
     *,
     quality_flag: str | None = None,
     kelly_stake: str | None = None,
+    stake: str | None = None,
     event_key_value: str = SETTLED_EVENT,
     start: datetime = START,
 ) -> Opportunity:
@@ -46,7 +47,9 @@ def ev_opp(
     )
     return Opportunity(
         kind="EV", category="sports", event=event, legs=[quote],
-        edge=Decimal("0.03"), stakes={}, status="OK",
+        edge=Decimal("0.03"),
+        stakes={} if stake is None else {outcome: Decimal(stake)},
+        status="OK",
         quality_flag=quality_flag,
         kelly_f_star=None if kelly_stake is None else Decimal("0.10"),
         kelly_stake=None if kelly_stake is None else Decimal(kelly_stake),
@@ -123,6 +126,19 @@ def test_settlement_records_kelly_pnl_from_base_sizing(tmp_path) -> None:
     # Confirmed P&L uses the second-observation cost, but the base row's Kelly size.
     assert row["pnl_kelly_confirmed"] == "13.95"
     assert row["kelly_stake_usd"] == "10.00"
+
+
+def test_settlement_uses_recorded_ev_stake_for_micro_bets(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    place_bets(store, [
+        ev_opp("kansas city royals", "0.50", quality_flag="micro", stake="5.00"),
+        ev_opp("texas rangers", "0.40", quality_flag="micro", stake="5.00"),
+    ])
+    config = load_config()
+    assert settle_sports(store, config, Path("tests/fixtures")) == 2
+    rows = {(r["result"], r["pnl_optimistic"], r["stake_usd"]) for r in settled_rows(store)}
+    assert ("WON", "4.66", "5.00") in rows
+    assert ("LOST", "-5.00", "5.00") in rows
 
 
 def test_settlement_carries_quality_flag_to_scoring_row(tmp_path) -> None:

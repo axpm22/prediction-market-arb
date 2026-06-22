@@ -141,3 +141,19 @@ def test_tracker_persists_opportunity_notes_with_lifecycle_note(tmp_path) -> Non
     assert "segment-blocked" in notes
     assert row["quality_flag"] == "segment-blocked"
     assert row["kelly_stake_usd"] == "0.00"
+
+
+def test_tracker_records_ev_stake_from_opportunity_sizing(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    poll1 = store.start_poll("watch")
+    opp = replace(
+        ev_opp("0.50"),
+        stakes={"los angeles dodgers": Decimal("7.50")},
+        quality_flag="micro",
+    )
+    record_tracker_poll(store, poll1, [opp])
+
+    with store.connect() as con:
+        [row] = list(con.execute("SELECT stake_usd, quality_flag FROM flat_bets"))
+    assert row["stake_usd"] == "7.50"
+    assert row["quality_flag"] == "micro"

@@ -194,7 +194,8 @@ MIGRATION_COLUMNS = {
         "category": "TEXT NOT NULL DEFAULT 'sports'",
     },
     "flat_bets": {
-        # Phase 1: NULL = clean; else 'suspect-edge' | 'thin-book' | 'one-sided'.
+        # Phase 1: NULL = clean; else labels such as 'suspect-edge', 'thin-book',
+        # 'micro', or 'one-sided'.
         "quality_flag": "TEXT",
         # Phase 3: parallel fractional-Kelly sizing (projection, never the headline).
         "kelly_f_star": "TEXT",

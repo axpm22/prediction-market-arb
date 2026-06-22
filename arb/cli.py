@@ -15,7 +15,7 @@ from .arbitrage import build_event, detect_divergences, detect_true_arbs, split_
 from .config import load_config
 from .models import Opportunity, Quote
 from .paper import fill_opportunity
-from .pricing import consensus_outcome_key, consensus_probabilities, edge_points, expected_value, q6
+from .pricing import consensus_outcome_key, consensus_probabilities, edge_points, expected_value, money, q6
 from .quality import classify_quality
 from .sizing import kelly_f_star, kelly_stake
 from .report import print_opportunities, print_positions, print_report
@@ -222,10 +222,20 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
     if in_play:
         print(f"{len(in_play)} in-play quotes persisted with live=1 and excluded from detection (pregame only).")
     # Depth floor BEFORE detection: a derived 1-cent ask backed by $3 of resting size is
-    # not a price. Thin quotes are persisted (data) but never participate in detection.
-    detectable = [q for q in pregame if q.depth_usd is None or q.depth_usd >= config.min_executable_usd]
-    if len(detectable) < len(pregame):
-        print(f"{len(pregame) - len(detectable)} thin quotes (depth < ${config.min_executable_usd}) excluded from detection.")
+    # not a main-lane price. A separate EV-only micro lane can measure small real edges,
+    # but thin ARB/divergence stays excluded because partial fills create leg risk.
+    detectable, micro_detectable, too_thin = split_depth_lanes(pregame, config)
+    thin_count = len(micro_detectable) + len(too_thin)
+    if thin_count:
+        if micro_detectable:
+            print(
+                f"{thin_count} thin quotes (depth < ${config.min_executable_usd}): "
+                f"{len(micro_detectable)} micro-eligible EV-only quotes "
+                f"(${config.micro_min_depth_usd}-${config.min_executable_usd} depth, "
+                f"edge >= {config.micro_e_min}); {len(too_thin)} too thin and excluded."
+            )
+        else:
+            print(f"{thin_count} thin quotes (depth < ${config.min_executable_usd}) excluded from detection.")
     opportunities = detect_true_arbs(
         detectable,
         bankroll=config.bankroll_usd,
@@ -254,6 +264,9 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
                 e_min=config.ev_e_min,
                 config=config,
             )
+        )
+        opportunities.extend(
+            detect_micro_ev_from_consensus(micro_detectable, store.load_consensus(), config)
         )
     opportunities, suspects = split_match_suspects(opportunities)
     if suspects:
@@ -370,6 +383,26 @@ def split_pregame(quotes: list[Quote], now: datetime) -> tuple[list[Quote], list
     return pregame, in_play
 
 
+def split_depth_lanes(quotes: list[Quote], config) -> tuple[list[Quote], list[Quote], list[Quote]]:
+    """Return normal-depth, micro-depth, and too-thin quotes.
+
+    Unknown depth remains in the normal lane because some adapters cannot expose book
+    depth reliably. Known thin depth is treated conservatively: only EV can use the
+    micro lane, and only above the configured minimum.
+    """
+    normal: list[Quote] = []
+    micro: list[Quote] = []
+    too_thin: list[Quote] = []
+    for quote in quotes:
+        if quote.depth_usd is None or quote.depth_usd >= config.min_executable_usd:
+            normal.append(quote)
+        elif config.micro_enabled and quote.depth_usd >= config.micro_min_depth_usd:
+            micro.append(quote)
+        else:
+            too_thin.append(quote)
+    return normal, micro, too_thin
+
+
 def compute_consensus(quotes: list[Quote], min_books: int) -> dict[tuple[str, str], Decimal]:
     by_event: dict[str, list[Quote]] = defaultdict(list)
     for quote in quotes:
@@ -388,6 +421,7 @@ def detect_ev_from_consensus(
     trusted_pairs: set[str],
     e_min: Decimal | None = None,
     config=None,
+    record_below_e_min: bool = True,
 ) -> list[Opportunity]:
     stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
     opportunities: list[Opportunity] = []
@@ -406,7 +440,10 @@ def detect_ev_from_consensus(
         status, notes = status_for_legs([quote], trusted_pairs)
         edge = edge_points(p_hat, quote.effective_cost)
         notes = (*notes, f"edge_pts:{edge}")
-        if e_min is not None and edge < e_min:
+        below_e_min = e_min is not None and edge < e_min
+        if below_e_min and not record_below_e_min:
+            continue
+        if below_e_min:
             notes = (*notes, "below-e-min")
         # EV_SPEC §4: EV's own killer — consensus event vs contract event may differ.
         status = "REVIEW"
@@ -429,6 +466,53 @@ def detect_ev_from_consensus(
             opp = _annotate_quality_and_kelly(opp, p_hat, quote.effective_cost, config)
         opportunities.append(opp)
     return opportunities
+
+
+def detect_micro_ev_from_consensus(
+    quotes: list[Quote],
+    consensus: dict[tuple[str, str], tuple[Decimal, datetime]],
+    config,
+) -> list[Opportunity]:
+    """Detect practical micro EV on thin books without admitting thin ARB risk.
+
+    Micro EV has three extra constraints:
+    1. quote depth already passed the micro floor in split_depth_lanes;
+    2. edge must clear the stricter micro_e_min, not merely be positive;
+    3. recorded stake is capped to visible depth, configured micro cap, and bankroll cap.
+    """
+    if not config.micro_enabled or not quotes:
+        return []
+    raw = detect_ev_from_consensus(
+        quotes,
+        consensus,
+        max_age_hours=config.consensus_max_age_hours,
+        trusted_pairs=config.trusted_pairs,
+        e_min=config.micro_e_min,
+        config=config,
+        record_below_e_min=False,
+    )
+    return [_mark_micro_ev(opp, config) for opp in raw]
+
+
+def _mark_micro_ev(opp: Opportunity, config) -> Opportunity:
+    quote = opp.legs[0]
+    bankroll_cap = config.bankroll_usd * config.max_stake_pct
+    depth_cap = quote.depth_usd if quote.depth_usd is not None else config.micro_max_stake_usd
+    stake = money(min(depth_cap, config.micro_max_stake_usd, bankroll_cap))
+    notes = (
+        *opp.notes,
+        "micro-depth-sized",
+        "micro-ev-only",
+        f"micro-depth-usd:{q6(depth_cap)}",
+        f"micro-stake-usd:{stake}",
+    )
+    return replace(
+        opp,
+        stakes={quote.outcome_label: stake},
+        notes=notes,
+        quality_flag="micro",
+        kelly_stake=stake if opp.kelly_stake is None else min(opp.kelly_stake, stake),
+    )
 
 
 def _annotate_quality_and_kelly(opp: Opportunity, p_hat: Decimal, effective_cost: Decimal, config) -> Opportunity:
@@ -483,8 +567,15 @@ def apply_opportunity_filters(opportunities: list[Opportunity], config) -> tuple
     left: list[Opportunity] = []
     for opportunity in opportunities:
         ok = True
+        is_micro = opportunity.kind == "EV" and opportunity.quality_flag == "micro"
         for leg in opportunity.legs:
-            if leg.depth_usd is not None and leg.depth_usd < config.min_executable_usd:
+            if leg.depth_usd is not None and leg.depth_usd < config.min_executable_usd and not is_micro:
+                ok = False
+            if is_micro and (
+                leg.depth_usd is None
+                or leg.depth_usd < config.micro_min_depth_usd
+                or leg.depth_usd >= config.min_executable_usd
+            ):
                 ok = False
             if leg.start_utc is not None and leg.start_utc > horizon:
                 ok = False

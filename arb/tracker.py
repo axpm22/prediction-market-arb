@@ -118,6 +118,7 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
     confirmed_pnl = pnl if status == "CONFIRMED" else None
     rule_id, validation_tag, validation_notes = classify_validation(current_opp, status, validation_rule)
     ledger_notes = _merge_notes(notes, (*current_opp.notes, *validation_notes))
+    stake_usd = _opportunity_stake(current_opp)
     con.execute(
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
@@ -137,7 +138,7 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
             int(current_opp.status == "OK"),
             int(any(leg.live for leg in current_opp.legs)),
             str(current_opp.edge),
-            "0" if current_opp.kind == "DIVERGENCE" else "1.00",
+            str(stake_usd),
             json.dumps([quote_to_json(leg) for leg in current_opp.legs]),
             str(cost),
             None if confirmed_cost is None else str(confirmed_cost),
@@ -161,6 +162,14 @@ def _merge_notes(primary: str, extra: tuple[str, ...]) -> str:
         if note and note not in notes:
             notes.append(note)
     return ",".join(notes)
+
+
+def _opportunity_stake(opp: Opportunity) -> Decimal:
+    if opp.kind == "DIVERGENCE":
+        return Decimal("0")
+    if opp.kind == "EV" and opp.legs:
+        return opp.stakes.get(opp.legs[0].outcome_label, Decimal("1.00"))
+    return Decimal("1.00")
 
 
 def _insert_close_row(con, poll_id: int, fingerprint: str, reappearance_of: int, notes: str) -> None:

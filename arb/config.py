@@ -35,6 +35,10 @@ class AppConfig:
     min_books_for_consensus: int
     min_liquidity_usd: Decimal
     min_executable_usd: Decimal
+    micro_enabled: bool
+    micro_min_depth_usd: Decimal
+    micro_max_stake_usd: Decimal
+    micro_e_min: Decimal
     max_days_to_settlement: int
     nonsports_max_days: int
     scan_times: list[str]
@@ -133,6 +137,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     _warn_stale_fees(raw, {"kalshi": kalshi, "polymarket": polymarket, "sx": sx})
     parlay = raw.get("parlay", {})
     sizing = raw.get("sizing", {})
+    micro = raw.get("micro", {})
     negrisk = raw.get("negrisk", {})
     btc = raw.get("btc_arb", {})
     database_path = Path(raw.get("database_path", "data/arb.sqlite"))
@@ -150,6 +155,10 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         min_books_for_consensus=int(raw["min_books_for_consensus"]),
         min_liquidity_usd=_decimal(raw["min_liquidity_usd"]),
         min_executable_usd=_decimal(raw["min_executable_usd"]),
+        micro_enabled=bool(micro.get("enabled", False)),
+        micro_min_depth_usd=_decimal(micro.get("min_depth_usd", "5")),
+        micro_max_stake_usd=_decimal(micro.get("max_stake_usd", "25")),
+        micro_e_min=_decimal(micro.get("e_min", ev.get("e_min", "0.05"))),
         max_days_to_settlement=int(raw["max_days_to_settlement"]),
         nonsports_max_days=int(raw["nonsports_max_days"]),
         scan_times=list(raw["scan_times"]),

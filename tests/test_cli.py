@@ -11,7 +11,9 @@ from arb.cli import (
     apply_segment_gates,
     compute_consensus,
     detect_ev_from_consensus,
+    detect_micro_ev_from_consensus,
     run_scan,
+    split_depth_lanes,
     split_pregame,
 )
 from arb.config import load_config
@@ -84,6 +86,37 @@ def test_filters_count_left_on_table() -> None:
     kept, left = apply_opportunity_filters(deep + shallow + far_out, config)
     assert len(kept) == 1
     assert len(left) == 2
+
+
+def test_depth_lanes_split_normal_micro_and_too_thin_quotes() -> None:
+    config = load_config()
+    unknown = replace(kalshi_quote("0.50"), depth_usd=None)
+    normal = kalshi_quote("0.50", depth="60")
+    micro = kalshi_quote("0.50", depth="10")
+    too_thin = kalshi_quote("0.50", depth="1")
+
+    normal_lane, micro_lane, too_thin_lane = split_depth_lanes([unknown, normal, micro, too_thin], config)
+
+    assert normal_lane == [unknown, normal]
+    assert micro_lane == [micro]
+    assert too_thin_lane == [too_thin]
+
+
+def test_micro_ev_requires_stricter_edge_and_caps_stake_to_depth() -> None:
+    config = load_config()
+    quote = kalshi_quote("0.50", depth="10")
+    fresh = datetime.now(timezone.utc)
+    low_edge = {(EVENT_KEY, "kansas city royals"): (Decimal("0.58"), fresh)}
+    high_edge = {(EVENT_KEY, "kansas city royals"): (Decimal("0.61"), fresh)}
+
+    assert detect_micro_ev_from_consensus([quote], low_edge, config) == []
+    [opp] = detect_micro_ev_from_consensus([quote], high_edge, config)
+
+    assert opp.quality_flag == "micro"
+    assert opp.stakes["kansas city royals"] == Decimal("10.00")
+    assert opp.kelly_stake == Decimal("10.00")
+    assert "micro-depth-sized" in opp.notes
+    assert "micro-ev-only" in opp.notes
 
 
 def seed_settled_segment(store: Store, sport: str, kind: str, n: int, wins: int) -> None:
