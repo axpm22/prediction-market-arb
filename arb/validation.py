@@ -50,11 +50,15 @@ def classify_validation(opp: Opportunity, status: str, rule: ValidationRule) -> 
     cost = _effective_cost(opp)
     if cost is None:
         return rule.rule_id, DROP, ("validation-drop:missing-cost",)
-    passes_price_edge = rule.min_cost <= cost <= rule.max_cost and opp.edge < rule.max_flagged_edge
+    # #5 max_flagged_edge is in probability POINTS (it sits beside a 0.40-0.75 cost band),
+    # so compare against edge_points (p - c), NOT opp.edge — which for EV is the ratio
+    # (p-c)/c and would make the cut cost-dependent (a true 2-pt edge at c=0.50 reads 0.04).
+    edge_pts = opp.edge_points if opp.edge_points is not None else opp.edge
+    passes_price_edge = rule.min_cost <= cost <= rule.max_cost and edge_pts < rule.max_flagged_edge
     if not passes_price_edge:
         if cost < rule.min_cost or cost > rule.max_cost:
             notes.append("validation-drop:cost-band")
-        if opp.edge >= rule.max_flagged_edge:
+        if edge_pts >= rule.max_flagged_edge:
             notes.append("validation-drop:flagged-edge")
         return rule.rule_id, DROP, tuple(notes)
     if status == "CONFIRMED":

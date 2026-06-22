@@ -13,6 +13,7 @@ interpolate windows — exact end-time match only (mirrors the totals exact-line
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -48,26 +49,39 @@ def windows_match(a: datetime, b: datetime, tolerance_secs: int) -> bool:
 
 
 def find_btc_arb(legs: list[BtcLeg], window_match_secs: int, trusted: bool) -> list[BtcArb]:
-    """Pair UP(venue A) with DOWN(venue B) on the same asset+window across venues."""
-    ups = [l for l in legs if l.direction == "UP"]
-    downs = [l for l in legs if l.direction == "DOWN"]
+    """One arb per (asset, window_end): the CHEAPEST cross-venue UP+DOWN pair.
+
+    #6 Previously this emitted every UP x DOWN combination, inflating opportunity counts
+    and double-allocating the same notional. Windows are matched EXACTLY on end time (the
+    module rule: never interpolate); window_match_secs is retained for signature
+    compatibility but not used to widen the match.
+    """
+    groups: dict[tuple[str, datetime], dict[str, list[BtcLeg]]] = defaultdict(
+        lambda: {"UP": [], "DOWN": []}
+    )
+    for l in legs:
+        key = (l.asset, l.window_end_utc.astimezone(timezone.utc))
+        groups[key][l.direction].append(l)
     arbs: list[BtcArb] = []
-    for up in ups:
-        for down in downs:
-            if up.venue == down.venue:
-                continue  # cross-venue only
-            if up.asset != down.asset:
-                continue
-            if not windows_match(up.window_end_utc, down.window_end_utc, window_match_secs):
-                continue
-            total = q6(up.effective_cost + down.effective_cost)
-            if total >= Decimal("1") or total <= 0:
-                continue
-            same_oracle = up.oracle == down.oracle and up.oracle != ""
-            # Honest gate: an arb is only OK if oracles provably match AND config trusts it.
-            status = "OK" if (same_oracle and trusted) else "REVIEW"
-            arbs.append(BtcArb(up.asset, up.window_end_utc, up, down, total,
-                               q6(Decimal("1") / total - Decimal("1")), same_oracle, status))
+    for (asset, window_end), sides in groups.items():
+        best: tuple[Decimal, BtcLeg, BtcLeg] | None = None
+        for up in sides["UP"]:
+            for down in sides["DOWN"]:
+                if up.venue == down.venue:
+                    continue  # cross-venue only
+                total = q6(up.effective_cost + down.effective_cost)
+                if total >= Decimal("1") or total <= 0:
+                    continue
+                if best is None or total < best[0]:
+                    best = (total, up, down)
+        if best is None:
+            continue
+        total, up, down = best
+        same_oracle = up.oracle == down.oracle and up.oracle != ""
+        # Honest gate: an arb is only OK if oracles provably match AND config trusts it.
+        status = "OK" if (same_oracle and trusted) else "REVIEW"
+        arbs.append(BtcArb(asset, window_end, up, down, total,
+                           q6(Decimal("1") / total - Decimal("1")), same_oracle, status))
     return arbs
 
 

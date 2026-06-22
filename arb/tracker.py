@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from .models import Opportunity
 from .pricing import money, q6
@@ -13,6 +14,21 @@ from .store import Store, quote_to_json
 from .validation import ValidationRule, classify_validation
 
 LIFECYCLE_STATUSES = {"OPEN", "CONFIRMED", "CLOSED", "SETTLED", "EXITED"}
+# SPEC §9: P&L attributes to the EST/EDT day the bet was placed. placed_at is stored UTC,
+# so a bet placed after ~19-20:00 ET rolls into the next UTC day; bucket by local date.
+ATTRIBUTION_TZ = ZoneInfo("America/New_York")
+
+
+def _local_date(placed_at: str | None) -> date | None:
+    if not placed_at:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(placed_at).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(ATTRIBUTION_TZ).date()
 
 
 def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportunity],
@@ -50,7 +66,7 @@ def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportun
 
 
 def write_daily_report(store: Store, report_date: date | None = None, output_dir: Path = Path("reports/daily")) -> tuple[Path, Path]:
-    report_date = report_date or datetime.now().date()
+    report_date = report_date or datetime.now(ATTRIBUTION_TZ).date()
     output_dir.mkdir(parents=True, exist_ok=True)
     records = _bet_records_for_date(store, report_date)
     cumulative_records = _bet_records_for_date(store, None)
@@ -201,13 +217,14 @@ def _optimistic_pnl(opp: Opportunity) -> Decimal | None:
 
 
 def _bet_records_for_date(store: Store, report_date: date | None):
-    where = "WHERE status = 'OPEN' AND kind != 'CLOSE'"
-    params: tuple[str, ...] = ()
-    if report_date is not None:
-        where += " AND substr(placed_at, 1, 10) = ?"
-        params = (report_date.isoformat(),)
+    # #1 Bucket by EST/EDT local date, not the UTC calendar date. SQLite can't tz-convert,
+    # so filter in Python on the attribution-tz date of placed_at.
     with store.connect() as con:
-        bases = list(con.execute(f"SELECT * FROM flat_bets {where} ORDER BY id", params))
+        bases = list(con.execute(
+            "SELECT * FROM flat_bets WHERE status = 'OPEN' AND kind != 'CLOSE' ORDER BY id"
+        ))
+        if report_date is not None:
+            bases = [row for row in bases if _local_date(row["placed_at"]) == report_date]
         if not bases:
             return []
         ids = [int(row["id"]) for row in bases]
@@ -296,19 +313,19 @@ def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulat
         "",
         "### By Sport",
         "",
-        *_table(["Sport", "Bets", "Settled P&L", "Pending"], _breakdown_rows(records, "sport")),
+        *_table(["Sport", "Bets", "Optimistic P&L", "Confirmed P&L", "Pending"], _breakdown_rows(records, "sport")),
         "",
         "### By Category",
         "",
-        *_table(["Category", "Bets", "Settled P&L", "Pending"], _breakdown_rows(records, "category")),
+        *_table(["Category", "Bets", "Optimistic P&L", "Confirmed P&L", "Pending"], _breakdown_rows(records, "category")),
         "",
         "### By Venue Pair",
         "",
-        *_table(["Venue Pair", "Bets", "Settled P&L", "Pending"], _venue_pair_rows(records)),
+        *_table(["Venue Pair", "Bets", "Optimistic P&L", "Confirmed P&L", "Pending"], _venue_pair_rows(records)),
         "",
         "### EV Edge Buckets",
         "",
-        *_table(["Bucket", "Bets", "Settled P&L", "Pending"], _ev_bucket_rows(records)),
+        *_table(["Bucket", "Bets", "Optimistic P&L", "Confirmed P&L", "Pending"], _ev_bucket_rows(records)),
         "",
         "### Validation Forward Test",
         "",
@@ -324,7 +341,7 @@ def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulat
         "",
         "## Flagged vs Realized",
         "",
-        *_table(["Class", "Flags", "Summed Flagged Edge", "Settled", "Settled P&L"], _flagged_vs_realized_rows(records)),
+        *_table(["Class", "Flags", "Summed Flagged Edge", "Settled", "Optimistic P&L", "Confirmed P&L"], _flagged_vs_realized_rows(records)),
         "",
         "## Cumulative Headline",
         "",
@@ -388,12 +405,21 @@ def _class_fill_rows(records: list[dict[str, object]]) -> list[list[str]]:
     return rows
 
 
+def _pnl_pair_cells(group: list[dict[str, object]]) -> list[str]:
+    # #8 every breakdown carries BOTH fills — the optimistic-vs-confirmed gap is the mirage.
+    return [
+        _fmt_money(_sum_pnl(group, "optimistic")),
+        _fmt_money(_sum_pnl(group, "confirmed")),
+        str(sum(1 for r in group if r["settled"] is None)),
+    ]
+
+
 def _breakdown_rows(records: list[dict[str, object]], field: str) -> list[list[str]]:
     grouped: dict[str, list[dict[str, object]]] = defaultdict(list)
     for record in records:
         grouped[str(record["base"][field] or "unknown")].append(record)
     return [
-        [key, str(len(group)), _fmt_money(_sum_pnl(group, "optimistic")), str(sum(1 for r in group if r["settled"] is None))]
+        [key, str(len(group)), *_pnl_pair_cells(group)]
         for key, group in sorted(grouped.items())
     ]
 
@@ -403,7 +429,7 @@ def _venue_pair_rows(records: list[dict[str, object]]) -> list[list[str]]:
     for record in records:
         grouped[_venue_pair(record)].append(record)
     return [
-        [key, str(len(group)), _fmt_money(_sum_pnl(group, "optimistic")), str(sum(1 for r in group if r["settled"] is None))]
+        [key, str(len(group)), *_pnl_pair_cells(group)]
         for key, group in sorted(grouped.items())
     ]
 
@@ -424,7 +450,7 @@ def _ev_bucket_rows(records: list[dict[str, object]]) -> list[list[str]]:
             bucket = ">5%"
         buckets[bucket].append(record)
     return [
-        [bucket, str(len(group)), _fmt_money(_sum_pnl(group, "optimistic")), str(sum(1 for r in group if r["settled"] is None))]
+        [bucket, str(len(group)), *_pnl_pair_cells(group)]
         for bucket, group in buckets.items()
     ]
 
@@ -479,10 +505,13 @@ def _kelly_rows(records: list[dict[str, object]]) -> list[list[str]]:
 
 def _extreme_rows(records: list[dict[str, object]]) -> list[list[str]]:
     settled = [(record, _record_pnl(record, "optimistic")) for record in records if _record_pnl(record, "optimistic") is not None]
+    # #7 pnl_optimistic is None for everything but ARB (and ARBs settle at entry), so the old
+    # pending metric was structurally dead. Expected pending P&L = stake x edge, where edge is
+    # return-per-dollar for both EV (ratio) and ARB (ROI), so this surfaces real EV positions.
     pending = [
-        (record, _dec(record["base"]["pnl_optimistic"]))
+        (record, _pending_exposure(record))
         for record in records
-        if record["settled"] is None and record["base"]["pnl_optimistic"] is not None
+        if record["settled"] is None
     ]
     rows: list[list[str]] = []
     if settled:
@@ -496,6 +525,11 @@ def _extreme_rows(records: list[dict[str, object]]) -> list[list[str]]:
     return rows
 
 
+def _pending_exposure(record: dict[str, object]) -> Decimal:
+    base = record["base"]
+    return q6(_dec(base["edge"]) * _dec(base["stake_usd"]))
+
+
 def _flagged_vs_realized_rows(records: list[dict[str, object]]) -> list[list[str]]:
     grouped: dict[str, list[dict[str, object]]] = defaultdict(list)
     for record in records:
@@ -507,6 +541,7 @@ def _flagged_vs_realized_rows(records: list[dict[str, object]]) -> list[list[str
             _fmt_pct(sum((_dec(record["base"]["edge"]) for record in group), Decimal("0"))),
             str(sum(1 for record in group if _record_pnl(record, "optimistic") is not None)),
             _fmt_money(_sum_pnl(group, "optimistic")),
+            _fmt_money(_sum_pnl(group, "confirmed")),
         ]
         for kind, group in sorted(grouped.items())
     ]

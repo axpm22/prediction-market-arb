@@ -10,10 +10,20 @@ realized < implied (longshots) are avoid/short. Bands are fitted from data, not 
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from decimal import Decimal
 
 from .store import Store
+
+# #2 The sample is drawn only from bets that PASSED the EV/arb filters, so this curve
+# reflects the selection rule, not the market's population longshot premium. A true FLB
+# study needs a representative cross-section of prices across the whole range (e.g. settled
+# raw quotes), which this ledger does not yet capture. Treat the signal as in-sample only.
+SELECTION_CAVEAT = (
+    "CAVEAT: sample is flagged-bets-only (passed EV/arb filters) -> selection-biased; "
+    "this measures the filter's calibration, not the population favorite-longshot premium."
+)
 
 
 @dataclass(frozen=True)
@@ -21,42 +31,61 @@ class BandStat:
     lo: float
     hi: float
     n: int
-    implied_mid: float        # midpoint of the band = implied probability proxy
+    implied_mid: float        # band midpoint (reference only)
+    mean_cost: float          # #3 mean PRE-FEE implied prob actually observed in the band
     realized_win_rate: float
-    edge: float               # realized - implied (positive => underpriced => back)
-    signal: str               # 'back' | 'avoid' | 'INSUFFICIENT_DATA'
+    edge: float               # realized - mean_cost (positive => underpriced => back)
+    signal: str               # 'back' | 'avoid' | 'neutral' | 'INSUFFICIENT_DATA'
 
 
 def _settled_binaries(store: Store) -> list[tuple[float, bool]]:
-    """(entry_effective_cost, won) for each settled clean binary bet with a numeric cost."""
+    """(entry PRE-FEE cost, won) for each settled clean binary bet.
+
+    #3 Bins on the de-vigged/raw cost (leg `cost`), NOT optimistic_cost (= cost + fee +
+    taker buffer). Fees push every bet into a higher band, so using the fee-loaded price
+    makes fees masquerade as the longshot premium (realized < implied purely from fees).
+    """
     out: list[tuple[float, bool]] = []
     with store.connect() as con:
         rows = con.execute(
-            """SELECT optimistic_cost, result FROM flat_bets
+            """SELECT optimistic_cost, legs_json, result FROM flat_bets
                 WHERE status='SETTLED' AND result IN ('WON','LOST')
-                  AND quality_flag IS NULL AND optimistic_cost IS NOT NULL"""
+                  AND quality_flag IS NULL"""
         )
         for r in rows:
-            try:
-                c = float(r["optimistic_cost"])
-            except (TypeError, ValueError):
-                continue
-            if 0.0 < c < 1.0:
+            c = _pre_fee_cost(r["legs_json"], r["optimistic_cost"])
+            if c is not None and 0.0 < c < 1.0:
                 out.append((c, r["result"] == "WON"))
     return out
+
+
+def _pre_fee_cost(legs_json, optimistic_cost) -> float | None:
+    try:
+        legs = json.loads(legs_json) if legs_json else []
+    except (TypeError, ValueError):
+        legs = []
+    if legs and legs[0].get("cost") is not None:
+        try:
+            return float(legs[0]["cost"])
+        except (TypeError, ValueError):
+            pass
+    try:
+        return float(optimistic_cost)  # fall back only if no per-leg pre-fee cost
+    except (TypeError, ValueError):
+        return None
 
 
 def calibration(store: Store, bands: list[float], min_samples: int, flb_min_edge: float) -> list[BandStat]:
     data = _settled_binaries(store)
     stats: list[BandStat] = []
     for lo, hi in zip(bands, bands[1:]):
-        in_band = [won for c, won in data if lo <= c < hi]
+        in_band = [(c, won) for c, won in data if lo <= c < hi]
         n = len(in_band)
         implied_mid = (lo + hi) / 2.0
-        # Always report the true realized win rate and edge; only the actionable SIGNAL is
-        # gated on sample size (an under-powered band is observed, just not yet trusted).
-        wr = sum(1 for w in in_band if w) / n if n else 0.0
-        edge = wr - implied_mid if n else 0.0
+        mean_cost = sum(c for c, _ in in_band) / n if n else implied_mid
+        wr = sum(1 for _, w in in_band if w) / n if n else 0.0
+        # #3 Compare realized to the MEAN actual cost in the band, not the midpoint.
+        edge = wr - mean_cost if n else 0.0
         if n < min_samples:
             signal = "INSUFFICIENT_DATA"
         elif edge >= flb_min_edge:
@@ -65,5 +94,6 @@ def calibration(store: Store, bands: list[float], min_samples: int, flb_min_edge
             signal = "avoid"
         else:
             signal = "neutral"
-        stats.append(BandStat(lo, hi, n, implied_mid, round(wr, 4), round(edge, 4), signal))
+        stats.append(BandStat(lo, hi, n, implied_mid, round(mean_cost, 4),
+                              round(wr, 4), round(edge, 4), signal))
     return stats

@@ -124,14 +124,15 @@ def main(argv: list[str] | None = None) -> int:
             print("(no settled clean bets yet — INSUFFICIENT_DATA across the board)")
         return 0
     if args.command == "backtest-flb":
-        from .bias import calibration
+        from .bias import SELECTION_CAVEAT, calibration
 
         flb = config.flb
         stats = calibration(store, list(flb.get("bands", [])), int(flb.get("min_samples_per_band", 200)),
                             float(flb.get("flb_min_edge", 0.02)))
-        print(f"{'BAND':>14} {'N':>6} {'IMPLIED':>8} {'REALIZED':>9} {'EDGE':>8}  SIGNAL")
+        print(SELECTION_CAVEAT)
+        print(f"{'BAND':>14} {'N':>6} {'MEAN_COST':>10} {'REALIZED':>9} {'EDGE':>8}  SIGNAL")
         for s in stats:
-            print(f"  [{s.lo:.2f},{s.hi:.2f}) {s.n:>6} {s.implied_mid:>8.1%} {s.realized_win_rate:>9.1%} {s.edge:>+8.1%}  {s.signal}")
+            print(f"  [{s.lo:.2f},{s.hi:.2f}) {s.n:>6} {s.mean_cost:>10.1%} {s.realized_win_rate:>9.1%} {s.edge:>+8.1%}  {s.signal}")
         return 0
     if args.command == "dashboard":
         from .experimental.dashboard import write_dashboard

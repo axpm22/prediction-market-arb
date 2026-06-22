@@ -91,10 +91,12 @@ def test_live_dashboard_exposes_scanner_controls(tmp_path) -> None:
 
     assert "scanners" in state
     scanner_ids = {scanner["id"] for scanner in state["scanners"]}
-    assert scanner_ids >= {"daemon", "micro_ev", "political", "nonsports"}
+    assert scanner_ids >= {"daemon", "micro_ev", "ev_exit", "political", "nonsports"}
     assert not (scanner_ids & {"focus", "verify", "hot"})
     micro = next(scanner for scanner in state["scanners"] if scanner["id"] == "micro_ev")
     assert micro["control"] == "parent"
+    ev_exit = next(scanner for scanner in state["scanners"] if scanner["id"] == "ev_exit")
+    assert ev_exit["control"] == "direct"
     assert "Micro EV" in PAGE
     assert len([process["name"] for process in state["processes"]]) == len({process["name"] for process in state["processes"]})
     assert "micro_ev" in state

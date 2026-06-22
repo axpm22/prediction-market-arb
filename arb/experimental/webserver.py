@@ -79,7 +79,7 @@ SCANNERS = [
         "log": LOG_FILES["ev-exit"],
         "poll_kinds": ["ev-exit"],
         "next_where": "kind='EV' AND (quality_flag IS NULL OR quality_flag='micro')",
-        "return_where": "kind='EV' AND (quality_flag IS NULL OR quality_flag='micro')",
+        "return_where": "kind='EV' AND status='EXITED'",
         "detail": "Paper take-profit exits; executable sell bid after fees, only when remaining edge is mostly gone.",
     },
     {
@@ -1116,9 +1116,11 @@ tr:last-child td{border-bottom:0}
 .open-event{font-weight:700;color:var(--text);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .subline{color:var(--muted);font-size:11px;margin-top:2px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+#kinds,#recent{max-height:360px;overflow:auto;padding-right:3px}
 @container (min-width:680px){.scanner-row{grid-template-columns:132px minmax(170px,1.3fr) minmax(150px,1fr) minmax(120px,.7fr) minmax(140px,.8fr)}.scanner-row>div:nth-child(n+3){grid-column:auto}}
-@media (max-width:1180px){.metric{grid-column:span 4}.wide,.side,.half{grid-column:span 12}.track-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.top-inner{align-items:flex-start;flex-direction:column}.procs{justify-content:flex-start}}
-@media (max-width:820px){.metric{grid-column:span 6}.detail-grid{grid-template-columns:1fr}.track-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:1180px){.metric{grid-column:span 4}.track-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.top-inner{align-items:flex-start;flex-direction:column}.procs{justify-content:flex-start}}
+@media (max-width:900px){.wide,.side,.half{grid-column:span 12}.detail-grid{grid-template-columns:1fr}}
+@media (max-width:820px){.metric{grid-column:span 6}.track-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:700px){.wrap{padding:12px}.top-inner{padding:12px}.value{font-size:22px}.chart{height:230px}.log{height:260px}.scanner-row{grid-template-columns:1fr}.scanner-row>div:nth-child(n){grid-column:auto}th:nth-child(5),td:nth-child(5){display:none}}
 </style>
 </head>
@@ -1184,24 +1186,12 @@ tr:last-child td{border-bottom:0}
       <div class="panel-body"><div class="bars" id="pipeline"></div></div>
     </div>
     <div class="panel half">
-      <div class="panel-head"><div class="panel-title">Poll Throughput</div><div class="muted" id="poll-summary"></div></div>
-      <div class="panel-body"><svg class="chart mini" id="polls"></svg></div>
-    </div>
-    <div class="panel half">
       <div class="panel-head"><div class="panel-title">Strategy Effectiveness</div><div class="muted" id="clv"></div></div>
       <div class="panel-body" id="kinds"></div>
     </div>
     <div class="panel half">
-      <div class="panel-head"><div class="panel-title">Segments</div><div class="muted">clean settled rows</div></div>
-      <div class="panel-body" id="segments"></div>
-    </div>
-    <div class="panel half">
       <div class="panel-head"><div class="panel-title">Recent Bets</div><div class="muted">append-only ledger</div></div>
       <div class="panel-body" id="recent"></div>
-    </div>
-    <div class="panel half">
-      <div class="panel-head"><div class="panel-title">Research Signals</div><div class="muted" id="research-summary">divergence spreads · not bets</div></div>
-      <div class="panel-body" id="research"></div>
     </div>
     <div class="panel full">
       <div class="panel-head">
@@ -1385,24 +1375,6 @@ function sampleLineData(data, maxPoints) {
   return sampled;
 }
 
-function drawBars(svg, rows) {
-  const w = svg.clientWidth || 600, h = svg.clientHeight || 136, pad = 12;
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  svg.innerHTML = "";
-  if (!rows.length) return;
-  const max = Math.max(...rows.map(r => num(r.n_quotes)), 1);
-  const bw = (w - pad * 2) / rows.length;
-  rows.forEach((r, i) => {
-    const bh = (num(r.n_quotes) / max) * (h - pad * 2);
-    const x = pad + i * bw;
-    svg.insertAdjacentHTML("beforeend", `<rect x="${x.toFixed(1)}" y="${(h-pad-bh).toFixed(1)}" width="${Math.max(2,bw-2).toFixed(1)}" height="${bh.toFixed(1)}" fill="#6aa8ff" opacity=".78"/>`);
-    if (num(r.n_opps) > 0) {
-      const oh = Math.max(3, (num(r.n_opps) / Math.max(...rows.map(p => num(p.n_opps)), 1)) * 42);
-      svg.insertAdjacentHTML("beforeend", `<rect x="${x.toFixed(1)}" y="${(h-pad-oh).toFixed(1)}" width="${Math.max(2,bw-2).toFixed(1)}" height="${oh.toFixed(1)}" fill="#e0ad3b"/>`);
-    }
-  });
-}
-
 function table(headers, rows, empty="No rows yet") {
   if (!rows.length) return `<div class="muted">${empty}</div>`;
   return `<table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
@@ -1490,9 +1462,9 @@ function scannerNext(scanner) {
 
 function scannerReturn(scanner) {
   const r = scanner.returns || {};
-  if (!r.settled) return `<b class="muted">No settled data</b><div class="scanner-meta">return not proven yet</div>`;
+  if (!r.settled) return `<b class="muted">No realized data</b><div class="scanner-meta">return not proven yet</div>`;
   const roi = r.roi == null ? "n/a" : pct(r.roi);
-  return `<b class="${valClass(r.pnl)}">${roi}</b><div class="scanner-meta">${money(r.pnl)} over ${r.settled} settled · avg ${money(r.avg_pnl)}</div>`;
+  return `<b class="${valClass(r.pnl)}">${roi}</b><div class="scanner-meta">${money(r.pnl)} over ${r.settled} realized · avg ${money(r.avg_pnl)}</div>`;
 }
 
 function scannerLastPoll(scanner) {
@@ -1668,22 +1640,9 @@ function renderKinds(d) {
   $("clv").textContent = clv.n ? `CLV n=${clv.n}, mean ${num(clv.mean_clv).toFixed(4)}` : "CLV gathering";
 }
 
-function renderSegments(d) {
-  const rows = d.segments.slice(0, 12).map(s => `<tr><td>${esc(s.segment)}</td><td>${s.n}</td><td>${pct(s.win_rate)}</td><td class="${valClass(s.roi)}">${pct(s.roi)}</td><td>${s.score}</td><td><span class="badge ${esc(s.tier)}">${esc(s.tier)}</span></td></tr>`);
-  $("segments").innerHTML = table(["Segment","N","Win","ROI","Score","Tier"], rows);
-}
-
 function renderRecent(d) {
   const rows = d.recent.map(r => `<tr><td class="muted">${r.id}</td><td>${esc(r.kind)}</td><td><span class="badge ${esc(r.status)}">${esc(r.status)}</span></td><td>${pct(r.edge)}</td><td>${esc(r.sport || r.category || "")}</td><td class="muted">${age(Math.round((Date.now()-Date.parse(r.placed_at))/1000))}</td></tr>`);
   $("recent").innerHTML = table(["ID","Kind","Status","Edge","Segment","Age"], rows);
-}
-
-function renderResearch(d) {
-  const r = d.research || {open:0, rows:[]};
-  $("research-summary").textContent = `${r.open} divergence spreads · not bets, no P&L`;
-  if (!r.rows.length) { $("research").innerHTML = `<div class="muted">No open divergence signals</div>`; return; }
-  const rows = r.rows.map(x => `<tr><td class="muted">${x.id}</td><td>${pct(x.edge)}</td><td>${esc(x.sport || x.category || "")}</td><td class="muted">${age(Math.round((Date.now()-Date.parse(x.placed_at))/1000))}</td></tr>`);
-  $("research").innerHTML = table(["ID","Spread","Segment","Age"], rows);
 }
 
 function renderLogs(d) {
@@ -1706,17 +1665,13 @@ function render(d) {
   renderOpenBets(d);
   renderPipeline(d);
   renderKinds(d);
-  renderSegments(d);
   renderRecent(d);
-  renderResearch(d);
   renderLogs(d);
-  $("poll-summary").textContent = `${d.health.last_poll_quotes ?? 0} quotes, ${d.health.last_poll_opps ?? 0} opps`;
   drawLines($("equity"), [
     {label:"raw", color:colors.raw, data:d.equity.optimistic_raw},
     {label:"clean", color:colors.clean, data:d.equity.optimistic_clean},
     {label:"confirmed", color:colors.confirmed, data:d.equity.confirmed_clean},
   ]);
-  drawBars($("polls"), d.polls);
 }
 
 $("reset-track").onclick = () => resetTracking(state);
