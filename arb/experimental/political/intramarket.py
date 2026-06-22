@@ -43,8 +43,9 @@ def find_intramarket_arb(
     # Empty-book trap (SPEC §3.1): ask 1.0 + bid 0.0 + liquidity 0 is not a real quote.
     if _is_empty_book(market):
         return None
-    yes_fee = all_in_fee_cost(yes_ask, fee_rate, taker_buffer)
-    no_fee = all_in_fee_cost(no_ask, fee_rate, taker_buffer)
+    # Political intra-market arb trades Kalshi binaries → Kalshi's quadratic fee basis.
+    yes_fee = all_in_fee_cost(yes_ask, fee_rate, taker_buffer, basis="quadratic")
+    no_fee = all_in_fee_cost(no_ask, fee_rate, taker_buffer, basis="quadratic")
     total = q6(yes_ask + yes_fee + no_ask + no_fee)
     if total >= Decimal("1") or total <= 0:
         return None

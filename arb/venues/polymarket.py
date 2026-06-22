@@ -119,7 +119,7 @@ def parse_polymarket_events(
                         outcome_label=label,
                         raw_price=price,
                         cost=price,
-                        fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer),
+                        fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer, basis="linear"),
                         depth_usd=depth,
                         live=False,
                         fetched_at=fetched_at,

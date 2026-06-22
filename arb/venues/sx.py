@@ -133,7 +133,7 @@ def parse_sx_payload(
                     outcome_label=label,
                     raw_price=cost,
                     cost=cost,
-                    fee_cost=all_in_fee_cost(cost, fee_rate, taker_buffer),
+                    fee_cost=all_in_fee_cost(cost, fee_rate, taker_buffer, basis="linear"),
                     depth_usd=depth,
                     live=False,
                     fetched_at=fetched_at,
@@ -166,7 +166,7 @@ def requote_sx_leg(market_hash: str, ref: str | None, fee_rate: Decimal | None,
         return None
     cost, _depth = best
     rate = fee_rate if fee_rate is not None else Decimal("0")
-    return q6(cost + all_in_fee_cost(cost, rate, taker_buffer))
+    return q6(cost + all_in_fee_cost(cost, rate, taker_buffer, basis="linear"))
 
 
 def _best_taker_order(orders: list[dict[str, Any]], maker_betting_outcome_one: bool) -> tuple[Decimal, Decimal] | None:

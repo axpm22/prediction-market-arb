@@ -140,7 +140,7 @@ def parse_kalshi_payload(
                         outcome_label=label,
                         raw_price=price,
                         cost=price,
-                        fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer),
+                        fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer, basis="quadratic"),
                         depth_usd=_depth_at_ask(book, side, price),
                         **common,
                     )
@@ -156,7 +156,7 @@ def parse_kalshi_payload(
                     outcome_label=normalize_name(subtitle or home, sport, aliases),
                     raw_price=price,
                     cost=price,
-                    fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer),
+                    fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer, basis="quadratic"),
                     depth_usd=_depth_at_ask(book, "yes", price),
                     **common,
                 )

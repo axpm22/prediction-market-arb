@@ -49,43 +49,74 @@ def consensus_outcome_key(market_type: str, line: Decimal | None, outcome_label:
 
 
 def consensus_probabilities(quotes: list[Quote], min_books: int) -> dict[str, Decimal]:
-    by_market: dict[tuple[str, str, Decimal | None], dict[str, Decimal]] = defaultdict(dict)
+    """Median de-vigged consensus per market, with two correctness guards:
+
+    #2 only books carrying the COMPLETE outcome set vote — a book missing the soccer DRAW
+       or one side of a total would otherwise be de-vigged as a 2-/1-way and inflate.
+    #1 after taking per-outcome medians, RENORMALIZE the vector so each market sums to 1.
+       Independent medians don't, so p(HOME)+p(AWAY) could be 0.97 or 1.04 and bias EV.
+    A market only contributes if every outcome in its complete set cleared min_books.
+    """
+    # (book, market_type, line) -> {outcome_key: decimal_odds}
+    raw_books: dict[tuple[str, str, Decimal | None], dict[str, Decimal]] = defaultdict(dict)
     for quote in quotes:
         if quote.venue != "oddsapi" or quote.raw_price <= 0:
             continue
-        group = (quote.book, quote.market_type, quote.line)
-        by_market[group][consensus_outcome_key(quote.market_type, quote.line, quote.outcome_label)] = quote.raw_price
+        key = consensus_outcome_key(quote.market_type, quote.line, quote.outcome_label)
+        raw_books[(quote.book, quote.market_type, quote.line)][key] = quote.raw_price
 
-    per_outcome: dict[str, list[Decimal]] = defaultdict(list)
-    for book_odds in by_market.values():
-        if len(book_odds) < 2:
-            continue
-        for outcome, prob in devig_book(book_odds).items():
-            per_outcome[outcome].append(prob)
+    # Group books by market and find that market's complete outcome set (max cardinality seen).
+    books_by_market: dict[tuple[str, Decimal | None], list[dict[str, Decimal]]] = defaultdict(list)
+    for (_book, market_type, line), odds in raw_books.items():
+        books_by_market[(market_type, line)].append(odds)
 
     consensus: dict[str, Decimal] = {}
-    for outcome, probs in per_outcome.items():
-        if len(probs) >= min_books:
-            consensus[outcome] = q6(Decimal(str(median(probs))))
+    for _market, books in books_by_market.items():
+        complete = max((frozenset(o) for o in books), key=len)
+        if len(complete) < 2:
+            continue  # a single-outcome market can't be de-vigged
+        per_outcome: dict[str, list[Decimal]] = defaultdict(list)
+        for odds in books:
+            if frozenset(odds) != complete:  # #2: incomplete books don't vote
+                continue
+            for outcome, prob in devig_book(odds).items():
+                per_outcome[outcome].append(prob)
+        # Require the FULL set to have cleared min_books, else renormalizing is meaningless.
+        if any(len(per_outcome.get(o, [])) < min_books for o in complete):
+            continue
+        medians = {o: Decimal(str(median(per_outcome[o]))) for o in complete}
+        total = sum(medians.values(), Decimal("0"))
+        if total <= 0:
+            continue
+        for outcome, value in medians.items():  # #1: renormalize the median vector to 1
+            consensus[outcome] = q6(value / total)
     return consensus
 
 
 def kalshi_fee_cost(price: Decimal, fee_rate: Decimal) -> Decimal:
+    """Kalshi's risk-based fee: rate·p·(1−p), peaks at p=0.5. Specific to Kalshi."""
     return q6(fee_rate * price * (Decimal("1") - price))
 
 
-def taker_fee_cost(price: Decimal, fee_rate: Decimal) -> Decimal:
-    return q6(fee_rate * price * (Decimal("1") - price))
+def linear_fee_cost(price: Decimal, fee_rate: Decimal) -> Decimal:
+    """Flat percentage of trade notional (e.g. Polymarket's taker fee): rate·price.
+    NOT the quadratic curve — applying Kalshi's p(1−p) here under-charged Polymarket
+    fees and mispriced every Polymarket edge."""
+    return q6(fee_rate * price)
 
 
-def all_in_fee_cost(price: Decimal, fee_rate: Decimal, taker_buffer: Decimal = Decimal("0")) -> Decimal:
-    """Per-contract friction used for decisioning: venue taker fee plus a price buffer.
+# Each venue's fee is modeled on its own basis; the bug was using Kalshi's curve for all.
+FEE_MODELS = {"quadratic": kalshi_fee_cost, "linear": linear_fee_cost}
 
-    `taker_buffer` is an additive cost in contract-price units. A value of 0.005 means
-    half a cent per $1 payout contract, guarding against slippage, queue position, stale
-    top-of-book reads, and small unmodeled platform/transfer frictions.
-    """
-    return q6(taker_fee_cost(price, fee_rate) + taker_buffer)
+
+def all_in_fee_cost(price: Decimal, fee_rate: Decimal, taker_buffer: Decimal = Decimal("0"),
+                    basis: str = "linear") -> Decimal:
+    """Per-contract friction for decisioning: venue taker fee (on its correct basis) plus a
+    price buffer. `taker_buffer` is additive in contract-price units (0.005 = half a cent
+    per $1 payout) guarding slippage/queue/stale-read frictions. `basis` selects the fee
+    curve: 'quadratic' for Kalshi, 'linear' for Polymarket/SX."""
+    model = FEE_MODELS.get(basis, linear_fee_cost)
+    return q6(model(price, fee_rate) + taker_buffer)
 
 
 def kalshi_fee_money(contracts: Decimal, price: Decimal, fee_rate: Decimal) -> Decimal:
