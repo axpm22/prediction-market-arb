@@ -100,6 +100,13 @@ ev_exit:
   min_exit_depth_usd: 5
   include_micro: true
   require_fair_value: true
+  # Symmetric protective exit: without this the loop only ever takes profit and rides every
+  # losing position to settlement, giving a one-sided view of the buy/sell loop. Cut a
+  # position once it is down stop_loss_roi AND the model edge has gone to <= stop_edge_floor
+  # (the thesis is broken, not just noise). Set stop_loss_enabled: false to disable.
+  stop_loss_enabled: true
+  stop_loss_roi: -0.15
+  stop_edge_floor: 0.0
 
 # Focused bet-by-bet rotation (python -m arbnext focus): re-quote one event's books on
 # all venues back-to-back (seconds apart) instead of venue-by-venue (minutes apart).
@@ -117,6 +124,10 @@ political:
   watch_interval_secs: 180
   categories: ["Politics", "Economics", "Climate and Weather"]
 consensus_max_age_hours: 8
+# Pregame lines move fast; a watch-path EV flag against a consensus older than this (for a
+# not-yet-started event) is "venue vs stale line" and is quarantined (quality_flag=
+# stale-consensus) out of the clean ledger. In-play quotes keep the looser 8h window.
+consensus_pregame_max_age_hours: 3
 # EV model (EV_SPEC.md). Betting stays OFF (consensus_enabled: false); these govern the
 # measurement-only instrument that proves/kills the EV thesis on CLV before a dollar.
 ev:

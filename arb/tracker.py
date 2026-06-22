@@ -138,11 +138,11 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
     con.execute(
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
-                              live, edge, stake_usd, legs_json, optimistic_cost, confirmed_cost,
+                              live, edge, edge_points, stake_usd, legs_json, optimistic_cost, confirmed_cost,
                               pnl_optimistic, pnl_confirmed, status, placed_at, notes,
                               quality_flag, kelly_f_star, kelly_stake_usd,
                               validation_rule, validation_tag)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             current_opp.fingerprint,
@@ -154,6 +154,7 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
             int(current_opp.status == "OK"),
             int(any(leg.live for leg in current_opp.legs)),
             str(current_opp.edge),
+            None if current_opp.edge_points is None else str(current_opp.edge_points),
             str(stake_usd),
             json.dumps([quote_to_json(leg) for leg in current_opp.legs]),
             str(cost),
@@ -246,7 +247,10 @@ def _bet_record(base, related_rows: list[object]) -> dict[str, object]:
     for row in related_rows:
         by_status[row["status"]].append(row)
     confirmed = by_status.get("CONFIRMED", [None])[0]
-    settled = by_status.get("SETTLED", [None])[0]
+    # #1 EXITED (paper take-profit/stop) is a TERMINAL realized state, mutually exclusive
+    # with SETTLED (settle and ev-exit each exclude the other's children). Treat it like a
+    # settled row so the take-profit P&L is booked and the bet stops counting as pending.
+    settled = by_status.get("SETTLED", [None])[0] or by_status.get("EXITED", [None])[0]
     verdicts = [
         row["status"]
         for row in related_rows
@@ -439,7 +443,9 @@ def _ev_bucket_rows(records: list[dict[str, object]]) -> list[list[str]]:
     for record in records:
         if record["base"]["kind"] != "EV":
             continue
-        edge = _dec(record["base"]["edge"])
+        # #4 Bucket on probability-points edge (cost-independent), not the (p-c)/c ratio,
+        # which inflates for cheap contracts and scatters identical edges across buckets.
+        edge = _edge_points(record["base"])
         if edge < Decimal("0.01"):
             bucket = "0-1%"
         elif edge < Decimal("0.02"):
@@ -528,6 +534,16 @@ def _extreme_rows(records: list[dict[str, object]]) -> list[list[str]]:
 def _pending_exposure(record: dict[str, object]) -> Decimal:
     base = record["base"]
     return q6(_dec(base["edge"]) * _dec(base["stake_usd"]))
+
+
+def _edge_points(base) -> Decimal:
+    # Canonical probability-points edge; fall back to the legacy ratio for pre-migration rows.
+    try:
+        if base["edge_points"] not in (None, ""):
+            return _dec(base["edge_points"])
+    except (KeyError, IndexError):
+        pass
+    return _dec(base["edge"])
 
 
 def _flagged_vs_realized_rows(records: list[dict[str, object]]) -> list[list[str]]:

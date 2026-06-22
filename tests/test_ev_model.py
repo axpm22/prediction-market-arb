@@ -52,7 +52,9 @@ def test_ev_flag_below_emin_recorded_but_tagged() -> None:
     assert "event-match-review" in opp.notes
     assert opp.status == "REVIEW"
     assert opp.kelly_f_star is not None      # Phase 3 projection attached
-    assert opp.quality_flag is None          # 0.50 ask, $500 depth, 2pt edge → clean
+    # #5 below-e_min is a first-class quarantine flag, not just a note, so it's excluded
+    # from the clean (quality_flag IS NULL) aggregate downstream.
+    assert opp.quality_flag == "below-e-min"
     assert any(n.startswith("capturable:") for n in opp.notes)
 
 

@@ -109,26 +109,42 @@ def exit_decision(
         return None
     profit = money(stake * (exit_bid / entry_cost - Decimal("1")))
     roi = q6(profit / stake) if stake > 0 else Decimal("0")
-    if profit < Decimal(str(cfg.get("min_profit_usd", "0.05"))):
-        return None
-    if roi < Decimal(str(cfg.get("min_profit_roi", "0.03"))):
-        return None
 
+    # Fresh fair value is required to act either way (a stale line can't tell us the edge is
+    # gone). require_fair_value=false lets take-profit run with no consensus (edge unknown).
     outcome = consensus_outcome_key(str(leg.get("market_type")), _decimal_or_none(leg.get("line")), str(leg.get("outcome_label")))
     entry = consensus.get((str(leg.get("event_key")), outcome))
+    have_fair_value = False
+    remaining_edge = Decimal("0")
     if entry is None:
         if bool(cfg.get("require_fair_value", True)):
             return None
-        remaining_edge = Decimal("0")
     else:
         p_hat, computed_at = entry
         if now - computed_at.astimezone(timezone.utc) > max_consensus_age:
             return None
         remaining_edge = q6(p_hat - exit_bid)
-    if remaining_edge > Decimal(str(cfg.get("exit_edge_ceiling", "0.01"))):
+        have_fair_value = True
+
+    take_profit = (
+        profit >= Decimal(str(cfg.get("min_profit_usd", "0.05")))
+        and roi >= Decimal(str(cfg.get("min_profit_roi", "0.03")))
+        and remaining_edge <= Decimal(str(cfg.get("exit_edge_ceiling", "0.01")))
+    )
+    # #6 protective stop: position is losing AND the model edge has collapsed (thesis broken).
+    # Needs real fair value — never stop out on an assumed-zero edge.
+    stop_loss = (
+        bool(cfg.get("stop_loss_enabled", False))
+        and have_fair_value
+        and roi <= Decimal(str(cfg.get("stop_loss_roi", "-0.15")))
+        and remaining_edge <= Decimal(str(cfg.get("stop_edge_floor", "0.0")))
+    )
+    if not (take_profit or stop_loss):
         return None
 
     return {
+        "kind": "take-profit" if take_profit else "stop-loss",
+        "result": "SOLD" if take_profit else "STOPPED",
         "entry_cost": q6(entry_cost),
         "exit_bid": q6(exit_bid),
         "exit_depth": "" if exit_depth is None else str(q6(exit_depth)),
@@ -140,7 +156,7 @@ def exit_decision(
 
 def _append_exit_row(con: sqlite3.Connection, bet: sqlite3.Row, decision: dict[str, Decimal | str], now: datetime) -> None:
     note = (
-        "ev-exit: take-profit; "
+        f"ev-exit: {decision['kind']}; "
         f"entry={decision['entry_cost']} exit_bid={decision['exit_bid']} "
         f"roi={decision['roi']} remaining_edge={decision['remaining_edge']} "
         f"exit_depth={decision['exit_depth']}"
@@ -152,7 +168,7 @@ def _append_exit_row(con: sqlite3.Connection, bet: sqlite3.Row, decision: dict[s
                               pnl_optimistic, pnl_confirmed, status, placed_at, settled_at, result, notes,
                               quality_flag, kelly_f_star, kelly_stake_usd,
                               validation_rule, validation_tag)
-        VALUES (?, ?, ?, ?, ?, 'EV', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'EXITED', ?, ?, 'SOLD', ?,
+        VALUES (?, ?, ?, ?, ?, 'EV', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'EXITED', ?, ?, ?, ?,
                 ?, ?, ?, ?, ?)
         """,
         (
@@ -160,7 +176,7 @@ def _append_exit_row(con: sqlite3.Connection, bet: sqlite3.Row, decision: dict[s
             bet["trusted"], bet["live"], bet["edge"], bet["stake_usd"], bet["legs_json"],
             str(decision["entry_cost"]), str(decision["exit_bid"]),
             str(decision["profit"]), str(decision["profit"]),
-            bet["placed_at"], now.isoformat(), note, bet["quality_flag"],
+            bet["placed_at"], now.isoformat(), str(decision["result"]), note, bet["quality_flag"],
             bet["kelly_f_star"], bet["kelly_stake_usd"], bet["validation_rule"], bet["validation_tag"],
         ),
     )

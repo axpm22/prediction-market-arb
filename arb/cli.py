@@ -285,6 +285,7 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
                 trusted_pairs=config.trusted_pairs,
                 e_min=config.ev_e_min,
                 config=config,
+                pregame_max_age_hours=config.consensus_pregame_max_age_hours,
             )
         )
         opportunities.extend(
@@ -454,6 +455,22 @@ def compute_consensus(quotes: list[Quote], min_books: int, min_books_totals: int
     return consensus
 
 
+def _cheapest_quote_per_outcome(quotes: list[Quote]) -> list[Quote]:
+    """Keep the single cheapest-effective-cost quote per (event_key, outcome), so two venues
+    under fair value on the same opinion become one EV bet, not two (#2)."""
+    best: dict[tuple[str, str], Quote] = {}
+    passthrough: list[Quote] = []
+    for q in quotes:
+        if q.venue == "oddsapi":
+            passthrough.append(q)
+            continue
+        key = (q.event_key, consensus_outcome_key(q.market_type, q.line, q.outcome_label))
+        current = best.get(key)
+        if current is None or q.effective_cost < current.effective_cost:
+            best[key] = q
+    return [*best.values(), *passthrough]
+
+
 def detect_ev_from_consensus(
     quotes: list[Quote],
     consensus: dict[tuple[str, str], tuple[Decimal, datetime]],
@@ -462,8 +479,18 @@ def detect_ev_from_consensus(
     e_min: Decimal | None = None,
     config=None,
     record_below_e_min: bool = True,
+    pregame_max_age_hours: int | None = None,
 ) -> list[Opportunity]:
-    stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    now = datetime.now(timezone.utc)
+    stale_cutoff = now - timedelta(hours=max_age_hours)
+    # #3 Pregame lines move well inside the 8h tag window, so a watch flag against an
+    # hours-old consensus is "venue vs stale line", not "venue vs sharp line". Use a tighter
+    # staleness window for pregame (in-play quotes keep the looser one).
+    pregame_cutoff = now - timedelta(hours=pregame_max_age_hours) if pregame_max_age_hours else stale_cutoff
+    # #2 One stake per opinion: if several venues are under fair value on the SAME outcome,
+    # keep only the cheapest (best-EV) quote, mirroring the closing recorder. Otherwise the
+    # high-frequency path books N $1 bets on one view and over-counts edge/exposure.
+    quotes = _cheapest_quote_per_outcome(quotes)
     opportunities: list[Opportunity] = []
     for quote in quotes:
         if quote.venue == "oddsapi":
@@ -488,7 +515,8 @@ def detect_ev_from_consensus(
         # EV_SPEC §4: EV's own killer — consensus event vs contract event may differ.
         status = "REVIEW"
         notes = (*notes, "event-match-review")
-        if computed_at < stale_cutoff:
+        is_stale = computed_at < (pregame_cutoff if not quote.live else stale_cutoff)
+        if is_stale:
             notes = (*notes, "stale-consensus")
         if quote.depth_usd is not None:
             notes = (*notes, f"capturable:{q6(quote.depth_usd * edge)}")
@@ -505,6 +533,13 @@ def detect_ev_from_consensus(
         )
         if config is not None:
             opp = _annotate_quality_and_kelly(opp, p_hat, quote.effective_cost, config)
+        # #5/#3 First-class quarantine: sub-threshold and stale-line EV must not sit in the
+        # CLEAN aggregate keyed on quality_flag IS NULL. Don't override a more specific flag.
+        if opp.quality_flag is None:
+            if below_e_min:
+                opp = replace(opp, quality_flag="below-e-min")
+            elif is_stale:
+                opp = replace(opp, quality_flag="stale-consensus")
         opportunities.append(opp)
     return opportunities
 

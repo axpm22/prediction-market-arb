@@ -56,6 +56,7 @@ class AppConfig:
     watch_interval_secs: int
     consensus_enabled: bool
     consensus_max_age_hours: int
+    consensus_pregame_max_age_hours: int
     ev_e_min: Decimal
     ev_kelly_fraction: Decimal
     ev_edge_suspect_above: Decimal
@@ -178,6 +179,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         watch_interval_secs=int(raw["watch_interval_secs"]),
         consensus_enabled=bool(raw["consensus_enabled"]),
         consensus_max_age_hours=int(raw["consensus_max_age_hours"]),
+        consensus_pregame_max_age_hours=int(raw.get("consensus_pregame_max_age_hours", 3)),
         ev_e_min=_decimal(ev.get("e_min", "0.05")),
         ev_kelly_fraction=_decimal(ev.get("kelly_fraction", "0.25")),
         ev_edge_suspect_above=_decimal(ev.get("edge_suspect_above", "0.25")),

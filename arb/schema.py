@@ -197,6 +197,10 @@ MIGRATION_COLUMNS = {
         # Phase 1: NULL = clean; else labels such as 'suspect-edge', 'thin-book',
         # 'micro', or 'one-sided'.
         "quality_flag": "TEXT",
+        # Canonical edge in PROBABILITY POINTS (EV: p-c, ARB: 1-S). The `edge` column is a
+        # per-kind ratio (EV (p-c)/c, ARB ROI) kept for display; aggregates/thresholds that
+        # must be comparable across kinds and cost levels use this instead.
+        "edge_points": "TEXT",
         # Phase 3: parallel fractional-Kelly sizing (projection, never the headline).
         "kelly_f_star": "TEXT",
         "kelly_stake_usd": "TEXT",
