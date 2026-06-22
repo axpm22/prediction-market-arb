@@ -108,7 +108,7 @@ def _horizon_bucket(event_date: date | None, now: datetime) -> tuple[str, str, i
         return ("unknown", "No event date", None)
     days = (event_date - now.date()).days
     if days < 0:
-        return ("overdue", "Past event date", days)
+        return ("overdue", "Awaiting settlement", days)
     if days == 0:
         return ("today", "Today", days)
     if days == 1:
@@ -179,6 +179,28 @@ def _open_bet_payload(row, now: datetime) -> dict[str, Any]:
     }
 
 
+def _negrisk_capturable(notes: str | None) -> float:
+    """Parse the 'capturable=$X' figure the negrisk sweep writes into notes."""
+    for token in str(notes or "").replace("|", " ").split():
+        if token.startswith("capturable=$"):
+            try:
+                return float(token[len("capturable=$"):])
+            except ValueError:
+                return 0.0
+    return 0.0
+
+
+def _negrisk_executable(row) -> bool:
+    """A NEGRISK basket is executable only with real legs, a P&L value, and positive
+    capturable depth. Current sweep rows have empty legs / $0 capturable -> not executable."""
+    legs_json = row["legs_json"] or "[]"
+    try:
+        has_legs = bool(json.loads(legs_json))
+    except (TypeError, json.JSONDecodeError):
+        has_legs = False
+    return has_legs and row["pnl_optimistic"] is not None and _negrisk_capturable(row["notes"]) > 0
+
+
 def _cached_clv(store: Store) -> dict[str, Any]:
     now = time.monotonic()
     if now - float(_CLV_CACHE["at"]) < CLV_CACHE_TTL_SECS:
@@ -230,6 +252,44 @@ def build_state(store: Store, config) -> dict[str, Any]:
             ),
             "result",
         )
+        # EV is judged ALONE: only clean, settled EV rows (WON/LOST/VOID). No ARB, no
+        # DIVERGENCE, no NEGRISK, no suspect-edge rows contaminate this number.
+        clean_ev = c.execute(
+            """
+            SELECT COUNT(*) settled,
+                   SUM(CASE WHEN result='WON' THEN 1 ELSE 0 END) won,
+                   SUM(CASE WHEN result='LOST' THEN 1 ELSE 0 END) lost,
+                   COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl,
+                   COALESCE(SUM(CAST(stake_usd AS REAL)),0) stake
+              FROM flat_bets
+             WHERE kind='EV' AND status='SETTLED'
+               AND result IN ('WON','LOST','VOID') AND quality_flag IS NULL
+            """
+        ).fetchone()
+        # Quarantined EV rows shown on their own line, never in Clean EV P&L.
+        suspect_ev = c.execute(
+            """
+            SELECT COUNT(*) n, COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl
+              FROM flat_bets
+             WHERE kind='EV' AND status='SETTLED'
+               AND result IN ('WON','LOST','VOID') AND quality_flag='suspect-edge'
+            """
+        ).fetchone()
+        # ARB gets its own lane: locked/provisional, includes RESOLVED. Never in EV totals.
+        locked_arb = c.execute(
+            """
+            SELECT COUNT(*) settled,
+                   SUM(CASE WHEN result='RESOLVED' THEN 1 ELSE 0 END) resolved,
+                   COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl,
+                   COALESCE(SUM(CAST(stake_usd AS REAL)),0) stake
+              FROM flat_bets
+             WHERE kind='ARB' AND status='SETTLED'
+            """
+        ).fetchone()
+        # DIVERGENCE is a research spread signal — never settled, never P&L.
+        research_open = c.execute(
+            "SELECT COUNT(*) n FROM flat_bets WHERE kind='DIVERGENCE' AND status='OPEN'"
+        ).fetchone()[0]
         kind_rows = [
             dict(r)
             for r in c.execute(
@@ -293,7 +353,7 @@ def build_state(store: Store, config) -> dict[str, Any]:
                        (SELECT COUNT(*) FROM flat_bets r WHERE r.reappearance_of = b.id AND r.status = 'LIFETIME') lifetime_n
                   FROM flat_bets b
                  WHERE b.status = 'OPEN'
-                   AND b.kind IN ('ARB','EV','NEGRISK','DIVERGENCE')
+                   AND b.kind IN ('ARB','EV','NEGRISK')
                    AND NOT EXISTS (
                        SELECT 1 FROM flat_bets s
                         WHERE s.reappearance_of = b.id
@@ -304,6 +364,20 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 """
             )
         )
+        # Research Signals: DIVERGENCE spreads, shown separately, no P&L (kept out of
+        # open-bet totals entirely per the reporting rules).
+        research_rows = [
+            dict(r)
+            for r in c.execute(
+                """
+                SELECT id, edge, sport, category, placed_at, notes, legs_json
+                  FROM flat_bets
+                 WHERE kind='DIVERGENCE' AND status='OPEN'
+                 ORDER BY CAST(edge AS REAL) DESC
+                 LIMIT 40
+                """
+            )
+        ]
         poll_series = [
             dict(r)
             for r in c.execute(
@@ -358,7 +432,12 @@ def build_state(store: Store, config) -> dict[str, Any]:
     last_poll_finished = last_poll["finished_at"] if last_poll else None
     seen_fingerprints: set[str] = set()
     open_rows = []
+    negrisk_hidden = 0
     for row in raw_open_rows:
+        # NEGRISK is ignored unless executable; non-executable baskets are hidden, counted.
+        if row["kind"] == "NEGRISK" and not _negrisk_executable(row):
+            negrisk_hidden += 1
+            continue
         fingerprint = row["fingerprint"]
         if fingerprint in seen_fingerprints:
             continue
@@ -396,6 +475,33 @@ def build_state(store: Store, config) -> dict[str, Any]:
         },
         "grades": {status: int(row["n"]) for status, row in grades.items()},
         "settled": {"won_n": won_n, "lost_n": lost_n, "net": _money(won_p + lost_p + resolved_p)},
+        # Clean EV P&L — the headline. EV judged alone (clean settled WON/LOST/VOID only).
+        "clean_ev": {
+            "settled": int(clean_ev["settled"] or 0),
+            "won": int(clean_ev["won"] or 0),
+            "lost": int(clean_ev["lost"] or 0),
+            "pnl": _money(clean_ev["pnl"]),
+            "stake": _money(clean_ev["stake"]),
+            "roi": round((float(clean_ev["pnl"] or 0) / float(clean_ev["stake"])), 4) if float(clean_ev["stake"] or 0) else 0.0,
+            "win_rate": round(int(clean_ev["won"] or 0) / int(clean_ev["settled"]), 4) if int(clean_ev["settled"] or 0) else 0.0,
+        },
+        "suspect_ev": {"n": int(suspect_ev["n"] or 0), "pnl": _money(suspect_ev["pnl"])},
+        # Locked ARB P&L — ARB's own lane (locked/provisional, includes RESOLVED).
+        "locked_arb": {
+            "settled": int(locked_arb["settled"] or 0),
+            "resolved": int(locked_arb["resolved"] or 0),
+            "pnl": _money(locked_arb["pnl"]),
+        },
+        # Research Signals — DIVERGENCE spreads, no P&L, not bets.
+        "research": {
+            "open": int(research_open),
+            "rows": [
+                {"id": int(r["id"]), "edge": round(float(r["edge"] or 0), 4),
+                 "sport": r["sport"], "category": r["category"], "placed_at": r["placed_at"]}
+                for r in research_rows
+            ],
+        },
+        "negrisk_hidden": int(negrisk_hidden),
         "ev": {
             "total": next((int(row["n"]) for row in kind_rows if row["kind"] == "EV"), 0),
             "suspect": int(ev_suspect),
@@ -605,6 +711,10 @@ tr:last-child td{border-bottom:0}
       <div class="panel-head"><div class="panel-title">Recent Bets</div><div class="muted">append-only ledger</div></div>
       <div class="panel-body" id="recent"></div>
     </div>
+    <div class="panel half">
+      <div class="panel-head"><div class="panel-title">Research Signals</div><div class="muted" id="research-summary">divergence spreads · not bets</div></div>
+      <div class="panel-body" id="research"></div>
+    </div>
     <div class="panel full">
       <div class="panel-head">
         <div class="panel-title">Live Output</div>
@@ -766,11 +876,13 @@ function horizonText(bet) {
 
 function renderMetrics(d) {
   const running = d.processes.filter(p => p.status === "ok").length;
+  const ce = d.clean_ev || {pnl:0,won:0,lost:0,settled:0,roi:0}, se = d.suspect_ev || {n:0,pnl:0}, la = d.locked_arb || {pnl:0,resolved:0,settled:0};
+  const suspectNote = se.n ? ` · suspect: ${se.n} (${money(se.pnl)})` : "";
   $("metrics").innerHTML = [
-    metric("Realized P&L", `<span class="${valClass(d.settled.net)}">${money(d.settled.net)}</span>`, `${d.settled.won_n} won / ${d.settled.lost_n} lost`),
+    metric("Clean EV P&L", `<span class="${valClass(ce.pnl)}">${money(ce.pnl)}</span>`, `${ce.won}W / ${ce.lost}L · ${ce.settled} settled · ${pct(ce.roi)} ROI${suspectNote}`),
+    metric("Locked ARB P&L", `<span class="${valClass(la.pnl)}">${money(la.pnl)}</span>`, `${la.settled} settled (${la.resolved} resolved) · provisional`),
     metric("Open Bets", compact(d.health.open_bets), `${compact(d.health.flat_bets)} ledger rows`, "blue"),
     metric("ARB Verification", `<span class="good">${d.arb.verified}</span><span class="muted"> / </span><span class="bad">${d.arb.vanished}</span>`, `${d.arb.unverifiable} unverifiable`),
-    metric("ARB Locked P&L", `<span class="${valClass(d.arb.settled_resolved_pnl)}">${money(d.arb.settled_resolved_pnl)}</span>`, `${d.arb.open_n} open, ${pct(d.arb.open_sum_edge)} edge`),
     metric("Quotes", compact(d.health.quotes), `latest ${age(d.health.last_quote_age_seconds)}`),
     metric("Processes", `${running}/${d.processes.length}`, `poll ${age(d.health.last_poll_age_seconds)}`, running ? "good" : "bad"),
   ].join("");
@@ -797,15 +909,17 @@ function renderOpenBets(d) {
     acc[bet.kind] = (acc[bet.kind] || 0) + 1;
     return acc;
   }, {});
-  const kinds = ["EV", "ARB", "NEGRISK", "DIVERGENCE", "ALL"].filter(kind => counts[kind]);
+  // DIVERGENCE is never an open bet (research only); NEGRISK only appears here if executable.
+  const kinds = ["EV", "ARB", "NEGRISK", "ALL"].filter(kind => counts[kind]);
   if (!kinds.includes(activeOpenKind)) activeOpenKind = kinds.includes("EV") ? "EV" : (kinds[0] || "ALL");
   $("open-tabs").innerHTML = kinds.map(kind => `<button class="tab ${kind === activeOpenKind ? "active" : ""}" data-kind="${esc(kind)}">${esc(kind)} ${counts[kind]}</button>`).join("");
   $("open-tabs").querySelectorAll("button").forEach(btn => btn.onclick = () => { activeOpenKind = btn.dataset.kind; renderOpenBets(state); });
   const shown = (d.open_bets || []).filter(bet => activeOpenKind === "ALL" || bet.kind === activeOpenKind);
   const clean = shown.filter(bet => bet.quality === "clean").length;
-  $("open-summary").textContent = `${shown.length} shown · ${clean} clean · grouped by event date`;
+  const hiddenNote = d.negrisk_hidden ? ` · ${d.negrisk_hidden} NEGRISK not executable (hidden)` : "";
+  $("open-summary").textContent = `${shown.length} shown · ${clean} clean · grouped by event date${hiddenNote}`;
   const order = ["overdue", "today", "tomorrow", "week", "later", "unknown"];
-  const labels = {overdue:"Past event date", today:"Today", tomorrow:"Tomorrow", week:"2-7 days", later:"8+ days", unknown:"No event date"};
+  const labels = {overdue:"Awaiting settlement", today:"Today", tomorrow:"Tomorrow", week:"2-7 days", later:"8+ days", unknown:"No event date"};
   const groups = order
     .map(key => [key, shown.filter(bet => bet.horizon === key)])
     .filter(([, bets]) => bets.length);
@@ -916,6 +1030,14 @@ function renderRecent(d) {
   $("recent").innerHTML = table(["ID","Kind","Status","Edge","Segment","Age"], rows);
 }
 
+function renderResearch(d) {
+  const r = d.research || {open:0, rows:[]};
+  $("research-summary").textContent = `${r.open} divergence spreads · not bets, no P&L`;
+  if (!r.rows.length) { $("research").innerHTML = `<div class="muted">No open divergence signals</div>`; return; }
+  const rows = r.rows.map(x => `<tr><td class="muted">${x.id}</td><td>${pct(x.edge)}</td><td>${esc(x.sport || x.category || "")}</td><td class="muted">${age(Math.round((Date.now()-Date.parse(x.placed_at))/1000))}</td></tr>`);
+  $("research").innerHTML = table(["ID","Spread","Segment","Age"], rows);
+}
+
 function renderLogs(d) {
   const names = Object.keys(d.logs);
   if (!names.includes(activeLog)) activeLog = names[0] || "daemon";
@@ -936,6 +1058,7 @@ function render(d) {
   renderKinds(d);
   renderSegments(d);
   renderRecent(d);
+  renderResearch(d);
   renderLogs(d);
   $("poll-summary").textContent = `${d.health.last_poll_quotes ?? 0} quotes, ${d.health.last_poll_opps ?? 0} opps`;
   drawLines($("equity"), [

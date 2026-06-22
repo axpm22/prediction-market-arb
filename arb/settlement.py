@@ -81,8 +81,10 @@ def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
         for delta in (-1, 0, 1):
             fetch_dates.add((base + timedelta(days=delta)).isoformat())
 
-    # Index final games by (utc_date, frozenset(normalized names)) -> list of score dicts.
-    index: dict[tuple[str, frozenset], list[dict[str, Decimal]]] = {}
+    # Index final games by (utc_date, normalized team pair, 6-hour start bucket). Older
+    # backfill ignored the bucket, which left same-team UTC-date collisions unresolved.
+    index: dict[tuple[str, frozenset, int], list[dict[str, Decimal]]] = {}
+    date_pair_index: dict[tuple[str, frozenset], list[dict[str, Decimal]]] = {}
     for fetch_date in sorted(fetch_dates):
         try:
             games = adapter.final_games(fetch_date)
@@ -96,8 +98,11 @@ def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
                 utc_date = datetime.fromisoformat(str(gd).replace("Z", "+00:00")).astimezone(timezone.utc).date().isoformat()
             else:
                 utc_date = fetch_date
+            bucket = int(datetime.fromisoformat(str(gd).replace("Z", "+00:00")).astimezone(timezone.utc).hour // 6) if gd else -1
             scores = {nh: Decimal(str(game["home_score"])), na: Decimal(str(game["away_score"]))}
-            index.setdefault((utc_date, frozenset({nh, na})), []).append(scores)
+            pair = frozenset({nh, na})
+            index.setdefault((utc_date, pair, bucket), []).append(scores)
+            date_pair_index.setdefault((utc_date, pair), []).append(scores)
 
     settled = 0
     with store.connect() as con:
@@ -106,8 +111,23 @@ def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
             parts = str(leg["event_key"]).split(":")
             if len(parts) < 4:
                 continue
-            bucket = index.get((parts[1], frozenset({parts[2], parts[3]})))
-            if not bucket or len(bucket) != 1:  # 0 = no final yet; >1 = doubleheader ambiguity
+            start_bucket = int(parts[4]) if len(parts) >= 5 and parts[4].isdigit() else -1
+            pair = frozenset({parts[2], parts[3]})
+            if start_bucket == -1:
+                bucket = date_pair_index.get((parts[1], pair))
+            else:
+                bucket = index.get((parts[1], pair, start_bucket))
+                if not bucket:
+                    # Some venue keys land late games on the adjacent UTC date. Use the
+                    # adjacent-date fallback only if bucket+pair still selects exactly one
+                    # final; true doubleheader ambiguity remains OPEN.
+                    base = date.fromisoformat(parts[1])
+                    bucket = [
+                        scores
+                        for delta in (-1, 1)
+                        for scores in index.get(((base + timedelta(days=delta)).isoformat(), pair, start_bucket), [])
+                    ]
+            if not bucket or len(bucket) != 1:  # 0 = no final yet; >1 = unresolved ambiguity
                 continue
             scores = bucket[0]
             if bet["kind"] == "ARB":

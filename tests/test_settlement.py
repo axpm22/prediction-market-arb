@@ -1,10 +1,11 @@
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
 from arb.config import load_config
 from arb.models import Event, Opportunity, Quote
-from arb.settlement import settle_manual, settle_sports
+from arb.settlement import settle_backfill_mlb, settle_manual, settle_sports
 from arb.store import Store
 from arb.tracker import record_tracker_poll
 
@@ -21,9 +22,11 @@ def ev_opp(
     *,
     quality_flag: str | None = None,
     kelly_stake: str | None = None,
+    event_key_value: str = SETTLED_EVENT,
+    start: datetime = START,
 ) -> Opportunity:
     quote = Quote(
-        event_key=SETTLED_EVENT,
+        event_key=event_key_value,
         venue="kalshi",
         book=f"KXMLB-{outcome}-{line}",
         market_type=market_type,  # type: ignore[arg-type]
@@ -35,11 +38,11 @@ def ev_opp(
         depth_usd=Decimal("1200"),
         live=False,
         fetched_at=datetime.now(timezone.utc),
-        start_utc=START,
+        start_utc=start,
     )
     event = Event(
-        event_key=SETTLED_EVENT, category="sports", sport="baseball_mlb",
-        home="kansas city royals", away="texas rangers", start_utc=START,
+        event_key=event_key_value, category="sports", sport="baseball_mlb",
+        home="kansas city royals", away="texas rangers", start_utc=start,
     )
     return Opportunity(
         kind="EV", category="sports", event=event, legs=[quote],
@@ -130,4 +133,110 @@ def test_manual_settlement(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     place_bets(store, [ev_opp("kansas city royals", "0.50")])
     assert settle_manual(store, SETTLED_EVENT, "kansas city royals") == 1
+    assert settled_rows(store)[0]["result"] == "WON"
+
+
+def test_mlb_backfill_uses_event_key_start_bucket_to_resolve_same_day_pair(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    event_key = "baseball_mlb:2026-06-11:chicago cubs:colorado rockies:3"
+    place_bets(store, [
+        ev_opp(
+            "OVER",
+            "0.50",
+            "TOTAL",
+            "8.5",
+            event_key_value=event_key,
+            start=datetime(2026, 6, 11, 19, 10, tzinfo=timezone.utc),
+        )
+    ])
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "mlbstats_schedule_2026-06-11.json").write_text(json.dumps({
+        "dates": [{
+            "games": [
+                {
+                    "gameDate": "2026-06-11T01:00:00Z",
+                    "gameNumber": 1,
+                    "status": {"abstractGameState": "Final"},
+                    "teams": {
+                        "away": {"team": {"name": "Chicago Cubs"}, "score": 2},
+                        "home": {"team": {"name": "Colorado Rockies"}, "score": 3},
+                    },
+                },
+                {
+                    "gameDate": "2026-06-11T19:10:00Z",
+                    "gameNumber": 2,
+                    "status": {"abstractGameState": "Final"},
+                    "teams": {
+                        "away": {"team": {"name": "Chicago Cubs"}, "score": 9},
+                        "home": {"team": {"name": "Colorado Rockies"}, "score": 3},
+                    },
+                },
+            ]
+        }]
+    }))
+
+    assert settle_backfill_mlb(store, fixture_dir) == 1
+    assert settled_rows(store)[0]["result"] == "WON"
+
+
+def test_mlb_backfill_accepts_adjacent_utc_date_when_bucket_is_unique(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    event_key = "baseball_mlb:2026-06-11:atlanta braves:chicago white sox:3"
+    place_bets(store, [
+        ev_opp(
+            "chicago white sox",
+            "0.50",
+            event_key_value=event_key,
+            start=datetime(2026, 6, 11, 23, 40, tzinfo=timezone.utc),
+        )
+    ])
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "mlbstats_schedule_2026-06-10.json").write_text(json.dumps({
+        "dates": [{
+            "games": [{
+                "gameDate": "2026-06-10T23:40:00Z",
+                "gameNumber": 1,
+                "status": {"abstractGameState": "Final"},
+                "teams": {
+                    "away": {"team": {"name": "Atlanta Braves"}, "score": 1},
+                    "home": {"team": {"name": "Chicago White Sox"}, "score": 2},
+                },
+            }]
+        }]
+    }))
+
+    assert settle_backfill_mlb(store, fixture_dir) == 1
+    assert settled_rows(store)[0]["result"] == "WON"
+
+
+def test_mlb_backfill_supports_legacy_event_keys_without_bucket(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    event_key = "baseball_mlb:2026-06-20:los angeles dodgers:new york yankees"
+    place_bets(store, [
+        ev_opp(
+            "los angeles dodgers",
+            "0.50",
+            event_key_value=event_key,
+            start=datetime(2026, 6, 20, 23, 10, tzinfo=timezone.utc),
+        )
+    ])
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "mlbstats_schedule_2026-06-20.json").write_text(json.dumps({
+        "dates": [{
+            "games": [{
+                "gameDate": "2026-06-20T23:10:00Z",
+                "gameNumber": 1,
+                "status": {"abstractGameState": "Final"},
+                "teams": {
+                    "away": {"team": {"name": "Los Angeles Dodgers"}, "score": 6},
+                    "home": {"team": {"name": "New York Yankees"}, "score": 4},
+                },
+            }]
+        }]
+    }))
+
+    assert settle_backfill_mlb(store, fixture_dir) == 1
     assert settled_rows(store)[0]["result"] == "WON"
