@@ -206,3 +206,38 @@ def copy_fill_slippage(whale_price: Decimal, next_executable_price: Decimal) -> 
 def is_uncopyable_category(category: str, skip_categories: list[str]) -> bool:
     """BTC/ETH 15-min bot wallets are spread-capture; copying eats the edge."""
     return category in set(skip_categories)
+
+
+DATA_API = "https://data-api.polymarket.com"
+HEADERS = {"User-Agent": "arb-paper-scanner/0.1 (public read-only)"}
+
+
+def fetch_recent_trades(limit: int = 500) -> list[dict]:
+    """Public, keyless Polymarket trade feed (on-chain). Fixtures-first verified."""
+    import requests
+
+    r = requests.get(f"{DATA_API}/trades", params={"limit": limit}, headers=HEADERS, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+
+def run_whale_pass(store: Store, cfg: dict, trades: list[dict] | None = None) -> tuple[int, int]:
+    """Ingest trades, compute + persist wallet stats and the trades. Returns (wallets, qualified).
+
+    Settlement/category enrichment for win-rate is a later step (needs per-condition
+    resolution); this pass establishes the wallet universe and trade history so the
+    qualification filters and copy experiment have data to run on.
+    """
+    import requests
+
+    try:
+        trades = trades if trades is not None else fetch_recent_trades()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"whale trade fetch failed: {exc}") from exc
+    # settled_results/categories are empty here (enrichment is a separate pass); the
+    # universe + trade log still get persisted so the cohort can be built up over time.
+    stats = wallet_stats(trades, settled_results={}, categories={}, cfg=cfg)
+    persist_wallet_stats(store, stats)
+    record_wallet_trades(store, trades)
+    qualified = sum(1 for s in stats if s.qualified)
+    return len(stats), qualified

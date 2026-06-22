@@ -39,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
     hot.add_argument("--once", action="store_true", help="adopt current bets, watch to completion, exit")
     negrisk = sub.add_parser("negrisk", help="intra-Polymarket negative-risk basket arbs (S1, no settlement risk)")
     negrisk.add_argument("--once", action="store_true", help="run a single pass and exit")
+    btc = sub.add_parser("btc", help="BTC cross-venue arb sweep (Phase 4; REVIEW — oracles differ)")
+    btc.add_argument("--once", action="store_true", help="run a single pass and exit")
+    whales = sub.add_parser("whales", help="ingest Polymarket whale trades + qualify wallets (Phase 5)")
+    whales.add_argument("--once", action="store_true", help="run a single pass and exit")
+    whales.add_argument("--list", action="store_true", help="print qualified wallets and exit")
     web = sub.add_parser("web", help="serve the read-only live dashboard")
     web.add_argument("--port", type=int, default=8787, help="local port to bind, default: 8787")
     annotate = sub.add_parser("annotate", help="attach an immutable tag+reason to a bet (never edits the bet)")
@@ -74,6 +79,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_hot(args, config)
     if args.command == "negrisk":
         return run_negrisk(args, config)
+    if args.command == "btc":
+        return run_btc(args, config)
+    if args.command == "whales":
+        return run_whales(args, config)
     if args.command == "web":
         from arb.experimental.webserver import serve
 
@@ -235,6 +244,55 @@ def run_negrisk(args: argparse.Namespace, config) -> int:
             print("negrisk: stop flag found, exiting cleanly.")
             return 0
         time.sleep(180)
+
+
+def run_btc(args: argparse.Namespace, config) -> int:
+    from arb.experimental.btc_sweep import run_btc_pass
+
+    store = Store(config.database_path)
+    print("BTC cross-venue sweep: Kalshi (CF Benchmarks) vs Polymarket (UMA) — REVIEW, oracles differ.")
+    while True:
+        try:
+            n_legs, found = run_btc_pass(store, config)
+            print(f"{datetime.now(timezone.utc).isoformat()} btc: {n_legs} legs, {found} cross-venue flags (REVIEW).")
+        except (RuntimeError, requests.RequestException) as exc:
+            print(f"btc: pass failed, retrying: {exc}")
+        if args.once:
+            return 0
+        if stop_requested("btc"):
+            print("btc: stop flag found, exiting cleanly.")
+            return 0
+        time.sleep(120)
+
+
+def run_whales(args: argparse.Namespace, config) -> int:
+    from arb.experimental.whales import run_whale_pass
+
+    wcfg = extras_config("whale_tracker")
+    store = Store(config.database_path)
+    if args.list:
+        with store.connect() as con:
+            rows = list(con.execute(
+                "SELECT address, n_trades, win_rate, top_category, category_share, qualified, suspect FROM wallets WHERE qualified=1 ORDER BY n_trades DESC LIMIT 40"))
+        print(f"{'WALLET':14} {'N':>6} {'WR':>6} {'CATEGORY':14} {'SHARE':>6} SUSPECT")
+        for r in rows:
+            print(f"{r['address'][:14]:14} {r['n_trades']:>6} {r['win_rate']:>6.0%} {str(r['top_category'])[:14]:14} {r['category_share']:>6.0%} {'yes' if r['suspect'] else ''}")
+        if not rows:
+            print("(no qualified wallets yet — run `whales --once` to ingest trades)")
+        return 0
+    print("Whale tracker: ingest Polymarket on-chain trades, qualify wallets (measurement/debunk).")
+    while True:
+        try:
+            n_wallets, qualified = run_whale_pass(store, wcfg)
+            print(f"{datetime.now(timezone.utc).isoformat()} whales: {n_wallets} wallets seen, {qualified} qualified.")
+        except (RuntimeError, requests.RequestException) as exc:
+            print(f"whales: pass failed, retrying: {exc}")
+        if args.once:
+            return 0
+        if stop_requested("whales"):
+            print("whales: stop flag found, exiting cleanly.")
+            return 0
+        time.sleep(300)
 
 
 def run_nonsports_suggest(config) -> int:

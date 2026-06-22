@@ -1,0 +1,25 @@
+{
+ "_settlement": "Polymarket UMA oracle (own resolution)",
+ "markets": [
+  {
+   "event_title": "What price will Bitcoin hit in June?",
+   "question": "Will Bitcoin reach $90,000 in June?",
+   "groupItemTitle": "\u2191 90,000",
+   "endDate": "2026-07-01T04:00:00Z",
+   "outcomes": "[\"Yes\", \"No\"]",
+   "clobTokenIds": "[\"95392237033134859316508517411280839091542508608393424743404750464234370530991\", \"83568251880898532448061162423002066724837653108034906268948118526362480986875\"]",
+   "bestAsk": 0.003,
+   "bestBid": 0.002
+  },
+  {
+   "event_title": "What price will Bitcoin hit in June?",
+   "question": "Will Bitcoin reach $82,500 in June?",
+   "groupItemTitle": "\u2191 82,500",
+   "endDate": "2026-07-01T04:00:00Z",
+   "outcomes": "[\"Yes\", \"No\"]",
+   "clobTokenIds": "[\"61500591812641370997958058565614570749858280386557944455333972770618552171659\", \"51653743901539436783448835613968795453855628475322784500233762380386237644831\"]",
+   "bestAsk": 0.004,
+   "bestBid": 0.003
+  }
+ ]
+}
