@@ -48,7 +48,7 @@ def consensus_outcome_key(market_type: str, line: Decimal | None, outcome_label:
     return outcome_label
 
 
-def consensus_probabilities(quotes: list[Quote], min_books: int) -> dict[str, Decimal]:
+def consensus_probabilities(quotes: list[Quote], min_books: int, min_books_totals: int | None = None) -> dict[str, Decimal]:
     """Median de-vigged consensus per market, with two correctness guards:
 
     #2 only books carrying the COMPLETE outcome set vote — a book missing the soccer DRAW
@@ -70,8 +70,9 @@ def consensus_probabilities(quotes: list[Quote], min_books: int) -> dict[str, De
     for (_book, market_type, line), odds in raw_books.items():
         books_by_market[(market_type, line)].append(odds)
 
+    totals_min = min_books_totals if min_books_totals is not None else min_books
     consensus: dict[str, Decimal] = {}
-    for _market, books in books_by_market.items():
+    for (market_type, _line), books in books_by_market.items():
         complete = max((frozenset(o) for o in books), key=len)
         if len(complete) < 2:
             continue  # a single-outcome market can't be de-vigged
@@ -81,8 +82,11 @@ def consensus_probabilities(quotes: list[Quote], min_books: int) -> dict[str, De
                 continue
             for outcome, prob in devig_book(odds).items():
                 per_outcome[outcome].append(prob)
-        # Require the FULL set to have cleared min_books, else renormalizing is meaningless.
-        if any(len(per_outcome.get(o, [])) < min_books for o in complete):
+        # #3 totals are line-fragmented (books rarely share the exact line), so a 3-book
+        # gate makes totals consensus nearly always dead. Use a lower totals threshold —
+        # NOT half-point interpolation, which would change the event definition.
+        gate = totals_min if market_type == "TOTAL" else min_books
+        if any(len(per_outcome.get(o, [])) < gate for o in complete):
             continue
         medians = {o: Decimal(str(median(per_outcome[o]))) for o in complete}
         total = sum(medians.values(), Decimal("0"))

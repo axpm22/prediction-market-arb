@@ -30,7 +30,7 @@ def test_sx_fixture_parses_winner_and_totals() -> None:
     assert winners == {"kansas city royals", "texas rangers"}
     assert {label for label, _ in totals} == {"OVER", "UNDER"}
     assert all(line == Decimal("11.5") for _, line in totals)
-    assert {q.event_key for q in quotes} == {"baseball_mlb:2026-06-10:kansas city royals:texas rangers:3"}
+    assert {q.event_key for q in quotes} == {"baseball_mlb:2026-06-10:kansas city royals:texas rangers"}
 
 
 def test_sx_quotes_flag_unverified_fee_only_while_rate_is_null() -> None:

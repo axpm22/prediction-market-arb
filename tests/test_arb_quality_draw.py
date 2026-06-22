@@ -9,7 +9,7 @@ from arb.settlement import _leg_result
 
 def leg(outcome: str, cost: str, venue: str = "kalshi", depth: str = "500") -> Quote:
     c = Decimal(cost)  # 2-way sport so detection isn't blocked by the soccer 3-way guard
-    return Quote(event_key="baseball_mlb:2026-06-22:france:iraq:3", venue=venue, book=f"{venue}-{outcome}",
+    return Quote(event_key="baseball_mlb:2026-06-22:france:iraq", venue=venue, book=f"{venue}-{outcome}",
                  market_type="WINNER", line=None, outcome_label=outcome, raw_price=c, cost=c,
                  fee_cost=Decimal("0"), depth_usd=Decimal(depth), live=False,
                  fetched_at=datetime.now(timezone.utc),

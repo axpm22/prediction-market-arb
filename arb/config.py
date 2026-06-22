@@ -34,6 +34,7 @@ class AppConfig:
     match_suspect_prob_diff: Decimal
     capital_charge_annual: Decimal
     min_books_for_consensus: int
+    min_books_for_consensus_totals: int
     min_liquidity_usd: Decimal
     min_executable_usd: Decimal
     micro_enabled: bool
@@ -155,6 +156,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         match_suspect_prob_diff=_decimal(raw["match_suspect_prob_diff"]),
         capital_charge_annual=_decimal(raw.get("capital_charge_annual", "0.05")),
         min_books_for_consensus=int(raw["min_books_for_consensus"]),
+        min_books_for_consensus_totals=int(raw.get("min_books_for_consensus_totals", raw["min_books_for_consensus"])),
         min_liquidity_usd=_decimal(raw["min_liquidity_usd"]),
         min_executable_usd=_decimal(raw["min_executable_usd"]),
         micro_enabled=bool(micro.get("enabled", False)),

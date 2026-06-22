@@ -25,7 +25,7 @@ def test_spec_11_vectors() -> None:
 def quote_at(start_offset_mins: int, sport: str = "basketball_nba") -> Quote:
     now = datetime(2026, 6, 11, 2, 0, tzinfo=timezone.utc)
     return Quote(
-        event_key=f"{sport}:2026-06-11:a:b:0", venue="kalshi", book="B", market_type="WINNER",
+        event_key=f"{sport}:2026-06-11:a:b", venue="kalshi", book="B", market_type="WINNER",
         line=None, outcome_label="a", raw_price=Decimal("0.5"), cost=Decimal("0.5"),
         fee_cost=Decimal("0"), depth_usd=None, live=False, fetched_at=now,
         start_utc=now - timedelta(minutes=start_offset_mins),

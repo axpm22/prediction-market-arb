@@ -12,7 +12,7 @@ from arb.tracker import record_tracker_poll
 
 
 def ev_opp(event_day: str, cost: str = "0.50") -> Opportunity:
-    event_key = f"baseball_mlb:{event_day}:kansas city royals:texas rangers:3"
+    event_key = f"baseball_mlb:{event_day}:kansas city royals:texas rangers"
     event = Event(
         event_key=event_key,
         category="sports",

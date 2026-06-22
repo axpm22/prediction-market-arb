@@ -35,12 +35,14 @@ def normalize_name(name: str, sport: str, aliases: dict[str, dict[str, str]] | N
 
 
 def event_key(sport: str, home: str, away: str, start_utc: datetime, aliases: dict[str, dict[str, str]] | None = None) -> str:
-    # SPEC §5 matches the same pair only within ±6 h. A bare date collides on MLB
-    # doubleheaders (two games, same teams, same UTC date), which blends quotes from
-    # different games into fake arbs — so the key carries a 6-hour start bucket.
+    # #4: NO sub-day bucket. A 6h floor bucket split two venues listing the same game at
+    # 17:55 vs 18:05 (and any pair straddling a 6h boundary — evening games cluster at the
+    # 18:00 UTC line), silently dropping real cross-venue arbs. Key on sport+date+pair only;
+    # doubleheaders (same teams, same day, hours apart) are caught by the start-drift gate
+    # (suspended, not mis-bet) and settled by each leg's exact stored start time.
     names = sorted([normalize_name(home, sport, aliases), normalize_name(away, sport, aliases)])
     start = start_utc.astimezone(timezone.utc)
-    return f"{sport}:{start.date().isoformat()}:{names[0]}:{names[1]}:{start.hour // 6}"
+    return f"{sport}:{start.date().isoformat()}:{names[0]}:{names[1]}"
 
 
 def token_ratio(left: str, right: str) -> int:

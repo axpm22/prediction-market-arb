@@ -6,7 +6,7 @@ from arb.models import Quote
 from arb.store import Store
 from arb.experimental.closing import events_in_window, latest_quotes, record_closing_bets, unused_events
 
-EVENT_KEY = "baseball_mlb:2026-06-10:kansas city royals:texas rangers:3"
+EVENT_KEY = "baseball_mlb:2026-06-10:kansas city royals:texas rangers"
 NOW = datetime(2026, 6, 10, 23, 36, tzinfo=timezone.utc)
 START = datetime(2026, 6, 10, 23, 40, tzinfo=timezone.utc)  # T-4 minutes from NOW
 

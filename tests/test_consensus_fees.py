@@ -6,7 +6,7 @@ from arb.pricing import all_in_fee_cost, consensus_probabilities, kalshi_fee_cos
 
 
 def oq(book: str, outcome: str, odds: str, market_type: str = "WINNER", line=None) -> Quote:
-    return Quote(event_key="soccer:2026-06-22:a:b:3", venue="oddsapi", book=book,
+    return Quote(event_key="soccer:2026-06-22:a:b", venue="oddsapi", book=book,
                  market_type=market_type, line=line, outcome_label=outcome,
                  raw_price=Decimal(odds), cost=Decimal("0"), fee_cost=Decimal("0"),
                  depth_usd=None, live=False, fetched_at=datetime.now(timezone.utc))
@@ -61,3 +61,31 @@ def test_linear_fee_not_max_at_half() -> None:
     rate = Decimal("0.03")
     assert linear_fee_cost(Decimal("0.90"), rate) == Decimal("0.027000")
     assert kalshi_fee_cost(Decimal("0.90"), rate) == Decimal("0.002700")
+
+
+# ---- #3 totals use a lower book threshold (line-fragmented) ----
+
+def test_totals_consensus_uses_lower_threshold() -> None:
+    # 2 books on the SAME total line 8.5. With min_books=3 totals would be dead;
+    # min_books_totals=2 recovers it (winner markets still need 3).
+    quotes = []
+    for i in range(2):
+        quotes += [oq(f"t{i}", "OVER", "1.95", "TOTAL", line=Decimal("8.5")),
+                   oq(f"t{i}", "UNDER", "1.95", "TOTAL", line=Decimal("8.5"))]
+    assert consensus_probabilities(quotes, min_books=3) == {}             # totals dead at 3
+    cons = consensus_probabilities(quotes, min_books=3, min_books_totals=2)
+    assert set(cons) == {"OVER:8.5", "UNDER:8.5"}
+    assert cons["OVER:8.5"] + cons["UNDER:8.5"] == Decimal("1.000000")    # still renormalized
+
+
+# ---- #4 event_key has no boundary-splitting bucket ----
+
+def test_event_key_no_sub_day_bucket() -> None:
+    from datetime import datetime, timezone
+    from arb.matching import event_key
+    a = event_key("baseball_mlb", "Texas", "Kansas City",
+                  datetime(2026, 6, 10, 17, 55, tzinfo=timezone.utc))
+    b = event_key("baseball_mlb", "Texas", "Kansas City",
+                  datetime(2026, 6, 10, 18, 5, tzinfo=timezone.utc))
+    assert a == b   # 17:55 vs 18:05 (straddling the old 18:00 bucket boundary) now group
+    assert a.count(":") == 3   # sport:date:away:home, no trailing bucket

@@ -26,7 +26,7 @@ def test_uneconomic_tag_on_tiny_far_dated_arb() -> None:
 
     def q(venue, outcome, cost):
         c = Decimal(cost)
-        return Quote(event_key="baseball_mlb:2026-07-01:a:b:0", venue=venue, book=f"{venue}-{outcome}",
+        return Quote(event_key="baseball_mlb:2026-07-01:a:b", venue=venue, book=f"{venue}-{outcome}",
                      market_type="WINNER", line=None, outcome_label=outcome, raw_price=c, cost=c,
                      fee_cost=Decimal("0"), depth_usd=Decimal("500"), live=False,
                      fetched_at=datetime.now(timezone.utc), start_utc=far)

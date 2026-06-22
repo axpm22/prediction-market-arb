@@ -18,6 +18,10 @@ match_suspect_prob_diff: 0.15
 # but separated from real edges in the report. 0.05 = 5%/yr (roughly cash/T-bills).
 capital_charge_annual: 0.05
 min_books_for_consensus: 3
+# Totals are line-fragmented (books rarely quote the identical total), so a 3-book gate
+# leaves totals consensus almost always dead. A lower totals threshold recovers it without
+# interpolating across lines (which would change the event being measured).
+min_books_for_consensus_totals: 2
 min_liquidity_usd: 500
 min_executable_usd: 50
 # Thin books can still be worth measuring at tiny size, but they must not pollute the

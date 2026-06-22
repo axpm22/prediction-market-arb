@@ -108,7 +108,7 @@ def record_closing_bets(
         sport_keys = [key for key, (s, _) in targets.items() if s == sport]
         consensus.update(
             (pair, p_hat)
-            for pair, p_hat in compute_consensus(odds_quotes, config.min_books_for_consensus).items()
+            for pair, p_hat in compute_consensus(odds_quotes, config.min_books_for_consensus, config.min_books_for_consensus_totals).items()
             if pair[0] in sport_keys
         )
     if not consensus:

@@ -10,7 +10,7 @@ from arb.store import Store
 from arb.tracker import record_tracker_poll
 
 # Completed game in the recorded scores fixture: KC 5 - TEX 3 on 2026-06-09 (total 8).
-SETTLED_EVENT = "baseball_mlb:2026-06-09:kansas city royals:texas rangers:3"
+SETTLED_EVENT = "baseball_mlb:2026-06-09:kansas city royals:texas rangers"
 START = datetime(2026, 6, 9, 23, 41, tzinfo=timezone.utc)
 
 
@@ -159,7 +159,7 @@ def test_manual_settlement(tmp_path) -> None:
 
 def test_mlb_backfill_uses_event_key_start_bucket_to_resolve_same_day_pair(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
-    event_key = "baseball_mlb:2026-06-11:chicago cubs:colorado rockies:3"
+    event_key = "baseball_mlb:2026-06-11:chicago cubs:colorado rockies"
     place_bets(store, [
         ev_opp(
             "OVER",

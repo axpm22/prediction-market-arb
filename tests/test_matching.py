@@ -7,7 +7,7 @@ from arb.venues.oddsapi import OddsApiAdapter
 from arb.venues.polymarket import PolymarketAdapter
 from arb.venues.sx import SxAdapter
 
-COMMON_KEY = "baseball_mlb:2026-06-10:kansas city royals:texas rangers:3"
+COMMON_KEY = "baseball_mlb:2026-06-10:kansas city royals:texas rangers"
 
 
 def test_aliases_are_sport_specific() -> None:

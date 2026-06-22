@@ -7,7 +7,7 @@ from arb.store import Store
 from arb.tracker import record_tracker_poll
 from arb.experimental.verify import run_verify_once, unverified_arb_bets
 
-EVENT_KEY = "baseball_mlb:2026-06-12:kansas city royals:texas rangers:3"
+EVENT_KEY = "baseball_mlb:2026-06-12:kansas city royals:texas rangers"
 VCFG = {"poll_secs": 10, "max_bet_age_secs": 900}
 
 

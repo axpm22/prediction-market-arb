@@ -8,7 +8,7 @@ from arb.pricing import clv_points, edge_points, kelly_fraction, q6
 from arb.store import Store
 from arb.experimental.ev.clv import grade_clv, venue_close
 
-EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers:3"
+EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers"
 
 
 def quote(cost: str, depth: str = "500") -> Quote:

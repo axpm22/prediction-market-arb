@@ -347,7 +347,7 @@ def run_scan(args: argparse.Namespace, config, store: Store) -> int:
     pregame, in_play = split_pregame(quotes, computed_at)
     quotes = [*pregame, *in_play]
     # In-play sportsbook odds must never become "pregame consensus".
-    consensus = compute_consensus(pregame, config.min_books_for_consensus)
+    consensus = compute_consensus(pregame, config.min_books_for_consensus, config.min_books_for_consensus_totals)
     print(f"Consensus outcomes computed: {len(consensus)} (from {len(pregame)} pregame quotes)")
 
     if args.dry_run:
@@ -442,13 +442,13 @@ def split_depth_lanes(quotes: list[Quote], config) -> tuple[list[Quote], list[Qu
     return normal, micro, too_thin
 
 
-def compute_consensus(quotes: list[Quote], min_books: int) -> dict[tuple[str, str], Decimal]:
+def compute_consensus(quotes: list[Quote], min_books: int, min_books_totals: int | None = None) -> dict[tuple[str, str], Decimal]:
     by_event: dict[str, list[Quote]] = defaultdict(list)
     for quote in quotes:
         by_event[quote.event_key].append(quote)
     consensus: dict[tuple[str, str], Decimal] = {}
     for event_key, event_quotes in by_event.items():
-        for outcome, p_hat in consensus_probabilities(event_quotes, min_books).items():
+        for outcome, p_hat in consensus_probabilities(event_quotes, min_books, min_books_totals).items():
             consensus[(event_key, outcome)] = p_hat
     return consensus
 

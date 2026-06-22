@@ -22,7 +22,7 @@ from arb.pricing import kalshi_fee_cost
 from arb.store import Store
 from arb.venues.oddsapi import parse_odds_events
 
-EVENT_KEY = "baseball_mlb:2026-06-10:kansas city royals:texas rangers:3"
+EVENT_KEY = "baseball_mlb:2026-06-10:kansas city royals:texas rangers"
 
 
 def kalshi_quote(cost: str, depth: str = "1200", start_days_out: int = 1) -> Quote:

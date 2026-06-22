@@ -9,7 +9,7 @@ from arb.arbitrage import (
 from arb.models import Quote
 from arb.experimental.analysis.leadlag import _moves
 
-EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers:3"
+EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers"
 
 
 def q(venue: str, outcome: str, cost: str, depth: str = "500") -> Quote:

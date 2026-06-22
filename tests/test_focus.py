@@ -6,7 +6,7 @@ from arb.models import Quote
 from arb.store import Store
 from arb.experimental.focus import build_bet_map, run_focus_pass
 
-EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers:3"
+EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers"
 FCFG = {"rotation_pause_secs": 0, "map_max_age_mins": 30, "sports": ["baseball_mlb", "basketball_nba"]}
 
 
@@ -29,7 +29,7 @@ def test_bet_map_requires_two_venues_and_fresh_quotes(tmp_path) -> None:
     seed(store, [
         stored("kalshi", "kansas city royals", "0.48"),
         stored("polymarket", "texas rangers", "0.50"),
-        stored("kalshi", "a", "0.50", event="baseball_mlb:2026-06-12:a:b:0"),          # single venue
+        stored("kalshi", "a", "0.50", event="baseball_mlb:2026-06-12:a:b"),          # single venue
         stored("kalshi", "c", "0.50", event="baseball_mlb:2026-06-12:c:d:0", age_mins=90),  # too old
         stored("polymarket", "c", "0.50", event="baseball_mlb:2026-06-12:c:d:0", age_mins=90),
     ])

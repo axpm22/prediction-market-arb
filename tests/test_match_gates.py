@@ -4,7 +4,7 @@ from decimal import Decimal
 from arb.arbitrage import detect_divergences, detect_true_arbs, same_outcome_spread, start_drift_secs
 from arb.models import Quote
 
-EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers:3"
+EVENT = "baseball_mlb:2026-06-12:kansas city royals:texas rangers"
 NOW = datetime(2026, 6, 12, 20, 0, tzinfo=timezone.utc)
 
 

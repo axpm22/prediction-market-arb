@@ -12,7 +12,7 @@ from arb.settlement import settle_backfill_mlb
 from arb.store import Store
 from arb.tracker import record_tracker_poll
 
-EVENT = "baseball_mlb:2026-06-09:kansas city royals:texas rangers:3"
+EVENT = "baseball_mlb:2026-06-09:kansas city royals:texas rangers"
 START = datetime(2026, 6, 9, 23, 41, tzinfo=timezone.utc)
 FIX = Path("tests/fixtures")
 
