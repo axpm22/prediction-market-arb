@@ -736,6 +736,11 @@ const num = v => Number(v || 0);
 const compact = v => new Intl.NumberFormat(undefined,{notation:"compact",maximumFractionDigits:1}).format(num(v));
 const money = v => `${num(v) >= 0 ? "+$" : "-$"}${Math.abs(num(v)).toFixed(2)}`;
 const pct = v => `${(num(v) * 100).toFixed(1)}%`;
+const axisMoney = v => {
+  const n = num(v), sign = n < 0 ? "-" : "";
+  const a = Math.abs(n);
+  return `${sign}$${a >= 1000 ? compact(a) : a.toFixed(a >= 10 ? 0 : 2)}`;
+};
 const age = seconds => {
   if (seconds == null) return "no data";
   if (seconds < 90) return `${seconds}s ago`;
@@ -808,32 +813,86 @@ function metric(label, value, detail, cls="") {
 }
 
 function drawLines(svg, series, opts={}) {
-  const w = svg.clientWidth || 800, h = svg.clientHeight || 260, pad = opts.pad ?? 18;
+  const w = svg.clientWidth || 800, h = svg.clientHeight || 260;
+  const padL = opts.padLeft ?? 54, padR = opts.padRight ?? 18, padT = opts.padTop ?? 36, padB = opts.padBottom ?? 34;
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  const points = series.flatMap(s => s.data || []);
+  const plotW = Math.max(1, w - padL - padR), plotH = Math.max(1, h - padT - padB);
+  const cleanSeries = series.map(s => ({...s, data:(s.data || []).filter(p => Number.isFinite(Date.parse(p.t)) && Number.isFinite(num(p.y)))}));
+  const points = cleanSeries.flatMap(s => s.data);
   svg.innerHTML = "";
   if (!points.length) {
     svg.innerHTML = `<text x="${w/2}" y="${h/2}" fill="#a4a6ad" text-anchor="middle">No settled points yet</text>`;
     return;
   }
-  const xs = points.map(p => Date.parse(p.t)).filter(Number.isFinite);
+  const xs = points.map(p => Date.parse(p.t));
   const ys = points.map(p => num(p.y));
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   let minY = Math.min(...ys), maxY = Math.max(...ys);
+  minY = Math.min(minY, 0);
+  maxY = Math.max(maxY, 0);
   if (minY === maxY) { minY -= 1; maxY += 1; }
-  const x = t => pad + ((Date.parse(t) - minX) / Math.max(1, maxX - minX)) * (w - pad * 2);
-  const y = v => h - pad - ((num(v) - minY) / (maxY - minY)) * (h - pad * 2);
+  const yPad = Math.max((maxY - minY) * .08, .5);
+  minY -= yPad; maxY += yPad;
+  const x = t => padL + ((Date.parse(t) - minX) / Math.max(1, maxX - minX)) * plotW;
+  const y = v => padT + plotH - ((num(v) - minY) / (maxY - minY)) * plotH;
+  const yTicks = niceTicks(minY, maxY, 5);
+  yTicks.forEach(t => {
+    const yy = y(t);
+    svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${w-padR}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#303238" stroke-width="1" opacity=".55"/>`);
+    svg.insertAdjacentHTML("beforeend", `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" fill="#a4a6ad" text-anchor="end" font-size="11">${axisMoney(t)}</text>`);
+  });
+  const xTicks = timeTicks(minX, maxX, 4);
+  xTicks.forEach(t => {
+    const xx = padL + ((t - minX) / Math.max(1, maxX - minX)) * plotW;
+    svg.insertAdjacentHTML("beforeend", `<text x="${xx.toFixed(1)}" y="${h-10}" fill="#a4a6ad" text-anchor="middle" font-size="11">${timeTickLabel(t, minX, maxX)}</text>`);
+  });
+  svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${padL}" y1="${padT}" y2="${h-padB}" stroke="#303238" stroke-width="1"/>`);
+  svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${w-padR}" y1="${h-padB}" y2="${h-padB}" stroke="#303238" stroke-width="1"/>`);
   const zero = y(0);
-  svg.insertAdjacentHTML("beforeend", `<line x1="${pad}" x2="${w-pad}" y1="${zero}" y2="${zero}" stroke="#303238" stroke-width="1"/>`);
-  series.forEach(s => {
-    const d = (s.data || []).map((p, i) => `${i ? "L" : "M"}${x(p.t).toFixed(1)},${y(p.y).toFixed(1)}`).join(" ");
+  if (zero >= padT && zero <= h - padB) {
+    svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${w-padR}" y1="${zero.toFixed(1)}" y2="${zero.toFixed(1)}" stroke="#f2f3f0" stroke-width="1" opacity=".28"/>`);
+  }
+  cleanSeries.forEach(s => {
+    const sampled = sampleLineData(s.data, opts.maxPoints ?? 180);
+    const d = sampled.map((p, i) => `${i ? "L" : "M"}${x(p.t).toFixed(1)},${y(p.y).toFixed(1)}`).join(" ");
     if (d) svg.insertAdjacentHTML("beforeend", `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`);
   });
-  const latest = series.map(s => {
+  const latest = cleanSeries.map(s => {
     const last = (s.data || [])[s.data.length - 1];
     return last ? `<span style="color:${s.color}">${esc(s.label)} ${money(last.y)}</span>` : "";
   }).filter(Boolean).join(" &nbsp; ");
-  svg.insertAdjacentHTML("beforeend", `<foreignObject x="${pad}" y="4" width="${w-pad*2}" height="26"><div xmlns="http://www.w3.org/1999/xhtml" style="font:12px system-ui;color:#a4a6ad">${latest}</div></foreignObject>`);
+  svg.insertAdjacentHTML("beforeend", `<foreignObject x="${padL}" y="7" width="${w-padL-padR}" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="font:12px system-ui;color:#a4a6ad;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${latest}</div></foreignObject>`);
+}
+
+function niceTicks(min, max, target=5) {
+  const span = Math.max(1e-9, max - min);
+  const rough = span / Math.max(1, target - 1);
+  const pow = Math.pow(10, Math.floor(Math.log10(rough)));
+  const step = [1, 2, 5, 10].map(n => n * pow).find(s => s >= rough) || 10 * pow;
+  const ticks = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step * .5; v += step) ticks.push(Math.abs(v) < step / 1e6 ? 0 : v);
+  return ticks.slice(0, 7);
+}
+
+function timeTicks(minX, maxX, target=4) {
+  if (minX === maxX) return [minX];
+  return Array.from({length:target}, (_, i) => minX + (maxX - minX) * (i / Math.max(1, target - 1)));
+}
+
+function timeTickLabel(ms, minX, maxX) {
+  const opts = maxX - minX > 86400000
+    ? {month:"short", day:"numeric"}
+    : {hour:"numeric", minute:"2-digit"};
+  return new Intl.DateTimeFormat(undefined, opts).format(new Date(ms));
+}
+
+function sampleLineData(data, maxPoints) {
+  if (!data || data.length <= maxPoints) return data || [];
+  const stride = Math.ceil(data.length / maxPoints);
+  const sampled = data.filter((_, i) => i % stride === 0);
+  const last = data[data.length - 1];
+  if (sampled[sampled.length - 1] !== last) sampled.push(last);
+  return sampled;
 }
 
 function drawBars(svg, rows) {
@@ -876,6 +935,10 @@ function horizonText(bet) {
 
 function renderMetrics(d) {
   const running = d.processes.filter(p => p.status === "ok").length;
+  const unhealthy = d.processes.filter(p => p.status !== "ok");
+  const workerDetail = unhealthy.length
+    ? unhealthy.map(p => `${p.status}: ${p.name}`).join(" · ")
+    : `all ${d.processes.length} expected workers running`;
   const ce = d.clean_ev || {pnl:0,won:0,lost:0,settled:0,roi:0}, se = d.suspect_ev || {n:0,pnl:0}, la = d.locked_arb || {pnl:0,resolved:0,settled:0};
   const suspectNote = se.n ? ` · suspect: ${se.n} (${money(se.pnl)})` : "";
   $("metrics").innerHTML = [
@@ -884,7 +947,7 @@ function renderMetrics(d) {
     metric("Open Bets", compact(d.health.open_bets), `${compact(d.health.flat_bets)} ledger rows`, "blue"),
     metric("ARB Verification", `<span class="good">${d.arb.verified}</span><span class="muted"> / </span><span class="bad">${d.arb.vanished}</span>`, `${d.arb.unverifiable} unverifiable`),
     metric("Quotes", compact(d.health.quotes), `latest ${age(d.health.last_quote_age_seconds)}`),
-    metric("Processes", `${running}/${d.processes.length}`, `poll ${age(d.health.last_poll_age_seconds)}`, running ? "good" : "bad"),
+    metric("Worker Health", `${running}/${d.processes.length}`, workerDetail, unhealthy.length ? "bad" : "good"),
   ].join("");
 }
 

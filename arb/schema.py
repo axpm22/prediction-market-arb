@@ -167,6 +167,16 @@ CREATE TABLE IF NOT EXISTS forecasts(
 );
 CREATE INDEX IF NOT EXISTS idx_quotes_close_lookup
 ON quotes(event_key, venue, book, outcome, live, fetched_at);
+-- flat_bets is scanned heavily by the dashboard, tracker, sweeps, and settlement.
+-- The correlated reappearance_of subqueries (confirmed/verified/vanished/lifetime counts)
+-- full-scan the table per row without this; it turns each into an index lookup.
+CREATE INDEX IF NOT EXISTS idx_flatbets_reappearance ON flat_bets(reappearance_of, status);
+CREATE INDEX IF NOT EXISTS idx_flatbets_kind_status ON flat_bets(kind, status);
+CREATE INDEX IF NOT EXISTS idx_flatbets_status_result ON flat_bets(status, result);
+CREATE INDEX IF NOT EXISTS idx_flatbets_fingerprint ON flat_bets(fingerprint, status);
+-- quotes lookups by recency (focus bet-map, lead-lag) and per-event grouping.
+CREATE INDEX IF NOT EXISTS idx_quotes_fetched ON quotes(fetched_at);
+CREATE INDEX IF NOT EXISTS idx_quotes_event ON quotes(event_key);
 """
 
 MIGRATION_COLUMNS = {

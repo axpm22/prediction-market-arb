@@ -168,15 +168,24 @@ table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</sty
 <h2>CLV</h2><pre id="clv"></pre><h2>Segment scores</h2><div id="scores"></div>
 <script>
 fetch('dashboard.json').then(r=>r.json()).then(d=>{
+ const lineOptions={
+   responsive:true,
+   elements:{point:{radius:0,hitRadius:8,hoverRadius:3},line:{borderWidth:2,tension:.18}},
+   plugins:{legend:{position:'bottom'}},
+   scales:{
+     x:{type:'time',grid:{display:false},ticks:{maxTicksLimit:5}},
+     y:{grid:{color:'rgba(0,0,0,.08)'},ticks:{maxTicksLimit:6,callback:v=>'$'+Number(v).toFixed(Math.abs(v)>=10?0:2)}}
+   }
+ };
  const mk=(c,l)=>({label:l,data:c.map(p=>({x:p.t,y:p.cum})),fill:false});
  new Chart(document.getElementById('eq'),{type:'line',data:{datasets:[
    mk(d.equity.optimistic_raw,'optimistic raw'),mk(d.equity.optimistic_clean,'optimistic clean'),
    mk(d.equity.confirmed_raw,'confirmed raw'),mk(d.equity.confirmed_clean,'confirmed clean')]},
-   options:{parsing:false,scales:{x:{type:'time'}}}});
+   options:{...lineOptions,parsing:false}});
  new Chart(document.getElementById('kelly'),{type:'line',data:{datasets:[
    mk(d.kelly_equity.optimistic_raw,'Kelly optimistic raw'),mk(d.kelly_equity.optimistic_clean,'Kelly optimistic clean'),
    mk(d.kelly_equity.confirmed_raw,'Kelly confirmed raw'),mk(d.kelly_equity.confirmed_clean,'Kelly confirmed clean')]},
-   options:{parsing:false,scales:{x:{type:'time'}}}});
+   options:{...lineOptions,parsing:false}});
  const labels=Object.keys(d.ev_edge_buckets);
  new Chart(document.getElementById('buckets'),{type:'bar',data:{labels,datasets:[
    {label:'EV raw count',data:labels.map(k=>d.ev_edge_buckets[k].raw.n)},

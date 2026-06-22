@@ -73,12 +73,30 @@ def venue_close(store: Store, event_key: str, venue: str, book: str, outcome: st
 
 def grade_clv(store: Store, min_depth: Decimal) -> dict:
     flags = _ev_flags(store)
+    # Reuse ONE connection for all per-flag closes. The old code opened a fresh
+    # connection (PRAGMA setup) per flag; the indexed LIMIT-1 lookup itself is sub-ms.
     graded: list[Decimal] = []
-    for f in flags:
-        close = venue_close(store, f["event_key"], f["venue"], f["book"], f["outcome"], min_depth)
-        if close is None:
-            continue
-        graded.append(clv_points(close, f["entry_ask"]))
+    seen: dict[tuple, Decimal | None] = {}
+    with store.connect() as con:
+        for f in flags:
+            key = (f["event_key"], f["venue"], f["book"], f["outcome"])
+            if key not in seen:
+                row = con.execute(
+                    """
+                    SELECT cost, fee_cost, depth_usd FROM quotes
+                     WHERE event_key=? AND venue=? AND book=? AND outcome=? AND live=0
+                     ORDER BY fetched_at DESC LIMIT 1
+                    """,
+                    key,
+                ).fetchone()
+                if row is None or (row["depth_usd"] is not None and Decimal(str(row["depth_usd"])) < min_depth):
+                    seen[key] = None
+                else:
+                    seen[key] = Decimal(str(row["cost"])) + Decimal(str(row["fee_cost"]))
+            close = seen[key]
+            if close is None:
+                continue
+            graded.append(clv_points(close, f["entry_ask"]))
     if not graded:
         return {"n": 0, "flags": len(flags)}
     values = [float(g) for g in graded]
