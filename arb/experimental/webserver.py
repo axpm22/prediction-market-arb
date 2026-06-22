@@ -1060,7 +1060,7 @@ PAGE = r"""<!doctype html>
   --gap:14px;--radius:8px;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.48 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.48 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-anchor:none}
 button{font:inherit}
 .top{position:sticky;top:0;z-index:5;background:rgba(17,19,21,.96);border-bottom:1px solid var(--line-soft);backdrop-filter:blur(10px)}
 .top-inner{display:flex;align-items:center;justify-content:space-between;gap:18px;max-width:1480px;margin:0 auto;padding:16px 22px}
@@ -1075,7 +1075,7 @@ h1{font-size:18px;line-height:1;margin:0;font-weight:720;letter-spacing:0}
 .duplicate .dot{background:var(--gold)}
 .wrap{max-width:1480px;margin:0 auto;padding:18px 22px 30px}
 .grid,.panels{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap)}
-.panel{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius);min-width:0;box-shadow:0 1px 0 rgba(255,255,255,.03)}
+.panel{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius);min-width:0;box-shadow:0 1px 0 rgba(255,255,255,.03);overflow-anchor:none}
 .panels{margin-top:var(--gap);align-items:start}
 .panels>.panel{container-type:inline-size}
 .metric{grid-column:span 3;padding:14px 15px;min-height:112px;display:flex;flex-direction:column;justify-content:space-between}

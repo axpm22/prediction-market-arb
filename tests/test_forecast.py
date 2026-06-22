@@ -55,6 +55,13 @@ def test_forecast_log_settle_report_and_edge_gate(tmp_path) -> None:
     assert data["summary"].n == 2
     assert data["mean_clv"] == 0.015
     with store.connect() as con:
-        [bet] = list(con.execute("SELECT * FROM flat_bets WHERE kind='FORECAST'"))
-    assert "forecast-id=" in bet["notes"]
-    assert bet["edge"] == "0.120000"
+        # Only high_edge (disagreement 0.12 >= 0.05) records a paper bet; low_edge does not.
+        [open_bet] = list(con.execute("SELECT * FROM flat_bets WHERE kind='FORECAST' AND status='OPEN'"))
+        [settled] = list(con.execute("SELECT * FROM flat_bets WHERE kind='FORECAST' AND status='SETTLED'"))
+    assert "forecast-id=" in open_bet["notes"]
+    # #10 edge is the comparable return-per-dollar at the executable price: (0.62-0.51)/0.51.
+    assert open_bet["edge"] == "0.215686"
+    assert open_bet["optimistic_cost"] == "0.51"
+    # #4 settlement realized the bet: YES side, outcome 0 -> lost -$1.
+    assert settled["result"] == "LOST"
+    assert settled["pnl_optimistic"] == "-1.00"
