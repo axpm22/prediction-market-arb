@@ -101,3 +101,23 @@ def test_live_dashboard_exposes_scanner_controls(tmp_path) -> None:
     assert all("returns" in scanner and "next" in scanner for scanner in state["scanners"])
     assert "Scanning Controls" in PAGE
     assert "/api/scanner" in PAGE
+
+
+def test_dashboard_surfaces_exposure_and_alerts(tmp_path) -> None:
+    import json as _json
+    from datetime import datetime as _dt, timezone as _tz
+    config = replace(load_config(), database_path=tmp_path / "arb.sqlite", bankroll_usd=__import__("decimal").Decimal("100"))
+    store = Store(config.database_path)
+    legs = _json.dumps([{"venue": "polymarket", "book": "b", "outcome_label": "x", "cost": "0.5", "fee_cost": "0"}])
+    with store.connect() as con:
+        for i in range(3):  # 3 x $60 = $180 committed > $100 bankroll
+            con.execute(
+                """INSERT INTO flat_bets(fingerprint, opened_poll_id, category, sport, kind, trusted, live,
+                       edge, stake_usd, legs_json, status, placed_at, notes)
+                   VALUES (?, 1, 'sports', 'baseball_mlb', 'EV', 0, 0, '0.03', '60', ?, 'OPEN', ?, '')""",
+                (f"fp{i}", legs, _dt.now(_tz.utc).isoformat()),
+            )
+    from arb.experimental.webserver import build_state
+    st = build_state(store, config)
+    assert st["exposure"]["over_bankroll"] is True
+    assert any("exceeds bankroll" in a["text"] and a["level"] == "bad" for a in st["alerts"])

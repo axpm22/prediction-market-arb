@@ -768,6 +768,9 @@ def build_state(store: Store, config) -> dict[str, Any]:
         )
         processes = _process_health()
         scanner_summaries = _scanner_summaries(c, processes, now)
+        settler_errors = c.execute(
+            "SELECT COUNT(*) FROM flat_bets WHERE status='CORRECTED' AND result='SETTLER-ERROR'"
+        ).fetchone()[0]
 
     def curve(field: str, clean: bool) -> list[dict[str, Any]]:
         cum, out = 0.0, []
@@ -814,8 +817,36 @@ def build_state(store: Store, config) -> dict[str, Any]:
         open_rows.append(row)
         if len(open_rows) >= 250:
             break
+    # Capital exposure + a single alerts list so problems surface at the top, not buried.
+    from arb.exposure import compute_exposure
+    per_venue_cap = config.bankroll_usd * config.max_stake_pct
+    exp = compute_exposure(store, config.bankroll_usd, per_venue_cap)
+    last_poll_age = _age_seconds(last_poll_finished or last_poll_started)
+    alerts: list[dict[str, str]] = []
+    for p in processes:
+        if p["status"] == "duplicate":
+            alerts.append({"level": "bad", "text": f"{p['name']} has {p['count']} copies running — double-counting bets"})
+        elif p["status"] == "down":
+            alerts.append({"level": "warn", "text": f"{p['name']} is not running"})
+    if last_poll_age is not None and last_poll_age > 600:
+        alerts.append({"level": "warn", "text": f"last poll was {last_poll_age // 60} min ago — scanner may be stalled"})
+    if exp.over_bankroll:
+        alerts.append({"level": "bad", "text": f"committed ${exp.total_committed} exceeds bankroll ${exp.bankroll}"})
+    for venue in exp.over_venue:
+        alerts.append({"level": "warn", "text": f"{venue} exposure ${exp.by_venue[venue]} over per-venue cap ${per_venue_cap}"})
+    if settler_errors:
+        alerts.append({"level": "bad", "text": f"{settler_errors} settlement mismatch(es) — realized P&L differs from the lock"})
+    credits_left = credits[0] if credits else None
+    if credits_left is not None and credits_left < 100:
+        alerts.append({"level": "warn", "text": f"Odds API credits low: {credits_left} left"})
     return {
         "now": now.isoformat(),
+        "alerts": alerts,
+        "exposure": {
+            "committed": float(exp.total_committed), "bankroll": float(exp.bankroll),
+            "over_bankroll": exp.over_bankroll, "by_venue": {v: float(a) for v, a in exp.by_venue.items()},
+            "settler_errors": int(settler_errors),
+        },
         "processes": processes,
         "scanners": scanner_summaries,
         "health": {
@@ -996,6 +1027,10 @@ h1{font-size:18px;line-height:1;margin:0;font-weight:720;letter-spacing:0}
 .value{font-size:27px;line-height:1.05;font-weight:760;letter-spacing:0;white-space:nowrap}
 .unit{font-size:12px;color:var(--muted);font-weight:520;margin-left:5px}
 .good{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--gold)}.blue{color:var(--blue)}.muted{color:var(--muted)}
+#alerts{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.alert{padding:8px 12px;border-radius:8px;font-size:13px;font-weight:500;border:1px solid}
+.alert.bad{background:rgba(229,72,77,.12);border-color:rgba(229,72,77,.4);color:var(--red)}
+.alert.warn{background:rgba(214,158,46,.12);border-color:rgba(214,158,46,.35);color:var(--gold)}
 .panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border-bottom:1px solid var(--line)}
 .panel-title{font-size:13px;font-weight:700;letter-spacing:0}
 .panel-body{padding:14px}
@@ -1069,6 +1104,7 @@ tr:last-child td{border-bottom:0}
   </div>
 </header>
 <main class="wrap">
+  <div id="alerts"></div>
   <section class="grid" id="metrics"></section>
   <section class="grid" style="margin-top:12px">
     <div class="panel full">
@@ -1373,9 +1409,18 @@ function renderMetrics(d) {
     metric("Locked ARB P&L", `<span class="${valClass(la.pnl)}">${money(la.pnl)}</span>`, `${la.settled} settled (${la.resolved} resolved) · provisional`),
     metric("Open Bets", compact(d.health.open_bets), `${compact(d.health.flat_bets)} ledger rows`, "blue"),
     metric("ARB Verification", `<span class="good">${d.arb.verified}</span><span class="muted"> / </span><span class="bad">${d.arb.vanished}</span>`, `${d.arb.unverifiable} unverifiable`),
+    metric("Capital Exposure", `<span class="${(d.exposure&&d.exposure.over_bankroll)?'bad':''}">${usd((d.exposure||{}).committed||0)}</span>`,
+           `of ${usd((d.exposure||{}).bankroll||0)} bankroll${(d.exposure&&d.exposure.settler_errors)?` · ${d.exposure.settler_errors} settler-error`:''}`,
+           (d.exposure&&d.exposure.over_bankroll)?"bad":"blue"),
     metric("Quotes", compact(d.health.quotes), `latest ${age(d.health.last_quote_age_seconds)}`),
     metric("Worker Health", `${running}/${enabled || d.processes.length}`, workerDetail, unhealthy.length ? "bad" : "good"),
   ].join("");
+}
+
+function renderAlerts(d) {
+  const a = d.alerts || [];
+  if (!a.length) { $("alerts").innerHTML = ""; return; }
+  $("alerts").innerHTML = a.map(x => `<div class="alert ${x.level}">${esc(x.text)}</div>`).join("");
 }
 
 function renderProcesses(d) {
@@ -1623,6 +1668,7 @@ function renderLogs(d) {
 
 function render(d) {
   renderProcesses(d);
+  renderAlerts(d);
   renderMetrics(d);
   renderTracking(d);
   renderScanners(d);
