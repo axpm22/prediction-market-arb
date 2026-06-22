@@ -1,38 +1,88 @@
 {
- "_settlement_sources": [
-  {
-   "name": "CF Benchmarks",
-   "url": "https://www.cfbenchmarks.com/data/indices/BRTI?ref=blog.cfbenchmarks.com"
-  }
- ],
  "markets": [
   {
    "ticker": "KXBTCD-26JUN2217-T73249.99",
    "title": "Bitcoin price on Jun 22, 2026?",
    "yes_sub_title": "$73,250 or above",
+   "floor_strike": 73249.99,
+   "cap_strike": null,
    "close_time": "2026-06-22T21:00:00Z",
-   "status": "active",
+   "expected_expiration_time": "2026-06-22T21:05:00Z",
    "yes_ask_dollars": "0.0100",
    "no_ask_dollars": "1.0000",
    "yes_bid_dollars": "0.0000",
    "no_bid_dollars": "0.9900",
-   "expected_expiration_time": "2026-06-22T21:05:00Z",
-   "settlement_value": null,
-   "rules_primary": "If the simple average of the sixty seconds of CF Benchmarks' Bitcoin Real-Time Index (BRTI) before 5 PM EDT is above 73249.99 at 5 PM EDT on Jun 22, 2026, then the market resolves to Yes."
+   "liquidity_dollars": "0.0000"
   },
   {
    "ticker": "KXBTCD-26JUN2217-T72999.99",
    "title": "Bitcoin price on Jun 22, 2026?",
    "yes_sub_title": "$73,000 or above",
+   "floor_strike": 72999.99,
+   "cap_strike": null,
    "close_time": "2026-06-22T21:00:00Z",
-   "status": "active",
+   "expected_expiration_time": "2026-06-22T21:05:00Z",
    "yes_ask_dollars": "0.0100",
    "no_ask_dollars": "1.0000",
    "yes_bid_dollars": "0.0000",
    "no_bid_dollars": "0.9900",
+   "liquidity_dollars": "0.0000"
+  },
+  {
+   "ticker": "KXBTCD-26JUN2217-T72749.99",
+   "title": "Bitcoin price on Jun 22, 2026?",
+   "yes_sub_title": "$72,750 or above",
+   "floor_strike": 72749.99,
+   "cap_strike": null,
+   "close_time": "2026-06-22T21:00:00Z",
    "expected_expiration_time": "2026-06-22T21:05:00Z",
-   "settlement_value": null,
-   "rules_primary": "If the simple average of the sixty seconds of CF Benchmarks' Bitcoin Real-Time Index (BRTI) before 5 PM EDT is above 72999.99 at 5 PM EDT on Jun 22, 2026, then the market resolves to Yes."
+   "yes_ask_dollars": "0.0100",
+   "no_ask_dollars": "1.0000",
+   "yes_bid_dollars": "0.0000",
+   "no_bid_dollars": "0.9900",
+   "liquidity_dollars": "0.0000"
+  },
+  {
+   "ticker": "KXBTCD-26JUN2217-T72499.99",
+   "title": "Bitcoin price on Jun 22, 2026?",
+   "yes_sub_title": "$72,500 or above",
+   "floor_strike": 72499.99,
+   "cap_strike": null,
+   "close_time": "2026-06-22T21:00:00Z",
+   "expected_expiration_time": "2026-06-22T21:05:00Z",
+   "yes_ask_dollars": "0.0100",
+   "no_ask_dollars": "1.0000",
+   "yes_bid_dollars": "0.0000",
+   "no_bid_dollars": "0.9900",
+   "liquidity_dollars": "0.0000"
+  },
+  {
+   "ticker": "KXBTCD-26JUN2217-T72249.99",
+   "title": "Bitcoin price on Jun 22, 2026?",
+   "yes_sub_title": "$72,250 or above",
+   "floor_strike": 72249.99,
+   "cap_strike": null,
+   "close_time": "2026-06-22T21:00:00Z",
+   "expected_expiration_time": "2026-06-22T21:05:00Z",
+   "yes_ask_dollars": "0.0100",
+   "no_ask_dollars": "1.0000",
+   "yes_bid_dollars": "0.0000",
+   "no_bid_dollars": "0.9900",
+   "liquidity_dollars": "0.0000"
+  },
+  {
+   "ticker": "KXBTCD-26JUN2217-T71999.99",
+   "title": "Bitcoin price on Jun 22, 2026?",
+   "yes_sub_title": "$72,000 or above",
+   "floor_strike": 71999.99,
+   "cap_strike": null,
+   "close_time": "2026-06-22T21:00:00Z",
+   "expected_expiration_time": "2026-06-22T21:05:00Z",
+   "yes_ask_dollars": "0.0100",
+   "no_ask_dollars": "1.0000",
+   "yes_bid_dollars": "0.0000",
+   "no_bid_dollars": "0.9900",
+   "liquidity_dollars": "0.0000"
   }
  ]
 }

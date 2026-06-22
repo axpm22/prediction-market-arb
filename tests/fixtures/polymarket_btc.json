@@ -1,25 +1,256 @@
 {
- "_settlement": "Polymarket UMA oracle (own resolution)",
  "markets": [
   {
-   "event_title": "What price will Bitcoin hit in June?",
    "question": "Will Bitcoin reach $90,000 in June?",
    "groupItemTitle": "\u2191 90,000",
    "endDate": "2026-07-01T04:00:00Z",
-   "outcomes": "[\"Yes\", \"No\"]",
-   "clobTokenIds": "[\"95392237033134859316508517411280839091542508608393424743404750464234370530991\", \"83568251880898532448061162423002066724837653108034906268948118526362480986875\"]",
-   "bestAsk": 0.003,
-   "bestBid": 0.002
+   "bestAsk": 0.002,
+   "bestBid": 0.001
   },
   {
-   "event_title": "What price will Bitcoin hit in June?",
    "question": "Will Bitcoin reach $82,500 in June?",
    "groupItemTitle": "\u2191 82,500",
    "endDate": "2026-07-01T04:00:00Z",
-   "outcomes": "[\"Yes\", \"No\"]",
-   "clobTokenIds": "[\"61500591812641370997958058565614570749858280386557944455333972770618552171659\", \"51653743901539436783448835613968795453855628475322784500233762380386237644831\"]",
    "bestAsk": 0.004,
    "bestBid": 0.003
+  },
+  {
+   "question": "Will Bitcoin reach $77,500 in June?",
+   "groupItemTitle": "\u2191 77,500",
+   "endDate": "2026-07-01T04:00:00Z",
+   "bestAsk": 0.009,
+   "bestBid": 0.008
+  },
+  {
+   "question": "Will Bitcoin dip to $57,500 in June?",
+   "groupItemTitle": "\u2193 57,500",
+   "endDate": "2026-07-01T04:00:00Z",
+   "bestAsk": 0.119,
+   "bestBid": 0.118
+  },
+  {
+   "question": "Will Bitcoin dip to $55,000 in June?",
+   "groupItemTitle": "\u2193 55,000",
+   "endDate": "2026-07-01T04:00:00Z",
+   "bestAsk": 0.049,
+   "bestBid": 0.046
+  },
+  {
+   "question": "Will Bitcoin reach $70,000 in June?",
+   "groupItemTitle": "\u2191 70,000",
+   "endDate": "2026-07-01T04:00:00Z",
+   "bestAsk": 0.13,
+   "bestBid": 0.12
+  },
+  {
+   "question": "Will the price of Bitcoin be above $60,000 on June 22?",
+   "groupItemTitle": "60,000",
+   "endDate": "2026-06-22T16:00:00Z",
+   "bestAsk": 0.996,
+   "bestBid": 0.995
+  },
+  {
+   "question": "Will the price of Bitcoin be above $68,000 on June 22?",
+   "groupItemTitle": "68,000",
+   "endDate": "2026-06-22T16:00:00Z",
+   "bestAsk": 0.004,
+   "bestBid": 0.003
+  },
+  {
+   "question": "Will the price of Bitcoin be above $72,000 on June 22?",
+   "groupItemTitle": "72,000",
+   "endDate": "2026-06-22T16:00:00Z",
+   "bestAsk": 0.001,
+   "bestBid": null
+  },
+  {
+   "question": "Will the price of Bitcoin be above $58,000 on June 22?",
+   "groupItemTitle": "58,000",
+   "endDate": "2026-06-22T16:00:00Z",
+   "bestAsk": 0.999,
+   "bestBid": 0.998
+  },
+  {
+   "question": "Will the price of Bitcoin be above $64,000 on June 22?",
+   "groupItemTitle": "64,000",
+   "endDate": "2026-06-22T16:00:00Z",
+   "bestAsk": 0.74,
+   "bestBid": 0.73
+  },
+  {
+   "question": "Will the price of Bitcoin be above $70,000 on June 22?",
+   "groupItemTitle": "70,000",
+   "endDate": "2026-06-22T16:00:00Z",
+   "bestAsk": 0.001,
+   "bestBid": null
+  },
+  {
+   "question": "Will Bitcoin reach $72,000 on June 21?",
+   "groupItemTitle": "\u2191 72,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.001,
+   "bestBid": null
+  },
+  {
+   "question": "Will Bitcoin reach $71,000 on June 21?",
+   "groupItemTitle": "\u2191 71,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.001,
+   "bestBid": null
+  },
+  {
+   "question": "Will Bitcoin reach $70,000 on June 21?",
+   "groupItemTitle": "\u2191 70,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.004,
+   "bestBid": null
+  },
+  {
+   "question": "Will Bitcoin reach $69,000 on June 21?",
+   "groupItemTitle": "\u2191 69,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.002,
+   "bestBid": null
+  },
+  {
+   "question": "Will Bitcoin reach $68,000 on June 21?",
+   "groupItemTitle": "\u2191 68,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.006,
+   "bestBid": null
+  },
+  {
+   "question": "Will Bitcoin reach $67,000 on June 21?",
+   "groupItemTitle": "\u2191 67,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.006,
+   "bestBid": 0.003
+  },
+  {
+   "question": "Will Bitcoin reach $200,000 by December 31, 2026?",
+   "groupItemTitle": "\u2191 200,000",
+   "endDate": "2027-01-01T05:00:00Z",
+   "bestAsk": 0.019,
+   "bestBid": 0.018
+  },
+  {
+   "question": "Will Bitcoin reach $180,000 by December 31, 2026?",
+   "groupItemTitle": "\u2191 180,000",
+   "endDate": "2027-01-01T05:00:00Z",
+   "bestAsk": 0.023,
+   "bestBid": 0.014
+  },
+  {
+   "question": "Will Bitcoin reach $160,000 by December 31, 2026?",
+   "groupItemTitle": "\u2191 160,000",
+   "endDate": "2027-01-01T05:00:00Z",
+   "bestAsk": 0.035,
+   "bestBid": 0.032
+  },
+  {
+   "question": "Will Bitcoin reach $140,000 by December 31, 2026?",
+   "groupItemTitle": "\u2191 140,000",
+   "endDate": "2027-01-01T05:00:00Z",
+   "bestAsk": 0.039,
+   "bestBid": 0.034
+  },
+  {
+   "question": "Will Bitcoin reach $120,000 by December 31, 2026?",
+   "groupItemTitle": "\u2191 120,000",
+   "endDate": "2027-01-01T05:00:00Z",
+   "bestAsk": 0.08,
+   "bestBid": 0.07
+  },
+  {
+   "question": "Will Bitcoin reach $100,000 by December 31, 2026?",
+   "groupItemTitle": "\u2191 100,000",
+   "endDate": "2027-01-01T05:00:00Z",
+   "bestAsk": 0.16,
+   "bestBid": 0.15
+  },
+  {
+   "question": "Will Bitcoin dip to $58,000 June 15-21?",
+   "groupItemTitle": "\u2193 58,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.001,
+   "bestBid": null
+  },
+  {
+   "question": "Will Bitcoin reach $80,000 June 15-21?",
+   "groupItemTitle": "\u2191 80,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.001,
+   "bestBid": null
+  },
+  {
+   "question": "Will Bitcoin reach $78,000 June 15-21?",
+   "groupItemTitle": "\u2191 78,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.001,
+   "bestBid": null
+  },
+  {
+   "question": "Will Bitcoin reach $70,000 June 15-21?",
+   "groupItemTitle": "\u2191 70,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.001,
+   "bestBid": null
+  },
+  {
+   "question": "Will Bitcoin dip to $62,000 June 15-21?",
+   "groupItemTitle": "\u2193 62,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.02,
+   "bestBid": 0.003
+  },
+  {
+   "question": "Will Bitcoin dip to $54,000 June 15-21?",
+   "groupItemTitle": "\u2193 54,000",
+   "endDate": "2026-06-22T04:00:00Z",
+   "bestAsk": 0.001,
+   "bestBid": null
+  },
+  {
+   "question": "Will the price of Bitcoin be above $64,000 on June 23?",
+   "groupItemTitle": "64,000",
+   "endDate": "2026-06-23T16:00:00Z",
+   "bestAsk": 0.67,
+   "bestBid": 0.66
+  },
+  {
+   "question": "Will the price of Bitcoin be above $62,000 on June 23?",
+   "groupItemTitle": "62,000",
+   "endDate": "2026-06-23T16:00:00Z",
+   "bestAsk": 0.94,
+   "bestBid": 0.93
+  },
+  {
+   "question": "Will the price of Bitcoin be above $58,000 on June 23?",
+   "groupItemTitle": "58,000",
+   "endDate": "2026-06-23T16:00:00Z",
+   "bestAsk": 0.996,
+   "bestBid": 0.992
+  },
+  {
+   "question": "Will the price of Bitcoin be above $56,000 on June 23?",
+   "groupItemTitle": "56,000",
+   "endDate": "2026-06-23T16:00:00Z",
+   "bestAsk": 1,
+   "bestBid": 0.999
+  },
+  {
+   "question": "Will the price of Bitcoin be above $68,000 on June 23?",
+   "groupItemTitle": "68,000",
+   "endDate": "2026-06-23T16:00:00Z",
+   "bestAsk": 0.032,
+   "bestBid": 0.03
+  },
+  {
+   "question": "Will the price of Bitcoin be above $72,000 on June 23?",
+   "groupItemTitle": "72,000",
+   "endDate": "2026-06-23T16:00:00Z",
+   "bestAsk": 0.001,
+   "bestBid": null
   }
  ]
 }
