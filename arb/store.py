@@ -223,5 +223,6 @@ def quote_to_json(quote: Quote) -> dict[str, str | None]:
         "fee_cost": str(quote.fee_cost),
         "depth_usd": _decimal_text(quote.depth_usd),
         "live": str(quote.live),
+        "start_utc": None if quote.start_utc is None else _dt_text(quote.start_utc),
         "ref": quote.ref,
     }

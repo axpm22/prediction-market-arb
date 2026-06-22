@@ -63,6 +63,11 @@ def settled_rows(store: Store):
         return list(con.execute("SELECT * FROM flat_bets WHERE status = 'SETTLED' ORDER BY id"))
 
 
+def strip_leg_start_times(store: Store) -> None:
+    with store.connect() as con:
+        con.execute("UPDATE flat_bets SET legs_json = json_remove(legs_json, '$[0].start_utc')")
+
+
 def test_score_settlement_vectors(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     place_bets(store, [
@@ -209,6 +214,150 @@ def test_mlb_backfill_accepts_adjacent_utc_date_when_bucket_is_unique(tmp_path) 
 
     assert settle_backfill_mlb(store, fixture_dir) == 1
     assert settled_rows(store)[0]["result"] == "WON"
+
+
+def test_mlb_backfill_uses_stored_start_time_to_resolve_doubleheader(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    event_key = "baseball_mlb:2026-06-17:atlanta braves:san francisco giants:3"
+    place_bets(store, [
+        ev_opp(
+            "UNDER",
+            "0.50",
+            "TOTAL",
+            "10.5",
+            event_key_value=event_key,
+            start=datetime(2026, 6, 17, 23, 15, tzinfo=timezone.utc),
+        ),
+    ])
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "mlbstats_schedule_2026-06-17.json").write_text(json.dumps({
+        "dates": [{
+            "games": [
+                {
+                    "gameDate": "2026-06-17T18:00:00Z",
+                    "gameNumber": 1,
+                    "status": {"abstractGameState": "Final"},
+                    "teams": {
+                        "away": {"team": {"name": "San Francisco Giants"}, "score": 7},
+                        "home": {"team": {"name": "Atlanta Braves"}, "score": 2},
+                    },
+                },
+                {
+                    "gameDate": "2026-06-17T23:15:00Z",
+                    "gameNumber": 2,
+                    "status": {"abstractGameState": "Final"},
+                    "teams": {
+                        "away": {"team": {"name": "San Francisco Giants"}, "score": 7},
+                        "home": {"team": {"name": "Atlanta Braves"}, "score": 5},
+                    },
+                },
+            ]
+        }]
+    }))
+
+    assert settle_backfill_mlb(store, fixture_dir) == 1
+    rows = settled_rows(store)
+    assert rows[0]["result"] == "LOST"
+    assert rows[0]["notes"] == "mlbstats-settled"
+
+
+def test_mlb_backfill_settles_legacy_doubleheader_when_result_is_consistent(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    event_key = "baseball_mlb:2026-06-18:atlanta braves:san francisco giants:3"
+    place_bets(store, [
+        ev_opp(
+            "UNDER",
+            "0.50",
+            "TOTAL",
+            "8.5",
+            event_key_value=event_key,
+            start=datetime(2026, 6, 18, 23, 15, tzinfo=timezone.utc),
+        ),
+        ev_opp(
+            "san francisco giants",
+            "0.50",
+            event_key_value=event_key,
+            start=datetime(2026, 6, 18, 23, 15, tzinfo=timezone.utc),
+        ),
+    ])
+    strip_leg_start_times(store)
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "mlbstats_schedule_2026-06-17.json").write_text(json.dumps({
+        "dates": [{
+            "games": [
+                {
+                    "gameDate": "2026-06-17T18:00:00Z",
+                    "gameNumber": 1,
+                    "status": {"abstractGameState": "Final"},
+                    "teams": {
+                        "away": {"team": {"name": "San Francisco Giants"}, "score": 7},
+                        "home": {"team": {"name": "Atlanta Braves"}, "score": 2},
+                    },
+                },
+                {
+                    "gameDate": "2026-06-17T23:15:00Z",
+                    "gameNumber": 2,
+                    "status": {"abstractGameState": "Final"},
+                    "teams": {
+                        "away": {"team": {"name": "San Francisco Giants"}, "score": 7},
+                        "home": {"team": {"name": "Atlanta Braves"}, "score": 5},
+                    },
+                },
+            ]
+        }]
+    }))
+
+    assert settle_backfill_mlb(store, fixture_dir) == 2
+    rows = settled_rows(store)
+    assert {row["result"] for row in rows} == {"WON", "LOST"}
+    assert all(row["notes"] == "mlbstats-settled; doubleheader-consistent-result" for row in rows)
+
+
+def test_mlb_backfill_leaves_doubleheader_open_when_result_conflicts(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    event_key = "baseball_mlb:2026-06-18:atlanta braves:san francisco giants:3"
+    place_bets(store, [
+        ev_opp(
+            "UNDER",
+            "0.50",
+            "TOTAL",
+            "10.5",
+            event_key_value=event_key,
+            start=datetime(2026, 6, 18, 23, 15, tzinfo=timezone.utc),
+        )
+    ])
+    strip_leg_start_times(store)
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "mlbstats_schedule_2026-06-17.json").write_text(json.dumps({
+        "dates": [{
+            "games": [
+                {
+                    "gameDate": "2026-06-17T18:00:00Z",
+                    "gameNumber": 1,
+                    "status": {"abstractGameState": "Final"},
+                    "teams": {
+                        "away": {"team": {"name": "San Francisco Giants"}, "score": 7},
+                        "home": {"team": {"name": "Atlanta Braves"}, "score": 2},
+                    },
+                },
+                {
+                    "gameDate": "2026-06-17T23:15:00Z",
+                    "gameNumber": 2,
+                    "status": {"abstractGameState": "Final"},
+                    "teams": {
+                        "away": {"team": {"name": "San Francisco Giants"}, "score": 7},
+                        "home": {"team": {"name": "Atlanta Braves"}, "score": 5},
+                    },
+                },
+            ]
+        }]
+    }))
+
+    assert settle_backfill_mlb(store, fixture_dir) == 0
+    assert settled_rows(store) == []
 
 
 def test_mlb_backfill_supports_legacy_event_keys_without_bucket(tmp_path) -> None:

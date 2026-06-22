@@ -55,11 +55,11 @@ def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
     """Resolve open MLB EV/ARB bets against the MLB Stats API (no lookback window).
 
     Rescues the backlog the Odds API's 3-day window orphaned. Matches each open bet to a
-    final game by (UTC date, the two normalized team names) parsed straight from the
-    event_key — so it does not depend on start-time buckets. Doubleheaders (two finals,
-    same date + same pair) are left OPEN as ambiguous rather than risk settling the wrong
-    game. Append-only and idempotent: bets already SETTLED are skipped by the open-bet
-    queries; re-running is a no-op.
+    final game by stored start time when available, then falls back to the event_key's
+    coarse UTC date + 6-hour bucket. Doubleheaders are settled only when the exact start
+    time selects one game, or when every candidate final gives the same result for the
+    stored leg. Append-only and idempotent: bets already SETTLED are skipped by the
+    open-bet queries; re-running is a no-op.
     """
     bets = [b for b in (*_open_ev_bets(store), *_open_arb_bets(store))
             if str(b["sport"]) == "baseball_mlb"]
@@ -72,19 +72,24 @@ def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
     # window around each so a late game logged under a different schedule date is caught.
     needed: set[str] = set()
     for bet in bets:
-        parts = str(json.loads(bet["legs_json"])[0]["event_key"]).split(":")
+        leg = json.loads(bet["legs_json"])[0]
+        parts = str(leg["event_key"]).split(":")
         if len(parts) >= 2:
             needed.add(parts[1])
+        start = _leg_start_utc(leg)
+        if start is not None:
+            needed.add(start.date().isoformat())
     fetch_dates: set[str] = set()
     for d in needed:
         base = date.fromisoformat(d)
         for delta in (-1, 0, 1):
             fetch_dates.add((base + timedelta(days=delta)).isoformat())
 
-    # Index final games by (utc_date, normalized team pair, 6-hour start bucket). Older
-    # backfill ignored the bucket, which left same-team UTC-date collisions unresolved.
+    # Index final games by exact start time and by the legacy 6-hour bucket. New rows use
+    # the exact time; old rows can still settle when every ambiguous final agrees.
     index: dict[tuple[str, frozenset, int], list[dict[str, Decimal]]] = {}
     date_pair_index: dict[tuple[str, frozenset], list[dict[str, Decimal]]] = {}
+    time_pair_index: dict[tuple[str, frozenset], list[tuple[datetime, dict[str, Decimal]]]] = {}
     for fetch_date in sorted(fetch_dates):
         try:
             games = adapter.final_games(fetch_date)
@@ -103,6 +108,9 @@ def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
             pair = frozenset({nh, na})
             index.setdefault((utc_date, pair, bucket), []).append(scores)
             date_pair_index.setdefault((utc_date, pair), []).append(scores)
+            if gd:
+                start = datetime.fromisoformat(str(gd).replace("Z", "+00:00")).astimezone(timezone.utc)
+                time_pair_index.setdefault((utc_date, pair), []).append((start, scores))
 
     settled = 0
     with store.connect() as con:
@@ -113,31 +121,42 @@ def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
                 continue
             start_bucket = int(parts[4]) if len(parts) >= 5 and parts[4].isdigit() else -1
             pair = frozenset({parts[2], parts[3]})
-            if start_bucket == -1:
+            leg_start = _leg_start_utc(leg)
+            bucket = _scores_for_start_time(time_pair_index, pair, leg_start)
+            if bucket:
+                pass
+            elif start_bucket == -1:
                 bucket = date_pair_index.get((parts[1], pair))
             else:
                 bucket = index.get((parts[1], pair, start_bucket))
                 if not bucket:
                     # Some venue keys land late games on the adjacent UTC date. Use the
-                    # adjacent-date fallback only if bucket+pair still selects exactly one
-                    # final; true doubleheader ambiguity remains OPEN.
+                    # adjacent-date fallback; doubleheaders below settle only if the leg
+                    # result is identical across every candidate final.
                     base = date.fromisoformat(parts[1])
                     bucket = [
                         scores
                         for delta in (-1, 1)
                         for scores in index.get(((base + timedelta(days=delta)).isoformat(), pair, start_bucket), [])
                     ]
-            if not bucket or len(bucket) != 1:  # 0 = no final yet; >1 = unresolved ambiguity
+            if not bucket:
                 continue
             scores = bucket[0]
             if bet["kind"] == "ARB":
+                if len(bucket) != 1:  # keep cross-venue event identity strict for arbs
+                    continue
                 _append_arb_resolved_row(con, bet)
                 settled += 1
                 continue
-            result = _leg_result(leg, scores)
+            if len(bucket) == 1:
+                result = _leg_result(leg, scores)
+                note = "mlbstats-settled"
+            else:
+                result = _consistent_result_across_candidates(leg, bucket)
+                note = "mlbstats-settled; doubleheader-consistent-result"
             if result is None:
                 continue
-            _append_settled_row(con, bet, result, "mlbstats-settled")
+            _append_settled_row(con, bet, result, note)
             settled += 1
     return settled
 
@@ -215,6 +234,35 @@ def score_results(events: list[dict[str, Any]], sport: str) -> dict[str, dict[st
     return results
 
 
+def _leg_start_utc(leg: dict[str, Any]) -> datetime | None:
+    raw = leg.get("start_utc")
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _scores_for_start_time(
+    index: dict[tuple[str, frozenset], list[tuple[datetime, dict[str, Decimal]]]],
+    pair: frozenset,
+    start: datetime | None,
+) -> list[dict[str, Decimal]] | None:
+    if start is None:
+        return None
+    matches: list[dict[str, Decimal]] = []
+    for delta in (-1, 0, 1):
+        key = ((start.date() + timedelta(days=delta)).isoformat(), pair)
+        # Align the bet start to the candidate date so the 2h window disambiguates the
+        # doubleheader by time-of-day even when the venue keyed the game a UTC day off.
+        shifted_start = start + timedelta(days=delta)
+        for candidate_start, scores in index.get(key, []):
+            if abs(candidate_start - shifted_start) <= timedelta(hours=2):
+                matches.append(scores)
+    return matches if len(matches) == 1 else None
+
+
 def _leg_result(leg: dict[str, Any], scores: dict[str, Decimal]) -> str | None:
     label = str(leg["outcome_label"])
     if leg.get("market_type") == "TOTAL":
@@ -231,6 +279,13 @@ def _leg_result(leg: dict[str, Any], scores: dict[str, Decimal]) -> str | None:
     if len(winners) != 1:  # tie — postponement/void rules differ per venue, leave pending
         return None
     return "WON" if winners[0] == label else "LOST"
+
+
+def _consistent_result_across_candidates(leg: dict[str, Any], candidates: list[dict[str, Decimal]]) -> str | None:
+    results = {_leg_result(leg, scores) for scores in candidates}
+    if None in results or len(results) != 1:
+        return None
+    return next(iter(results))
 
 
 def _open_ev_bets(store: Store) -> list[sqlite3.Row]:

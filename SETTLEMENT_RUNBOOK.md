@@ -142,7 +142,7 @@ kill "$(cat logs/daemon_8h_test.pid)"
 |---|---|---|
 | OVERDUE count > 0 and not shrinking | daemon not running / machine slept | restart daemon; check uptime; add cron fallback (§4) |
 | A specific game stays OPEN, others settle | team-name mismatch vs `aliases.json` | add the alias mapping; re-run `settle-backfill` |
-| Two same-day games vs same teams stay OPEN | doubleheader (left OPEN on purpose) | settle by hand: `python -m arb settle --manual EVENT_KEY OUTCOME` |
+| Two same-day games vs same teams stay OPEN | doubleheader where no stored start time selects one game and candidates imply different results | settle by hand: `python -m arb settle --manual EVENT_KEY OUTCOME` |
 | `credits below ... abort` in log | Odds API credits low | settlement still works via `settle-backfill` (free); top up Odds API only for consensus |
 | `settle ... failed` once, then recovers | transient network blip | fine — isolated try/except retries next cycle; investigate only if persistent |
 | Non-MLB sport bets stuck | backfill is MLB-only today | use `python -m arb settle` (Odds API) within 3 days, or add a sport-specific source |
