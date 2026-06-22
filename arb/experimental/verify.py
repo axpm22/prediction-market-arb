@@ -19,7 +19,7 @@ from typing import Any, Callable
 
 import requests
 
-from arb.pricing import kalshi_fee_cost, q6
+from arb.pricing import all_in_fee_cost, q6
 from arb.store import Store
 from arb.venues.kalshi import BASE_URL as KALSHI_URL
 from arb.venues.polymarket import CLOB_URL, _best_ask
@@ -120,21 +120,21 @@ def run_verify_once(store: Store, config, vcfg: dict[str, Any], fetchers: dict[s
 
 def live_fetchers(config) -> dict[str, Fetcher]:
     return {
-        "kalshi": lambda leg: _kalshi_current_ask(leg, config.kalshi_fee_rate),
-        "polymarket": _polymarket_current_ask,
+        "kalshi": lambda leg: _kalshi_current_ask(leg, config.kalshi_fee_rate, config.taker_price_buffer),
+        "polymarket": lambda leg: _polymarket_current_ask(leg, config.polymarket_sports_fee_rate, config.taker_price_buffer),
         # SX legs now carry an outcome-side hint (leg["ref"]) so we can re-fetch orders
         # and re-price the exact side — see arb.venues.sx.requote_sx_leg.
-        "sx": lambda leg: _sx_current_ask(leg, config.sx_fee_rate),
+        "sx": lambda leg: _sx_current_ask(leg, config.sx_fee_rate, config.taker_price_buffer),
     }
 
 
-def _sx_current_ask(leg: dict[str, Any], fee_rate: Decimal | None) -> Decimal | None:
+def _sx_current_ask(leg: dict[str, Any], fee_rate: Decimal | None, taker_buffer: Decimal) -> Decimal | None:
     from arb.venues.sx import requote_sx_leg
 
-    return requote_sx_leg(str(leg["book"]), leg.get("ref"), fee_rate)
+    return requote_sx_leg(str(leg["book"]), leg.get("ref"), fee_rate, taker_buffer)
 
 
-def _kalshi_current_ask(leg: dict[str, Any], fee_rate: Decimal) -> Decimal | None:
+def _kalshi_current_ask(leg: dict[str, Any], fee_rate: Decimal, taker_buffer: Decimal) -> Decimal | None:
     response = requests.get(f"{KALSHI_URL}/markets/{leg['book']}/orderbook", timeout=30, headers=HEADERS)
     if response.status_code == 404:
         return None
@@ -149,13 +149,13 @@ def _kalshi_current_ask(leg: dict[str, Any], fee_rate: Decimal) -> Decimal | Non
     price = Decimal("1") - best_bid
     if not Decimal("0") < price < Decimal("1"):
         return None
-    return q6(price + kalshi_fee_cost(price, fee_rate))
+    return q6(price + all_in_fee_cost(price, fee_rate, taker_buffer))
 
 
-def _polymarket_current_ask(leg: dict[str, Any]) -> Decimal | None:
+def _polymarket_current_ask(leg: dict[str, Any], fee_rate: Decimal, taker_buffer: Decimal) -> Decimal | None:
     response = requests.get(f"{CLOB_URL}/book", params={"token_id": leg["book"]}, timeout=30, headers=HEADERS)
     if response.status_code == 404:
         return None
     response.raise_for_status()
     best = _best_ask(response.json().get("asks", []))
-    return None if best is None else q6(best[0])
+    return None if best is None else q6(best[0] + all_in_fee_cost(best[0], fee_rate, taker_buffer))

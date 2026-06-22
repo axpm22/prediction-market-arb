@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import time
 from collections import deque
 from datetime import date, datetime, timezone
@@ -38,7 +39,121 @@ LOG_FILES = {
     "negrisk": Path("logs/negrisk.log"),
     "political": Path("logs/political.log"),
     "closing": Path("logs/closing.log"),
+    "nonsports": Path("logs/nonsports.log"),
+    "btc": Path("logs/btc.log"),
+    "whales": Path("logs/whales.log"),
 }
+SCANNERS = [
+    {
+        "id": "daemon",
+        "name": "Sports Watch",
+        "process": "daemon",
+        "stop": "daemon",
+        "command": [sys.executable, "-m", "arb", "daemon"],
+        "log": LOG_FILES["daemon"],
+        "poll_kinds": ["watch", "scan"],
+        "next_where": "category='sports' AND kind IN ('EV','ARB')",
+        "return_where": "category='sports' AND kind IN ('EV','ARB')",
+        "detail": "MLB now; also stores configured soccer, tennis, MMA quotes.",
+    },
+    {
+        "id": "focus",
+        "name": "Focused Recheck",
+        "process": "focus",
+        "stop": "focus",
+        "command": [sys.executable, "-m", "arb.experimental", "focus"],
+        "log": LOG_FILES["focus"],
+        "poll_kinds": ["focus"],
+        "next_where": "category='sports' AND kind IN ('EV','ARB')",
+        "return_where": "category='sports' AND kind IN ('EV','ARB')",
+        "detail": "Re-quotes active sports events across books within seconds.",
+    },
+    {
+        "id": "verify",
+        "name": "Flash Verify",
+        "process": "verify",
+        "stop": "verify",
+        "command": [sys.executable, "-m", "arb.experimental", "verify"],
+        "log": LOG_FILES["verify"],
+        "poll_kinds": [],
+        "next_where": "category='sports' AND kind='ARB'",
+        "return_where": "category='sports' AND kind='ARB'",
+        "detail": "Checks fresh ARB flags quickly; support process, not its own return stream.",
+    },
+    {
+        "id": "hot",
+        "name": "Hot Watchers",
+        "process": "hot",
+        "stop": "hot",
+        "command": [sys.executable, "-m", "arb.experimental", "hot"],
+        "log": LOG_FILES["hot"],
+        "poll_kinds": [],
+        "next_where": "category='sports' AND kind='ARB'",
+        "return_where": "category='sports' AND kind='ARB'",
+        "detail": "Tracks fresh ARBs every second through their short lifetime.",
+    },
+    {
+        "id": "negrisk",
+        "name": "Negative Risk",
+        "process": "negrisk",
+        "stop": "negrisk",
+        "command": [sys.executable, "-m", "arb.experimental", "negrisk"],
+        "log": LOG_FILES["negrisk"],
+        "poll_kinds": ["negrisk"],
+        "next_where": "kind='NEGRISK'",
+        "return_where": "kind='NEGRISK'",
+        "detail": "Single-venue basket arbs; only clear if capturable depth exists.",
+    },
+    {
+        "id": "political",
+        "name": "Politics / Econ / Weather",
+        "process": "political",
+        "stop": "political",
+        "command": [sys.executable, "-m", "arb.experimental", "political"],
+        "log": LOG_FILES["political"],
+        "poll_kinds": ["political"],
+        "next_where": "(sport='political' OR category IN ('politics','economics','climate'))",
+        "return_where": "(sport='political' OR category IN ('politics','economics','climate'))",
+        "detail": "Kalshi intra-market YES+NO only; no cross-venue wording risk.",
+    },
+    {
+        "id": "nonsports",
+        "name": "Mapped Weather / Macro",
+        "process": "nonsports",
+        "stop": "nonsports",
+        "command": [sys.executable, "-m", "arb.experimental", "nonsports"],
+        "log": LOG_FILES["nonsports"],
+        "poll_kinds": ["nonsports"],
+        "next_where": "category='nonsports' AND kind NOT IN ('NEGRISK','ARB_BTC')",
+        "return_where": "category='nonsports' AND kind NOT IN ('NEGRISK','ARB_BTC')",
+        "detail": "Only manually reviewed weather/macro maps; every flag stays REVIEW.",
+    },
+    {
+        "id": "closing",
+        "name": "Closing-Line EV",
+        "process": "closing",
+        "stop": "closing",
+        "command": [sys.executable, "-m", "arb.experimental", "closing"],
+        "log": LOG_FILES["closing"],
+        "poll_kinds": ["closing"],
+        "next_where": "kind='EV' AND notes LIKE '%closing-line%'",
+        "return_where": "kind='EV' AND notes LIKE '%closing-line%'",
+        "detail": "One late snapshot per event; currently scoped to MLB.",
+    },
+    {
+        "id": "btc",
+        "name": "BTC / Crypto",
+        "process": "btc",
+        "stop": "btc",
+        "command": [sys.executable, "-m", "arb.experimental", "btc"],
+        "log": LOG_FILES["btc"],
+        "poll_kinds": ["btc"],
+        "next_where": "(sport='btc_15m' OR category='btc_15m' OR kind='ARB_BTC')",
+        "return_where": "(sport='btc_15m' OR category='btc_15m' OR kind='ARB_BTC')",
+        "detail": "Cross-venue crypto windows; REVIEW until oracle equivalence is proven.",
+    },
+]
+SCANNERS_BY_ID = {scanner["id"]: scanner for scanner in SCANNERS}
 CLV_CACHE_TTL_SECS = 300
 _CLV_CACHE: dict[str, Any] = {"at": 0.0, "value": {"n": 0}}
 
@@ -47,21 +162,59 @@ _PS_CACHE: dict[str, Any] = {"at": 0.0, "value": []}
 _PS_TTL_SECS = 4.0
 
 
+def _stop_path(name: str) -> Path:
+    return Path("data") / f"stop-{name}"
+
+
+def _stop_requested(name: str) -> bool:
+    return Path("data/stop-all").exists() or _stop_path(name).exists()
+
+
+def _process_count(pattern: str, ps: str) -> int:
+    return sum(1 for line in ps.splitlines() if pattern in line and "grep" not in line and "caffeinate" not in line)
+
+
+def _scanner_processes(ps: str | None = None) -> dict[str, dict[str, Any]]:
+    if ps is None:
+        try:
+            ps = subprocess.run(["ps", "-Ao", "command"], capture_output=True, text=True, timeout=5).stdout
+        except Exception:  # noqa: BLE001
+            ps = ""
+    out = {}
+    process_patterns = {name: pattern for name, pattern in PROCESSES}
+    for scanner in SCANNERS:
+        process = str(scanner["process"])
+        pattern = process_patterns.get(process, f"arb.experimental {process}")
+        count = _process_count(pattern, ps)
+        stopped = _stop_requested(str(scanner["stop"]))
+        if stopped and count > 0:
+            status = "stopping"
+        elif stopped:
+            status = "disabled"
+        elif count == 1:
+            status = "ok"
+        elif count == 0:
+            status = "down"
+        else:
+            status = "duplicate"
+        out[scanner["id"]] = {
+            "id": scanner["id"],
+            "name": process,
+            "label": scanner["name"],
+            "count": count,
+            "status": status,
+            "stopped": stopped,
+        }
+    return out
+
+
 def _process_health() -> list[dict[str, Any]]:
     # Cache the ps spawn briefly — the dashboard polls every 8s (× open tabs) and process
     # status barely changes between polls; no need to fork ps on every request.
     nowm = time.monotonic()
     if nowm - float(_PS_CACHE["at"]) < _PS_TTL_SECS and _PS_CACHE["value"]:
         return _PS_CACHE["value"]
-    try:
-        ps = subprocess.run(["ps", "-Ao", "command"], capture_output=True, text=True, timeout=5).stdout
-    except Exception:  # noqa: BLE001
-        ps = ""
-    out = []
-    for name, pat in PROCESSES:
-        count = sum(1 for line in ps.splitlines() if pat in line and "grep" not in line and "caffeinate" not in line)
-        status = "ok" if count == 1 else ("down" if count == 0 else "duplicate")
-        out.append({"name": name, "count": count, "status": status})
+    out = list(_scanner_processes().values())
     _PS_CACHE.update({"at": nowm, "value": out})
     return out
 
@@ -196,6 +349,144 @@ def _open_bet_payload(row, now: datetime) -> dict[str, Any]:
     }
 
 
+def _leg_start(leg: dict[str, Any], event_key: str | None) -> datetime | None:
+    raw = leg.get("start_utc")
+    if raw:
+        try:
+            return datetime.fromisoformat(str(raw).replace("Z", "+00:00")).astimezone(timezone.utc)
+        except ValueError:
+            pass
+    event_date = _event_date_from_key(event_key)
+    if event_date is None:
+        return None
+    return datetime(event_date.year, event_date.month, event_date.day, tzinfo=timezone.utc)
+
+
+def _scanner_next_event(con, where: str, now: datetime) -> dict[str, Any] | None:
+    rows = list(
+        con.execute(
+            f"""
+            SELECT id, kind, status, edge, legs_json, placed_at, notes
+              FROM flat_bets b
+             WHERE b.status IN ('OPEN','CONFIRMED')
+               AND {where}
+               AND NOT EXISTS (
+                   SELECT 1 FROM flat_bets s
+                    WHERE s.status IN ('SETTLED','CLOSED')
+                      AND s.reappearance_of = CASE WHEN b.status='CONFIRMED' THEN b.reappearance_of ELSE b.id END
+               )
+             ORDER BY b.id DESC
+             LIMIT 800
+            """
+        )
+    )
+    candidates: list[tuple[datetime, dict[str, Any]]] = []
+    fallback: list[tuple[datetime, dict[str, Any]]] = []
+    for row in rows:
+        try:
+            legs = json.loads(row["legs_json"] or "[]")
+        except (TypeError, json.JSONDecodeError):
+            legs = []
+        first = legs[0] if legs else {}
+        event_key = first.get("event_key")
+        start = _leg_start(first, event_key)
+        if start is None:
+            continue
+        item = {
+            "id": int(row["id"]),
+            "kind": row["kind"],
+            "status": row["status"],
+            "event": _compact_event_name(event_key),
+            "event_key": event_key,
+            "start": start.isoformat(),
+            "starts_in_seconds": int((start - now).total_seconds()),
+            "edge": round(float(row["edge"] or 0), 4),
+        }
+        if start >= now:
+            candidates.append((start, item))
+        else:
+            fallback.append((start, item))
+    if candidates:
+        return min(candidates, key=lambda x: x[0])[1]
+    if fallback:
+        return max(fallback, key=lambda x: x[0])[1]
+    return None
+
+
+def _scanner_returns(con, where: str) -> dict[str, Any]:
+    row = con.execute(
+        f"""
+        SELECT COUNT(*) n,
+               COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl,
+               COALESCE(SUM(CAST(stake_usd AS REAL)),0) stake,
+               AVG(CAST(pnl_optimistic AS REAL)) avg_pnl
+          FROM flat_bets
+         WHERE status='SETTLED'
+           AND result IN ('WON','LOST','RESOLVED','VOID')
+           AND {where}
+        """
+    ).fetchone()
+    n = int(row["n"] or 0)
+    pnl = float(row["pnl"] or 0)
+    stake = float(row["stake"] or 0)
+    return {
+        "settled": n,
+        "pnl": _money(pnl),
+        "stake": _money(stake),
+        "roi": round(pnl / stake, 4) if stake else None,
+        "avg_pnl": _money(row["avg_pnl"]) if n else None,
+    }
+
+
+def _scanner_last_poll(con, poll_kinds: list[str]) -> dict[str, Any] | None:
+    if not poll_kinds:
+        return None
+    placeholders = ",".join("?" for _ in poll_kinds)
+    row = con.execute(
+        f"""
+        SELECT kind, started_at, finished_at, n_quotes, n_opps
+          FROM polls
+         WHERE kind IN ({placeholders})
+         ORDER BY id DESC
+         LIMIT 1
+        """,
+        poll_kinds,
+    ).fetchone()
+    if row is None:
+        return None
+    at = row["finished_at"] or row["started_at"]
+    return {
+        "kind": row["kind"],
+        "at": at,
+        "age_seconds": _age_seconds(at),
+        "quotes": row["n_quotes"],
+        "opps": row["n_opps"],
+    }
+
+
+def _scanner_summaries(con, processes: list[dict[str, Any]], now: datetime) -> list[dict[str, Any]]:
+    by_id = {row["id"]: row for row in processes}
+    out = []
+    for scanner in SCANNERS:
+        scanner_id = str(scanner["id"])
+        proc = by_id.get(scanner_id, {})
+        returns = _scanner_returns(con, str(scanner["return_where"]))
+        out.append(
+            {
+                "id": scanner_id,
+                "name": scanner["name"],
+                "status": proc.get("status", "down"),
+                "count": proc.get("count", 0),
+                "stopped": bool(proc.get("stopped")),
+                "detail": scanner["detail"],
+                "next": _scanner_next_event(con, str(scanner["next_where"]), now),
+                "returns": returns,
+                "last_poll": _scanner_last_poll(con, list(scanner["poll_kinds"])),
+            }
+        )
+    return out
+
+
 def _negrisk_capturable(notes: str | None) -> float:
     """Parse the 'capturable=$X' figure the negrisk sweep writes into notes."""
     for token in str(notes or "").replace("|", " ").split():
@@ -232,6 +523,52 @@ def _cached_clv(store: Store) -> dict[str, Any]:
         value = {"n": 0}
     _CLV_CACHE.update({"at": now, "value": value})
     return value
+
+
+def _send_json(handler: BaseHTTPRequestHandler, payload: dict[str, Any], status: int = 200) -> None:
+    body = json.dumps(payload).encode()
+    handler.send_response(status)
+    handler.send_header("Content-Type", "application/json")
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def _launch_scanner(scanner: dict[str, Any]) -> dict[str, Any]:
+    process_info = _scanner_processes().get(str(scanner["id"]), {})
+    if int(process_info.get("count") or 0) > 0:
+        return {"ok": True, "message": "already running"}
+    Path("logs").mkdir(exist_ok=True)
+    log_path = Path(scanner["log"])
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("ab") as out:
+        subprocess.Popen(  # noqa: S603 - fixed local command list from SCANNERS.
+            list(scanner["command"]),
+            cwd=Path.cwd(),
+            stdout=out,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    _PS_CACHE.update({"at": 0.0, "value": []})
+    return {"ok": True, "message": "started"}
+
+
+def _set_scanner_state(scanner_id: str, action: str) -> dict[str, Any]:
+    scanner = SCANNERS_BY_ID.get(scanner_id)
+    if scanner is None:
+        return {"ok": False, "error": f"unknown scanner {scanner_id!r}"}
+    if action not in {"start", "stop"}:
+        return {"ok": False, "error": "action must be start or stop"}
+    Path("data").mkdir(exist_ok=True)
+    stop_path = _stop_path(str(scanner["stop"]))
+    if action == "stop":
+        stop_path.write_text(datetime.now(timezone.utc).isoformat())
+        _PS_CACHE.update({"at": 0.0, "value": []})
+        return {"ok": True, "message": "stop requested"}
+    if stop_path.exists():
+        stop_path.unlink()
+    return _launch_scanner(scanner)
 
 
 def build_state(store: Store, config) -> dict[str, Any]:
@@ -416,6 +753,8 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 """
             )
         )
+        processes = _process_health()
+        scanner_summaries = _scanner_summaries(c, processes, now)
 
     def curve(field: str, clean: bool) -> list[dict[str, Any]]:
         cum, out = 0.0, []
@@ -464,7 +803,8 @@ def build_state(store: Store, config) -> dict[str, Any]:
             break
     return {
         "now": now.isoformat(),
-        "processes": _process_health(),
+        "processes": processes,
+        "scanners": scanner_summaries,
         "health": {
             "quotes": quotes,
             "polls": polls,
@@ -568,6 +908,23 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+    def do_POST(self):  # noqa: N802
+        if self.path != "/api/scanner":
+            self.send_response(404)
+            self.end_headers()
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or "0")
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            result = _set_scanner_state(str(payload.get("scanner", "")), str(payload.get("action", "")))
+            if not result.get("ok"):
+                _send_json(self, result, 400)
+                return
+            result["state"] = build_state(self.store, self.config)
+            _send_json(self, result)
+        except Exception as exc:  # noqa: BLE001
+            _send_json(self, {"ok": False, "error": str(exc)}, 500)
+
 
 def serve(port: int = 8787) -> None:
     config = load_config()
@@ -646,6 +1003,18 @@ tr:last-child td{border-bottom:0}
 .track-card{background:#111216;border:1px solid var(--line);border-radius:8px;padding:11px 12px;min-width:0}
 .track-card .label{margin-bottom:5px}
 .track-card .value{font-size:21px}
+.scanner-list{display:grid;gap:8px}
+.scanner-row{display:grid;grid-template-columns:132px minmax(190px,1.3fr) minmax(170px,1fr) minmax(130px,.7fr) minmax(150px,.8fr);gap:10px;align-items:center;background:#111216;border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
+.scanner-title{display:flex;align-items:center;gap:8px;font-weight:730;min-width:0}
+.scanner-title span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scanner-meta{color:var(--muted);font-size:11px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scanner-toggle{height:30px;min-width:78px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);cursor:pointer}
+.scanner-toggle.stop{border-color:rgba(255,107,99,.45);color:var(--red)}
+.scanner-toggle.start{border-color:rgba(86,194,113,.45);color:var(--green)}
+.scanner-toggle:disabled{opacity:.55;cursor:wait}
+.status-chip{display:inline-flex;align-items:center;gap:6px;height:24px;border:1px solid var(--line);border-radius:99px;padding:0 8px;color:var(--muted);font-size:11px}
+.status-chip .dot{width:7px;height:7px}
+.status-chip.ok{color:var(--green)}.status-chip.down{color:var(--red)}.status-chip.disabled{color:var(--muted)}.status-chip.stopping,.status-chip.duplicate{color:var(--gold)}
 .detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .detail-block{min-width:0}
 .detail-title{font-size:12px;font-weight:700;margin:0 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
@@ -658,8 +1027,9 @@ tr:last-child td{border-bottom:0}
 .subline{color:var(--muted);font-size:11px;margin-top:2px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 @media (max-width:1100px){.metric{grid-column:span 4}.wide,.side,.half{grid-column:span 12}.top-inner{align-items:flex-start;flex-direction:column}.procs{justify-content:flex-start}}
+@media (max-width:1000px){.scanner-row{grid-template-columns:128px 1fr 1fr}.scanner-row>div:nth-child(4),.scanner-row>div:nth-child(5){grid-column:span 1}}
 @media (max-width:900px){.track-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.detail-grid{grid-template-columns:1fr}}
-@media (max-width:700px){.metric{grid-column:span 6}.wrap{padding:12px}.top-inner{padding:12px}.value{font-size:22px}.chart{height:230px}.log{height:260px}.track-grid{grid-template-columns:repeat(2,minmax(0,1fr))}th:nth-child(5),td:nth-child(5){display:none}}
+@media (max-width:700px){.metric{grid-column:span 6}.wrap{padding:12px}.top-inner{padding:12px}.value{font-size:22px}.chart{height:230px}.log{height:260px}.track-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.scanner-row{grid-template-columns:1fr}.scanner-row>div:nth-child(n){grid-column:auto}th:nth-child(5),td:nth-child(5){display:none}}
 </style>
 </head>
 <body>
@@ -690,6 +1060,16 @@ tr:last-child td{border-bottom:0}
         <div class="track-grid" id="track-cards"></div>
         <div id="track-detail" style="margin-top:12px"></div>
       </div>
+    </div>
+    <div class="panel full">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Scanning Controls</div>
+          <div class="muted" id="scanner-summary"></div>
+        </div>
+        <div class="status-line"><span class="pill">start/stop workers</span><span class="pill">review-only where wording risk exists</span></div>
+      </div>
+      <div class="panel-body"><div class="scanner-list" id="scanners"></div></div>
     </div>
     <div class="panel full">
       <div class="panel-head open-toolbar">
@@ -983,6 +1363,79 @@ function renderPipeline(d) {
   }).join("") || `<div class="muted">No ARB rows yet</div>`;
 }
 
+function scannerStatus(scanner) {
+  const label = scanner.status === "ok" ? "running"
+    : scanner.status === "disabled" ? "disabled"
+    : scanner.status === "stopping" ? "stopping"
+    : scanner.status === "duplicate" ? `duplicate x${scanner.count}`
+    : "down";
+  return `<span class="status-chip ${esc(scanner.status)}"><span class="dot"></span>${esc(label)}</span>`;
+}
+
+function scannerNext(scanner) {
+  const next = scanner.next;
+  if (!next) return `<b>None queued</b><div class="scanner-meta">no active event in this group</div>`;
+  const seconds = num(next.starts_in_seconds);
+  const when = seconds < -60 ? `${duration(Math.abs(seconds))} past`
+    : seconds < 60 ? "now"
+    : `in ${duration(seconds)}`;
+  return `<b title="${esc(next.event_key || next.event)}">${esc(next.event)}</b><div class="scanner-meta">${esc(when)} · ${esc(next.kind)} · edge ${pct(next.edge)}</div>`;
+}
+
+function scannerReturn(scanner) {
+  const r = scanner.returns || {};
+  if (!r.settled) return `<b class="muted">No settled data</b><div class="scanner-meta">return not proven yet</div>`;
+  const roi = r.roi == null ? "n/a" : pct(r.roi);
+  return `<b class="${valClass(r.pnl)}">${roi}</b><div class="scanner-meta">${money(r.pnl)} over ${r.settled} settled · avg ${money(r.avg_pnl)}</div>`;
+}
+
+function scannerLastPoll(scanner) {
+  const p = scanner.last_poll;
+  if (!p) return `<b class="muted">No poll row</b><div class="scanner-meta">${esc(scanner.detail)}</div>`;
+  return `<b>${age(p.age_seconds)}</b><div class="scanner-meta">${esc(p.kind)} · ${p.quotes ?? 0} quotes · ${p.opps ?? 0} flags</div>`;
+}
+
+async function setScanner(scanner, action, button) {
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch("/api/scanner", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({scanner, action}),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error(payload.error || "scanner update failed");
+    state = payload.state;
+    render(state);
+  } catch (err) {
+    alert(err.message || String(err));
+    if (button) button.disabled = false;
+  }
+}
+
+function renderScanners(d) {
+  const scanners = d.scanners || [];
+  const running = scanners.filter(s => s.status === "ok").length;
+  const disabled = scanners.filter(s => s.status === "disabled").length;
+  $("scanner-summary").textContent = `${running} running · ${disabled} disabled · ${scanners.length} controllable groups`;
+  $("scanners").innerHTML = scanners.map(s => {
+    const canStop = s.status === "ok" || s.status === "duplicate" || s.status === "stopping";
+    const action = canStop ? "stop" : "start";
+    const buttonClass = canStop ? "stop" : "start";
+    const buttonText = canStop ? "Deactivate" : "Activate";
+    return `<div class="scanner-row">
+      <div><button class="scanner-toggle ${buttonClass}" data-scanner="${esc(s.id)}" data-action="${action}" type="button">${buttonText}</button></div>
+      <div><div class="scanner-title">${scannerStatus(s)}<span>${esc(s.name)}</span></div><div class="scanner-meta">${esc(s.detail)}</div></div>
+      <div>${scannerNext(s)}</div>
+      <div>${scannerReturn(s)}</div>
+      <div>${scannerLastPoll(s)}</div>
+    </div>`;
+  }).join("") || `<div class="muted">No scanners configured.</div>`;
+  $("scanners").querySelectorAll("button").forEach(btn => {
+    btn.onclick = () => setScanner(btn.dataset.scanner, btn.dataset.action, btn);
+  });
+}
+
 function renderOpenBets(d) {
   const counts = (d.open_bets || []).reduce((acc, bet) => {
     acc.ALL = (acc.ALL || 0) + 1;
@@ -1133,6 +1586,7 @@ function render(d) {
   renderProcesses(d);
   renderMetrics(d);
   renderTracking(d);
+  renderScanners(d);
   renderOpenBets(d);
   renderPipeline(d);
   renderKinds(d);

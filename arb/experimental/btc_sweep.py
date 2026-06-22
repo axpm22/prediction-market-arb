@@ -17,6 +17,7 @@ from typing import Any, Callable
 import requests
 
 from arb.btc_arb import BtcLeg, find_btc_arb
+from arb.pricing import all_in_fee_cost, q6
 from arb.store import Store
 
 KB = "https://api.elections.kalshi.com/trade-api/v2"
@@ -40,7 +41,11 @@ def _asset_key(strike: str, window_end: datetime) -> str:
     return f"BTC@{strike}@{window_end.strftime('%Y%m%d%H%M')}"
 
 
-def parse_kalshi_btc(payload: dict[str, Any]) -> list[BtcLeg]:
+def parse_kalshi_btc(
+    payload: dict[str, Any],
+    fee_rate: Decimal = Decimal("0"),
+    taker_buffer: Decimal = Decimal("0"),
+) -> list[BtcLeg]:
     legs: list[BtcLeg] = []
     for m in payload.get("markets", []):
         strike = _strike(str(m.get("ticker", ""))) or _strike(str(m.get("yes_sub_title", "")))
@@ -51,12 +56,18 @@ def parse_kalshi_btc(payload: dict[str, Any]) -> list[BtcLeg]:
             continue
         end = datetime.fromisoformat(str(close).replace("Z", "+00:00"))
         asset = _asset_key(strike, end)
-        legs.append(BtcLeg("kalshi", asset, "UP", end, Decimal(str(yes_ask)), KALSHI_ORACLE))
-        legs.append(BtcLeg("kalshi", asset, "DOWN", end, Decimal(str(no_ask)), KALSHI_ORACLE))
+        yes_price = Decimal(str(yes_ask))
+        no_price = Decimal(str(no_ask))
+        legs.append(BtcLeg("kalshi", asset, "UP", end, q6(yes_price + all_in_fee_cost(yes_price, fee_rate, taker_buffer)), KALSHI_ORACLE))
+        legs.append(BtcLeg("kalshi", asset, "DOWN", end, q6(no_price + all_in_fee_cost(no_price, fee_rate, taker_buffer)), KALSHI_ORACLE))
     return legs
 
 
-def parse_polymarket_btc(payload: dict[str, Any]) -> list[BtcLeg]:
+def parse_polymarket_btc(
+    payload: dict[str, Any],
+    fee_rate: Decimal = Decimal("0"),
+    taker_buffer: Decimal = Decimal("0"),
+) -> list[BtcLeg]:
     legs: list[BtcLeg] = []
     for m in payload.get("markets", []):
         strike = _strike(str(m.get("question", ""))) or _strike(str(m.get("groupItemTitle", "")))
@@ -68,8 +79,10 @@ def parse_polymarket_btc(payload: dict[str, Any]) -> list[BtcLeg]:
         end = datetime.fromisoformat(str(end_text).replace("Z", "+00:00"))
         asset = _asset_key(strike, end)
         # YES "above strike" = UP at best ask; DOWN = buy NO = 1 - best bid.
-        legs.append(BtcLeg("polymarket", asset, "UP", end, Decimal(str(ask)), POLY_ORACLE))
-        legs.append(BtcLeg("polymarket", asset, "DOWN", end, Decimal("1") - Decimal(str(bid)), POLY_ORACLE))
+        up_price = Decimal(str(ask))
+        down_price = Decimal("1") - Decimal(str(bid))
+        legs.append(BtcLeg("polymarket", asset, "UP", end, q6(up_price + all_in_fee_cost(up_price, fee_rate, taker_buffer)), POLY_ORACLE))
+        legs.append(BtcLeg("polymarket", asset, "DOWN", end, q6(down_price + all_in_fee_cost(down_price, fee_rate, taker_buffer)), POLY_ORACLE))
     return legs
 
 
@@ -78,7 +91,10 @@ def run_btc_pass(store: Store, config,
                  poly_fetch: Callable[[], dict] | None = None) -> tuple[int, int]:
     kalshi_fetch = kalshi_fetch or _live_kalshi
     poly_fetch = poly_fetch or _live_poly
-    legs = parse_kalshi_btc(kalshi_fetch()) + parse_polymarket_btc(poly_fetch())
+    legs = (
+        parse_kalshi_btc(kalshi_fetch(), config.kalshi_fee_rate, config.taker_price_buffer)
+        + parse_polymarket_btc(poly_fetch(), config.polymarket_crypto_fee_rate, config.taker_price_buffer)
+    )
     arbs = find_btc_arb(legs, config.btc_window_match_secs, config.btc_trusted)
     poll_id = store.start_poll("btc")
     _persist(store, poll_id, arbs)

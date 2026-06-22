@@ -14,7 +14,7 @@ import requests
 from arb.config import AppConfig
 from arb.matching import event_key, load_aliases, normalize_name
 from arb.models import Quote
-from arb.pricing import kalshi_fee_cost
+from arb.pricing import all_in_fee_cost
 
 BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"
 SERIES_CACHE = Path("data/kalshi_series.json")
@@ -46,7 +46,7 @@ class KalshiAdapter:
     def fetch_quotes(self, sport: str) -> list[Quote]:
         if self.fixture_dir is not None:
             payload = json.loads((self.fixture_dir / f"kalshi_{sport}.json").read_text())
-            return parse_kalshi_payload(payload, sport, self.config.kalshi_fee_rate)
+            return parse_kalshi_payload(payload, sport, self.config.kalshi_fee_rate, self.config.taker_price_buffer)
         if not SERIES_CACHE.exists():
             raise RuntimeError(f"Missing {SERIES_CACHE}; seed it from GET /series?category=Sports first.")
         series = json.loads(SERIES_CACHE.read_text()).get(sport)
@@ -60,7 +60,7 @@ class KalshiAdapter:
             for market in markets
             if not _is_empty_book(market)
         }
-        return parse_kalshi_payload({"markets": markets, "orderbooks": orderbooks}, sport, self.config.kalshi_fee_rate)
+        return parse_kalshi_payload({"markets": markets, "orderbooks": orderbooks}, sport, self.config.kalshi_fee_rate, self.config.taker_price_buffer)
 
     def _fetch_series_markets(self, series_ticker: str) -> list[dict[str, Any]]:
         markets: list[dict[str, Any]] = []
@@ -90,7 +90,12 @@ class KalshiAdapter:
         raise RuntimeError(f"Kalshi kept returning 429 for {path}")
 
 
-def parse_kalshi_payload(payload: dict[str, Any] | list, sport: str, fee_rate: Decimal) -> list[Quote]:
+def parse_kalshi_payload(
+    payload: dict[str, Any] | list,
+    sport: str,
+    fee_rate: Decimal,
+    taker_buffer: Decimal = Decimal("0"),
+) -> list[Quote]:
     if isinstance(payload, list):
         payload = {"markets": payload}
     markets = payload.get("markets", [])
@@ -135,7 +140,7 @@ def parse_kalshi_payload(payload: dict[str, Any] | list, sport: str, fee_rate: D
                         outcome_label=label,
                         raw_price=price,
                         cost=price,
-                        fee_cost=kalshi_fee_cost(price, fee_rate),
+                        fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer),
                         depth_usd=_depth_at_ask(book, side, price),
                         **common,
                     )
@@ -151,7 +156,7 @@ def parse_kalshi_payload(payload: dict[str, Any] | list, sport: str, fee_rate: D
                     outcome_label=normalize_name(subtitle or home, sport, aliases),
                     raw_price=price,
                     cost=price,
-                    fee_cost=kalshi_fee_cost(price, fee_rate),
+                    fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer),
                     depth_usd=_depth_at_ask(book, "yes", price),
                     **common,
                 )

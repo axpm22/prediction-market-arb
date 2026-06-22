@@ -20,7 +20,7 @@ import yaml
 from arb.arbitrage import detect_divergences, detect_true_arbs
 from arb.matching import normalize_name, token_ratio
 from arb.models import Opportunity, Quote
-from arb.pricing import kalshi_fee_cost
+from arb.pricing import all_in_fee_cost
 from arb.store import Store
 from arb.tracker import record_tracker_poll
 from arb.venues.kalshi import BASE_URL as KALSHI_URL
@@ -48,15 +48,20 @@ def load_map(path: Path = MAP_PATH, today: date | None = None, max_days: int | N
     return kept
 
 
-def fetch_mapped_quotes(entries: list[dict[str, Any]], kalshi_fee_rate: Decimal) -> list[Quote]:
+def fetch_mapped_quotes(
+    entries: list[dict[str, Any]],
+    kalshi_fee_rate: Decimal,
+    polymarket_fee_rate: Decimal = Decimal("0"),
+    taker_buffer: Decimal = Decimal("0"),
+) -> list[Quote]:
     fetched_at = datetime.now(timezone.utc)
     quotes: list[Quote] = []
     for entry in entries:
         key = f"nonsports:{entry['id']}"
         close_by = entry["close_by"] if isinstance(entry["close_by"], date) else date.fromisoformat(str(entry["close_by"]))
         start = datetime(close_by.year, close_by.month, close_by.day, tzinfo=timezone.utc)
-        quotes.extend(_kalshi_entry_quotes(entry, key, start, fetched_at, kalshi_fee_rate))
-        quotes.extend(_polymarket_entry_quotes(entry, key, start, fetched_at))
+        quotes.extend(_kalshi_entry_quotes(entry, key, start, fetched_at, kalshi_fee_rate, taker_buffer))
+        quotes.extend(_polymarket_entry_quotes(entry, key, start, fetched_at, polymarket_fee_rate, taker_buffer))
     return quotes
 
 
@@ -79,7 +84,7 @@ def run_nonsports_once(store: Store, config, ncfg: dict[str, Any]) -> tuple[int,
     entries = load_map(max_days=config.nonsports_max_days)
     if not entries:
         return 0, 0
-    quotes = fetch_mapped_quotes(entries, config.kalshi_fee_rate)
+    quotes = fetch_mapped_quotes(entries, config.kalshi_fee_rate, config.polymarket_fee_rate, config.taker_price_buffer)
     opportunities = detect_nonsports(quotes, config)
     poll_id = store.start_poll("nonsports")
     _save_nonsports_quotes(store, poll_id, quotes)
@@ -145,7 +150,7 @@ def fetch_polymarket_titles(tags: list[str]) -> list[tuple[str, str]]:
     return titles
 
 
-def _kalshi_entry_quotes(entry, key: str, start, fetched_at, fee_rate: Decimal) -> list[Quote]:
+def _kalshi_entry_quotes(entry, key: str, start, fetched_at, fee_rate: Decimal, taker_buffer: Decimal) -> list[Quote]:
     if not entry.get("kalshi_series") or not entry.get("kalshi_ticker"):
         return []
     data = _get(f"{KALSHI_URL}/markets?series_ticker={entry['kalshi_series']}&status=open&limit=200")
@@ -162,14 +167,14 @@ def _kalshi_entry_quotes(entry, key: str, start, fetched_at, fee_rate: Decimal) 
             Quote(
                 event_key=key, venue="kalshi", book=str(market["ticker"]), market_type="WINNER",
                 line=None, outcome_label=label, raw_price=price, cost=price,
-                fee_cost=kalshi_fee_cost(price, fee_rate), depth_usd=_depth_at_ask(book, side, price),
+                fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer), depth_usd=_depth_at_ask(book, side, price),
                 live=False, fetched_at=fetched_at, start_utc=start, notes=("nonsports",),
             )
         )
     return quotes
 
 
-def _polymarket_entry_quotes(entry, key: str, start, fetched_at) -> list[Quote]:
+def _polymarket_entry_quotes(entry, key: str, start, fetched_at, fee_rate: Decimal, taker_buffer: Decimal) -> list[Quote]:
     quotes = []
     for label, token_id in (entry.get("polymarket_tokens") or {}).items():
         response = requests.get(f"{CLOB_URL}/book", params={"token_id": token_id}, timeout=30, headers=HEADERS)
@@ -184,7 +189,7 @@ def _polymarket_entry_quotes(entry, key: str, start, fetched_at) -> list[Quote]:
             Quote(
                 event_key=key, venue="polymarket", book=str(token_id), market_type="WINNER",
                 line=None, outcome_label=str(label).upper(), raw_price=price, cost=price,
-                fee_cost=Decimal("0"), depth_usd=depth, live=False, fetched_at=fetched_at,
+                fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer), depth_usd=depth, live=False, fetched_at=fetched_at,
                 start_utc=start, notes=("nonsports",),
             )
         )

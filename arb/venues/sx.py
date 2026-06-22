@@ -11,7 +11,7 @@ import requests
 from arb.config import AppConfig
 from arb.matching import event_key, load_aliases, normalize_name
 from arb.models import Quote
-from arb.pricing import q6
+from arb.pricing import all_in_fee_cost, q6
 
 BASE_URL = "https://api.sx.bet"
 PCT_SCALE = Decimal("100000000000000000000")
@@ -39,7 +39,7 @@ class SxAdapter:
     def fetch_quotes(self, sport: str) -> list[Quote]:
         if self.fixture_dir is not None:
             data = json.loads((self.fixture_dir / f"sx_{sport}.json").read_text())
-            return parse_sx_payload(data, sport, fee_rate=self.config.sx_fee_rate)
+            return parse_sx_payload(data, sport, fee_rate=self.config.sx_fee_rate, taker_buffer=self.config.taker_price_buffer)
         if self.config.sx_fee_rate is None:
             raise RuntimeError("SX adapter refuses live runs while sx.fee_rate is null.")
         sport_id = SPORT_IDS.get(sport)
@@ -53,7 +53,7 @@ class SxAdapter:
             markets.extend(self._fetch_league_markets(int(league["leagueId"])))
         markets = [m for m in markets if int(m.get("type", 0)) in {MONEYLINE, TOTALS}]
         orders = self._fetch_orders([str(m["marketHash"]) for m in markets])
-        return parse_sx_payload({"markets": markets, "orders": orders}, sport, fee_rate=self.config.sx_fee_rate)
+        return parse_sx_payload({"markets": markets, "orders": orders}, sport, fee_rate=self.config.sx_fee_rate, taker_buffer=self.config.taker_price_buffer)
 
     def _fetch_league_markets(self, league_id: int) -> list[dict[str, Any]]:
         markets: list[dict[str, Any]] = []
@@ -87,7 +87,12 @@ def taker_cost_from_percentage_odds(percentage_odds: str) -> Decimal:
     return q6(Decimal("1") - maker_probability)
 
 
-def parse_sx_payload(payload: dict[str, Any], sport: str, fee_rate: Decimal | None) -> list[Quote]:
+def parse_sx_payload(
+    payload: dict[str, Any],
+    sport: str,
+    fee_rate: Decimal | None,
+    taker_buffer: Decimal = Decimal("0"),
+) -> list[Quote]:
     fetched_at = datetime.now(timezone.utc)
     aliases = load_aliases()
     # SPEC §3.3: SX void rules differ from the other venues; legs stay flagged for REVIEW.
@@ -128,7 +133,7 @@ def parse_sx_payload(payload: dict[str, Any], sport: str, fee_rate: Decimal | No
                     outcome_label=label,
                     raw_price=cost,
                     cost=cost,
-                    fee_cost=q6(fee_rate * cost * (Decimal("1") - cost)),
+                    fee_cost=all_in_fee_cost(cost, fee_rate, taker_buffer),
                     depth_usd=depth,
                     live=False,
                     fetched_at=fetched_at,
@@ -143,6 +148,7 @@ def parse_sx_payload(payload: dict[str, Any], sport: str, fee_rate: Decimal | No
 
 
 def requote_sx_leg(market_hash: str, ref: str | None, fee_rate: Decimal | None,
+                   taker_buffer: Decimal = Decimal("0"),
                    session: requests.Session | None = None) -> Decimal | None:
     """Re-price one SX leg now: fetch live orders for its market, pick the best taker
     order on the leg's side, return effective cost (taker cost + fee). None if the book
@@ -160,7 +166,7 @@ def requote_sx_leg(market_hash: str, ref: str | None, fee_rate: Decimal | None,
         return None
     cost, _depth = best
     rate = fee_rate if fee_rate is not None else Decimal("0")
-    return q6(cost + rate * cost * (Decimal("1") - cost))
+    return q6(cost + all_in_fee_cost(cost, rate, taker_buffer))
 
 
 def _best_taker_order(orders: list[dict[str, Any]], maker_betting_outcome_one: bool) -> tuple[Decimal, Decimal] | None:

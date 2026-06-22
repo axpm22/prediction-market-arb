@@ -44,6 +44,7 @@ def find_negrisk_arb(
     require_exhaustive: bool,
     max_outcomes: int,
     min_executable_usd: Decimal | None = None,
+    taker_buffer: Decimal = Decimal("0"),
 ) -> NegRiskArb | None:
     """Detect a convert or overshoot arb in one negative-risk event. None if none."""
     markets = event.get("markets", [])
@@ -64,8 +65,8 @@ def find_negrisk_arb(
         bid = _dec(m.get("yes_best_bid"))
         if ask is None or bid is None:
             return None  # an incomplete set cannot be a real basket arb
-        ask_fee = q6(fee_rate * ask * (Decimal("1") - ask))
-        bid_fee = q6(fee_rate * bid * (Decimal("1") - bid))
+        ask_fee = q6(fee_rate * ask * (Decimal("1") - ask) + taker_buffer)
+        bid_fee = q6(fee_rate * bid * (Decimal("1") - bid) + taker_buffer)
         ask_depth = _dec(m.get("yes_ask_depth")) or Decimal("0")
         bid_depth = _dec(m.get("yes_bid_depth")) or Decimal("0")
         asks.append(q6(ask + ask_fee))

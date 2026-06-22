@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
-from arb.pricing import kalshi_fee_cost, q6
+from arb.pricing import all_in_fee_cost, q6
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,12 @@ class IntraMarketArb:
     close_time: str
 
 
-def find_intramarket_arb(market: dict, fee_rate: Decimal, category: str) -> IntraMarketArb | None:
+def find_intramarket_arb(
+    market: dict,
+    fee_rate: Decimal,
+    category: str,
+    taker_buffer: Decimal = Decimal("0"),
+) -> IntraMarketArb | None:
     """Return a locked intra-market arb for one Kalshi market, or None."""
     yes_ask = _ask(market.get("yes_ask_dollars"))
     no_ask = _ask(market.get("no_ask_dollars"))
@@ -38,8 +43,8 @@ def find_intramarket_arb(market: dict, fee_rate: Decimal, category: str) -> Intr
     # Empty-book trap (SPEC §3.1): ask 1.0 + bid 0.0 + liquidity 0 is not a real quote.
     if _is_empty_book(market):
         return None
-    yes_fee = kalshi_fee_cost(yes_ask, fee_rate)
-    no_fee = kalshi_fee_cost(no_ask, fee_rate)
+    yes_fee = all_in_fee_cost(yes_ask, fee_rate, taker_buffer)
+    no_fee = all_in_fee_cost(no_ask, fee_rate, taker_buffer)
     total = q6(yes_ask + yes_fee + no_ask + no_fee)
     if total >= Decimal("1") or total <= 0:
         return None

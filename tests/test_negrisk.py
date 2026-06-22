@@ -81,7 +81,7 @@ def test_sweep_persists_executable_legs_and_quality_flag(tmp_path) -> None:
     config = replace(load_config(), database_path=tmp_path / "arb.sqlite")
     store = Store(config.database_path)
     thin_event = event(
-        [Decimal("0.30"), Decimal("0.30"), Decimal("0.35")],
+        [Decimal("0.28"), Decimal("0.30"), Decimal("0.34")],
         depths=[Decimal("500"), Decimal("500"), Decimal("10")],
     )
 
@@ -91,7 +91,7 @@ def test_sweep_persists_executable_legs_and_quality_flag(tmp_path) -> None:
 
     legs = json.loads(row["legs_json"])
     assert len(legs) == 3
-    assert row["optimistic_cost"] == "0.950000"
-    assert row["pnl_optimistic"] == "0.05"
+    assert row["optimistic_cost"] == "0.966800"
+    assert row["pnl_optimistic"] == "0.03"
     assert row["quality_flag"] == "thin-leg"
     assert "thin-leg" in row["notes"]

@@ -23,11 +23,11 @@ def test_parses_real_btc_fixtures() -> None:
 def test_btc_records_review_when_strike_and_window_align(tmp_path) -> None:
     config = load_config()
     store = Store(tmp_path / "a.sqlite")
-    # Aligned strike+window across venues, asks sum < 1 -> arb, but oracles differ -> REVIEW.
+    # Aligned strike+window across venues, still below 1 after practical fees -> REVIEW.
     kalshi = {"markets": [{"ticker": "KXBTCD-26JUN2107-T72000", "yes_sub_title": "above $72000",
-              "close_time": "2026-06-21T11:00:00Z", "yes_ask_dollars": "0.48", "no_ask_dollars": "0.49"}]}
+              "close_time": "2026-06-21T11:00:00Z", "yes_ask_dollars": "0.40", "no_ask_dollars": "0.49"}]}
     poly = {"markets": [{"question": "Bitcoin above $72000 on June 21?",
-            "endDate": "2026-06-21T11:00:00Z", "bestAsk": "0.50", "bestBid": "0.46"}]}
+            "endDate": "2026-06-21T11:00:00Z", "bestAsk": "0.50", "bestBid": "0.60"}]}
     n_legs, found = run_btc_pass(store, config, kalshi_fetch=lambda: kalshi, poly_fetch=lambda: poly)
     assert n_legs == 4 and found >= 1
     with store.connect() as con:

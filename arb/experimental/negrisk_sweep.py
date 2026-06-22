@@ -83,6 +83,7 @@ def run_negrisk_pass(store: Store, config, fetcher: Callable[[], list[dict]] | N
             config.negrisk_require_exhaustive,
             config.negrisk_max_outcomes,
             config.min_executable_usd,
+            config.taker_price_buffer,
         )
         if arb is not None:
             found.append(arb)

@@ -74,6 +74,20 @@ def kalshi_fee_cost(price: Decimal, fee_rate: Decimal) -> Decimal:
     return q6(fee_rate * price * (Decimal("1") - price))
 
 
+def taker_fee_cost(price: Decimal, fee_rate: Decimal) -> Decimal:
+    return q6(fee_rate * price * (Decimal("1") - price))
+
+
+def all_in_fee_cost(price: Decimal, fee_rate: Decimal, taker_buffer: Decimal = Decimal("0")) -> Decimal:
+    """Per-contract friction used for decisioning: venue taker fee plus a price buffer.
+
+    `taker_buffer` is an additive cost in contract-price units. A value of 0.005 means
+    half a cent per $1 payout contract, guarding against slippage, queue position, stale
+    top-of-book reads, and small unmodeled platform/transfer frictions.
+    """
+    return q6(taker_fee_cost(price, fee_rate) + taker_buffer)
+
+
 def kalshi_fee_money(contracts: Decimal, price: Decimal, fee_rate: Decimal) -> Decimal:
     return ceil_cent(fee_rate * contracts * price * (Decimal("1") - price))
 

@@ -22,7 +22,7 @@ import requests
 
 from arb.arbitrage import detect_divergences, detect_true_arbs, split_match_suspects
 from arb.models import Opportunity, Quote
-from arb.pricing import kalshi_fee_cost, q6
+from arb.pricing import all_in_fee_cost, q6
 from arb.store import Store
 from arb.tracker import _active_rows, _insert_tracker_row
 from arb.validation import load_validation_rule
@@ -66,7 +66,7 @@ def build_bet_map(store: Store, now: datetime, max_age_mins: int, sports: list[s
     }
 
 
-def requote_event(legs: list[Any], fetchers: dict[str, Fetcher], kalshi_fee_rate: Decimal) -> list[Quote]:
+def requote_event(legs: list[Any], fetchers: dict[str, Fetcher], config) -> list[Quote]:
     """Fresh, near-simultaneous quotes for one event's stored legs."""
     fetched_at = datetime.now(timezone.utc)
     quotes: list[Quote] = []
@@ -78,7 +78,16 @@ def requote_event(legs: list[Any], fetchers: dict[str, Fetcher], kalshi_fee_rate
         if current is None:
             continue
         price, depth = current
-        fee = kalshi_fee_cost(price, kalshi_fee_rate) if leg["venue"] == "kalshi" else Decimal(leg["fee_cost"])
+        venue = str(leg["venue"])
+        if venue == "kalshi":
+            fee = all_in_fee_cost(price, config.kalshi_fee_rate, config.taker_price_buffer)
+        elif venue == "polymarket":
+            fee = all_in_fee_cost(price, config.polymarket_sports_fee_rate, config.taker_price_buffer)
+        elif venue == "sx":
+            rate = config.sx_fee_rate if config.sx_fee_rate is not None else Decimal("0")
+            fee = all_in_fee_cost(price, rate, config.taker_price_buffer)
+        else:
+            fee = Decimal(str(leg["fee_cost"]))
         quotes.append(
             Quote(
                 event_key=leg["event_key"],
@@ -109,7 +118,7 @@ def run_focus_pass(store: Store, config, fcfg: dict[str, Any],
     pause = float(fcfg["rotation_pause_secs"])
     quotes: list[Quote] = []
     for index, legs in enumerate(bet_map.values()):
-        quotes.extend(requote_event(legs, fetchers, config.kalshi_fee_rate))
+        quotes.extend(requote_event(legs, fetchers, config))
         if pause and index < len(bet_map) - 1:
             time.sleep(pause)
     detectable = [q for q in quotes if q.depth_usd is None or q.depth_usd >= config.min_executable_usd]

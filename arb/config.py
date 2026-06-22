@@ -60,7 +60,10 @@ class AppConfig:
     fuzzy_match_threshold: int
     kalshi_fee_rate: Decimal
     polymarket_fee_rate: Decimal
+    polymarket_sports_fee_rate: Decimal
+    polymarket_crypto_fee_rate: Decimal
     sx_fee_rate: Decimal | None
+    taker_price_buffer: Decimal
     odds_api_region: str
     odds_api_warn_below_credits: int
     odds_api_abort_below_credits: int
@@ -172,7 +175,10 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         fuzzy_match_threshold=int(raw["fuzzy_match_threshold"]),
         kalshi_fee_rate=_decimal(kalshi["fee_rate"]),
         polymarket_fee_rate=_decimal(polymarket["fee_rate"]),
+        polymarket_sports_fee_rate=_decimal(polymarket.get("sports_fee_rate", polymarket["fee_rate"])),
+        polymarket_crypto_fee_rate=_decimal(polymarket.get("crypto_fee_rate", polymarket["fee_rate"])),
         sx_fee_rate=None if sx_fee is None else _decimal(sx_fee),
+        taker_price_buffer=_decimal(raw.get("execution", {}).get("taker_price_buffer", "0")),
         odds_api_region=str(odds_api["region"]),
         odds_api_warn_below_credits=int(odds_api["warn_below_credits"]),
         odds_api_abort_below_credits=int(odds_api["abort_below_credits"]),

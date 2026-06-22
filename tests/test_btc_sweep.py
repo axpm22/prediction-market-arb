@@ -25,14 +25,14 @@ def test_parsers_handle_recorded_fixtures() -> None:
 def test_sweep_emits_review_arb_btc_flag_on_matching_strike_window(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     config = load_config()
-    # Same strike + same window on both venues; UP(kalshi 0.48) + DOWN(poly 0.49) = 0.97 < 1.
+    # Same strike + same window; still clears after Kalshi + Polymarket crypto fees.
     kalshi = {"markets": [{
         "ticker": "KXBTCD-26JUN2217-T73000", "yes_sub_title": "$73,000 or above",
-        "close_time": "2026-06-22T21:00:00Z", "yes_ask_dollars": "0.48", "no_ask_dollars": "0.55",
+        "close_time": "2026-06-22T21:00:00Z", "yes_ask_dollars": "0.40", "no_ask_dollars": "0.55",
     }]}
     poly = {"markets": [{
         "question": "Will Bitcoin reach $73,000?", "groupItemTitle": "↑ 73,000",
-        "endDate": "2026-06-22T21:00:00Z", "bestAsk": 0.60, "bestBid": 0.51,  # DOWN = 1-0.51 = 0.49
+        "endDate": "2026-06-22T21:00:00Z", "bestAsk": 0.60, "bestBid": 0.60,  # DOWN = 1-0.60 = 0.40
     }]}
     n_legs, found = run_btc_pass(store, config, kalshi_fetch=lambda: kalshi, poly_fetch=lambda: poly)
     assert n_legs == 4 and found >= 1

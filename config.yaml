@@ -112,13 +112,19 @@ kalshi:
   source_url: "https://kalshi.com/docs (fee schedule; ceil(0.07*C*P*(1-P)))"
   confirmed_on: 2026-06-10
 polymarket:
-  fee_rate: 0.0   # explicitly pinned: no trading fee; gas/relayer costs not yet modeled
-  source_url: "https://docs.polymarket.com"
-  confirmed_on: 2026-06-10
+  fee_rate: 0.05         # conservative default for unknown non-geopolitical categories
+  crypto_fee_rate: 0.07  # documented Crypto taker fee
+  sports_fee_rate: 0.03  # documented Sports taker fee; makers are 0
+  source_url: "https://docs.polymarket.com/trading/fees"
+  confirmed_on: 2026-06-22
 sx:
   fee_rate: 0.0   # taker 0%, maker 0%, parlays 5% (fees only on winning bets)
   source_url: "https://docs.sx.bet/user-guides/trading/fees"
   confirmed_on: 2026-06-10
+execution:
+  # Additive per-contract taker buffer in $1-payout units. 0.005 = half a cent.
+  # This makes top-of-book edges survive slippage/latency/queue risk before display.
+  taker_price_buffer: 0.005
 odds_api: { region: us, warn_below_credits: 100, abort_below_credits: 50 }
 parlay: { enabled: false, divergence_threshold: 0.05 }
 # Phase 3 parallel Kelly sizing (projection only; flat-$1 stays the headline).

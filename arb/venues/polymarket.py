@@ -13,7 +13,7 @@ import requests
 from arb.config import AppConfig
 from arb.matching import event_key, load_aliases, normalize_name
 from arb.models import Quote
-from arb.pricing import q6
+from arb.pricing import all_in_fee_cost, q6
 
 GAMMA_URL = "https://gamma-api.polymarket.com"
 CLOB_URL = "https://clob.polymarket.com"
@@ -44,7 +44,13 @@ class PolymarketAdapter:
     def fetch_quotes(self, sport: str) -> list[Quote]:
         if self.fixture_dir is not None:
             data = json.loads((self.fixture_dir / f"polymarket_{sport}.json").read_text())
-            return parse_polymarket_events(data, sport, self.config.min_liquidity_usd, self.config.polymarket_fee_rate)
+            return parse_polymarket_events(
+                data,
+                sport,
+                self.config.min_liquidity_usd,
+                self.config.polymarket_sports_fee_rate,
+                self.config.taker_price_buffer,
+            )
         tag_slug = TAG_SLUGS.get(sport)
         if tag_slug is None:
             raise RuntimeError(f"No Polymarket tag_slug mapped for sport {sport!r}; SPEC §3.2 lists mlb/nba/soccer/tennis/mma only.")
@@ -55,10 +61,22 @@ class PolymarketAdapter:
         )
         response.raise_for_status()
         events = _attach_clob_books(response.json())
-        return parse_polymarket_events(events, sport, self.config.min_liquidity_usd, self.config.polymarket_fee_rate)
+        return parse_polymarket_events(
+            events,
+            sport,
+            self.config.min_liquidity_usd,
+            self.config.polymarket_sports_fee_rate,
+            self.config.taker_price_buffer,
+        )
 
 
-def parse_polymarket_events(events: list[dict[str, Any]], sport: str, min_liquidity: Decimal, fee_rate: Decimal) -> list[Quote]:
+def parse_polymarket_events(
+    events: list[dict[str, Any]],
+    sport: str,
+    min_liquidity: Decimal,
+    fee_rate: Decimal,
+    taker_buffer: Decimal = Decimal("0"),
+) -> list[Quote]:
     fetched_at = datetime.now(timezone.utc)
     aliases = load_aliases()
     quotes: list[Quote] = []
@@ -101,7 +119,7 @@ def parse_polymarket_events(events: list[dict[str, Any]], sport: str, min_liquid
                         outcome_label=label,
                         raw_price=price,
                         cost=price,
-                        fee_cost=q6(fee_rate * price * (Decimal("1") - price)),
+                        fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer),
                         depth_usd=depth,
                         live=False,
                         fetched_at=fetched_at,

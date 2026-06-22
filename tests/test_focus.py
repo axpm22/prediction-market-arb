@@ -45,10 +45,10 @@ def test_focus_pass_detects_on_simultaneous_requotes_and_confirms_existing(tmp_p
         stored("kalshi", "kansas city royals", "0.48"),
         stored("polymarket", "texas rangers", "0.50"),
     ])
-    # Re-quotes still sum below 1 → an arb detected on prices seconds apart.
+    # Re-quotes still sum below 1 after fees + execution buffer.
     fetchers = {
         "kalshi": lambda leg: (Decimal("0.47"), Decimal("400")),
-        "polymarket": lambda leg: (Decimal("0.50"), Decimal("400")),
+        "polymarket": lambda leg: (Decimal("0.46"), Decimal("400")),
     }
     n_events, n_opps = run_focus_pass(store, config, FCFG, fetchers)
     assert n_events == 1

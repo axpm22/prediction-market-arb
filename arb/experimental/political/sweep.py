@@ -41,7 +41,7 @@ def run_political_pass(store: Store, config, pcfg: dict[str, Any], fetcher: Fetc
             continue
         scanned += len(markets)
         for market in markets:
-            arb = find_intramarket_arb(market, config.kalshi_fee_rate, str(entry["category"]))
+            arb = find_intramarket_arb(market, config.kalshi_fee_rate, str(entry["category"]), config.taker_price_buffer)
             if arb is not None:
                 arbs.append(arb)
     poll_id = store.start_poll("political")
