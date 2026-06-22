@@ -23,6 +23,7 @@ from arb.experimental.political.series import load_series
 KALSHI_URL = "https://api.elections.kalshi.com/trade-api/v2"
 HEADERS = {"User-Agent": "arb-paper-scanner/0.1 (public read-only)"}
 THROTTLE_SECS = 0.15
+MAX_RETRIES_429 = 4  # Kalshi shares a per-IP limit across all our processes; back off.
 
 Fetcher = Callable[[str], list[dict[str, Any]]]
 
@@ -93,19 +94,30 @@ def _live_fetcher() -> Fetcher:
         markets: list[dict[str, Any]] = []
         cursor = ""
         while True:
-            wait = last_call[0] + THROTTLE_SECS - time.monotonic()
-            if wait > 0:
-                time.sleep(wait)
-            last_call[0] = time.monotonic()
             url = f"{KALSHI_URL}/markets?series_ticker={series_ticker}&status=open&limit=200"
             if cursor:
                 url += f"&cursor={cursor}"
-            response = requests.get(url, timeout=30, headers=HEADERS)
-            response.raise_for_status()
-            data = response.json()
+            data = _get_with_backoff(url, last_call)
             markets.extend(data.get("markets", []))
             cursor = data.get("cursor") or ""
             if not cursor:
                 return markets
 
     return fetch
+
+
+def _get_with_backoff(url: str, last_call: list[float]) -> dict[str, Any]:
+    """Throttled GET that retries 429 (shared Kalshi per-IP limit) instead of dropping the
+    series — the old code raised on the first 429, silently losing that series' data."""
+    for attempt in range(MAX_RETRIES_429 + 1):
+        wait = last_call[0] + THROTTLE_SECS - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        last_call[0] = time.monotonic()
+        response = requests.get(url, timeout=30, headers=HEADERS)
+        if response.status_code == 429 and attempt < MAX_RETRIES_429:
+            time.sleep(float(response.headers.get("Retry-After") or 2 ** attempt))
+            continue
+        response.raise_for_status()
+        return response.json()
+    raise RuntimeError(f"Kalshi kept returning 429 for {url}")
