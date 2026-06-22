@@ -55,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
         "settle-backfill",
         help="settle MLB bets via the MLB Stats API (no 3-day window; rescues orphaned bets)")
     backfill.add_argument("--fixtures", action="store_true", help="use recorded mlbstats fixtures")
+    sub.add_parser("settle-health", help="report overdue open EV/ARB bets and last settlement time")
     sub.add_parser("scores", help="per-segment edge scores from settled clean bets (Phase 2)")
     sub.add_parser("backtest-flb", help="favorite-longshot calibration over settled clean bets (S2)")
     sub.add_parser("dashboard", help="regenerate reports/dashboard.json from the ledger (Phase 6)")
@@ -175,6 +176,12 @@ def main(argv: list[str] | None = None) -> int:
         settled = settle_backfill_mlb(store, fixture_dir)
         print(f"Backfilled {settled} MLB flat bets via the MLB Stats API.")
         return 0
+    if args.command == "settle-health":
+        from .settlement_health import format_settle_health, settle_health
+
+        health = settle_health(store, config.timezone, config.settle_grace_hours)
+        print(format_settle_health(health))
+        return 1 if health.overdue_count > config.settle_health_overdue_max else 0
     if args.command == "scan":
         return run_scan(args, config, store)
     if args.command == "watch":

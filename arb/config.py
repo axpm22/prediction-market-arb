@@ -41,6 +41,8 @@ class AppConfig:
     daily_report_time: str
     settle_time: str
     settle_days_from: int
+    settle_health_overdue_max: int
+    settle_grace_hours: int
     sports: list[str]
     consensus_sports: list[str]
     scan_breaks: bool
@@ -151,6 +153,8 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         daily_report_time=str(raw["daily_report_time"]),
         settle_time=str(raw["settle_time"]),
         settle_days_from=int(raw["settle_days_from"]),
+        settle_health_overdue_max=int(raw.get("settle_health_overdue_max", 0)),
+        settle_grace_hours=int(raw.get("settle_grace_hours", 6)),
         sports=list(raw["sports"]),
         consensus_sports=list(raw["consensus_sports"]),
         scan_breaks=bool(raw["scan_breaks"]),

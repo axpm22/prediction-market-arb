@@ -11,7 +11,7 @@ import json
 import subprocess
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -91,6 +91,94 @@ def _rows_by_key(rows, key: str) -> dict[str, dict[str, Any]]:
     return {row[key]: dict(row) for row in rows}
 
 
+def _event_date_from_key(event_key: str | None) -> date | None:
+    if not event_key:
+        return None
+    parts = event_key.split(":")
+    if len(parts) < 2:
+        return None
+    try:
+        return date.fromisoformat(parts[1])
+    except ValueError:
+        return None
+
+
+def _horizon_bucket(event_date: date | None, now: datetime) -> tuple[str, str, int | None]:
+    if event_date is None:
+        return ("unknown", "No event date", None)
+    days = (event_date - now.date()).days
+    if days < 0:
+        return ("overdue", "Past event date", days)
+    if days == 0:
+        return ("today", "Today", days)
+    if days == 1:
+        return ("tomorrow", "Tomorrow", days)
+    if days <= 7:
+        return ("week", "2-7 days", days)
+    return ("later", "8+ days", days)
+
+
+def _compact_event_name(event_key: str | None) -> str:
+    if not event_key:
+        return "unknown event"
+    parts = event_key.split(":")
+    if len(parts) >= 4:
+        away = parts[2].replace("-", " ")
+        home = parts[3].replace("-", " ")
+        return f"{away} @ {home}"
+    return event_key
+
+
+def _open_bet_payload(row, now: datetime) -> dict[str, Any]:
+    try:
+        legs = json.loads(row["legs_json"])
+    except (TypeError, json.JSONDecodeError):
+        legs = []
+    first = legs[0] if legs else {}
+    event_key = first.get("event_key")
+    event_date = _event_date_from_key(event_key)
+    bucket, bucket_label, days_to_event = _horizon_bucket(event_date, now)
+    age = _age_seconds(row["placed_at"])
+    leg_labels = [
+        f"{leg.get('outcome_label', '?')}@{leg.get('venue', '?')} {leg.get('cost', '?')}"
+        for leg in legs[:4]
+    ]
+    if len(legs) > 4:
+        leg_labels.append(f"+{len(legs) - 4} more")
+    notes = [note for note in str(row["notes"] or "").split(",") if note]
+    return {
+        "id": int(row["id"]),
+        "kind": row["kind"],
+        "status": row["status"],
+        "edge": float(row["edge"] or 0),
+        "sport": row["sport"],
+        "category": row["category"],
+        "quality": row["quality_flag"] or "clean",
+        "trusted": bool(row["trusted"]),
+        "live": bool(row["live"]),
+        "placed_at": row["placed_at"],
+        "age_seconds": age,
+        "event_key": event_key,
+        "event": _compact_event_name(event_key),
+        "event_date": None if event_date is None else event_date.isoformat(),
+        "days_to_event": days_to_event,
+        "horizon": bucket,
+        "horizon_label": bucket_label,
+        "outcome": first.get("outcome_label"),
+        "venue": first.get("venue"),
+        "cost": first.get("cost"),
+        "depth_usd": first.get("depth_usd"),
+        "market_type": first.get("market_type"),
+        "line": first.get("line"),
+        "legs": leg_labels,
+        "notes": notes[:5],
+        "confirmed": bool(row["confirmed_n"]),
+        "verified": int(row["verified_n"] or 0),
+        "vanished": int(row["vanished_n"] or 0),
+        "lifetime": int(row["lifetime_n"] or 0),
+    }
+
+
 def _cached_clv(store: Store) -> dict[str, Any]:
     now = time.monotonic()
     if now - float(_CLV_CACHE["at"]) < CLV_CACHE_TTL_SECS:
@@ -108,6 +196,7 @@ def _cached_clv(store: Store) -> dict[str, Any]:
 
 
 def build_state(store: Store, config) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
     with store.connect() as con:
         c = con.cursor()
         quotes = c.execute("SELECT COUNT(*) FROM quotes").fetchone()[0]
@@ -194,6 +283,27 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 """
             )
         ]
+        raw_open_rows = list(
+            c.execute(
+                """
+                SELECT b.*,
+                       (SELECT COUNT(*) FROM flat_bets r WHERE r.reappearance_of = b.id AND r.status = 'CONFIRMED') confirmed_n,
+                       (SELECT COUNT(*) FROM flat_bets r WHERE r.reappearance_of = b.id AND r.status = 'VERIFIED') verified_n,
+                       (SELECT COUNT(*) FROM flat_bets r WHERE r.reappearance_of = b.id AND r.status = 'VANISHED') vanished_n,
+                       (SELECT COUNT(*) FROM flat_bets r WHERE r.reappearance_of = b.id AND r.status = 'LIFETIME') lifetime_n
+                  FROM flat_bets b
+                 WHERE b.status = 'OPEN'
+                   AND b.kind IN ('ARB','EV','NEGRISK','DIVERGENCE')
+                   AND NOT EXISTS (
+                       SELECT 1 FROM flat_bets s
+                        WHERE s.reappearance_of = b.id
+                          AND s.status IN ('SETTLED','CLOSED')
+                   )
+                 ORDER BY b.id DESC
+                 LIMIT 800
+                """
+            )
+        )
         poll_series = [
             dict(r)
             for r in c.execute(
@@ -246,8 +356,18 @@ def build_state(store: Store, config) -> dict[str, Any]:
     resolved_p = float(settled.get("RESOLVED", {}).get("pnl", 0.0))
     last_poll_started = last_poll["started_at"] if last_poll else None
     last_poll_finished = last_poll["finished_at"] if last_poll else None
+    seen_fingerprints: set[str] = set()
+    open_rows = []
+    for row in raw_open_rows:
+        fingerprint = row["fingerprint"]
+        if fingerprint in seen_fingerprints:
+            continue
+        seen_fingerprints.add(fingerprint)
+        open_rows.append(row)
+        if len(open_rows) >= 250:
+            break
     return {
-        "now": datetime.now(timezone.utc).isoformat(),
+        "now": now.isoformat(),
         "processes": _process_health(),
         "health": {
             "quotes": quotes,
@@ -290,6 +410,7 @@ def build_state(store: Store, config) -> dict[str, Any]:
             "confirmed_clean": curve("pnl_confirmed", True),
         },
         "segments": segments,
+        "open_bets": [_open_bet_payload(row, now) for row in open_rows],
         "polls": poll_series,
         "recent": recent,
         "logs": {name: _log_tail(path) for name, path in LOG_FILES.items()},
@@ -406,6 +527,13 @@ tr:last-child td{border-bottom:0}
 .detail-block{min-width:0}
 .detail-title{font-size:12px;font-weight:700;margin:0 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 .delta-table td:nth-child(n+2),.delta-table th:nth-child(n+2){text-align:right}
+.open-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.open-groups{display:grid;gap:14px}
+.open-group-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 7px;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.open-table td{font-size:12px}
+.open-event{font-weight:700;color:var(--text);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.subline{color:var(--muted);font-size:11px;margin-top:2px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 @media (max-width:1100px){.metric{grid-column:span 4}.wide,.side,.half{grid-column:span 12}.top-inner{align-items:flex-start;flex-direction:column}.procs{justify-content:flex-start}}
 @media (max-width:900px){.track-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.detail-grid{grid-template-columns:1fr}}
 @media (max-width:700px){.metric{grid-column:span 6}.wrap{padding:12px}.top-inner{padding:12px}.value{font-size:22px}.chart{height:230px}.log{height:260px}.track-grid{grid-template-columns:repeat(2,minmax(0,1fr))}th:nth-child(5),td:nth-child(5){display:none}}
@@ -439,6 +567,16 @@ tr:last-child td{border-bottom:0}
         <div class="track-grid" id="track-cards"></div>
         <div id="track-detail" style="margin-top:12px"></div>
       </div>
+    </div>
+    <div class="panel full">
+      <div class="panel-head open-toolbar">
+        <div>
+          <div class="panel-title">Open Bets &amp; EV</div>
+          <div class="muted" id="open-summary"></div>
+        </div>
+        <div class="tabs" id="open-tabs"></div>
+      </div>
+      <div class="panel-body"><div class="open-groups" id="open-bets"></div></div>
     </div>
     <div class="panel wide">
       <div class="panel-head">
@@ -480,6 +618,7 @@ tr:last-child td{border-bottom:0}
 const $ = id => document.getElementById(id);
 let state = null;
 let activeLog = "daemon";
+let activeOpenKind = "EV";
 const colors = {raw:"#a4a6ad", clean:"#6aa8ff", confirmed:"#56c271", opps:"#e0ad3b"};
 const trackKey = "arb-dashboard-tracking-v1";
 const esc = v => String(v ?? "").replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -610,6 +749,21 @@ function table(headers, rows, empty="No rows yet") {
   return `<table><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
 }
 
+function shortAge(seconds) {
+  if (seconds == null) return "unknown";
+  if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))}m`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
+
+function horizonText(bet) {
+  if (bet.days_to_event == null) return bet.horizon_label;
+  if (bet.days_to_event < 0) return `${Math.abs(bet.days_to_event)}d past`;
+  if (bet.days_to_event === 0) return "today";
+  if (bet.days_to_event === 1) return "tomorrow";
+  return `${bet.days_to_event}d`;
+}
+
 function renderMetrics(d) {
   const running = d.processes.filter(p => p.status === "ok").length;
   $("metrics").innerHTML = [
@@ -635,6 +789,62 @@ function renderPipeline(d) {
     const n = d.grades[k], color = k === "VANISHED" ? "var(--red)" : k === "UNVERIFIABLE" ? "var(--gold)" : k === "VERIFIED" || k === "CONFIRMED" ? "var(--green)" : "var(--blue)";
     return `<div class="bar-row"><span><span class="badge ${k}">${k}</span></span><span class="bar-track"><span class="bar-fill" style="width:${Math.max(4,n/max*100)}%;background:${color}"></span></span><b>${n}</b></div>`;
   }).join("") || `<div class="muted">No ARB rows yet</div>`;
+}
+
+function renderOpenBets(d) {
+  const counts = (d.open_bets || []).reduce((acc, bet) => {
+    acc.ALL = (acc.ALL || 0) + 1;
+    acc[bet.kind] = (acc[bet.kind] || 0) + 1;
+    return acc;
+  }, {});
+  const kinds = ["EV", "ARB", "NEGRISK", "DIVERGENCE", "ALL"].filter(kind => counts[kind]);
+  if (!kinds.includes(activeOpenKind)) activeOpenKind = kinds.includes("EV") ? "EV" : (kinds[0] || "ALL");
+  $("open-tabs").innerHTML = kinds.map(kind => `<button class="tab ${kind === activeOpenKind ? "active" : ""}" data-kind="${esc(kind)}">${esc(kind)} ${counts[kind]}</button>`).join("");
+  $("open-tabs").querySelectorAll("button").forEach(btn => btn.onclick = () => { activeOpenKind = btn.dataset.kind; renderOpenBets(state); });
+  const shown = (d.open_bets || []).filter(bet => activeOpenKind === "ALL" || bet.kind === activeOpenKind);
+  const clean = shown.filter(bet => bet.quality === "clean").length;
+  $("open-summary").textContent = `${shown.length} shown · ${clean} clean · grouped by event date`;
+  const order = ["overdue", "today", "tomorrow", "week", "later", "unknown"];
+  const labels = {overdue:"Past event date", today:"Today", tomorrow:"Tomorrow", week:"2-7 days", later:"8+ days", unknown:"No event date"};
+  const groups = order
+    .map(key => [key, shown.filter(bet => bet.horizon === key)])
+    .filter(([, bets]) => bets.length);
+  if (!groups.length) {
+    $("open-bets").innerHTML = `<div class="muted">No open ${esc(activeOpenKind)} bets right now.</div>`;
+    return;
+  }
+  $("open-bets").innerHTML = groups.map(([key, bets]) => {
+    const rows = bets.slice(0, 60).map(bet => {
+      const detail = [
+        bet.outcome ? `${bet.outcome}` : "",
+        bet.venue ? `@${bet.venue}` : "",
+        bet.cost ? `cost ${bet.cost}` : "",
+        bet.depth_usd ? `depth $${bet.depth_usd}` : "",
+      ].filter(Boolean).join(" ");
+      const flags = [
+        bet.quality !== "clean" ? `<span class="badge UNVERIFIABLE">${esc(bet.quality)}</span>` : "",
+        bet.confirmed ? `<span class="badge CONFIRMED">CONF</span>` : "",
+        bet.verified ? `<span class="badge VERIFIED">V${bet.verified}</span>` : "",
+        bet.vanished ? `<span class="badge VANISHED">X${bet.vanished}</span>` : "",
+        bet.live ? `<span class="badge REVIEW">LIVE</span>` : "",
+      ].filter(Boolean).join(" ");
+      return `<tr>
+        <td class="muted mono">${bet.id}</td>
+        <td><span class="badge ${esc(bet.kind)}">${esc(bet.kind)}</span></td>
+        <td><div class="open-event" title="${esc(bet.event_key || bet.event)}">${esc(bet.event)}</div><div class="subline">${esc(detail || bet.legs.join(", "))}</div></td>
+        <td>${esc(bet.event_date || "unknown")}<div class="subline">${esc(horizonText(bet))}</div></td>
+        <td class="${valClass(bet.edge)}">${pct(bet.edge)}</td>
+        <td><span class="badge ${esc(bet.status)}">${esc(bet.status)}</span><div class="subline">${flags}</div></td>
+        <td class="muted">${shortAge(bet.age_seconds)}</td>
+      </tr>`;
+    });
+    const hidden = bets.length > 60 ? `<div class="muted" style="margin-top:8px">Showing latest 60 of ${bets.length} in this bucket.</div>` : "";
+    return `<div>
+      <div class="open-group-title"><span>${labels[key]}</span><span>${bets.length}</span></div>
+      ${table(["ID","Kind","Event / leg","Event date","Edge","Status","Age"], rows).replace("<table>", "<table class=\"open-table\">")}
+      ${hidden}
+    </div>`;
+  }).join("");
 }
 
 function renderTracking(d) {
@@ -721,6 +931,7 @@ function render(d) {
   renderProcesses(d);
   renderMetrics(d);
   renderTracking(d);
+  renderOpenBets(d);
   renderPipeline(d);
   renderKinds(d);
   renderSegments(d);
