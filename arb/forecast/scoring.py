@@ -13,11 +13,12 @@ class ForecastSummary:
     mean_brier_you: float
     mean_brier_market: float
     brier_skill: float
+    mean_brier_diff: float                       # #9 mean per-event (you - market); <0 = you better
     mean_logloss_you: float
     mean_logloss_market: float
     logloss_skill: float
     ece: float
-    brier_skill_ci95: tuple[float, float] | None
+    brier_diff_ci95: tuple[float, float] | None  # #9 bootstrap CI of the PAIRED difference
 
 
 def brier(probability: Decimal | str | float, outcome: int) -> float:
@@ -71,35 +72,36 @@ def expected_calibration_error(bins: list[dict], n: int) -> float:
 def summarize(rows: list[dict], bins: int = 10, clip: float = 0.000001) -> tuple[ForecastSummary, list[dict]]:
     n = len(rows)
     if n == 0:
-        empty = ForecastSummary(0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None)
+        empty = ForecastSummary(0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, None)
         return empty, calibration_bins([], bins)
     brier_you = mean(float(row["brier_you"]) for row in rows)
     brier_market = mean(float(row["brier_market"]) for row in rows)
     logloss_you = mean(float(row["logloss_you"]) for row in rows)
     logloss_market = mean(float(row["logloss_market"]) for row in rows)
+    # #9 paired difference per event — the correct instrument when your p and the market's
+    # are often nearly identical (a ratio-of-means understates variance in exactly that case).
+    diffs = [float(row["brier_you"]) - float(row["brier_market"]) for row in rows]
     cal = calibration_bins(rows, bins)
     summary = ForecastSummary(
         n=n,
         mean_brier_you=round(brier_you, 6),
         mean_brier_market=round(brier_market, 6),
         brier_skill=skill_score(brier_you, brier_market),
+        mean_brier_diff=round(mean(diffs), 6),
         mean_logloss_you=round(logloss_you, 6),
         mean_logloss_market=round(logloss_market, 6),
         logloss_skill=skill_score(logloss_you, logloss_market),
         ece=expected_calibration_error(cal, n),
-        brier_skill_ci95=_bootstrap_brier_skill(rows) if n >= 30 else None,
+        brier_diff_ci95=_bootstrap_paired_diff(diffs) if n >= 30 else None,
     )
     return summary, cal
 
 
-def _bootstrap_brier_skill(rows: list[dict], resamples: int = 5000) -> tuple[float, float]:
+def _bootstrap_paired_diff(diffs: list[float], resamples: int = 5000) -> tuple[float, float]:
+    """Bootstrap CI of the mean per-event (brier_you - brier_market). A CI strictly below 0
+    is evidence you out-predict the market; straddling 0 is not."""
     rng = random.Random(12345)
-    values: list[float] = []
-    n = len(rows)
-    for _ in range(resamples):
-        sample = rng.choices(rows, k=n)
-        by = mean(float(row["brier_you"]) for row in sample)
-        bm = mean(float(row["brier_market"]) for row in sample)
-        values.append(skill_score(by, bm))
+    n = len(diffs)
+    values = [mean(rng.choices(diffs, k=n)) for _ in range(resamples)]
     values.sort()
     return (round(values[int(0.025 * resamples)], 6), round(values[int(0.975 * resamples)], 6))
