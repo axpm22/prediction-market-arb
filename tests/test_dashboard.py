@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from arb.config import load_config
 from arb.experimental.dashboard import build_dashboard_data, write_dashboard
+from arb.experimental.webserver import PAGE, build_state
 from arb.store import Store
 
 
@@ -80,3 +81,16 @@ def test_dashboard_data_includes_clean_raw_buckets_drawdowns_and_kelly(tmp_path)
     html = (tmp_path / "dashboard.html").read_text()
     assert "chartjs-adapter-date-fns" in html
     assert "Kelly optimistic raw" in html
+
+
+def test_live_dashboard_exposes_scanner_controls(tmp_path) -> None:
+    config = replace(load_config(), database_path=tmp_path / "arb.sqlite")
+    store = Store(config.database_path)
+
+    state = build_state(store, config)
+
+    assert "scanners" in state
+    assert {scanner["id"] for scanner in state["scanners"]} >= {"daemon", "political", "nonsports"}
+    assert all("returns" in scanner and "next" in scanner for scanner in state["scanners"])
+    assert "Scanning Controls" in PAGE
+    assert "/api/scanner" in PAGE
