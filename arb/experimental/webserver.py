@@ -43,7 +43,16 @@ CLV_CACHE_TTL_SECS = 300
 _CLV_CACHE: dict[str, Any] = {"at": 0.0, "value": {"n": 0}}
 
 
+_PS_CACHE: dict[str, Any] = {"at": 0.0, "value": []}
+_PS_TTL_SECS = 4.0
+
+
 def _process_health() -> list[dict[str, Any]]:
+    # Cache the ps spawn briefly — the dashboard polls every 8s (× open tabs) and process
+    # status barely changes between polls; no need to fork ps on every request.
+    nowm = time.monotonic()
+    if nowm - float(_PS_CACHE["at"]) < _PS_TTL_SECS and _PS_CACHE["value"]:
+        return _PS_CACHE["value"]
     try:
         ps = subprocess.run(["ps", "-Ao", "command"], capture_output=True, text=True, timeout=5).stdout
     except Exception:  # noqa: BLE001
@@ -53,15 +62,23 @@ def _process_health() -> list[dict[str, Any]]:
         count = sum(1 for line in ps.splitlines() if pat in line and "grep" not in line and "caffeinate" not in line)
         status = "ok" if count == 1 else ("down" if count == 0 else "duplicate")
         out.append({"name": name, "count": count, "status": status})
+    _PS_CACHE.update({"at": nowm, "value": out})
     return out
 
 
-def _log_tail(path: Path, n: int = 90) -> list[str]:
+def _log_tail(path: Path, n: int = 90, tail_bytes: int = 65536) -> list[str]:
     if not path.exists():
         return []
     try:
-        with path.open(errors="replace") as handle:
-            lines = deque((line.rstrip("\n") for line in handle if line.strip()), maxlen=n)
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            # Seek from the end so cost is O(tail_bytes), not O(filesize) — logs grow
+            # unbounded over a multi-day run and this is read every dashboard refresh.
+            if size > tail_bytes:
+                handle.seek(size - tail_bytes)
+                handle.readline()  # drop the partial first line
+            text = handle.read().decode(errors="replace")
+        lines = deque((ln for ln in text.splitlines() if ln.strip()), maxlen=n)
     except Exception:  # noqa: BLE001
         return []
     return list(lines)
