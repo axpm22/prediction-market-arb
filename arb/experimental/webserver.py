@@ -585,7 +585,19 @@ def build_state(store: Store, config) -> dict[str, Any]:
         flat_bets = c.execute("SELECT COUNT(*) FROM flat_bets").fetchone()[0]
         max_poll_id = c.execute("SELECT COALESCE(MAX(id),0) FROM polls").fetchone()[0]
         max_flat_bet_id = c.execute("SELECT COALESCE(MAX(id),0) FROM flat_bets").fetchone()[0]
-        open_bets = c.execute("SELECT COUNT(*) FROM flat_bets WHERE status IN ('OPEN','REVIEW','VERIFIED','CONFIRMED','LIFETIME')").fetchone()[0]
+        open_bets = c.execute(
+            """
+            SELECT COUNT(*)
+              FROM flat_bets b
+             WHERE b.kind != 'CLOSE'
+               AND b.status IN ('OPEN','REVIEW','VERIFIED','CONFIRMED','LIFETIME')
+               AND NOT EXISTS (
+                   SELECT 1 FROM flat_bets s
+                    WHERE s.reappearance_of = b.id
+                      AND s.status IN ('SETTLED','CLOSED','EXITED')
+               )
+            """
+        ).fetchone()[0]
         last_poll = c.execute(
             "SELECT kind, started_at, finished_at, n_quotes, n_opps, credits_remaining FROM polls ORDER BY id DESC LIMIT 1"
         ).fetchone()
@@ -656,6 +668,11 @@ def build_state(store: Store, config) -> dict[str, Any]:
               FROM flat_bets
              WHERE kind='EV' AND quality_flag='micro'
                AND status IN ('OPEN','REVIEW','VERIFIED','CONFIRMED','LIFETIME')
+               AND NOT EXISTS (
+                   SELECT 1 FROM flat_bets s
+                    WHERE s.reappearance_of = flat_bets.id
+                      AND s.status IN ('SETTLED','CLOSED','EXITED')
+               )
             """
         ).fetchone()
         # ARB gets its own lane: locked/provisional, includes RESOLVED. Never in EV totals.
@@ -680,7 +697,13 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 SELECT kind,
                        COUNT(*) n,
                        SUM(CASE WHEN status IN ('SETTLED','EXITED') THEN 1 ELSE 0 END) settled,
-                       SUM(CASE WHEN status IN ('OPEN','REVIEW','VERIFIED','CONFIRMED','LIFETIME') THEN 1 ELSE 0 END) active,
+                       SUM(CASE WHEN status IN ('OPEN','REVIEW','VERIFIED','CONFIRMED','LIFETIME')
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM flat_bets s
+                                       WHERE s.reappearance_of = flat_bets.id
+                                         AND s.status IN ('SETTLED','CLOSED','EXITED')
+                                  )
+                                THEN 1 ELSE 0 END) active,
                        COALESCE(SUM(CASE WHEN status IN ('SETTLED','EXITED') THEN CAST(pnl_optimistic AS REAL) ELSE 0 END),0) pnl,
                        AVG(CAST(edge AS REAL)) avg_edge,
                        SUM(CASE WHEN result='WON' THEN 1 ELSE 0 END) won,
@@ -702,7 +725,13 @@ def build_state(store: Store, config) -> dict[str, Any]:
                        COALESCE(quality_flag,'clean') quality,
                        COUNT(*) n,
                        SUM(CASE WHEN status IN ('SETTLED','EXITED') THEN 1 ELSE 0 END) settled,
-                       SUM(CASE WHEN status IN ('OPEN','REVIEW','VERIFIED','CONFIRMED','LIFETIME') THEN 1 ELSE 0 END) active,
+                       SUM(CASE WHEN status IN ('OPEN','REVIEW','VERIFIED','CONFIRMED','LIFETIME')
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM flat_bets s
+                                       WHERE s.reappearance_of = flat_bets.id
+                                         AND s.status IN ('SETTLED','CLOSED','EXITED')
+                                  )
+                                THEN 1 ELSE 0 END) active,
                        SUM(CASE WHEN result='WON' THEN 1 ELSE 0 END) won,
                        SUM(CASE WHEN result='LOST' THEN 1 ELSE 0 END) lost,
                        COALESCE(SUM(CASE WHEN status IN ('SETTLED','EXITED') THEN CAST(pnl_optimistic AS REAL) ELSE 0 END),0) pnl,
@@ -1633,7 +1662,10 @@ function renderKinds(d) {
       ? (q.quality === "clean" ? "EV clean" : q.quality === "micro" ? "Micro EV" : `EV ${q.quality}`)
       : (q.quality === "clean" ? q.kind : `${q.kind} ${q.quality}`);
     const pnl = num(q.pnl);
-    return `<tr><td><b>${esc(label)}</b></td><td>${q.n}</td><td>${q.active}</td><td>${q.settled}</td><td class="${valClass(pnl)}">${money(pnl)}</td><td>${q.avg_edge == null ? "" : pct(q.avg_edge)}</td></tr>`;
+    const edge = q.kind === "EV" && q.quality === "suspect-edge"
+      ? `<span class="muted">quarantined</span>`
+      : (q.avg_edge == null ? "" : pct(q.avg_edge));
+    return `<tr><td><b>${esc(label)}</b></td><td>${q.n}</td><td>${q.active}</td><td>${q.settled}</td><td class="${valClass(pnl)}">${money(pnl)}</td><td>${edge}</td></tr>`;
   });
   $("kinds").innerHTML = table(["Lane","Rows","Active","Settled","P&L","Avg Edge"], rows);
   const clv = d.ev.clv || {};

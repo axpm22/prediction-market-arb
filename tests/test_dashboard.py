@@ -105,6 +105,40 @@ def test_live_dashboard_exposes_scanner_controls(tmp_path) -> None:
     assert "/api/scanner" in PAGE
 
 
+def test_live_dashboard_does_not_count_settled_append_only_roots_as_active(tmp_path) -> None:
+    config = replace(load_config(), database_path=tmp_path / "arb.sqlite")
+    store = Store(config.database_path)
+    now = datetime.now(timezone.utc).isoformat()
+    with store.connect() as con:
+        cur = con.execute(
+            """INSERT INTO flat_bets(fingerprint, opened_poll_id, category, sport, kind, trusted, live,
+                   edge, stake_usd, legs_json, optimistic_cost, status, placed_at, quality_flag, notes)
+               VALUES ('suspect', 1, 'sports', 'baseball_mlb', 'EV', 0, 0,
+                       '321.43', '1.00', '[]', '0.001', 'OPEN', ?, 'suspect-edge', '')""",
+            (now,),
+        )
+        root_id = cur.lastrowid
+        con.execute(
+            """INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind,
+                   trusted, live, edge, stake_usd, legs_json, optimistic_cost, pnl_optimistic,
+                   status, placed_at, settled_at, result, quality_flag, notes)
+               VALUES ('suspect', ?, 1, 'sports', 'baseball_mlb', 'EV',
+                       0, 0, '321.43', '1.00', '[]', '0.001', '-1.00',
+                       'SETTLED', ?, ?, 'LOST', 'suspect-edge', 'score-settled')""",
+            (root_id, now, now),
+        )
+
+    state = build_state(store, config)
+    suspect = next(row for row in state["quality"] if row["kind"] == "EV" and row["quality"] == "suspect-edge")
+
+    assert state["health"]["open_bets"] == 0
+    assert suspect["n"] == 2
+    assert suspect["active"] == 0
+    assert suspect["settled"] == 1
+    assert suspect["pnl"] == -1.0
+    assert "quarantined" in PAGE
+
+
 def test_dashboard_surfaces_exposure_and_alerts(tmp_path) -> None:
     import json as _json
     from datetime import datetime as _dt, timezone as _tz
