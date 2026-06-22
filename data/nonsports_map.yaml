@@ -1,14 +1,85 @@
-# Manual non-sports event map. NOTHING is matched automatically — review BOTH venues'
-# resolution wording before adding an entry, then set enabled: true.
-# Settle by hand when resolved:  python -m arb settle --manual nonsports:<id> <YES|NO>
+# Curated niche cross-venue map — weather, worldcup, macro. NOTHING is matched
+# automatically. Each entry is hand-written after reading BOTH venues' rulebooks and
+# recording their fields under `rulebook:`. An entry only goes live when:
+#   enabled: true  AND  reviewed: true  AND  arb.experimental.niche.validate_entry approves
+# (the validator proves both rulebooks resolve the SAME question). Until then it is ignored.
+# Every niche flag is cross-venue => REVIEW, never auto-filled; settlement is manual:
+#   python -m arb settle --manual nonsports:<id> <YES|NO>
 #
-# - id: fed-cut-2026-06                  # event_key becomes "nonsports:fed-cut-2026-06"
-#   enabled: false
-#   question: "Fed cuts rates at the June 2026 meeting?"
-#   kalshi_series: KXFEDDECISION         # series to fetch (SPEC §3.1 endpoint)
-#   kalshi_ticker: KXFEDDECISION-26JUN-CUT   # exact market within that series
-#   polymarket_tokens:                   # CLOB token id per outcome
-#     YES: "123456..."
-#     NO: "654321..."
-#   close_by: 2026-06-18                 # must be within nonsports_max_days to be scanned
-[]
+# Templates below are disabled (enabled: false, reviewed: false). Fill real tickers/token
+# ids and the rulebook fields from each venue's resolution criteria, then review + enable.
+
+- id: weather-austin-high-2026-06-24-100f
+  vertical: weather
+  enabled: false
+  reviewed: false
+  question: "Austin high temperature on 2026-06-24 >= 100F?"
+  close_by: 2026-06-24
+  required_match:
+    metric: high_temperature
+    city: austin
+    date: 2026-06-24
+    unit: fahrenheit
+    threshold: 100
+    comparator: ">="
+    source: SAME_REQUIRED        # both venues MUST cite the identical station/source
+  kalshi:
+    series: ""
+    ticker: ""
+    outcome_map: { YES: "", NO: "" }
+    rulebook: { metric: high_temperature, city: austin, date: 2026-06-24, unit: fahrenheit,
+                threshold: 100, comparator: ">=", source: "", void_rules: "" }
+  polymarket:
+    market_id: ""
+    token_map: { YES: "", NO: "" }
+    rulebook: { metric: high_temperature, city: austin, date: 2026-06-24, unit: fahrenheit,
+                threshold: 100, comparator: ">=", source: "", void_rules: "" }
+
+- id: worldcup-france-iraq-2026-06-22-total-2-5
+  vertical: worldcup
+  enabled: false
+  reviewed: false
+  question: "France vs Iraq total goals over 2.5?"
+  close_by: 2026-06-22
+  required_match:
+    competition: fifa world cup 2026
+    teams: france|iraq
+    market_type: total_goals
+    line: 2.5
+    period: regulation_plus_stoppage
+  kalshi:
+    series: ""
+    ticker: ""
+    outcome_map: { OVER: "", UNDER: "" }
+    rulebook: { competition: fifa world cup 2026, teams: france|iraq, market_type: total_goals,
+                line: 2.5, period: regulation_plus_stoppage, extra_time_counts: "false",
+                penalties_count: "false", draw_handling: n/a, void_rules: "" }
+  polymarket:
+    market_id: ""
+    token_map: { OVER: "", UNDER: "" }
+    rulebook: { competition: fifa world cup 2026, teams: france|iraq, market_type: total_goals,
+                line: 2.5, period: regulation_plus_stoppage, extra_time_counts: "false",
+                penalties_count: "false", draw_handling: n/a, void_rules: "" }
+
+- id: macro-fed-decision-2026-07-hold
+  vertical: macro
+  enabled: false
+  reviewed: false
+  question: "FOMC holds the target rate at the July 2026 meeting?"
+  close_by: 2026-07-29
+  required_match:
+    release: fomc target rate decision
+    meeting_date: 2026-07-29
+    source: federal reserve
+    outcome: hold
+  kalshi:
+    series: ""
+    ticker: ""
+    outcome_map: { YES: "", NO: "" }
+    rulebook: { release: fomc target rate decision, meeting_date: 2026-07-29,
+                source: federal reserve, outcome: hold, void_rules: "" }
+  polymarket:
+    market_id: ""
+    token_map: { YES: "", NO: "" }
+    rulebook: { release: fomc target rate decision, meeting_date: 2026-07-29,
+                source: federal reserve, outcome: hold, void_rules: "" }

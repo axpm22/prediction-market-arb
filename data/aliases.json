@@ -189,5 +189,26 @@
   },
   "soccer": {
     "tie": "draw"
+  },
+  "soccer_worldcup": {
+    "bosnia and herzegovina": "bosnia",
+    "cabo verde": "cape verde",
+    "congo dr": "dr congo",
+    "cote d'ivoire": "ivory coast",
+    "czechia": "czech republic",
+    "c\u00f4te d'ivoire": "ivory coast",
+    "democratic republic of the congo": "dr congo",
+    "dr congo": "dr congo",
+    "ir iran": "iran",
+    "iran ir": "iran",
+    "korea dpr": "north korea",
+    "korea republic": "south korea",
+    "republic of korea": "south korea",
+    "turkiye": "turkey",
+    "t\u00fcrkiye": "turkey",
+    "u.s.": "united states",
+    "us": "united states",
+    "usa": "united states",
+    "usmnt": "united states"
   }
 }

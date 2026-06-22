@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     nonsports = sub.add_parser("nonsports", help="watch manually mapped non-sports events (politics/econ/weather)")
     nonsports.add_argument("--once", action="store_true", help="run a single pass and exit")
     sub.add_parser("nonsports-suggest", help="fuzzy-pair venue titles into logs/nonsports_candidates.log (suggestions only)")
+    sub.add_parser("niche", help="show curated niche map (weather/worldcup/macro) with validation verdicts")
     verify = sub.add_parser("verify", help="flash-verify fresh ARB flags by re-quoting their legs within seconds")
     verify.add_argument("--once", action="store_true", help="run a single pass and exit")
     focus = sub.add_parser("focus", help="bet-by-bet rotation: re-quote each event's books on all venues at once")
@@ -65,6 +66,8 @@ def extras_config(block: str) -> dict:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     config = load_config()
+    if args.command == "niche":
+        return run_niche(config)
     if args.command == "nonsports-suggest":
         return run_nonsports_suggest(config)
     if args.command == "nonsports":
@@ -293,6 +296,27 @@ def run_whales(args: argparse.Namespace, config) -> int:
             print("whales: stop flag found, exiting cleanly.")
             return 0
         time.sleep(300)
+
+
+def run_niche(config) -> int:
+    from arb.experimental.niche import load_niche_map, validate_entry
+
+    entries = load_niche_map()
+    if not entries:
+        print("No niche map entries (data/nonsports_map.yaml).")
+        return 0
+    print(f"{'ID':44s} {'VERTICAL':9s} {'STATE':9s} VERDICT")
+    for e in entries:
+        v = validate_entry(e)
+        if not (e.get("enabled") and e.get("reviewed")):
+            state, verdict = "template", "disabled (enabled/reviewed false)"
+        elif v.approved:
+            state, verdict = "LIVE", "validated — rulebooks match"
+        else:
+            state, verdict = "REFUSED", f"{v.field}: {v.reason}"
+        print(f"{str(e.get('id'))[:44]:44s} {str(e.get('vertical')):9s} {state:9s} {verdict}")
+    print("\nNiche flags are cross-venue => REVIEW, never auto-filled; settlement is manual.")
+    return 0
 
 
 def run_nonsports_suggest(config) -> int:
