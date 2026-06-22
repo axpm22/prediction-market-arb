@@ -1332,10 +1332,11 @@ function horizonText(bet) {
 
 function renderMetrics(d) {
   const running = d.processes.filter(p => p.status === "ok").length;
-  const unhealthy = d.processes.filter(p => p.status !== "ok");
+  const unhealthy = d.processes.filter(p => !["ok","disabled"].includes(p.status));
+  const enabled = d.processes.filter(p => p.status !== "disabled").length;
   const workerDetail = unhealthy.length
     ? unhealthy.map(p => `${p.status}: ${p.name}`).join(" · ")
-    : `all ${d.processes.length} expected workers running`;
+    : `${running}/${enabled || d.processes.length} enabled workers running`;
   const ce = d.clean_ev || {pnl:0,won:0,lost:0,settled:0,roi:0}, se = d.suspect_ev || {n:0,pnl:0}, la = d.locked_arb || {pnl:0,resolved:0,settled:0};
   const suspectNote = se.n ? ` · suspect: ${se.n} (${money(se.pnl)})` : "";
   $("metrics").innerHTML = [
@@ -1344,7 +1345,7 @@ function renderMetrics(d) {
     metric("Open Bets", compact(d.health.open_bets), `${compact(d.health.flat_bets)} ledger rows`, "blue"),
     metric("ARB Verification", `<span class="good">${d.arb.verified}</span><span class="muted"> / </span><span class="bad">${d.arb.vanished}</span>`, `${d.arb.unverifiable} unverifiable`),
     metric("Quotes", compact(d.health.quotes), `latest ${age(d.health.last_quote_age_seconds)}`),
-    metric("Worker Health", `${running}/${d.processes.length}`, workerDetail, unhealthy.length ? "bad" : "good"),
+    metric("Worker Health", `${running}/${enabled || d.processes.length}`, workerDetail, unhealthy.length ? "bad" : "good"),
   ].join("");
 }
 
