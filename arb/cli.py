@@ -57,6 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     backfill.add_argument("--fixtures", action="store_true", help="use recorded mlbstats fixtures")
     sub.add_parser("settle-health", help="report overdue open EV/ARB bets and last settlement time")
     sub.add_parser("reconcile", help="cross-check settled ARBs against venue-actual resolution (audit fix #1)")
+    sub.add_parser("exposure", help="total + per-venue committed capital across active bets (audit fix #3)")
     sub.add_parser("scores", help="per-segment edge scores from settled clean bets (Phase 2)")
     sub.add_parser("backtest-flb", help="favorite-longshot calibration over settled clean bets (S2)")
     sub.add_parser("dashboard", help="regenerate reports/dashboard.json from the ledger (Phase 6)")
@@ -104,6 +105,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {counts['corrected']} SETTLER-ERROR(s) — realized P&L differed from the lock.")
         if counts["skipped"]:
             print(f"  {counts['skipped']} skipped (a leg's venue resolution not available yet).")
+        return 0
+    if args.command == "exposure":
+        from .exposure import compute_exposure, format_exposure
+
+        per_venue_cap = config.bankroll_usd * config.max_stake_pct
+        print(format_exposure(compute_exposure(store, config.bankroll_usd, per_venue_cap)))
         return 0
     if args.command == "scores":
         from .scoring import persist_scores, score_segments
