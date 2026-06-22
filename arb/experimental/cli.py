@@ -38,6 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
     political.add_argument("--once", action="store_true", help="run a single pass and exit")
     hot = sub.add_parser("hot", help="per-bet watchers: re-quote each fresh arb's books every ~1s for its lifetime")
     hot.add_argument("--once", action="store_true", help="adopt current bets, watch to completion, exit")
+    ev_exit = sub.add_parser("ev-exit", help="paper-exit EV bets when sell bid locks profit and edge is gone")
+    ev_exit.add_argument("--once", action="store_true", help="run a single pass and exit")
     negrisk = sub.add_parser("negrisk", help="intra-Polymarket negative-risk basket arbs (S1, no settlement risk)")
     negrisk.add_argument("--once", action="store_true", help="run a single pass and exit")
     btc = sub.add_parser("btc", help="BTC cross-venue arb sweep (Phase 4; REVIEW — oracles differ)")
@@ -80,6 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_political(args, config)
     if args.command == "hot":
         return run_hot(args, config)
+    if args.command == "ev-exit":
+        return run_ev_exit(args, config)
     if args.command == "negrisk":
         return run_negrisk(args, config)
     if args.command == "btc":
@@ -247,6 +251,32 @@ def run_negrisk(args: argparse.Namespace, config) -> int:
             print("negrisk: stop flag found, exiting cleanly.")
             return 0
         time.sleep(180)
+
+
+def run_ev_exit(args: argparse.Namespace, config) -> int:
+    from arb.experimental.ev_exit import run_ev_exit_once
+
+    ecfg = extras_config("ev_exit")
+    store = Store(config.database_path)
+    print(
+        f"EV exit watcher: sell-bid take-profit, min ROI {ecfg['min_profit_roi']}, "
+        f"remaining edge <= {ecfg['exit_edge_ceiling']}."
+    )
+    while True:
+        try:
+            poll_id = store.start_poll("ev-exit")
+            exited = run_ev_exit_once(store, config, ecfg)
+            store.finish_poll(poll_id, None, 0, exited)
+            if exited:
+                print(f"{datetime.now(timezone.utc).isoformat()} ev-exit: appended {exited} EXITED/SOLD rows.")
+        except (RuntimeError, requests.RequestException) as exc:
+            print(f"ev-exit: pass failed, retrying: {exc}")
+        if args.once:
+            return 0
+        if stop_requested("ev-exit"):
+            print("ev-exit: stop flag found, exiting cleanly.")
+            return 0
+        time.sleep(int(ecfg["poll_secs"]))
 
 
 def run_btc(args: argparse.Namespace, config) -> int:

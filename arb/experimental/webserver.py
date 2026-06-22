@@ -23,6 +23,7 @@ from arb.store import Store
 
 PROCESSES = [
     ("daemon", "arb daemon"),
+    ("ev-exit", "arb.experimental ev-exit"),
     ("negrisk", "arb.experimental negrisk"),
     ("political", "arb.experimental political"),
     ("nonsports", "arb.experimental nonsports"),
@@ -35,6 +36,7 @@ LOG_FILES = {
     "focus": Path("logs/focus.log"),
     "verify": Path("logs/verify.log"),
     "hot": Path("logs/hot.log"),
+    "ev-exit": Path("logs/ev-exit.log"),
     "negrisk": Path("logs/negrisk.log"),
     "political": Path("logs/political.log"),
     "closing": Path("logs/closing.log"),
@@ -67,6 +69,18 @@ SCANNERS = [
         "return_where": "kind='EV' AND quality_flag='micro'",
         "detail": "Thin-book EV only; $5-$50 visible depth, stricter edge, depth-capped stake.",
         "control": "parent",
+    },
+    {
+        "id": "ev_exit",
+        "name": "EV Exit",
+        "process": "ev-exit",
+        "stop": "ev-exit",
+        "command": [sys.executable, "-m", "arb.experimental", "ev-exit"],
+        "log": LOG_FILES["ev-exit"],
+        "poll_kinds": ["ev-exit"],
+        "next_where": "kind='EV' AND (quality_flag IS NULL OR quality_flag='micro')",
+        "return_where": "kind='EV' AND (quality_flag IS NULL OR quality_flag='micro')",
+        "detail": "Paper take-profit exits; executable sell bid after fees, only when remaining edge is mostly gone.",
     },
     {
         "id": "negrisk",
@@ -358,7 +372,7 @@ def _scanner_next_event(con, where: str, now: datetime) -> dict[str, Any] | None
                AND {where}
                AND NOT EXISTS (
                    SELECT 1 FROM flat_bets s
-                    WHERE s.status IN ('SETTLED','CLOSED')
+                    WHERE s.status IN ('SETTLED','CLOSED','EXITED')
                       AND s.reappearance_of = CASE WHEN b.status='CONFIRMED' THEN b.reappearance_of ELSE b.id END
                )
              ORDER BY b.id DESC
@@ -407,8 +421,8 @@ def _scanner_returns(con, where: str) -> dict[str, Any]:
                COALESCE(SUM(CAST(stake_usd AS REAL)),0) stake,
                AVG(CAST(pnl_optimistic AS REAL)) avg_pnl
           FROM flat_bets
-         WHERE status='SETTLED'
-           AND result IN ('WON','LOST','RESOLVED','VOID')
+         WHERE status IN ('SETTLED','EXITED')
+           AND result IN ('WON','LOST','RESOLVED','VOID','SOLD')
            AND {where}
         """
     ).fetchone()
@@ -591,33 +605,34 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 """
                 SELECT result, COUNT(*) n, COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl
                   FROM flat_bets
-                 WHERE status='SETTLED' AND result IN ('WON','LOST','RESOLVED','VOID')
+                 WHERE status IN ('SETTLED','EXITED') AND result IN ('WON','LOST','RESOLVED','VOID','SOLD')
                  GROUP BY result
                 """
             ),
             "result",
         )
-        # EV is judged ALONE: only clean, settled EV rows (WON/LOST/VOID). No ARB, no
-        # DIVERGENCE, no NEGRISK, no suspect-edge rows contaminate this number.
+        # EV is judged ALONE: clean, realized EV rows only. SOLD is a paper take-profit
+        # exit, not a game outcome, but it is fillable P&L at the executable bid.
         clean_ev = c.execute(
             """
             SELECT COUNT(*) settled,
                    SUM(CASE WHEN result='WON' THEN 1 ELSE 0 END) won,
                    SUM(CASE WHEN result='LOST' THEN 1 ELSE 0 END) lost,
+                   SUM(CASE WHEN result='SOLD' THEN 1 ELSE 0 END) sold,
                    COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl,
                    COALESCE(SUM(CAST(stake_usd AS REAL)),0) stake
               FROM flat_bets
-             WHERE kind='EV' AND status='SETTLED'
-               AND result IN ('WON','LOST','VOID') AND quality_flag IS NULL
+             WHERE kind='EV' AND status IN ('SETTLED','EXITED')
+               AND result IN ('WON','LOST','VOID','SOLD') AND quality_flag IS NULL
             """
         ).fetchone()
         # Quarantined EV rows shown on their own line, never in Clean EV P&L.
         suspect_ev = c.execute(
             """
             SELECT COUNT(*) n, COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl
-              FROM flat_bets
-             WHERE kind='EV' AND status='SETTLED'
-               AND result IN ('WON','LOST','VOID') AND quality_flag='suspect-edge'
+             FROM flat_bets
+             WHERE kind='EV' AND status IN ('SETTLED','EXITED')
+               AND result IN ('WON','LOST','VOID','SOLD') AND quality_flag='suspect-edge'
             """
         ).fetchone()
         # Micro EV is practical-but-thin: separate from clean EV so small-depth rows do
@@ -627,11 +642,12 @@ def build_state(store: Store, config) -> dict[str, Any]:
             SELECT COUNT(*) settled,
                    SUM(CASE WHEN result='WON' THEN 1 ELSE 0 END) won,
                    SUM(CASE WHEN result='LOST' THEN 1 ELSE 0 END) lost,
+                   SUM(CASE WHEN result='SOLD' THEN 1 ELSE 0 END) sold,
                    COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl,
                    COALESCE(SUM(CAST(stake_usd AS REAL)),0) stake
               FROM flat_bets
-             WHERE kind='EV' AND status='SETTLED'
-               AND result IN ('WON','LOST','VOID') AND quality_flag='micro'
+             WHERE kind='EV' AND status IN ('SETTLED','EXITED')
+               AND result IN ('WON','LOST','VOID','SOLD') AND quality_flag='micro'
             """
         ).fetchone()
         micro_active = c.execute(
@@ -663,9 +679,9 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 """
                 SELECT kind,
                        COUNT(*) n,
-                       SUM(CASE WHEN status='SETTLED' THEN 1 ELSE 0 END) settled,
+                       SUM(CASE WHEN status IN ('SETTLED','EXITED') THEN 1 ELSE 0 END) settled,
                        SUM(CASE WHEN status IN ('OPEN','REVIEW','VERIFIED','CONFIRMED','LIFETIME') THEN 1 ELSE 0 END) active,
-                       COALESCE(SUM(CASE WHEN status='SETTLED' THEN CAST(pnl_optimistic AS REAL) ELSE 0 END),0) pnl,
+                       COALESCE(SUM(CASE WHEN status IN ('SETTLED','EXITED') THEN CAST(pnl_optimistic AS REAL) ELSE 0 END),0) pnl,
                        AVG(CAST(edge AS REAL)) avg_edge,
                        SUM(CASE WHEN result='WON' THEN 1 ELSE 0 END) won,
                        SUM(CASE WHEN result='LOST' THEN 1 ELSE 0 END) lost
@@ -685,12 +701,12 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 SELECT kind,
                        COALESCE(quality_flag,'clean') quality,
                        COUNT(*) n,
-                       SUM(CASE WHEN status='SETTLED' THEN 1 ELSE 0 END) settled,
+                       SUM(CASE WHEN status IN ('SETTLED','EXITED') THEN 1 ELSE 0 END) settled,
                        SUM(CASE WHEN status IN ('OPEN','REVIEW','VERIFIED','CONFIRMED','LIFETIME') THEN 1 ELSE 0 END) active,
                        SUM(CASE WHEN result='WON' THEN 1 ELSE 0 END) won,
                        SUM(CASE WHEN result='LOST' THEN 1 ELSE 0 END) lost,
-                       COALESCE(SUM(CASE WHEN status='SETTLED' THEN CAST(pnl_optimistic AS REAL) ELSE 0 END),0) pnl,
-                       COALESCE(SUM(CASE WHEN status='SETTLED' THEN CAST(pnl_confirmed AS REAL) ELSE 0 END),0) confirmed_pnl,
+                       COALESCE(SUM(CASE WHEN status IN ('SETTLED','EXITED') THEN CAST(pnl_optimistic AS REAL) ELSE 0 END),0) pnl,
+                       COALESCE(SUM(CASE WHEN status IN ('SETTLED','EXITED') THEN CAST(pnl_confirmed AS REAL) ELSE 0 END),0) confirmed_pnl,
                        AVG(CAST(edge AS REAL)) avg_edge
                   FROM flat_bets
                  WHERE kind != 'CLOSE'
@@ -724,7 +740,7 @@ def build_state(store: Store, config) -> dict[str, Any]:
                    AND NOT EXISTS (
                        SELECT 1 FROM flat_bets s
                         WHERE s.reappearance_of = b.id
-                          AND s.status IN ('SETTLED','CLOSED')
+                          AND s.status IN ('SETTLED','CLOSED','EXITED')
                    )
                  ORDER BY b.id DESC
                  LIMIT 800
@@ -761,7 +777,7 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 """
                 SELECT placed_at, pnl_optimistic, pnl_confirmed, quality_flag
                   FROM flat_bets
-                 WHERE status='SETTLED' AND result IN ('WON','LOST','RESOLVED','VOID')
+                 WHERE status IN ('SETTLED','EXITED') AND result IN ('WON','LOST','RESOLVED','VOID','SOLD')
                  ORDER BY placed_at
                 """
             )
@@ -881,10 +897,14 @@ def build_state(store: Store, config) -> dict[str, Any]:
             "settled": int(clean_ev["settled"] or 0),
             "won": int(clean_ev["won"] or 0),
             "lost": int(clean_ev["lost"] or 0),
+            "sold": int(clean_ev["sold"] or 0),
             "pnl": _money(clean_ev["pnl"]),
             "stake": _money(clean_ev["stake"]),
             "roi": round((float(clean_ev["pnl"] or 0) / float(clean_ev["stake"])), 4) if float(clean_ev["stake"] or 0) else 0.0,
-            "win_rate": round(int(clean_ev["won"] or 0) / int(clean_ev["settled"]), 4) if int(clean_ev["settled"] or 0) else 0.0,
+            "win_rate": (
+                round(int(clean_ev["won"] or 0) / (int(clean_ev["won"] or 0) + int(clean_ev["lost"] or 0)), 4)
+                if int(clean_ev["won"] or 0) + int(clean_ev["lost"] or 0) else 0.0
+            ),
         },
         "suspect_ev": {"n": int(suspect_ev["n"] or 0), "pnl": _money(suspect_ev["pnl"])},
         "micro_ev": {
@@ -893,10 +913,14 @@ def build_state(store: Store, config) -> dict[str, Any]:
             "settled": int(micro_ev["settled"] or 0),
             "won": int(micro_ev["won"] or 0),
             "lost": int(micro_ev["lost"] or 0),
+            "sold": int(micro_ev["sold"] or 0),
             "pnl": _money(micro_ev["pnl"]),
             "stake": _money(micro_ev["stake"]),
             "roi": round((float(micro_ev["pnl"] or 0) / float(micro_ev["stake"])), 4) if float(micro_ev["stake"] or 0) else 0.0,
-            "win_rate": round(int(micro_ev["won"] or 0) / int(micro_ev["settled"]), 4) if int(micro_ev["settled"] or 0) else 0.0,
+            "win_rate": (
+                round(int(micro_ev["won"] or 0) / (int(micro_ev["won"] or 0) + int(micro_ev["lost"] or 0)), 4)
+                if int(micro_ev["won"] or 0) + int(micro_ev["lost"] or 0) else 0.0
+            ),
         },
         # Locked ARB P&L — ARB's own lane (locked/provisional, includes RESOLVED).
         "locked_arb": {
@@ -1001,103 +1025,101 @@ PAGE = r"""<!doctype html>
 <title>ArbitrageModel Live</title>
 <style>
 :root{
-  --bg:#101113;--panel:#18191d;--panel-2:#202126;--line:#303238;--text:#f2f3f0;--muted:#a4a6ad;
-  --green:#56c271;--red:#ff6b63;--gold:#e0ad3b;--blue:#6aa8ff;--violet:#b58cff;--cyan:#5ac8c8;
+  --bg:#111315;--panel:#1a1d21;--panel-2:#22262b;--panel-3:#15181c;--line:#343a42;--line-soft:#282d34;
+  --text:#f1f3f0;--muted:#a9afb7;--muted-2:#808892;
+  --green:#61c88a;--red:#ff7a70;--gold:#e5b85a;--blue:#76aefc;--violet:#bca2ff;--cyan:#6fd5ce;
+  --gap:14px;--radius:8px;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.48 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 button{font:inherit}
-.top{position:sticky;top:0;z-index:5;background:rgba(16,17,19,.96);border-bottom:1px solid var(--line)}
-.top-inner{display:flex;align-items:center;justify-content:space-between;gap:18px;max-width:1440px;margin:0 auto;padding:14px 20px}
+.top{position:sticky;top:0;z-index:5;background:rgba(17,19,21,.96);border-bottom:1px solid var(--line-soft);backdrop-filter:blur(10px)}
+.top-inner{display:flex;align-items:center;justify-content:space-between;gap:18px;max-width:1480px;margin:0 auto;padding:16px 22px}
 .brand{display:flex;align-items:baseline;gap:12px;min-width:260px}
 h1{font-size:18px;line-height:1;margin:0;font-weight:720;letter-spacing:0}
 .sub{color:var(--muted);font-size:13px}
 .procs{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
-.proc{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);height:28px;padding:0 9px;border-radius:8px;color:var(--muted);font-size:12px}
+.proc{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-soft);background:var(--panel-2);height:28px;padding:0 9px;border-radius:var(--radius);color:var(--muted);font-size:12px}
 .dot{width:8px;height:8px;border-radius:99px;background:var(--muted)}
 .ok .dot{background:var(--green);box-shadow:0 0 10px rgba(86,194,113,.6)}
 .down .dot{background:var(--red)}
 .duplicate .dot{background:var(--gold)}
-.wrap{max-width:1440px;margin:0 auto;padding:18px 20px 28px}
-.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-width:0}
-/* Masonry: every panel tiles side-by-side and packs vertically with no dead space.
-   Each panel is a query container so its inner grids reflow to the column width. */
-.panels{columns:340px 4;column-gap:12px;margin-top:12px}
-.panels>.panel{break-inside:avoid;-webkit-column-break-inside:avoid;margin:0 0 12px;container-type:inline-size}
-.metric{grid-column:span 2;padding:14px}
+.wrap{max-width:1480px;margin:0 auto;padding:18px 22px 30px}
+.grid,.panels{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap)}
+.panel{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius);min-width:0;box-shadow:0 1px 0 rgba(255,255,255,.03)}
+.panels{margin-top:var(--gap);align-items:start}
+.panels>.panel{container-type:inline-size}
+.metric{grid-column:span 3;padding:14px 15px;min-height:112px;display:flex;flex-direction:column;justify-content:space-between}
 .wide{grid-column:span 8}.side{grid-column:span 4}.half{grid-column:span 6}.full{grid-column:span 12}
-.label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px}
-.value{font-size:27px;line-height:1.05;font-weight:760;letter-spacing:0;white-space:nowrap}
+.label{color:var(--muted-2);font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px}
+.value{font-size:26px;line-height:1.08;font-weight:760;letter-spacing:0;white-space:nowrap}
 .unit{font-size:12px;color:var(--muted);font-weight:520;margin-left:5px}
 .good{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--gold)}.blue{color:var(--blue)}.muted{color:var(--muted)}
 #alerts{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
 .alert{padding:8px 12px;border-radius:8px;font-size:13px;font-weight:500;border:1px solid}
 .alert.bad{background:rgba(229,72,77,.12);border-color:rgba(229,72,77,.4);color:var(--red)}
 .alert.warn{background:rgba(214,158,46,.12);border-color:rgba(214,158,46,.35);color:var(--gold)}
-.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border-bottom:1px solid var(--line)}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px;padding:12px 14px;border-bottom:1px solid var(--line-soft)}
 .panel-title{font-size:13px;font-weight:700;letter-spacing:0}
 .panel-body{padding:14px}
-.chart{width:100%;height:272px;display:block}
-.mini{height:136px}
+.chart{width:100%;height:260px;display:block}
+.mini{height:150px}
 .bars{display:grid;gap:9px}
 .bar-row{display:grid;grid-template-columns:92px 1fr 42px;align-items:center;gap:10px;font-size:12px}
-.bar-track{height:9px;background:#111216;border:1px solid var(--line);border-radius:99px;overflow:hidden}
+.bar-track{height:9px;background:var(--panel-3);border:1px solid var(--line-soft);border-radius:99px;overflow:hidden}
 .bar-fill{height:100%;background:var(--blue)}
 table{width:100%;border-collapse:collapse;font-size:12.5px}
-th,td{padding:8px 7px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th,td{padding:8px 7px;border-bottom:1px solid var(--line-soft);text-align:left;vertical-align:middle}
 th{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:650}
 tr:last-child td{border-bottom:0}
 .badge{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:6px;font-size:11px;font-weight:740;background:#25262c;color:var(--muted)}
 .badge.OPEN,.badge.REVIEW{color:var(--blue);background:rgba(106,168,255,.13)}
 .badge.VERIFIED,.badge.CONFIRMED,.badge.WON{color:var(--green);background:rgba(86,194,113,.14)}
 .badge.VANISHED,.badge.LOST,.badge.BLOCKED{color:var(--red);background:rgba(255,107,99,.14)}
-.badge.LIFETIME,.badge.SETTLED,.badge.RESOLVED{color:var(--violet);background:rgba(181,140,255,.13)}
+.badge.LIFETIME,.badge.SETTLED,.badge.RESOLVED,.badge.EXITED,.badge.SOLD{color:var(--violet);background:rgba(181,140,255,.13)}
 .badge.UNVERIFIABLE,.badge.INSUFFICIENT_DATA{color:var(--gold);background:rgba(224,173,59,.13)}
 .badge.MICRO_EV,.badge.micro{color:#5fe0c1;background:rgba(95,224,193,.14)}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tab{height:28px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);padding:0 9px;cursor:pointer}
+.tab{height:28px;border-radius:7px;border:1px solid var(--line-soft);background:var(--panel-2);color:var(--muted);padding:0 9px;cursor:pointer}
 .tab.active{color:var(--text);border-color:#555963;background:#2a2c33}
-.log{margin:0;height:322px;overflow:auto;background:#0b0c0e;border:1px solid var(--line);border-radius:8px;padding:12px;color:#d2d5d0;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap}
+.log{margin:0;height:320px;overflow:auto;background:var(--panel-3);border:1px solid var(--line-soft);border-radius:8px;padding:12px;color:#d2d5d0;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap}
 .status-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:12px}
-.pill{display:inline-flex;align-items:center;height:24px;padding:0 8px;border:1px solid var(--line);border-radius:99px;background:var(--panel-2);color:var(--muted)}
-.action{height:30px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);padding:0 10px;cursor:pointer}
+.pill{display:inline-flex;align-items:center;height:24px;padding:0 8px;border:1px solid var(--line-soft);border-radius:99px;background:var(--panel-2);color:var(--muted)}
+.action{height:30px;border-radius:7px;border:1px solid var(--line-soft);background:var(--panel-2);color:var(--text);padding:0 10px;cursor:pointer}
 .action:hover{border-color:#555963;background:#2a2c33}
-.track-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:10px}
-.track-card{background:#111216;border:1px solid var(--line);border-radius:8px;padding:11px 12px;min-width:0}
+.track-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.track-card{background:var(--panel-3);border:1px solid var(--line-soft);border-radius:8px;padding:11px 12px;min-width:0}
 .track-card .label{margin-bottom:5px}
 .track-card .value{font-size:21px}
-.scanner-list{display:grid;gap:8px}
-.scanner-row{display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;background:#111216;border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
+.scanner-list{display:grid;gap:8px;max-height:430px;overflow:auto;padding-right:3px}
+.scanner-row{display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;background:var(--panel-3);border:1px solid var(--line-soft);border-radius:8px;padding:10px;min-width:0}
 .scanner-row>div:nth-child(n+3){grid-column:1/-1}
 .scanner-title{display:flex;align-items:center;gap:8px;font-weight:730;min-width:0}
 .scanner-title span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scanner-meta{color:var(--muted);font-size:11px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.scanner-toggle{height:30px;min-width:78px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);cursor:pointer}
+.scanner-toggle{height:30px;min-width:78px;border-radius:7px;border:1px solid var(--line-soft);background:var(--panel-2);color:var(--text);cursor:pointer}
 .scanner-toggle.stop{border-color:rgba(255,107,99,.45);color:var(--red)}
 .scanner-toggle.start{border-color:rgba(86,194,113,.45);color:var(--green)}
-.scanner-toggle.linked{border-color:var(--line);color:var(--muted);cursor:default}
+.scanner-toggle.linked{border-color:var(--line-soft);color:var(--muted);cursor:default}
 .scanner-toggle:disabled{opacity:.55;cursor:wait}
-.status-chip{display:inline-flex;align-items:center;gap:6px;height:24px;border:1px solid var(--line);border-radius:99px;padding:0 8px;color:var(--muted);font-size:11px}
+.status-chip{display:inline-flex;align-items:center;gap:6px;height:24px;border:1px solid var(--line-soft);border-radius:99px;padding:0 8px;color:var(--muted);font-size:11px}
 .status-chip .dot{width:7px;height:7px}
 .status-chip.ok{color:var(--green)}.status-chip.down{color:var(--red)}.status-chip.disabled{color:var(--muted)}.status-chip.stopping,.status-chip.duplicate{color:var(--gold)}
-.detail-grid{display:grid;grid-template-columns:1fr;gap:12px}
+.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .detail-block{min-width:0}
 .detail-title{font-size:12px;font-weight:700;margin:0 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 .delta-table td:nth-child(n+2),.delta-table th:nth-child(n+2){text-align:right}
 .open-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.open-groups{display:grid;gap:14px}
+.open-groups{display:grid;gap:14px;max-height:560px;overflow:auto;padding-right:3px}
 .open-group-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 7px;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
 .open-table td{font-size:12px}
 .open-event{font-weight:700;color:var(--text);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .subline{color:var(--muted);font-size:11px;margin-top:2px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-/* When a panel column is wide enough, expand the dense inner grids back to full layout. */
-@container (min-width:560px){.detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @container (min-width:680px){.scanner-row{grid-template-columns:132px minmax(170px,1.3fr) minmax(150px,1fr) minmax(120px,.7fr) minmax(140px,.8fr)}.scanner-row>div:nth-child(n+3){grid-column:auto}}
-@media (max-width:1100px){.metric{grid-column:span 4}.top-inner{align-items:flex-start;flex-direction:column}.procs{justify-content:flex-start}}
-@media (max-width:760px){.panels{columns:1}}
-@media (max-width:700px){.metric{grid-column:span 6}.wrap{padding:12px}.top-inner{padding:12px}.value{font-size:22px}.chart{height:230px}.log{height:260px}.track-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.scanner-row{grid-template-columns:1fr}.scanner-row>div:nth-child(n){grid-column:auto}th:nth-child(5),td:nth-child(5){display:none}}
+@media (max-width:1180px){.metric{grid-column:span 4}.wide,.side,.half{grid-column:span 12}.track-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.top-inner{align-items:flex-start;flex-direction:column}.procs{justify-content:flex-start}}
+@media (max-width:820px){.metric{grid-column:span 6}.detail-grid{grid-template-columns:1fr}.track-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:700px){.wrap{padding:12px}.top-inner{padding:12px}.value{font-size:22px}.chart{height:230px}.log{height:260px}.scanner-row{grid-template-columns:1fr}.scanner-row>div:nth-child(n){grid-column:auto}th:nth-child(5),td:nth-child(5){display:none}}
 </style>
 </head>
 <body>
@@ -1408,11 +1430,13 @@ function renderMetrics(d) {
   const workerDetail = unhealthy.length
     ? unhealthy.map(p => `${p.status}: ${p.name}`).join(" · ")
     : `${running}/${enabled || d.processes.length} enabled workers running`;
-  const ce = d.clean_ev || {pnl:0,won:0,lost:0,settled:0,roi:0}, se = d.suspect_ev || {n:0,pnl:0}, me = d.micro_ev || {active:0,pnl:0,settled:0,roi:0,active_stake:0}, la = d.locked_arb || {pnl:0,resolved:0,settled:0};
+  const ce = d.clean_ev || {pnl:0,won:0,lost:0,sold:0,settled:0,roi:0}, se = d.suspect_ev || {n:0,pnl:0}, me = d.micro_ev || {active:0,pnl:0,sold:0,settled:0,roi:0,active_stake:0}, la = d.locked_arb || {pnl:0,resolved:0,settled:0};
   const suspectNote = se.n ? ` · suspect: ${se.n} (${money(se.pnl)})` : "";
+  const cleanSold = ce.sold ? ` · ${ce.sold} sold` : "";
+  const microSold = me.sold ? ` · ${me.sold} sold` : "";
   $("metrics").innerHTML = [
-    metric("Clean EV P&L", `<span class="${valClass(ce.pnl)}">${money(ce.pnl)}</span>`, `${ce.won}W / ${ce.lost}L · ${ce.settled} settled · ${pct(ce.roi)} ROI${suspectNote}`),
-    metric("Micro EV", `<span class="${valClass(me.pnl)}">${money(me.pnl)}</span>`, `${me.active} open · ${me.settled} settled · ${pct(me.roi)} ROI · open stake ${usd(me.active_stake)}`, "blue"),
+    metric("Clean EV P&L", `<span class="${valClass(ce.pnl)}">${money(ce.pnl)}</span>`, `${ce.won}W / ${ce.lost}L${cleanSold} · ${ce.settled} realized · ${pct(ce.roi)} ROI${suspectNote}`),
+    metric("Micro EV", `<span class="${valClass(me.pnl)}">${money(me.pnl)}</span>`, `${me.active} open · ${me.settled} realized${microSold} · ${pct(me.roi)} ROI · open stake ${usd(me.active_stake)}`, "blue"),
     metric("Locked ARB P&L", `<span class="${valClass(la.pnl)}">${money(la.pnl)}</span>`, `${la.settled} settled (${la.resolved} resolved) · provisional`),
     metric("Open Bets", compact(d.health.open_bets), `${compact(d.health.flat_bets)} ledger rows`, "blue"),
     metric("ARB Verification", `<span class="good">${d.arb.verified}</span><span class="muted"> / </span><span class="bad">${d.arb.vanished}</span>`, `${d.arb.unverifiable} unverifiable`),
@@ -1438,7 +1462,7 @@ function renderProcesses(d) {
 function renderPipeline(d) {
   const max = Math.max(...Object.values(d.grades).map(num), 1);
   $("pipeline-total").textContent = `${d.arb.open_n} open ARBs`;
-  const order = ["OPEN","VERIFIED","CONFIRMED","LIFETIME","SETTLED","VANISHED","UNVERIFIABLE","REVIEW"];
+  const order = ["OPEN","VERIFIED","CONFIRMED","LIFETIME","SETTLED","EXITED","VANISHED","UNVERIFIABLE","REVIEW"];
   $("pipeline").innerHTML = order.filter(k => d.grades[k]).map(k => {
     const n = d.grades[k], color = k === "VANISHED" ? "var(--red)" : k === "UNVERIFIABLE" ? "var(--gold)" : k === "VERIFIED" || k === "CONFIRMED" ? "var(--green)" : "var(--blue)";
     return `<div class="bar-row"><span><span class="badge ${k}">${k}</span></span><span class="bar-track"><span class="bar-fill" style="width:${Math.max(4,n/max*100)}%;background:${color}"></span></span><b>${n}</b></div>`;

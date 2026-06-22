@@ -12,7 +12,7 @@ from .pricing import money, q6
 from .store import Store, quote_to_json
 from .validation import ValidationRule, classify_validation
 
-LIFECYCLE_STATUSES = {"OPEN", "CONFIRMED", "CLOSED", "SETTLED"}
+LIFECYCLE_STATUSES = {"OPEN", "CONFIRMED", "CLOSED", "SETTLED", "EXITED"}
 
 
 def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportunity],
@@ -86,7 +86,7 @@ def tracker_bet_view(store: Store) -> dict[str, dict[str, Decimal | None]]:
 
 def _active_rows(con) -> dict[str, object]:
     # Flash verification and hot lifetime rows are annotations on an opportunity's
-    # lifecycle, not lifecycle transitions. OPEN/CONFIRMED/CLOSED/SETTLED rows decide
+    # lifecycle, not lifecycle transitions. OPEN/CONFIRMED/CLOSED/SETTLED/EXITED rows decide
     # whether a fingerprint is still active or can reappear as a new bet.
     rows = list(con.execute("SELECT * FROM flat_bets ORDER BY id"))
     latest: dict[str, object] = {}
@@ -102,7 +102,7 @@ def _active_rows(con) -> dict[str, object]:
 
 def _latest_closed_id(con, fingerprint: str) -> int | None:
     row = con.execute(
-        "SELECT id FROM flat_bets WHERE fingerprint = ? AND status = 'CLOSED' ORDER BY id DESC LIMIT 1",
+        "SELECT id FROM flat_bets WHERE fingerprint = ? AND status IN ('CLOSED','EXITED') ORDER BY id DESC LIMIT 1",
         (fingerprint,),
     ).fetchone()
     return None if row is None else int(row["id"])
