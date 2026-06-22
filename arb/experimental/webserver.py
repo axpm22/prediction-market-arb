@@ -1021,6 +1021,10 @@ h1{font-size:18px;line-height:1;margin:0;font-weight:720;letter-spacing:0}
 .wrap{max-width:1440px;margin:0 auto;padding:18px 20px 28px}
 .grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-width:0}
+/* Masonry: every panel tiles side-by-side and packs vertically with no dead space.
+   Each panel is a query container so its inner grids reflow to the column width. */
+.panels{columns:340px 4;column-gap:12px;margin-top:12px}
+.panels>.panel{break-inside:avoid;-webkit-column-break-inside:avoid;margin:0 0 12px;container-type:inline-size}
 .metric{grid-column:span 2;padding:14px}
 .wide{grid-column:span 8}.side{grid-column:span 4}.half{grid-column:span 6}.full{grid-column:span 12}
 .label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px}
@@ -1059,12 +1063,13 @@ tr:last-child td{border-bottom:0}
 .pill{display:inline-flex;align-items:center;height:24px;padding:0 8px;border:1px solid var(--line);border-radius:99px;background:var(--panel-2);color:var(--muted)}
 .action{height:30px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);padding:0 10px;cursor:pointer}
 .action:hover{border-color:#555963;background:#2a2c33}
-.track-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.track-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:10px}
 .track-card{background:#111216;border:1px solid var(--line);border-radius:8px;padding:11px 12px;min-width:0}
 .track-card .label{margin-bottom:5px}
 .track-card .value{font-size:21px}
 .scanner-list{display:grid;gap:8px}
-.scanner-row{display:grid;grid-template-columns:132px minmax(190px,1.3fr) minmax(170px,1fr) minmax(130px,.7fr) minmax(150px,.8fr);gap:10px;align-items:center;background:#111216;border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
+.scanner-row{display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;background:#111216;border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
+.scanner-row>div:nth-child(n+3){grid-column:1/-1}
 .scanner-title{display:flex;align-items:center;gap:8px;font-weight:730;min-width:0}
 .scanner-title span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scanner-meta{color:var(--muted);font-size:11px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1076,7 +1081,7 @@ tr:last-child td{border-bottom:0}
 .status-chip{display:inline-flex;align-items:center;gap:6px;height:24px;border:1px solid var(--line);border-radius:99px;padding:0 8px;color:var(--muted);font-size:11px}
 .status-chip .dot{width:7px;height:7px}
 .status-chip.ok{color:var(--green)}.status-chip.down{color:var(--red)}.status-chip.disabled{color:var(--muted)}.status-chip.stopping,.status-chip.duplicate{color:var(--gold)}
-.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.detail-grid{display:grid;grid-template-columns:1fr;gap:12px}
 .detail-block{min-width:0}
 .detail-title{font-size:12px;font-weight:700;margin:0 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 .delta-table td:nth-child(n+2),.delta-table th:nth-child(n+2){text-align:right}
@@ -1087,9 +1092,11 @@ tr:last-child td{border-bottom:0}
 .open-event{font-weight:700;color:var(--text);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .subline{color:var(--muted);font-size:11px;margin-top:2px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-@media (max-width:1100px){.metric{grid-column:span 4}.wide,.side,.half{grid-column:span 12}.top-inner{align-items:flex-start;flex-direction:column}.procs{justify-content:flex-start}}
-@media (max-width:1000px){.scanner-row{grid-template-columns:128px 1fr 1fr}.scanner-row>div:nth-child(4),.scanner-row>div:nth-child(5){grid-column:span 1}}
-@media (max-width:900px){.track-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.detail-grid{grid-template-columns:1fr}}
+/* When a panel column is wide enough, expand the dense inner grids back to full layout. */
+@container (min-width:560px){.detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (min-width:680px){.scanner-row{grid-template-columns:132px minmax(170px,1.3fr) minmax(150px,1fr) minmax(120px,.7fr) minmax(140px,.8fr)}.scanner-row>div:nth-child(n+3){grid-column:auto}}
+@media (max-width:1100px){.metric{grid-column:span 4}.top-inner{align-items:flex-start;flex-direction:column}.procs{justify-content:flex-start}}
+@media (max-width:760px){.panels{columns:1}}
 @media (max-width:700px){.metric{grid-column:span 6}.wrap{padding:12px}.top-inner{padding:12px}.value{font-size:22px}.chart{height:230px}.log{height:260px}.track-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.scanner-row{grid-template-columns:1fr}.scanner-row>div:nth-child(n){grid-column:auto}th:nth-child(5),td:nth-child(5){display:none}}
 </style>
 </head>
@@ -1106,7 +1113,7 @@ tr:last-child td{border-bottom:0}
 <main class="wrap">
   <div id="alerts"></div>
   <section class="grid" id="metrics"></section>
-  <section class="grid" style="margin-top:12px">
+  <section class="panels">
     <div class="panel full">
       <div class="panel-head">
         <div>
