@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from arb.forecast.scoring import brier, log_loss, summarize
-from arb.pricing import q6
+from arb.pricing import money, q6
 from arb.store import Store
 
 
@@ -108,7 +108,7 @@ def _settle_forecast_bet(con, forecast_id: int, outcome: int) -> None:
     result = "WON" if won else "LOST"
     cost = Decimal(str(base["optimistic_cost"]))
     stake = Decimal(str(base["stake_usd"]))
-    pnl = q6(stake * (Decimal("1") / cost - Decimal("1"))) if won else q6(-stake)
+    pnl = money(stake * (Decimal("1") / cost - Decimal("1"))) if won else money(-stake)
     con.execute(
         """INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind,
                trusted, live, edge, stake_usd, legs_json, optimistic_cost, pnl_optimistic,

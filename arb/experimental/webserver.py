@@ -1688,7 +1688,35 @@ function renderLogs(d) {
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
 
+function captureScroll() {
+  const doc = document.documentElement;
+  const pageMax = Math.max(0, doc.scrollHeight - window.innerHeight);
+  const inner = {};
+  ["scanners", "open-bets", "kinds", "recent", "log"].forEach(id => {
+    const el = $(id);
+    if (el) inner[id] = {top: el.scrollTop, bottom: el.scrollHeight - el.clientHeight - el.scrollTop};
+  });
+  return {top: window.scrollY, bottom: pageMax - window.scrollY, inner};
+}
+
+function restoreScroll(snapshot) {
+  if (!snapshot) return;
+  requestAnimationFrame(() => {
+    const doc = document.documentElement;
+    const pageMax = Math.max(0, doc.scrollHeight - window.innerHeight);
+    const pageTarget = snapshot.bottom < 48 ? pageMax : Math.min(snapshot.top, pageMax);
+    if (Math.abs(window.scrollY - pageTarget) > 2) window.scrollTo(0, pageTarget);
+    Object.entries(snapshot.inner || {}).forEach(([id, pos]) => {
+      const el = $(id);
+      if (!el) return;
+      const max = Math.max(0, el.scrollHeight - el.clientHeight);
+      el.scrollTop = pos.bottom < 24 ? max : Math.min(pos.top, max);
+    });
+  });
+}
+
 function render(d) {
+  const scroll = captureScroll();
   renderProcesses(d);
   renderAlerts(d);
   renderMetrics(d);
@@ -1704,6 +1732,7 @@ function render(d) {
     {label:"clean", color:colors.clean, data:d.equity.optimistic_clean},
     {label:"confirmed", color:colors.confirmed, data:d.equity.confirmed_clean},
   ]);
+  restoreScroll(scroll);
 }
 
 $("reset-track").onclick = () => resetTracking(state);
