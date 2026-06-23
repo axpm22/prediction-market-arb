@@ -48,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     whales.add_argument("--once", action="store_true", help="run a single pass and exit")
     whales.add_argument("--list", action="store_true", help="print qualified wallets and exit")
     sub.add_parser("devig-regrade", help="offline: re-grade stored EV flags under proportional/power/shin de-vig (Lever A.3)")
+    sub.add_parser("divergence-reversion", help="offline: do large cross-venue spreads revert? (weakness#10)")
     web = sub.add_parser("web", help="serve the read-only live dashboard")
     web.add_argument("--port", type=int, default=8787, help="local port to bind, default: 8787")
     annotate = sub.add_parser("annotate", help="attach an immutable tag+reason to a bet (never edits the bet)")
@@ -97,6 +98,12 @@ def main(argv: list[str] | None = None) -> int:
         results = regrade(Store(config.database_path),
                           config.min_books_for_consensus, config.min_books_for_consensus_totals)
         print(format_regrade(results))
+        return 0
+    if args.command == "divergence-reversion":
+        from arb.experimental.analysis.divergence_reversion import format_reversion, run_reversion
+
+        print(format_reversion(run_reversion(Store(config.database_path),
+                                             float(config.divergence_threshold))))
         return 0
     if args.command == "web":
         from arb.experimental.webserver import serve
