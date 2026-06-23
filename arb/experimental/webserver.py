@@ -46,11 +46,11 @@ LOG_FILES = {
 }
 
 EDGE_SIZED_EV_BASELINE = {
-    "label": "2026-06-23 edge-sized start",
+    "label": "2026-06-23 KEEP-only edge-sized start",
     "max_id": 7924,
-    "settled": 487,
-    "stake": 681.18,
-    "pnl": 113.42,
+    "settled": 35,
+    "stake": 22.20,
+    "pnl": 8.01,
 }
 
 SCANNERS = [
@@ -709,6 +709,7 @@ def build_state(store: Store, config) -> dict[str, Any]:
                AND status IN ('SETTLED','EXITED')
                AND result IN ('WON','LOST')
                AND quality_flag IS NULL
+               AND validation_tag='KEEP'
             """,
             (EDGE_SIZED_EV_BASELINE["max_id"], EDGE_SIZED_EV_BASELINE["max_id"]),
         ).fetchone()
@@ -1282,12 +1283,12 @@ tr:last-child td{border-bottom:0}
     <div class="panel full">
       <div class="panel-head">
         <div>
-          <div class="panel-title">Edge-Sized EV</div>
-          <div class="muted" id="edge-sized-summary"></div>
+          <div class="panel-title">Clean EV</div>
+          <div class="muted" id="clean-ev-summary"></div>
         </div>
-        <div class="status-line"><span class="pill">$1 per 1% edge</span><span class="pill">clean EV only</span></div>
+        <div class="tabs" id="clean-ev-tabs"></div>
       </div>
-      <div class="panel-body"><div class="track-grid" id="edge-sized"></div></div>
+      <div class="panel-body"><div class="track-grid" id="clean-ev-panel"></div></div>
     </div>
     <div class="panel full">
       <div class="panel-head">
@@ -1346,6 +1347,7 @@ const $ = id => document.getElementById(id);
 let state = null;
 let activeLog = "daemon";
 let activeOpenKind = "EV";
+let activeCleanEvMode = "flat";
 const colors = {raw:"#a4a6ad", clean:"#6aa8ff", confirmed:"#56c271", opps:"#e0ad3b"};
 const trackKey = "arb-dashboard-tracking-v1";
 const laneLabel = kind => ({MICRO_EV:"MICRO EV"}[kind] || kind);
@@ -1589,15 +1591,36 @@ function renderLiveBaseball(d) {
     `</div><div class="muted" style="margin-top:8px">VANISHED-vs-null gap, CLV at +30s/+2m/next-inning, and avg effective_state_age accrue once the Phase-1 live runner captures marks. This lane is never folded into clean pregame EV.</div>`;
 }
 
-function renderEdgeSized(d) {
+function renderCleanEv(d) {
+  const ce = d.clean_ev || {pnl:0, stake:0, roi:0, settled:0, won:0, lost:0, sold:0, win_rate:0};
   const ev = d.edge_sized_ev;
-  if (!ev || !$("edge-sized")) return;
-  $("edge-sized-summary").textContent =
+  if (!ev || !$("clean-ev-panel")) return;
+  const tabs = [["flat", "Flat $1"], ["edge", "Edge-sized"]];
+  $("clean-ev-tabs").innerHTML = tabs
+    .map(([mode, label]) => `<button class="tab ${mode === activeCleanEvMode ? "active" : ""}" data-mode="${mode}" type="button">${esc(label)}</button>`)
+    .join("");
+  $("clean-ev-tabs").querySelectorAll("button").forEach(btn => {
+    btn.onclick = () => { activeCleanEvMode = btn.dataset.mode; renderCleanEv(state); };
+  });
+  if (activeCleanEvMode === "flat") {
+    const sold = ce.sold ? ` · ${ce.sold} sold` : "";
+    $("clean-ev-summary").textContent = "actual clean EV paper track · flat $1 stake per row";
+    $("clean-ev-panel").innerHTML = [
+      deltaCard("Flat $1 P&L", money(ce.pnl), `${ce.won}W / ${ce.lost}L${sold} · ${ce.settled} realized`, valClass(ce.pnl)),
+      deltaCard("Stake", usd(ce.stake), `${pct(ce.roi)} ROI · clean EV only`, "blue"),
+      deltaCard("Win Rate", pct(ce.win_rate), `${ce.won + ce.lost} game outcomes`),
+      deltaCard("Suspect Excluded", `${(d.suspect_ev || {}).n || 0}`, "quarantined rows not counted", "warn"),
+      deltaCard("Rule", "$1 / bet", "current dashboard headline sizing"),
+      deltaCard("Lane", "Clean", "quality_flag is NULL"),
+    ].join("");
+    return;
+  }
+  $("clean-ev-summary").textContent =
     `${ev.rule} · starts at ${money(ev.baseline_pnl)} after ${ev.baseline_settled} settled rows`;
   const newDetail = ev.new_settled
     ? `${ev.new_won}W / ${ev.new_lost}L · max new stake ${usd(ev.max_new_stake)}`
     : `waiting for row id > ${ev.baseline_max_id}`;
-  $("edge-sized").innerHTML = [
+  $("clean-ev-panel").innerHTML = [
     deltaCard("Total P&L", money(ev.pnl), `${ev.settled} settled · from ${money(ev.baseline_pnl)} start`, valClass(ev.pnl)),
     deltaCard("Since Start", money(ev.new_pnl), newDetail, valClass(ev.new_pnl)),
     deltaCard("Total Stake", usd(ev.stake), `${pct(ev.roi)} ROI · clean EV only`, "blue"),
@@ -1874,7 +1897,7 @@ function render(d) {
   renderLiveBaseball(d);
   renderMetrics(d);
   renderTracking(d);
-  renderEdgeSized(d);
+  renderCleanEv(d);
   renderScanners(d);
   renderOpenBets(d);
   renderPipeline(d);

@@ -138,7 +138,9 @@ def test_live_dashboard_tracks_edge_sized_ev_from_baseline(tmp_path) -> None:
     assert sized["new_stake"] == 5.0
     assert sized["new_pnl"] == 5.0
     assert sized["pnl"] == 118.42
-    assert "Edge-Sized EV" in PAGE
+    assert "Clean EV" in PAGE
+    assert "clean-ev-tabs" in PAGE
+    assert "Edge-sized" in PAGE
 
 
 def test_live_dashboard_does_not_count_settled_append_only_roots_as_active(tmp_path) -> None:

@@ -5,9 +5,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from .lifecycle import active_rows_by_fingerprint
 from .store import Store
-
-LIFECYCLE_STATUSES = {"OPEN", "CONFIRMED", "CLOSED", "SETTLED", "EXITED"}
 
 
 @dataclass(frozen=True)
@@ -66,14 +65,7 @@ def _active_sports_bets(store: Store):
                 """
             )
         )
-    latest_by_fingerprint = {}
-    for row in rows:
-        if row["status"] in LIFECYCLE_STATUSES:
-            latest_by_fingerprint[row["fingerprint"]] = row
-    return [
-        row for row in latest_by_fingerprint.values()
-        if row["status"] in {"OPEN", "CONFIRMED"}
-    ]
+    return list(active_rows_by_fingerprint(rows).values())
 
 
 def _event_day(legs_json: str) -> date | None:

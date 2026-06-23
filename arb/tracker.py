@@ -8,12 +8,11 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from .lifecycle import active_rows_by_fingerprint
 from .models import Opportunity
 from .pricing import money, q6
 from .store import Store, quote_to_json
 from .validation import ValidationRule, classify_validation
-
-LIFECYCLE_STATUSES = {"OPEN", "CONFIRMED", "CLOSED", "SETTLED", "EXITED"}
 # SPEC §9: P&L attributes to the EST/EDT day the bet was placed. placed_at is stored UTC,
 # so a bet placed after ~19-20:00 ET rolls into the next UTC day; bucket by local date.
 ATTRIBUTION_TZ = ZoneInfo("America/New_York")
@@ -105,15 +104,7 @@ def _active_rows(con) -> dict[str, object]:
     # lifecycle, not lifecycle transitions. OPEN/CONFIRMED/CLOSED/SETTLED/EXITED rows decide
     # whether a fingerprint is still active or can reappear as a new bet.
     rows = list(con.execute("SELECT * FROM flat_bets ORDER BY id"))
-    latest: dict[str, object] = {}
-    for row in rows:
-        if row["status"] in LIFECYCLE_STATUSES:
-            latest[row["fingerprint"]] = row
-    return {
-        fingerprint: row
-        for fingerprint, row in latest.items()
-        if row["status"] in {"OPEN", "CONFIRMED"}
-    }
+    return active_rows_by_fingerprint(rows)
 
 
 def _latest_closed_id(con, fingerprint: str) -> int | None:
