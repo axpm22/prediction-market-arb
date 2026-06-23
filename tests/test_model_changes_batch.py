@@ -79,3 +79,17 @@ def test_high_win_rate_but_unprofitable_whale_not_qualified() -> None:
     assert w.win_rate >= 0.60          # would have passed the old hit-rate gate
     assert w.roi < 0                   # but it loses money
     assert w.qualified is False        # ...so it is not qualified
+
+
+# ---- EV#7: continuous stale-consensus edge decay ----
+
+def test_consensus_edge_decays_with_age() -> None:
+    config = replace(load_config(), ev_edge_decay_per_hour=Decimal("0.02"))
+    # consensus 2h old, raw edge 0.06 -> decayed 0.06 - 0.04 = 0.02; below an e_min of 0.03.
+    old = datetime.now(timezone.utc) - timedelta(hours=2)
+    consensus = {(EVENT, "kansas city royals"): (Decimal("0.56"), old)}
+    [opp] = detect_ev_from_consensus([_quote("0.50", 1)], consensus, max_age_hours=8,
+                                     trusted_pairs=set(), e_min=Decimal("0.03"), config=config,
+                                     pregame_max_age_hours=8)
+    assert any(n.startswith("edge_decayed:") for n in opp.notes)
+    assert "below-e-min" in opp.notes        # decayed below e_min even though raw edge was 0.06

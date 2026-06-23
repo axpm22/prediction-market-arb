@@ -143,6 +143,9 @@ ev:
   edge_suspect_above: 0.25   # Phase 1: EV edge above this = stale/thin-book, quarantined
   enforce_depth_floor: true  # require depth >= min_executable_usd to be 'clean'
   reject_one_sided_books: true
+  # EV#7: pregame info decays smoothly, not as a step. Subtract this many probability points
+  # of edge per hour of consensus age before the e_min gate (0 = legacy binary behavior).
+  edge_decay_per_hour: 0.0
 scan_times: ["10:00", "15:00", "19:00"]
 daily_report_time: "23:59"
 settle_time: "09:30"

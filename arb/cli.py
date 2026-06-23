@@ -538,7 +538,16 @@ def detect_ev_from_consensus(
         notes = (*notes, f"edge_pts:{edge}")
         if calibrated:
             notes = (*notes, "p_hat-calibrated")
-        below_e_min = e_min is not None and edge < e_min
+        # EV#7: decay edge continuously by consensus age (pregame info decays smoothly, not as
+        # a step). The decayed edge — not the raw one — is what the e_min gate sees.
+        gate_edge = edge
+        decay_rate = getattr(config, "ev_edge_decay_per_hour", Decimal("0")) if config is not None else Decimal("0")
+        if decay_rate > 0:
+            age_hours = Decimal(str(max(0.0, (datetime.now(timezone.utc) - computed_at).total_seconds() / 3600.0)))
+            gate_edge = max(Decimal("0"), q6(edge - decay_rate * age_hours))
+            if gate_edge < edge:
+                notes = (*notes, f"edge_decayed:{gate_edge}")
+        below_e_min = e_min is not None and gate_edge < e_min
         if below_e_min and not record_below_e_min:
             continue
         if below_e_min:

@@ -64,6 +64,7 @@ class AppConfig:
     ev_edge_suspect_above: Decimal
     ev_enforce_depth_floor: bool
     ev_reject_one_sided: bool
+    ev_edge_decay_per_hour: Decimal
     auto_fill: bool
     trusted_pairs: set[str]
     fuzzy_match_threshold: int
@@ -199,6 +200,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         ev_edge_suspect_above=_decimal(ev.get("edge_suspect_above", "0.25")),
         ev_enforce_depth_floor=bool(ev.get("enforce_depth_floor", True)),
         ev_reject_one_sided=bool(ev.get("reject_one_sided_books", True)),
+        ev_edge_decay_per_hour=_decimal(ev.get("edge_decay_per_hour", "0")),
         auto_fill=bool(raw["auto_fill"]),
         trusted_pairs=set(raw["trusted_pairs"]),
         fuzzy_match_threshold=int(raw["fuzzy_match_threshold"]),
