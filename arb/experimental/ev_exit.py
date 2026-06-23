@@ -17,7 +17,6 @@ import requests
 
 from arb.pricing import all_in_fee_cost, consensus_outcome_key, money, q6
 from arb.store import Store
-from arb.venues.kalshi import BASE_URL as KALSHI_URL
 from arb.venues.polymarket import CLOB_URL
 
 HEADERS = {"User-Agent": "arb-paper-scanner/0.1 (public read-only)"}
@@ -100,14 +99,25 @@ def exit_decision(
     if current is None:
         return None
     exit_bid, exit_depth = current
-    entry_cost = Decimal(str(bet["confirmed_entry_cost"] or bet["optimistic_cost"]))
-    if entry_cost <= 0 or exit_bid <= 0:
+    # H1: optimistic and confirmed entry costs are DISTINCT bases for DISTINCT P&L numbers.
+    # The trigger uses the truest available entry (the confirmed fill if any, else the
+    # optimistic ask); but the ledger stores both P&Ls separately and pnl_confirmed stays
+    # NULL when the bet was never confirmed — never the optimistic value (mirrors
+    # settlement._append_settled_row).
+    optimistic_cost = Decimal(str(bet["optimistic_cost"]))
+    raw_confirmed = bet["confirmed_entry_cost"]
+    confirmed_cost = Decimal(str(raw_confirmed)) if raw_confirmed not in (None, "") else None
+    entry_cost = confirmed_cost if confirmed_cost is not None else optimistic_cost
+    if optimistic_cost <= 0 or entry_cost <= 0 or exit_bid <= 0:
         return None
     stake = Decimal(str(bet["stake_usd"]))
     min_depth = Decimal(str(cfg.get("min_exit_depth_usd", "5")))
     if exit_depth is not None and exit_depth < min(min_depth, stake):
         return None
-    profit = money(stake * (exit_bid / entry_cost - Decimal("1")))
+    pnl_optimistic = money(stake * (exit_bid / optimistic_cost - Decimal("1")))
+    pnl_confirmed = (money(stake * (exit_bid / confirmed_cost - Decimal("1")))
+                     if confirmed_cost is not None else None)
+    profit = pnl_confirmed if pnl_confirmed is not None else pnl_optimistic
     roi = q6(profit / stake) if stake > 0 else Decimal("0")
 
     # Fresh fair value is required to act either way (a stale line can't tell us the edge is
@@ -146,17 +156,21 @@ def exit_decision(
         "kind": "take-profit" if take_profit else "stop-loss",
         "result": "SOLD" if take_profit else "STOPPED",
         "entry_cost": q6(entry_cost),
+        "optimistic_cost": q6(optimistic_cost),
         "exit_bid": q6(exit_bid),
         "exit_depth": "" if exit_depth is None else str(q6(exit_depth)),
         "profit": profit,
+        "pnl_optimistic": pnl_optimistic,
+        "pnl_confirmed": pnl_confirmed,   # None when the entry was never confirmed (H1)
         "roi": roi,
         "remaining_edge": remaining_edge,
     }
 
 
 def _append_exit_row(con: sqlite3.Connection, bet: sqlite3.Row, decision: dict[str, Decimal | str], now: datetime) -> None:
+    confirmed_note = "confirmed" if decision["pnl_confirmed"] is not None else "unconfirmed-entry"
     note = (
-        f"ev-exit: {decision['kind']}; "
+        f"ev-exit: {decision['kind']}; {confirmed_note}; "
         f"entry={decision['entry_cost']} exit_bid={decision['exit_bid']} "
         f"roi={decision['roi']} remaining_edge={decision['remaining_edge']} "
         f"exit_depth={decision['exit_depth']}"
@@ -174,8 +188,11 @@ def _append_exit_row(con: sqlite3.Connection, bet: sqlite3.Row, decision: dict[s
         (
             bet["fingerprint"], bet["id"], bet["opened_poll_id"], bet["category"], bet["sport"],
             bet["trusted"], bet["live"], bet["edge"], bet["stake_usd"], bet["legs_json"],
-            str(decision["entry_cost"]), str(decision["exit_bid"]),
-            str(decision["profit"]), str(decision["profit"]),
+            # H1: optimistic_cost = optimistic entry; pnl_optimistic from it. pnl_confirmed is
+            # NULL unless the entry was confirmed — never a copy of the optimistic value.
+            str(decision["optimistic_cost"]), str(decision["exit_bid"]),
+            str(decision["pnl_optimistic"]),
+            None if decision["pnl_confirmed"] is None else str(decision["pnl_confirmed"]),
             bet["placed_at"], now.isoformat(), str(decision["result"]), note, bet["quality_flag"],
             bet["kelly_f_star"], bet["kelly_stake_usd"], bet["validation_rule"], bet["validation_tag"],
         ),
@@ -183,18 +200,28 @@ def _append_exit_row(con: sqlite3.Connection, bet: sqlite3.Row, decision: dict[s
 
 
 def live_fetchers(config) -> dict[str, ExitFetcher]:
+    # H2: per-bet book reads go through rate-limited, pooled sessions instead of a fresh
+    # unthrottled requests.get per bet. Kalshi reuses the adapter's _get (min-interval +
+    # 429 back-off); Polymarket reuses one pooled Session (the CLOB has no documented
+    # per-IP limiter, so connection reuse is the available throttle).
+    from arb.venues.kalshi import KalshiAdapter
+
+    kalshi_adapter = KalshiAdapter(config)
+    poly_session = requests.Session()
+    poly_session.headers.update(HEADERS)
     return {
-        "kalshi": lambda leg: _kalshi_current_bid(leg, config.kalshi_fee_rate, config.taker_price_buffer),
-        "polymarket": lambda leg: _polymarket_current_bid(leg, config.polymarket_sports_fee_rate, config.taker_price_buffer),
+        "kalshi": lambda leg: _kalshi_current_bid(leg, kalshi_adapter, config.kalshi_fee_rate, config.taker_price_buffer),
+        "polymarket": lambda leg: _polymarket_current_bid(leg, poly_session, config.polymarket_sports_fee_rate, config.taker_price_buffer),
     }
 
 
-def _kalshi_current_bid(leg: dict[str, Any], fee_rate: Decimal, taker_buffer: Decimal) -> tuple[Decimal, Decimal | None] | None:
-    response = requests.get(f"{KALSHI_URL}/markets/{leg['book']}/orderbook", timeout=30, headers=HEADERS)
-    if response.status_code == 404:
-        return None
-    response.raise_for_status()
-    orderbook = response.json()
+def _kalshi_current_bid(leg: dict[str, Any], adapter, fee_rate: Decimal, taker_buffer: Decimal) -> tuple[Decimal, Decimal | None] | None:
+    try:
+        orderbook = adapter._get(f"/markets/{leg['book']}/orderbook")  # rate-limited, 429-retrying
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            return None  # closed/unknown market — not a quote
+        raise
     book = orderbook.get("orderbook_fp") or orderbook.get("orderbook") or {}
     side = "no" if leg.get("market_type") == "TOTAL" and leg.get("outcome_label") == "UNDER" else "yes"
     levels = book.get(f"{side}_dollars") or []
@@ -207,8 +234,8 @@ def _kalshi_current_bid(leg: dict[str, Any], fee_rate: Decimal, taker_buffer: De
     return (net, q6(bid * size)) if net > 0 else None
 
 
-def _polymarket_current_bid(leg: dict[str, Any], fee_rate: Decimal, taker_buffer: Decimal) -> tuple[Decimal, Decimal | None] | None:
-    response = requests.get(f"{CLOB_URL}/book", params={"token_id": leg["book"]}, timeout=30, headers=HEADERS)
+def _polymarket_current_bid(leg: dict[str, Any], session: requests.Session, fee_rate: Decimal, taker_buffer: Decimal) -> tuple[Decimal, Decimal | None] | None:
+    response = session.get(f"{CLOB_URL}/book", params={"token_id": leg["book"]}, timeout=30)
     if response.status_code == 404:
         return None
     response.raise_for_status()

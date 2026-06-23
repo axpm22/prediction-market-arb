@@ -1,0 +1,9 @@
+{
+  "_comment": "Recorded Polymarket Gamma /markets shape for a VOID/no-contest binary (audit A2 resolver fixture). A closed market with a 50/50 payout is the void outcome.",
+  "id": "0xMARKETVOID",
+  "question": "Game cancelled - rain",
+  "closed": true,
+  "outcomes": "[\"Team A\", \"Team B\"]",
+  "outcomePrices": "[\"0.5\", \"0.5\"]",
+  "clobTokenIds": "[\"tokA\", \"tokB\"]"
+}

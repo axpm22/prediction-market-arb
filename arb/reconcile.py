@@ -66,11 +66,22 @@ def reconcile_arb(leg_results: list[tuple[Decimal, str]], provisional_pnl: Decim
     return Reconciliation(realized, agrees, detail)
 
 
+def _resolver_for(leg_resolver, venue: str):
+    """Audit A2: resolvers compose by venue. `leg_resolver` is either a single callable
+    (applied to every leg — back-compat) or a {venue: callable} mapping that dispatches
+    per leg so a kalshi+poly arb resolves its kalshi leg with the kalshi resolver and its
+    poly leg with the poly resolver. A venue with no resolver yields None (unresolved)."""
+    if isinstance(leg_resolver, dict):
+        return leg_resolver.get(venue)
+    return leg_resolver
+
+
 def reconcile_settlements(store: Store, leg_resolver) -> dict[str, int]:
     """For each settled ARB lacking a reconciliation, fetch venue-actual leg results via
-    `leg_resolver(leg) -> 'WON'|'LOST'|'VOID'|None` and append a RECONCILED/CORRECTED row.
-    Returns {checked, agree, corrected, skipped}. leg_resolver is injected so the pure
-    logic is testable and the live venue-resolution fetch can be swapped in."""
+    per-venue resolvers `(leg) -> 'WON'|'LOST'|'VOID'|None` and append a RECONCILED/CORRECTED
+    row. `leg_resolver` is a single callable OR a {venue: callable} mapping (audit A2). A bet
+    is "unresolved" only when *its own* leg's venue resolver returns None — no longer skipped
+    just because one venue lacks a resolver. Returns {checked, agree, corrected, skipped}."""
     counts = {"checked": 0, "agree": 0, "corrected": 0, "skipped": 0}
     with store.connect() as con:
         bets = list(con.execute(
@@ -87,7 +98,8 @@ def reconcile_settlements(store: Store, leg_resolver) -> dict[str, int]:
             leg_results: list[tuple[Decimal, str]] = []
             unresolved = False
             for leg in legs:
-                res = leg_resolver(leg)
+                resolver = _resolver_for(leg_resolver, str(leg.get("venue")))
+                res = resolver(leg) if resolver is not None else None
                 if res is None:
                     unresolved = True
                     break
@@ -102,7 +114,36 @@ def reconcile_settlements(store: Store, leg_resolver) -> dict[str, int]:
             status = "RECONCILED" if recon.agrees else "CORRECTED"
             counts["agree" if recon.agrees else "corrected"] += 1
             _append_recon_row(con, bet, recon, status)
+        # Audit A2: any settled arb still without a venue cross-check carries an unverified
+        # provisional lock — surface the count so the headline can label it provisional.
+        counts["provisional"] = provisional_arb_count(con)
     return counts
+
+
+def provisional_arb_count(con: sqlite3.Connection) -> int:
+    """Settled RESOLVED arbs whose realized P&L is still the unverified provisional lock
+    (no RECONCILED/CORRECTED child row yet). Until this is 0, arb realized P&L is provisional."""
+    row = con.execute(
+        """
+        SELECT COUNT(*) FROM flat_bets b
+         WHERE b.kind='ARB' AND b.status='SETTLED' AND b.result='RESOLVED'
+           AND NOT EXISTS (SELECT 1 FROM flat_bets r
+                            WHERE r.reappearance_of=b.id AND r.status IN ('RECONCILED','CORRECTED'))
+        """
+    ).fetchone()
+    return int(row[0]) if row else 0
+
+
+def default_resolvers() -> dict:
+    """Audit A2: the live per-venue resolver map. Each is a public, unauthenticated
+    settled-resolution read mirroring kalshi_leg_result's WON|LOST|VOID|None contract.
+    SX stays in the map but fails closed until its settled-market field set is verified
+    live (see CRITICAL_AND_HIGH.md A2), so it can only ever skip, never fake a lock."""
+    from .venues.kalshi import kalshi_leg_result
+    from .venues.polymarket import polymarket_leg_result
+    from .venues.sx import sx_leg_result
+
+    return {"kalshi": kalshi_leg_result, "polymarket": polymarket_leg_result, "sx": sx_leg_result}
 
 
 def _append_recon_row(con: sqlite3.Connection, bet: sqlite3.Row, recon: Reconciliation, status: str) -> None:

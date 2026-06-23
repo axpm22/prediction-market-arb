@@ -1,0 +1,9 @@
+{
+  "_comment": "Recorded Polymarket Gamma /markets shape for a SETTLED binary (audit A2 resolver fixture). outcomePrices snap to 1/0 on resolution; clobTokenIds is index-aligned with outcomes/outcomePrices. The 'tokWin' token resolved WON, 'tokLose' LOST.",
+  "id": "0xMARKET",
+  "question": "Chicago White Sox vs Atlanta Braves",
+  "closed": true,
+  "outcomes": "[\"Chicago White Sox\", \"Atlanta Braves\"]",
+  "outcomePrices": "[\"1\", \"0\"]",
+  "clobTokenIds": "[\"tokWin\", \"tokLose\"]"
+}

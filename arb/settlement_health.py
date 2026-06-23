@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from .lifecycle import active_rows_by_fingerprint
+from .lifecycle import active_rows_via_index
 from .store import Store
 
 
@@ -54,18 +54,9 @@ def format_settle_health(health: SettlementHealth) -> str:
 
 
 def _active_sports_bets(store: Store):
+    # S1: indexed latest-lifecycle read (was a full kind/status scan + Python derivation).
     with store.connect() as con:
-        rows = list(
-            con.execute(
-                """
-                SELECT *
-                  FROM flat_bets
-                 WHERE kind IN ('EV', 'ARB', 'CLOSE') AND status IN ('OPEN', 'CONFIRMED', 'CLOSED', 'SETTLED', 'EXITED')
-                 ORDER BY id
-                """
-            )
-        )
-    return list(active_rows_by_fingerprint(rows).values())
+        return list(active_rows_via_index(con, kinds=("EV", "ARB", "CLOSE")).values())
 
 
 def _event_day(legs_json: str) -> date | None:

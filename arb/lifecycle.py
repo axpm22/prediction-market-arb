@@ -35,3 +35,36 @@ def active_rows_by_fingerprint(rows: Iterable[Any]) -> dict[str, Any]:
         for fingerprint, row in latest_lifecycle_by_fingerprint(rows).items()
         if row["status"] in ACTIVE_STATUSES
     }
+
+
+def active_rows_via_index(con, kinds: tuple[str, ...] | None = None) -> dict[str, Any]:
+    """S1: the SAME active set as `active_rows_by_fingerprint(all rows)`, but computed in the
+    DB through the fingerprint/status indexes instead of scanning every `flat_bets` row in
+    Python each poll (the old `SELECT * FROM flat_bets` was O(bets×polls)).
+
+    For each fingerprint, the latest lifecycle row is the max-id row whose status is in
+    LIFECYCLE_STATUSES; the fingerprint is active iff that row's status is ACTIVE. The query
+    returns exactly those latest-and-active rows. When `kinds` is given the lifecycle is
+    derived within that kind set (mirrors settlement_health's pre-filter, e.g. EV/ARB/CLOSE).
+    """
+    active_list = sorted(ACTIVE_STATUSES)
+    life_list = sorted(LIFECYCLE_STATUSES)
+    active_ph = ",".join("?" * len(active_list))
+    life_ph = ",".join("?" * len(life_list))
+    kind_outer = kind_inner = ""
+    kind_params: list[str] = []
+    if kinds:
+        kind_ph = ",".join("?" * len(kinds))
+        kind_outer = f" AND b.kind IN ({kind_ph})"
+        kind_inner = f" AND c.kind IN ({kind_ph})"
+        kind_params = list(kinds)
+    sql = (
+        f"SELECT b.* FROM flat_bets b "
+        f"WHERE b.status IN ({active_ph}){kind_outer} "
+        f"  AND b.id = (SELECT MAX(c.id) FROM flat_bets c "
+        f"              WHERE c.fingerprint = b.fingerprint "
+        f"                AND c.status IN ({life_ph}){kind_inner}) "
+        f"ORDER BY b.id"
+    )
+    params = [*active_list, *kind_params, *life_list, *kind_params]
+    return {row["fingerprint"]: row for row in con.execute(sql, params)}

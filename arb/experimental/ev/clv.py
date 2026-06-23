@@ -31,7 +31,11 @@ def _ev_flags(store: Store) -> list[dict]:
     with store.connect() as con:
         rows = list(
             con.execute(
-                "SELECT * FROM flat_bets WHERE kind = 'EV' AND status IN ('OPEN','REVIEW') ORDER BY id"
+                # N1: quarantined flags (quality_flag NOT NULL — uneconomic, below-min-profit,
+                # low edge/SE, etc.) must NOT enter the edge-proof sample; they would bias the
+                # gate that decides whether EV ever goes live. Only clean flags count.
+                "SELECT * FROM flat_bets WHERE kind = 'EV' AND status IN ('OPEN','REVIEW') "
+                "AND quality_flag IS NULL ORDER BY id"
             )
         )
     flags = []
@@ -182,20 +186,31 @@ def grade_clv_novig(store: Store) -> dict:
     }
 
 
+def clv_result(store: Store, fee_loaded: bool, min_depth: Decimal) -> dict:
+    """N1: the no-vig CLV is the DEFAULT verdict instrument. Loading fees on both ends
+    (`grade_clv`) biases mean CLV toward/below zero, so the pre-registered gate
+    `ci95_low > 0` produces a false negative on your own edge and keeps EV disabled. The
+    fee-loaded metric stays available behind `--fee-loaded` for comparison only."""
+    return grade_clv(store, min_depth) if fee_loaded else grade_clv_novig(store)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m arb.experimental.ev.clv")
-    parser.add_argument("--min-depth", type=float, default=50.0)
-    parser.add_argument("--novig", action="store_true", help="EV#9: no-vig closing-mid CLV (fees excluded)")
+    parser.add_argument("--min-depth", type=float, default=50.0,
+                        help="depth floor for the fee-loaded venue close (only used with --fee-loaded)")
+    parser.add_argument("--fee-loaded", action="store_true",
+                        help="N1: use the BIASED fee-loaded close-minus-entry CLV (comparison only; not the gate)")
+    # Back-compat: --novig was the opt-in for the no-vig metric; it is now the default, so the
+    # flag is accepted but a no-op (the prompt's `clv --novig` still works).
+    parser.add_argument("--novig", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     store = Store(load_config().database_path)
-    if args.novig:
-        r = grade_clv_novig(store)
-    else:
-        r = grade_clv(store, Decimal(str(args.min_depth)))
+    r = clv_result(store, fee_loaded=args.fee_loaded, min_depth=Decimal(str(args.min_depth)))
+    metric = "fee-loaded (BIASED — comparison only)" if args.fee_loaded else "no-vig mid (default gate)"
     if r["n"] == 0:
         print(f"No CLV-gradeable EV flags yet ({r.get('flags', 0)} flags, none with a depth-floored venue close).")
         return 0
-    print(f"CLV over {r['n']} EV flags (of {r['flags']} recorded):")
+    print(f"CLV [{metric}] over {r['n']} EV flags (of {r['flags']} recorded):")
     print(f"  mean CLV points : {r['mean_clv']:+.5f}")
     print(f"  positive rate   : {r['positive_rate']:.1%}")
     print(f"  95% bootstrap CI: [{r['ci95'][0]:+.5f}, {r['ci95'][1]:+.5f}]")

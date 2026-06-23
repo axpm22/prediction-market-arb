@@ -44,6 +44,7 @@ def _ev_opp(now: datetime, *, stake: str = "1.00", quality_flag: str | None = No
         event=event,
         legs=[quote],
         edge=Decimal("0.10"),
+        edge_points=Decimal("0.01"),
         stakes={"home": Decimal(stake)},
         status="OK",
         quality_flag=quality_flag,
@@ -93,6 +94,63 @@ def test_ev_exit_sells_when_profit_is_fillable_and_edge_is_gone(tmp_path) -> Non
     assert "remaining_edge=0.005000" in rows[1]["notes"]
 
 
+def test_ev_exit_never_confirmed_has_null_pnl_confirmed(tmp_path) -> None:
+    """H1: an EXITED row from a never-confirmed bet must NOT book its optimistic P&L as
+    confirmed. pnl_confirmed stays NULL; pnl_optimistic carries the optimistic number."""
+    now = datetime.now(timezone.utc)
+    config = replace(load_config(), database_path=tmp_path / "arb.sqlite", consensus_max_age_hours=8)
+    store = Store(config.database_path)
+    opp = _ev_opp(now)
+    _place(store, opp)  # opened, never CONFIRMED
+    store.save_consensus({(opp.event.event_key, "home"): Decimal("0.565")}, now)
+
+    assert run_ev_exit_once(
+        store, config, _cfg(),
+        fetchers={"polymarket": lambda _leg: (Decimal("0.56"), Decimal("100"))},
+        now=now,
+    ) == 1
+    with store.connect() as con:
+        [exit_row] = list(con.execute("SELECT * FROM flat_bets WHERE status='EXITED'"))
+    assert exit_row["pnl_optimistic"] == "0.12"     # optimistic entry 0.50 -> exit 0.56
+    assert exit_row["pnl_confirmed"] is None         # never confirmed -> NULL, not 0.12
+    assert "unconfirmed-entry" in exit_row["notes"]
+
+
+def test_ev_exit_confirmed_entry_populates_pnl_confirmed(tmp_path) -> None:
+    """H1 mirror: when a CONFIRMED entry exists, pnl_confirmed is computed from its cost,
+    separately from the optimistic number."""
+    now = datetime.now(timezone.utc)
+    config = replace(load_config(), database_path=tmp_path / "arb.sqlite", consensus_max_age_hours=8)
+    store = Store(config.database_path)
+    opp = _ev_opp(now)
+    _place(store, opp)
+    store.save_consensus({(opp.event.event_key, "home"): Decimal("0.565")}, now)
+    # Append a CONFIRMED child with a worse (higher) real fill cost 0.52 vs optimistic 0.50.
+    with store.connect() as con:
+        parent = con.execute("SELECT * FROM flat_bets WHERE status='OPEN'").fetchone()
+        con.execute(
+            """INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind,
+                   trusted, live, edge, stake_usd, legs_json, optimistic_cost, confirmed_cost,
+                   status, placed_at, notes)
+               VALUES (?, ?, ?, 'sports', 'baseball_mlb', 'EV', 0, 0, '0.10', '1.00', ?, '0.50', '0.52',
+                       'CONFIRMED', ?, '')""",
+            (parent["fingerprint"], parent["id"], parent["opened_poll_id"],
+             parent["legs_json"], parent["placed_at"]),
+        )
+
+    assert run_ev_exit_once(
+        store, config, _cfg(),
+        fetchers={"polymarket": lambda _leg: (Decimal("0.56"), Decimal("100"))},
+        now=now,
+    ) == 1
+    with store.connect() as con:
+        [exit_row] = list(con.execute("SELECT * FROM flat_bets WHERE status='EXITED'"))
+    assert exit_row["pnl_optimistic"] == "0.12"     # from optimistic 0.50
+    # confirmed entry 0.52 -> 1*(0.56/0.52 - 1) = 0.0769 -> money() = 0.08
+    assert exit_row["pnl_confirmed"] == "0.08"
+    assert "confirmed" in exit_row["notes"]
+
+
 def test_ev_exit_refuses_to_sell_when_model_still_has_edge(tmp_path) -> None:
     now = datetime.now(timezone.utc)
     config = replace(load_config(), database_path=tmp_path / "arb.sqlite", consensus_max_age_hours=8)
@@ -134,9 +192,11 @@ def test_ev_exit_closes_bet_for_settlement_and_allows_reentry(tmp_path) -> None:
 
     _place(store, opp)
     with store.connect() as con:
-        rows = list(con.execute("SELECT id, status, reappearance_of FROM flat_bets ORDER BY id"))
-    assert [row["status"] for row in rows] == ["OPEN", "EXITED", "OPEN"]
+        rows = list(con.execute("SELECT id, status, reappearance_of, quality_flag, notes FROM flat_bets ORDER BY id"))
+    assert [row["status"] for row in rows] == ["OPEN", "EXITED", "CLOSED"]
     assert rows[2]["reappearance_of"] == rows[1]["id"]
+    assert rows[2]["quality_flag"] == "terminal-fingerprint-skipped"
+    assert "skip-terminal-fingerprint:EXITED" in rows[2]["notes"]
 
 
 def test_ev_exit_requires_enough_exit_depth(tmp_path) -> None:

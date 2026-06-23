@@ -176,6 +176,68 @@ def requote_sx_leg(market_hash: str, ref: str | None, fee_rate: Decimal | None,
     return q6(cost + all_in_fee_cost(cost, rate, taker_buffer, basis="linear"))
 
 
+def resolve_sx_market(market: dict[str, Any], ref: str | None) -> str | None:
+    """Pure resolution logic (audit A2 resolver) — testable against a recorded settled
+    market with no network. `ref` is the leg's outcome side ("1"/"2", Quote.ref). Returns
+    WON|LOST|VOID for that side, or None if the market has not reported yet (or the leg
+    predates the side hint).
+
+    SX settled markets report `outcome`: 1 = outcome one won, 2 = outcome two won, 3 (or a
+    void status / `outcomeVoidName`) = void/no-contest, 0 = not yet reported. NOTE: `outcome`
+    is the documented SX resolution field but is *not* in SPEC §3.3's listed field set —
+    it needs a one-time live verification before SX reconciliation is trusted in production
+    (logged in CRITICAL_AND_HIGH.md). Until then this resolves correctly against fixtures and
+    fails closed (None) on anything ambiguous, so it can never manufacture a false lock.
+    """
+    if ref not in {"1", "2"}:
+        return None  # legs recorded before the side hint stay UNVERIFIABLE
+    status = str(market.get("status", "")).upper()
+    void_statuses = {"VOID", "VOIDED", "CANCELLED", "CANCELED", "NO_CONTEST", "NO_GAME_OR_EVEN"}
+    outcome = market.get("outcome")
+    try:
+        outcome_code = int(outcome) if outcome is not None else 0
+    except (TypeError, ValueError):
+        outcome_code = 0
+    if status in void_statuses or outcome_code == 3:
+        return "VOID"
+    if outcome_code not in {1, 2}:
+        return None  # not reported yet
+    return "WON" if str(outcome_code) == ref else "LOST"
+
+
+def _fetch_sx_market(market_hash: str, session: requests.Session | None = None) -> dict[str, Any] | None:
+    """Public, unauthenticated SX read for one settled market by hash. None on any
+    non-200/transport error (rule #3: do not guess alternatives). The settled-market
+    endpoint/`outcome` field need a one-time live check before trusting in production."""
+    sess = session or requests.Session()
+    sess.headers.setdefault("User-Agent", USER_AGENT)
+    try:
+        response = sess.get(f"{BASE_URL}/markets/find", params={"marketHashes": market_hash}, timeout=30)
+        if response.status_code != 200:
+            return None
+        data = response.json().get("data")
+    except requests.RequestException:
+        return None
+    if isinstance(data, list):
+        return data[0] if data else None
+    return data if isinstance(data, dict) else None
+
+
+def sx_leg_result(leg: dict, fetch_market=_fetch_sx_market) -> str | None:
+    """Venue-actual resolution for an SX ARB leg (audit A2 resolver), mirroring
+    kalshi_leg_result's WON|LOST|VOID|None contract. Non-SX legs, legs without a side hint
+    (`ref`), and not-yet-reported markets return None so reconcile leaves them unresolved."""
+    if leg.get("venue") != "sx":
+        return None
+    market_hash = leg.get("book")
+    if not market_hash:
+        return None
+    market = fetch_market(str(market_hash))
+    if not market:
+        return None
+    return resolve_sx_market(market, leg.get("ref"))
+
+
 def _taker_ladder(orders: list[dict[str, Any]], maker_betting_outcome_one: bool) -> tuple[tuple[Decimal, Decimal], ...] | None:
     """Wave 2: all taker orders on this side as (cost, taker $-notional) levels, best first."""
     levels: list[tuple[Decimal, Decimal]] = []

@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
-from .pricing import q6
+from .pricing import all_in_fee_cost, q6
 
 CENT = Decimal("0.000001")
 
@@ -65,8 +65,11 @@ def find_negrisk_arb(
         bid = _dec(m.get("yes_best_bid"))
         if ask is None or bid is None:
             return None  # an incomplete set cannot be a real basket arb
-        ask_fee = q6(fee_rate * ask * (Decimal("1") - ask) + taker_buffer)
-        bid_fee = q6(fee_rate * bid * (Decimal("1") - bid) + taker_buffer)
+        # C0: these are Polymarket markets, so fees follow the LINEAR model (rate·price), not
+        # the Kalshi quadratic rate·p·(1−p). The quadratic curve under-charges (1−p < 1), which
+        # shrinks Σasks+fees below 1 and manufactures fake convert arbs in the safest class.
+        ask_fee = all_in_fee_cost(ask, fee_rate, taker_buffer, basis="linear")
+        bid_fee = all_in_fee_cost(bid, fee_rate, taker_buffer, basis="linear")
         ask_depth = _dec(m.get("yes_ask_depth")) or Decimal("0")
         bid_depth = _dec(m.get("yes_bid_depth")) or Decimal("0")
         asks.append(q6(ask + ask_fee))

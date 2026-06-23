@@ -1,0 +1,11 @@
+{
+  "_comment": "Recorded SX /markets/find shape for a SETTLED market (audit A2 resolver fixture). outcome=1 -> outcome one (teamOne) won. status SETTLED. NOTE: the 'outcome' field is not yet in SPEC §3.3's field list and needs one-time live verification (CRITICAL_AND_HIGH.md A2).",
+  "marketHash": "0xSETTLED",
+  "teamOneName": "Atlanta Braves",
+  "teamTwoName": "Chicago White Sox",
+  "outcomeOneName": "Atlanta Braves",
+  "outcomeTwoName": "Chicago White Sox",
+  "status": "SETTLED",
+  "outcome": 1,
+  "gameTime": 1749600000
+}

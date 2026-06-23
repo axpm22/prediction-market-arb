@@ -15,7 +15,7 @@ from .arbitrage import build_event, detect_divergences, detect_true_arbs, split_
 from .config import load_config
 from .models import Opportunity, Quote
 from .paper import fill_opportunity
-from .pricing import consensus_dispersion, consensus_outcome_key, consensus_probabilities, edge_points, expected_value, is_economic, money, q6
+from .pricing import consensus_dispersion, consensus_outcome_key, consensus_outcome_times, consensus_probabilities, edge_points, expected_value, is_economic, money, q6
 from .quality import classify_quality
 from .sizing import kelly_f_star, kelly_stake
 from .report import print_opportunities, print_positions, print_report
@@ -98,10 +98,9 @@ def main(argv: list[str] | None = None) -> int:
         print_positions(store)
         return 0
     if args.command == "reconcile":
-        from .reconcile import reconcile_settlements
-        from .venues.kalshi import kalshi_leg_result
+        from .reconcile import default_resolvers, reconcile_settlements
 
-        counts = reconcile_settlements(store, kalshi_leg_result)
+        counts = reconcile_settlements(store, default_resolvers())
         print(f"Reconciled settled ARBs vs venue-actual resolution: {counts}")
         if counts["corrected"]:
             print(f"  {counts['corrected']} SETTLER-ERROR(s) — realized P&L differed from the lock.")
@@ -208,6 +207,17 @@ def main(argv: list[str] | None = None) -> int:
             fixture_dir = Path("tests/fixtures") if args.fixtures else None
             settled = settle_sports(store, config, fixture_dir)
         print(f"Settled {settled} flat bets.")
+        # Audit A2 — close the reconciliation loop after every live settle (the daemon
+        # already does this in run_settle_job). Skipped under --fixtures so tests never
+        # make live venue calls; non-fatal so a venue hiccup can't undo the settle.
+        if not args.manual and not args.fixtures:
+            try:
+                from .reconcile import default_resolvers, reconcile_settlements
+
+                counts = reconcile_settlements(store, default_resolvers())
+                print(f"Reconciled settled ARBs vs venue-actual resolution: {counts}")
+            except Exception as exc:  # noqa: BLE001
+                print(f"settle: reconciliation failed (settle still stands): {exc}")
         return 0
     if args.command == "settle-backfill":
         fixture_dir = Path("tests/fixtures") if args.fixtures else None
@@ -285,6 +295,7 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
         max_start_drift_mins=config.max_start_drift_mins,
         match_suspect_prob_diff=config.match_suspect_prob_diff,
         capital_charge_annual=config.capital_charge_annual,
+        size_by_ladder=config.arb_size_by_ladder,
     )
     opportunities.extend(
         detect_divergences(
@@ -382,6 +393,9 @@ def run_scan(args: argparse.Namespace, config, store: Store) -> int:
         sharp_books=config.sharp_books if config.weight_sharp_books else None,
         sharp_weight=config.sharp_book_weight)
     dispersion = compute_dispersion(pregame, config.min_books_for_consensus, config.devig_method)  # EV#3
+    # EV#6: stamp each consensus row with the books' median line-move time, not the scan clock.
+    line_times = compute_line_times(pregame, config.min_books_for_consensus,
+                                    config.min_books_for_consensus_totals)
     print(f"Consensus outcomes computed: {len(consensus)} (from {len(pregame)} pregame quotes)")
 
     if args.dry_run:
@@ -389,10 +403,22 @@ def run_scan(args: argparse.Namespace, config, store: Store) -> int:
         return 1 if aborted else 0
 
     poll_id = store.start_poll("scan")
+    if aborted:
+        # E4: an aborted/4xx scan has a partial-coverage quote set. `save_consensus` upserts with
+        # ON CONFLICT DO UPDATE, so writing this poll's consensus would OVERWRITE complete prior
+        # consensus for those events with a thinner one, and EV would then price against a biased
+        # p̂. Persist the raw quotes (rule #7) but SKIP the consensus write entirely — the prior
+        # complete consensus stays intact and the next clean scan refreshes it.
+        store.save_scan_results(poll_id, quotes, {}, computed_at, None,
+                                adapter.credits_remaining, len(quotes), 0)
+        print(f"Persisted scan poll {poll_id}: {len(quotes)} quotes; consensus write SKIPPED "
+              f"(aborted poll — E4 guard, prior consensus preserved).")
+        return 1
     store.save_scan_results(poll_id, quotes, consensus, computed_at, dispersion,
-                            adapter.credits_remaining, len(quotes), 0)  # pass3#7 atomic
+                            adapter.credits_remaining, len(quotes), 0,  # pass3#7 atomic
+                            outcome_times=line_times)  # EV#6
     print(f"Persisted scan poll {poll_id}: {len(quotes)} quotes, {len(consensus)} consensus outcomes.")
-    return 1 if aborted else 0
+    return 0
 
 
 def cross_venue_overlap(quotes: list[Quote]) -> tuple[int, int]:
@@ -448,9 +474,13 @@ def split_pregame(quotes: list[Quote], now: datetime) -> tuple[list[Quote], list
     pregame: list[Quote] = []
     in_play: list[Quote] = []
     for quote in quotes:
-        if quote.start_utc is None or quote.start_utc > now:
+        if quote.start_utc is not None and quote.start_utc > now:
             pregame.append(quote)
         else:
+            # E5: `start_utc is None` means the start is unknown — no time guard can protect it,
+            # so it must NOT be actionable. Treat it exactly like an already-started event:
+            # route to the non-actionable lane (live=1, persisted for research, never detected
+            # on, never enters consensus). Only a known future start is pregame.
             in_play.append(quote if quote.live else replace(quote, live=True))
     return pregame, in_play
 
@@ -518,6 +548,19 @@ def compute_dispersion(quotes: list[Quote], min_books: int, method: str = "propo
     return out
 
 
+def compute_line_times(quotes: list[Quote], min_books: int,
+                       min_books_totals: int | None = None) -> dict[tuple[str, str], datetime]:
+    """EV#6: per (event, outcome) median book line-move time, used to stamp consensus age."""
+    by_event: dict[str, list[Quote]] = defaultdict(list)
+    for quote in quotes:
+        by_event[quote.event_key].append(quote)
+    out: dict[tuple[str, str], datetime] = {}
+    for event_key, eq in by_event.items():
+        for outcome, ts in consensus_outcome_times(eq, min_books, min_books_totals).items():
+            out[(event_key, outcome)] = ts
+    return out
+
+
 def detect_ev_from_consensus(
     quotes: list[Quote],
     consensus: dict[tuple[str, str], tuple[Decimal, datetime]],
@@ -549,12 +592,25 @@ def detect_ev_from_consensus(
         if entry is None:
             continue
         p_hat, computed_at = entry
+        # EV#4: a zero/negative effective cost (malformed or fee-credited quote) makes the EV
+        # division blow up and would raise out of the whole scan/watch cycle. Skip it instead.
+        if quote.effective_cost <= 0:
+            continue
         # EV#5: apply the measured FLB calibration to p_hat before EV (the curve IS a p_hat
         # correction). Off unless a calibrator is supplied; identity otherwise.
         calibrated = False
+        calib_slope = Decimal("1")  # EV#7: local slope of the calibration curve at p_hat
         if calibrator is not None:
             from .bias import calibrate_probability
-            adj = q6(Decimal(str(calibrate_probability(float(p_hat), calibrator))))
+            p_raw = float(p_hat)
+            adj = q6(Decimal(str(calibrate_probability(p_raw, calibrator))))
+            # EV#7: dispersion is measured in RAW prob space; the calibration is a monotone map,
+            # so a spread around p_hat transforms by the curve's local slope. Carry that slope so
+            # the edge (calibrated) and the SE (below) live in the same units.
+            h = 1e-4
+            lo = calibrate_probability(max(0.0, p_raw - h), calibrator)
+            hi = calibrate_probability(min(1.0, p_raw + h), calibrator)
+            calib_slope = q6(Decimal(str(abs(hi - lo) / (2 * h))))
             calibrated = adj != p_hat
             p_hat = adj
         ev = expected_value(p_hat, quote.effective_cost)
@@ -575,6 +631,11 @@ def detect_ev_from_consensus(
             gate_edge = max(Decimal("0"), q6(edge - decay_rate * age_hours))
             if gate_edge < edge:
                 notes = (*notes, f"edge_decayed:{gate_edge}")
+        # EV#7 (decay consistency): the decayed edge is the EFFECTIVE edge for everything
+        # downstream — stored edge, ratio, capturable, and Kelly — not just the e_min gate.
+        # Under the default edge_decay_per_hour=0, eff_edge == edge and behavior is unchanged.
+        eff_edge = gate_edge
+        eff_ev = q6(eff_edge / quote.effective_cost)
         below_e_min = e_min is not None and gate_edge < e_min
         if below_e_min and not record_below_e_min:
             continue
@@ -583,16 +644,24 @@ def detect_ev_from_consensus(
         # EV_SPEC §4: EV's own killer — consensus event vs contract event may differ.
         status = "REVIEW"
         notes = (*notes, "event-match-review")
-        is_stale = computed_at < (pregame_cutoff if not quote.live else stale_cutoff)
+        # EV#5 (window): stored consensus is always pregame (scan never lets in-play odds
+        # become consensus), so an in-play quote compared to it should be flagged stale
+        # SOONER, not later. Use the tighter pregame window regardless of quote.live.
+        is_stale = computed_at < pregame_cutoff
         if is_stale:
             notes = (*notes, "stale-consensus")
         if quote.depth_usd is not None:
-            notes = (*notes, f"capturable:{q6(quote.depth_usd * edge)}")
+            notes = (*notes, f"capturable:{q6(quote.depth_usd * eff_edge)}")
         # EV#3: consensus uncertainty. The cross-book dispersion is an SE proxy. Gate on
         # edge/SE (a 5-pt edge from disagreeing books is weaker than from tight ones) and size
         # Kelly off the LOWER bound of fair value (p_hat - haircut*dispersion). Off by default.
         disp = (dispersion or {}).get((quote.event_key, outcome), Decimal("0"))
-        p_for_kelly = p_hat
+        # EV#7: map the raw-space SE into calibrated space so edge/SE is dimensionally honest.
+        if calibrator is not None and disp > 0:
+            disp = q6(disp * calib_slope)
+        # Size Kelly off the decayed fair value (cost + eff_edge), so staleness shrinks the
+        # stake too. Under no decay this equals p_hat; capped at p_hat so it never inflates.
+        p_for_kelly = min(p_hat, q6(quote.effective_cost + eff_edge))
         low_edge_se = False
         if config is not None and getattr(config, "ev_dispersion_gate", False) and disp > 0:
             ratio = gate_edge / disp
@@ -600,14 +669,14 @@ def detect_ev_from_consensus(
             if ratio < config.ev_edge_se_min:
                 low_edge_se = True
             haircut = config.ev_dispersion_kelly_haircut * disp
-            p_for_kelly = max(Decimal("0"), q6(p_hat - haircut))
+            p_for_kelly = max(Decimal("0"), q6(p_for_kelly - haircut))
         opp = Opportunity(
             kind="EV",
             category="sports",
             event=build_event(quote.event_key, [quote]),
             legs=[quote],
-            edge=ev,
-            edge_points=edge,  # #9 p-c, comparable across kinds (quality/ranking use this)
+            edge=eff_ev,
+            edge_points=eff_edge,  # #9 p-c (decay-adjusted), comparable across kinds
             stakes={quote.outcome_label: Decimal("1.00")},
             status=status,  # type: ignore[arg-type]
             notes=notes,
@@ -705,6 +774,15 @@ def _annotate_quality_and_kelly(opp: Opportunity, p_hat: Decimal, effective_cost
         if not is_economic(opp.edge, days, config.capital_charge_annual):
             notes = (*notes, f"uneconomic-horizon:{days:.1f}d")
             quality = quality or "uneconomic-horizon"
+    # EV#3 (ratio hazard): the headline EV is a per-dollar ROI, so the uneconomic-horizon gate
+    # above can pass a tiny-notional longshot on rate alone. Add an ABSOLUTE expected-profit
+    # floor: stake * edge_points must clear min_expected_profit_usd. 0 = off (default).
+    floor = getattr(config, "ev_min_expected_profit_usd", Decimal("0"))
+    if floor > 0:
+        expected_profit = q6(stake * opp.edge_points)
+        notes = (*notes, f"exp-profit-usd:{expected_profit}")
+        if expected_profit < floor:
+            quality = quality or "below-min-profit"
     return replace(opp, quality_flag=quality, kelly_f_star=f_star, kelly_stake=stake, notes=notes)
 
 
@@ -781,10 +859,9 @@ def run_settle_job(config, store: Store) -> None:
     except Exception as exc:  # noqa: BLE001
         print(f"settle: MLB Stats backfill failed: {exc}")
     try:
-        from .reconcile import reconcile_settlements
-        from .venues.kalshi import kalshi_leg_result
+        from .reconcile import default_resolvers, reconcile_settlements
 
-        counts = reconcile_settlements(store, kalshi_leg_result)
+        counts = reconcile_settlements(store, default_resolvers())
         print(f"Daily reconciliation (venue-actual vs lock): {counts}")
     except Exception as exc:  # noqa: BLE001
         print(f"settle: reconciliation failed: {exc}")

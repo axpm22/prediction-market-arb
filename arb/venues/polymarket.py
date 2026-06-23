@@ -197,3 +197,73 @@ def _best_ask(levels: list[dict[str, Any]]) -> tuple[Decimal, Decimal] | None:
         return None
     price, size = min(parsed, key=lambda level: level[0])
     return price, q6(price * size)
+
+
+def resolve_polymarket_market(market: dict[str, Any], token_id: str) -> str | None:
+    """Pure resolution logic (audit A2 resolver) — testable against a recorded settled
+    market with no network. Returns WON|LOST|VOID for the leg's CLOB `token_id`, or None
+    if the market has not resolved yet.
+
+    A Polymarket binary resolves by `outcomePrices` snapping to ["1","0"]/["0","1"]; the
+    token's index in `clobTokenIds` selects its price (SPEC §3.2 fields only). A 50/50
+    split on a *closed* market is the void outcome (UMA reported the market void / no
+    contest), mirroring Kalshi's VOID. Open/unresolved markets return None so reconcile
+    skips rather than guesses.
+    """
+    closed = market.get("closed")
+    if closed not in (True, "true", "True", 1, "1"):
+        return None
+    token_ids = [str(t) for t in _json_list(market.get("clobTokenIds", []))]
+    prices = _json_list(market.get("outcomePrices", []))
+    if not token_ids or len(prices) != len(token_ids):
+        return None
+    try:
+        index = token_ids.index(str(token_id))
+    except ValueError:
+        return None
+    try:
+        price = Decimal(str(prices[index]))
+    except Exception:  # noqa: BLE001 — malformed price -> treat as unresolved
+        return None
+    if price >= Decimal("0.99"):
+        return "WON"
+    if price <= Decimal("0.01"):
+        return "LOST"
+    # Closed but the token's outcome paid a fraction (e.g. 0.5/0.5) -> void/no-contest.
+    return "VOID"
+
+
+def _fetch_market_by_token(token_id: str) -> dict[str, Any] | None:
+    """Public, unauthenticated Gamma read for one settled market by its CLOB token id.
+    Returns the market dict (SPEC §3.2 fields: outcomes/outcomePrices/clobTokenIds) or
+    None on any non-200/transport error (rule #3: do not guess alternatives)."""
+    try:
+        response = requests.get(
+            f"{GAMMA_URL}/markets",
+            params={"clob_token_ids": token_id},
+            timeout=30,
+            headers={"User-Agent": "arb-paper-scanner/0.1 (public read-only)"},
+        )
+        if response.status_code != 200:
+            return None
+        data = response.json()
+    except requests.RequestException:
+        return None
+    if isinstance(data, list):
+        return data[0] if data else None
+    return data if isinstance(data, dict) else None
+
+
+def polymarket_leg_result(leg: dict, fetch_market=_fetch_market_by_token) -> str | None:
+    """Venue-actual resolution for a Polymarket ARB leg (audit A2 resolver), mirroring
+    kalshi_leg_result's WON|LOST|VOID|None contract. Non-Polymarket legs and legs whose
+    market has not resolved return None so reconcile leaves them unresolved."""
+    if leg.get("venue") != "polymarket":
+        return None
+    token_id = leg.get("book")
+    if not token_id:
+        return None
+    market = fetch_market(str(token_id))
+    if not market:
+        return None
+    return resolve_polymarket_market(market, str(token_id))

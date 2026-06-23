@@ -6,13 +6,14 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
-from .lifecycle import active_rows_by_fingerprint
+from .lifecycle import active_rows_via_index
 from .models import Opportunity
 from .pricing import money, q6
 from .store import Store, quote_to_json
-from .validation import ValidationRule, classify_validation
+from .validation import DROP, ValidationRule, classify_validation
 # SPEC §9: P&L attributes to the EST/EDT day the bet was placed. placed_at is stored UTC,
 # so a bet placed after ~19-20:00 ET rolls into the next UTC day; bucket by local date.
 ATTRIBUTION_TZ = ZoneInfo("America/New_York")
@@ -31,16 +32,55 @@ def _local_date(placed_at: str | None) -> date | None:
 
 
 def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportunity],
-                        validation_rule: ValidationRule | None = None) -> None:
+                        validation_rule: ValidationRule | None = None,
+                        now: datetime | None = None) -> None:
     validation_rule = validation_rule or ValidationRule()
     current = {opp.fingerprint: opp for opp in opportunities}
+    now = now or datetime.now(timezone.utc)
+    now = _as_utc(now)
     with store.connect() as con:
         active = _active_rows(con)
+        active_positions = _active_position_keys(con)
+        seen_positions: set[str] = set()
         for fingerprint, row in active.items():
             if fingerprint not in current:
                 _insert_close_row(con, poll_id, fingerprint, int(row["id"]), "absent-one-poll")
         for opp in opportunities:
             row = active.get(opp.fingerprint)
+            rejection = _actionability_rejection(opp, now)
+            if rejection is None and row is None:
+                terminal = _latest_hard_terminal(con, opp.fingerprint)
+                if terminal is not None:
+                    rejection = (
+                        f"skip-terminal-fingerprint:{terminal['status']}",
+                        "terminal-fingerprint-skipped",
+                        int(terminal["id"]),
+                    )
+            if rejection is None and row is None:
+                position_key = _position_key(opp)
+                active_position = active_positions.get(position_key)
+                if position_key in seen_positions:
+                    rejection = (
+                        f"skip-duplicate-position:{position_key}",
+                        "duplicate-position-skipped",
+                        None,
+                    )
+                elif active_position is not None:
+                    rejection = (
+                        f"skip-duplicate-position:{position_key}",
+                        "duplicate-position-skipped",
+                        int(active_position["id"]),
+                    )
+            if rejection is None and opp.quality_flag is None:
+                tag = classify_validation(opp, "CONFIRMED" if row is not None and row["status"] == "OPEN" else "OPEN", validation_rule)[1]
+                if tag == DROP:
+                    rejection = ("skip-validation-drop", "validation-drop", int(row["id"]) if row is not None else None)
+            if rejection is not None:
+                note, quality_flag, parent_id = rejection
+                if row is not None:
+                    parent_id = int(row["id"])
+                _insert_rejected_row(con, poll_id, opp, parent_id, note, quality_flag, validation_rule, now)
+                continue
             if row is None:
                 prior_closed = _latest_closed_id(con, opp.fingerprint)
                 _insert_tracker_row(
@@ -51,6 +91,7 @@ def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportun
                     reappearance_of=prior_closed,
                     notes="first-observed" if prior_closed is None else "reappeared",
                     validation_rule=validation_rule,
+                    placed_at=now,
                 )
             elif row["status"] == "OPEN" and int(row["opened_poll_id"]) != poll_id:
                 _insert_tracker_row(
@@ -61,7 +102,9 @@ def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportun
                     reappearance_of=int(row["id"]),
                     notes="second-consecutive-observation",
                     validation_rule=validation_rule,
+                    placed_at=now,
                 )
+            seen_positions.add(_position_key(opp))
 
 
 def write_daily_report(store: Store, report_date: date | None = None, output_dir: Path = Path("reports/daily")) -> tuple[Path, Path]:
@@ -103,8 +146,29 @@ def _active_rows(con) -> dict[str, object]:
     # Flash verification and hot lifetime rows are annotations on an opportunity's
     # lifecycle, not lifecycle transitions. OPEN/CONFIRMED/CLOSED/SETTLED/EXITED rows decide
     # whether a fingerprint is still active or can reappear as a new bet.
-    rows = list(con.execute("SELECT * FROM flat_bets ORDER BY id"))
-    return active_rows_by_fingerprint(rows)
+    # S1: read only candidate-active rows via the fingerprint index (was SELECT * every poll).
+    return active_rows_via_index(con)
+
+
+def _active_position_keys(con) -> dict[str, object]:
+    active = active_rows_via_index(con)  # S1: indexed, not a full flat_bets scan
+    keyed: dict[str, object] = {}
+    for row in active.values():
+        key = _position_key_from_row(row)
+        if key:
+            keyed[key] = row
+    return keyed
+
+
+def _latest_hard_terminal(con, fingerprint: str):
+    return con.execute(
+        """
+        SELECT id, status FROM flat_bets
+         WHERE fingerprint = ? AND status IN ('SETTLED','EXITED')
+         ORDER BY id DESC LIMIT 1
+        """,
+        (fingerprint,),
+    ).fetchone()
 
 
 def _latest_closed_id(con, fingerprint: str) -> int | None:
@@ -115,9 +179,63 @@ def _latest_closed_id(con, fingerprint: str) -> int | None:
     return None if row is None else int(row["id"])
 
 
+def _actionability_rejection(opp: Opportunity, now: datetime) -> tuple[str, str, int | None] | None:
+    starts = [leg.start_utc for leg in opp.legs]
+    if opp.kind in {"EV", "ARB"} and opp.event.start_utc is None:
+        return ("skip-missing-start", "missing-start-skipped", None)
+    event_start = _as_utc(opp.event.start_utc)
+    leg_starts = [_as_utc(start) for start in starts if start is not None]
+    if opp.kind in {"EV", "ARB"} and (event_start <= now or any(start <= now for start in leg_starts)):
+        return ("skip-started-event", "in-play-skipped", None)
+    if opp.category != "sports" and opp.kind in {"EV", "ARB"}:
+        return ("skip-nonsports-auto-action", "manual-resolver-required", None)
+    return None
+
+
+def _as_utc(dt: datetime) -> datetime:
+    return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _position_key(opp: Opportunity) -> str:
+    leg_keys = [
+        _leg_position_key(
+            opp.event.event_key,
+            leg.market_type,
+            leg.line,
+            leg.outcome_label,
+        )
+        for leg in opp.legs
+    ]
+    return f"{opp.category}|{opp.event.sport}|{opp.kind}|{'||'.join(sorted(leg_keys))}"
+
+
+def _position_key_from_row(row: Any) -> str | None:
+    try:
+        legs = json.loads(row["legs_json"] or "[]")
+    except json.JSONDecodeError:
+        return None
+    if not legs:
+        return None
+    leg_keys = [
+        _leg_position_key(
+            str(leg.get("event_key") or ""),
+            str(leg.get("market_type") or ""),
+            leg.get("line"),
+            str(leg.get("outcome_label") or ""),
+        )
+        for leg in legs
+    ]
+    return f"{row['category']}|{row['sport']}|{row['kind']}|{'||'.join(sorted(leg_keys))}"
+
+
+def _leg_position_key(event_key: str, market_type: str, line: object, outcome_label: str) -> str:
+    return "|".join([event_key, market_type, "" if line is None else str(line), outcome_label.strip().lower()])
+
+
 def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str,
                         reappearance_of: int | None, notes: str,
-                        validation_rule: ValidationRule | None = None) -> None:
+                        validation_rule: ValidationRule | None = None,
+                        placed_at: datetime | None = None) -> None:
     validation_rule = validation_rule or ValidationRule()
     cost = _opportunity_cost(current_opp)
     pnl = _optimistic_pnl(current_opp)
@@ -153,9 +271,48 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
             None if pnl is None else str(pnl),
             None if confirmed_pnl is None else str(confirmed_pnl),
             status,
-            datetime.now(timezone.utc).isoformat(),
+            (placed_at or datetime.now(timezone.utc)).isoformat(),
             ledger_notes,
             current_opp.quality_flag,
+            None if current_opp.kelly_f_star is None else str(current_opp.kelly_f_star),
+            None if current_opp.kelly_stake is None else str(current_opp.kelly_stake),
+            rule_id,
+            validation_tag,
+        ),
+    )
+
+
+def _insert_rejected_row(con, poll_id: int, current_opp: Opportunity, reappearance_of: int | None,
+                         notes: str, quality_flag: str, validation_rule: ValidationRule | None = None,
+                         placed_at: datetime | None = None) -> None:
+    validation_rule = validation_rule or ValidationRule()
+    cost = _opportunity_cost(current_opp)
+    rule_id, validation_tag, validation_notes = classify_validation(current_opp, "OPEN", validation_rule)
+    ledger_notes = _merge_notes(notes, (*current_opp.notes, *validation_notes))
+    con.execute(
+        """
+        INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
+                              live, edge, edge_points, stake_usd, legs_json, optimistic_cost, confirmed_cost,
+                              pnl_optimistic, pnl_confirmed, status, placed_at, notes,
+                              quality_flag, kelly_f_star, kelly_stake_usd,
+                              validation_rule, validation_tag)
+        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, '0', ?, ?, NULL, NULL, NULL, 'CLOSED', ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            current_opp.fingerprint,
+            reappearance_of,
+            poll_id,
+            current_opp.category,
+            current_opp.event.sport,
+            current_opp.kind,
+            int(any(leg.live for leg in current_opp.legs)) or int(quality_flag == "in-play-skipped"),
+            str(current_opp.edge),
+            None if current_opp.edge_points is None else str(current_opp.edge_points),
+            json.dumps([quote_to_json(leg) for leg in current_opp.legs]),
+            None if cost is None else str(cost),
+            (placed_at or datetime.now(timezone.utc)).isoformat(),
+            ledger_notes,
+            quality_flag,
             None if current_opp.kelly_f_star is None else str(current_opp.kelly_f_star),
             None if current_opp.kelly_stake is None else str(current_opp.kelly_stake),
             rule_id,
