@@ -80,9 +80,11 @@ def test_recorded_real_fixture_parses_and_is_no_arb() -> None:
 def test_sweep_persists_executable_legs_and_quality_flag(tmp_path) -> None:
     config = replace(load_config(), database_path=tmp_path / "arb.sqlite")
     store = Store(config.database_path)
+    # Lever C lowered the negRisk floor to $5 (single-settlement, no cross-venue leg risk), so
+    # the thin leg must now be below $5 to be flagged thin (a $10 leg is executable now).
     thin_event = event(
         [Decimal("0.28"), Decimal("0.30"), Decimal("0.34")],
-        depths=[Decimal("500"), Decimal("500"), Decimal("10")],
+        depths=[Decimal("500"), Decimal("500"), Decimal("2")],
     )
 
     assert run_negrisk_pass(store, config, fetcher=lambda: [thin_event], book_filler=lambda e: e) == (1, 1)

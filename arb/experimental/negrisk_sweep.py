@@ -22,11 +22,24 @@ CLOB = "https://clob.polymarket.com"
 HEADERS = {"User-Agent": "arb-paper-scanner/0.1 (public read-only)"}
 
 
-def fetch_negrisk_events(limit: int = 60) -> list[dict]:
-    r = requests.get(f"{GAMMA}/events", params={"closed": "false", "limit": limit,
-                     "order": "volume24hr", "ascending": "false"}, headers=HEADERS, timeout=30)
-    r.raise_for_status()
-    return [e for e in r.json() if e.get("negRisk") and len(e.get("markets", [])) >= 2]
+def fetch_negrisk_events(limit: int = 200, pages: int = 3) -> list[dict]:
+    """Lever C: widen coverage beyond the volume-24h top — paginate so briefly-mispriced
+    low-volume baskets (the ones worth catching) are seen too."""
+    seen: dict[str, dict] = {}
+    per_page = max(1, limit // max(1, pages))
+    for page in range(pages):
+        r = requests.get(f"{GAMMA}/events",
+                         params={"closed": "false", "limit": per_page, "offset": page * per_page,
+                                 "order": "volume24hr", "ascending": "false"},
+                         headers=HEADERS, timeout=30)
+        r.raise_for_status()
+        batch = r.json()
+        if not batch:
+            break
+        for e in batch:
+            if e.get("negRisk") and len(e.get("markets", [])) >= 2:
+                seen[str(e.get("id", e.get("slug", id(e))))] = e
+    return list(seen.values())
 
 
 def attach_books(event: dict) -> dict:
@@ -71,7 +84,7 @@ def _levels(raw_levels: list[dict[str, Any]]) -> list[tuple[Decimal, Decimal]]:
 
 def run_negrisk_pass(store: Store, config, fetcher: Callable[[], list[dict]] | None = None,
                      book_filler: Callable[[dict], dict] | None = None) -> tuple[int, int]:
-    fetcher = fetcher or fetch_negrisk_events
+    fetcher = fetcher or (lambda: fetch_negrisk_events(config.negrisk_scan_limit, config.negrisk_scan_pages))
     book_filler = book_filler or attach_books
     events = fetcher()
     found: list[NegRiskArb] = []
@@ -82,7 +95,7 @@ def run_negrisk_pass(store: Store, config, fetcher: Callable[[], list[dict]] | N
             config.negrisk_min_edge,
             config.negrisk_require_exhaustive,
             config.negrisk_max_outcomes,
-            config.min_executable_usd,
+            config.negrisk_min_executable_usd,  # Lever C: lower single-settlement floor
             config.taker_price_buffer,
         )
         if arb is not None:
@@ -111,6 +124,43 @@ def _persist(store: Store, poll_id: int, arbs: list[NegRiskArb]) -> None:
                  a.quality_flag,
                  a.basket_n, str(a.basket_sum)),
             )
+
+
+def lifetime_distribution(store: Store) -> dict[str, Any]:
+    """Lever C deliverable: how fast NEGRISK baskets close. For each opened NEGRISK flag,
+    the seconds until its first CLOSE/SETTLED child — the flag-lifetime distribution is itself
+    the result (a basket that closes in seconds is uncapturable in practice)."""
+    from datetime import datetime as _dt
+    with store.connect() as con:
+        opens = list(con.execute(
+            "SELECT id, placed_at FROM flat_bets WHERE kind='NEGRISK' AND status='OPEN' ORDER BY id"))
+        closes = list(con.execute(
+            """SELECT reappearance_of, placed_at FROM flat_bets
+                WHERE kind='NEGRISK' AND status IN ('CLOSED','SETTLED') AND reappearance_of IS NOT NULL"""))
+    close_at: dict[int, str] = {}
+    for row in closes:
+        rid = int(row["reappearance_of"])
+        if rid not in close_at or str(row["placed_at"]) < close_at[rid]:
+            close_at[rid] = str(row["placed_at"])
+    lifetimes: list[float] = []
+    for row in opens:
+        c = close_at.get(int(row["id"]))
+        if not c:
+            continue
+        try:
+            secs = (_dt.fromisoformat(c) - _dt.fromisoformat(str(row["placed_at"]))).total_seconds()
+        except ValueError:
+            continue
+        if secs >= 0:
+            lifetimes.append(secs)
+    lifetimes.sort()
+    n = len(lifetimes)
+
+    def pct(p: float) -> float | None:
+        return round(lifetimes[min(n - 1, int(p * n))], 1) if n else None
+
+    return {"opened": len(opens), "closed": n,
+            "p50_secs": pct(0.50), "p90_secs": pct(0.90), "max_secs": (lifetimes[-1] if n else None)}
 
 
 def _notes(arb: NegRiskArb) -> str:

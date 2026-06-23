@@ -93,6 +93,9 @@ class AppConfig:
     negrisk_min_edge: Decimal
     negrisk_require_exhaustive: bool
     negrisk_max_outcomes: int
+    negrisk_scan_limit: int
+    negrisk_scan_pages: int
+    negrisk_min_executable_usd: Decimal
     btc_window_match_secs: int
     btc_max_window_minutes: int
     btc_trusted: bool
@@ -237,6 +240,11 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         negrisk_min_edge=_decimal(negrisk.get("min_edge", "0.005")),
         negrisk_require_exhaustive=bool(negrisk.get("require_exhaustive_exclusive", True)),
         negrisk_max_outcomes=int(negrisk.get("max_outcomes", 30)),
+        negrisk_scan_limit=int(negrisk.get("scan_limit", 200)),
+        negrisk_scan_pages=int(negrisk.get("scan_pages", 3)),
+        # Lower floor than the global min_executable: single-venue, single-settlement, so no
+        # cross-venue leg risk justifies measuring thinner baskets (Lever C).
+        negrisk_min_executable_usd=_decimal(negrisk.get("min_executable_usd", "5")),
         btc_window_match_secs=int(btc.get("window_match_secs", 5)),
         btc_max_window_minutes=int(btc.get("max_window_minutes", 15)),
         btc_trusted=bool(btc.get("trusted", False)),

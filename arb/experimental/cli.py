@@ -42,6 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     ev_exit.add_argument("--once", action="store_true", help="run a single pass and exit")
     negrisk = sub.add_parser("negrisk", help="intra-Polymarket negative-risk basket arbs (S1, no settlement risk)")
     negrisk.add_argument("--once", action="store_true", help="run a single pass and exit")
+    negrisk.add_argument("--lifetime", action="store_true", help="report the basket flag-lifetime distribution and exit (Lever C)")
     btc = sub.add_parser("btc", help="BTC cross-venue arb sweep (Phase 4; REVIEW — oracles differ)")
     btc.add_argument("--once", action="store_true", help="run a single pass and exit")
     whales = sub.add_parser("whales", help="ingest Polymarket whale trades + qualify wallets (Phase 5)")
@@ -250,9 +251,14 @@ def run_hot(args: argparse.Namespace, config) -> int:
 
 
 def run_negrisk(args: argparse.Namespace, config) -> int:
-    from arb.experimental.negrisk_sweep import run_negrisk_pass
+    from arb.experimental.negrisk_sweep import lifetime_distribution, run_negrisk_pass
 
     store = Store(config.database_path)
+    if getattr(args, "lifetime", False):
+        d = lifetime_distribution(store)
+        print(f"NEGRISK flag-lifetime: opened={d['opened']} closed={d['closed']} "
+              f"p50={d['p50_secs']}s p90={d['p90_secs']}s max={d['max_secs']}s")
+        return 0
     print("Negative-risk basket sweep: intra-Polymarket, single resolution, no cross-venue risk.")
     while True:
         try:

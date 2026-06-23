@@ -228,6 +228,12 @@ negrisk:
   min_edge: 0.005                  # 0.5% after fees
   require_exhaustive_exclusive: true
   max_outcomes: 30
+  # Lever C: widen coverage (more events, paginated, not just the volume-24h top) and lower the
+  # depth floor — single-venue/single-settlement has no cross-venue leg risk, so thin baskets
+  # are worth measuring.
+  scan_limit: 200
+  scan_pages: 3
+  min_executable_usd: 5
 # S3 / Phase 4 same-oracle BTC short-horizon cross-venue arb.
 btc_arb:
   enabled: true
