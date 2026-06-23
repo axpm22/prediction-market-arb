@@ -5,6 +5,7 @@ import re
 import string
 from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 try:
     from rapidfuzz import fuzz
@@ -12,6 +13,11 @@ except ModuleNotFoundError:  # pragma: no cover
     fuzz = None
 
 ALIAS_PATH = Path("data/aliases.json")
+# weakness#7: key the event date in a fixed sports-local tz, NOT UTC. A UTC calendar date
+# recreates the 00:00 seam — two venues listing a late US game at 23:55 vs 00:05 UTC get
+# different dates and never match. Both venues share the same absolute start, so a shared
+# tz gives them the same date. Settlement already tolerates +/-1 day for the residual.
+EVENT_DATE_TZ = ZoneInfo("America/New_York")
 PUNCT_TABLE = str.maketrans("", "", string.punctuation)
 
 
@@ -41,7 +47,7 @@ def event_key(sport: str, home: str, away: str, start_utc: datetime, aliases: di
     # doubleheaders (same teams, same day, hours apart) are caught by the start-drift gate
     # (suspended, not mis-bet) and settled by each leg's exact stored start time.
     names = sorted([normalize_name(home, sport, aliases), normalize_name(away, sport, aliases)])
-    start = start_utc.astimezone(timezone.utc)
+    start = start_utc.astimezone(EVENT_DATE_TZ)
     return f"{sport}:{start.date().isoformat()}:{names[0]}:{names[1]}"
 
 

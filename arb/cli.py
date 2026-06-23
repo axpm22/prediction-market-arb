@@ -15,7 +15,7 @@ from .arbitrage import build_event, detect_divergences, detect_true_arbs, split_
 from .config import load_config
 from .models import Opportunity, Quote
 from .paper import fill_opportunity
-from .pricing import consensus_outcome_key, consensus_probabilities, edge_points, expected_value, money, q6
+from .pricing import consensus_outcome_key, consensus_probabilities, edge_points, expected_value, is_economic, money, q6
 from .quality import classify_quality
 from .sizing import kelly_f_star, kelly_stake
 from .report import print_opportunities, print_positions, print_report
@@ -609,7 +609,21 @@ def _annotate_quality_and_kelly(opp: Opportunity, p_hat: Decimal, effective_cost
     f_star = kelly_f_star(p_hat, effective_cost)
     stake = kelly_stake(p_hat, effective_cost, config.sizing_kelly_fraction,
                         config.bankroll_usd, config.sizing_max_fraction)
-    return replace(opp, quality_flag=quality, kelly_f_star=f_star, kelly_stake=stake)
+    notes = opp.notes
+    # pass3#6/weakness#8: a stale/unverified venue fee silently shifts every edge, and fees
+    # are first-order at sub-4% edges. Quarantine bets whose venue fee is past fee_stale_days.
+    if any(leg.venue in config.stale_fee_venues for leg in opp.legs):
+        notes = (*notes, "stale-fee")
+        quality = quality or "stale-fee"
+    # pass3#3: EV ties up the $1 until settlement (up to max_days_to_settlement), unlike an
+    # arb that locks at entry. Gate on edge-PER-DAY-held: if the expected return doesn't beat
+    # the capital charge over the holding period, quarantine it (uneconomic-horizon).
+    if opp.event.start_utc is not None:
+        days = max(0.0, (opp.event.start_utc - datetime.now(timezone.utc)).total_seconds() / 86400.0)
+        if not is_economic(opp.edge, days, config.capital_charge_annual):
+            notes = (*notes, f"uneconomic-horizon:{days:.1f}d")
+            quality = quality or "uneconomic-horizon"
+    return replace(opp, quality_flag=quality, kelly_f_star=f_star, kelly_stake=stake, notes=notes)
 
 
 def apply_segment_gates(opportunities: list[Opportunity], store: Store, config) -> list[Opportunity]:

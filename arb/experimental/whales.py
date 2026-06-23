@@ -33,6 +33,7 @@ class WalletStat:
     qualified: bool
     suspect: bool         # win rate above ceiling -> likely zombie-order illusion
     pnl_usd: Decimal = Decimal("0")
+    roi: float = 0.0      # realized P&L / cost on settled trades — the profitability gate
 
 
 def wallet_stats(trades: list[dict], settled_results: dict[str, bool], categories: dict[str, str],
@@ -43,9 +44,9 @@ def wallet_stats(trades: list[dict], settled_results: dict[str, bool], categorie
     categories: conditionId -> category label (for concentration).
     """
     min_trades = int(cfg.get("min_trades", 100))
-    wr_floor = float(cfg.get("wr_floor", 0.60))
     wr_ceiling = float(cfg.get("wr_ceiling", 0.72))
     min_share = float(cfg.get("min_category_share", 0.50))
+    min_roi = float(cfg.get("min_roi", 0.0))  # pass3#10: profitability gate, not hit rate
 
     by_wallet: dict[str, list[dict]] = defaultdict(list)
     for t in trades:
@@ -57,6 +58,18 @@ def wallet_stats(trades: list[dict], settled_results: dict[str, bool], categorie
         settled = [t for t in ts if str(t["conditionId"]) in settled_results]
         wins = sum(1 for t in settled if settled_results[str(t["conditionId"])])
         win_rate = wins / len(settled) if settled else 0.0
+        # pass3#10: realized P&L and ROI on settled trades. A share costs `price`*`size` and
+        # pays `size` if it wins; the module's own thesis is that a high win rate can be
+        # right-but-unprofitable (hedge legs, zombie-order inflation), so qualify on ROI.
+        cost = Decimal("0")
+        pnl = Decimal("0")
+        for t in settled:
+            price = Decimal(str(t.get("price", 0)))
+            size = Decimal(str(t.get("size", 0)))
+            stake = price * size
+            cost += stake
+            pnl += (size - stake) if settled_results[str(t["conditionId"])] else -stake
+        roi = float(pnl / cost) if cost > 0 else 0.0
         cat_counts: dict[str, int] = defaultdict(int)
         for t in ts:
             cat_counts[categories.get(str(t["conditionId"]), "unknown")] += 1
@@ -65,7 +78,7 @@ def wallet_stats(trades: list[dict], settled_results: dict[str, bool], categorie
         suspect = win_rate > wr_ceiling
         qualified = (
             n >= min_trades
-            and win_rate >= wr_floor
+            and roi >= min_roi
             and top_share >= min_share
         )
         out.append(
@@ -77,6 +90,8 @@ def wallet_stats(trades: list[dict], settled_results: dict[str, bool], categorie
                 top_category_share=round(top_share, 4),
                 qualified=qualified,
                 suspect=suspect,
+                pnl_usd=pnl,
+                roi=round(roi, 4),
             )
         )
     return out

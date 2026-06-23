@@ -92,6 +92,7 @@ class AppConfig:
     validation: dict
     live_baseball_ev: dict
     odds_api_key: str | None
+    stale_fee_venues: frozenset[str] = frozenset()
     database_path: Path = Path("data/arb.sqlite")
 
 
@@ -113,19 +114,25 @@ def _load_env() -> None:
         os.environ.setdefault(key.strip(), value.strip())
 
 
-def _warn_stale_fees(raw: dict[str, Any], venues: dict[str, dict[str, Any]]) -> None:
-    # Stale fees warn but never halt — silent downtime is worse than a dated number.
+def _warn_stale_fees(raw: dict[str, Any], venues: dict[str, dict[str, Any]]) -> set[str]:
+    # Stale fees warn (never halt the scanner — silent downtime is worse) but the venue is
+    # returned as stale so detection can quarantine its bets: a wrong/stale fee silently
+    # shifts every edge, and fees are first-order at sub-4% edges (pass3#6 / weakness#8).
     stale_days = int(raw.get("fee_stale_days", 30))
     today = datetime.now(timezone.utc).date()
+    stale: set[str] = set()
     for venue, block in venues.items():
         confirmed = block.get("confirmed_on")
         if confirmed is None:
             print(f"config: WARNING {venue} fee_rate has no confirmed_on date.")
+            stale.add(venue)
             continue
         confirmed = confirmed if isinstance(confirmed, date) else date.fromisoformat(str(confirmed))
         age = (today - confirmed).days
         if age > stale_days:
             print(f"config: WARNING {venue} fee confirmed {age} days ago (> {stale_days}); re-check {block.get('source_url', 'source')}.")
+            stale.add(venue)
+    return stale
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
@@ -140,7 +147,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     kalshi = raw.get("kalshi", {})
     polymarket = raw.get("polymarket", {})
     sx = raw.get("sx", {})
-    _warn_stale_fees(raw, {"kalshi": kalshi, "polymarket": polymarket, "sx": sx})
+    stale_fee_venues = _warn_stale_fees(raw, {"kalshi": kalshi, "polymarket": polymarket, "sx": sx})
     parlay = raw.get("parlay", {})
     sizing = raw.get("sizing", {})
     micro = raw.get("micro", {})
@@ -219,5 +226,6 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         validation=dict(raw.get("validation", {})),
         live_baseball_ev=dict(raw.get("live_baseball_ev", {})),
         odds_api_key=os.environ.get("ODDS_API_KEY") or None,
+        stale_fee_venues=frozenset(stale_fee_venues),
         database_path=database_path,
     )
