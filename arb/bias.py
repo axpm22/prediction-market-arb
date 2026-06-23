@@ -100,3 +100,57 @@ def calibration(store: Store, bands: list[float], min_samples: int, flb_min_edge
         stats.append(BandStat(lo, hi, n, implied_mid, round(mean_cost, 4),
                               round(wr, 4), round(edge, 4), signal))
     return stats
+
+
+# --- EV#5: apply the measured calibration back into p_hat (isotonic) ---------------------
+# The FLB curve IS a correction function for p_hat (realized win rate vs implied prob). EV
+# detection historically used raw p_hat; this fits a monotonic (isotonic) map from the
+# population sample and lets detection apply p_hat_calibrated. Gated by config (default off).
+
+def _pav(xs: list[float], ys: list[float], ws: list[float]) -> tuple[list[float], list[float]]:
+    """Pool-adjacent-violators: weighted isotonic (non-decreasing) fit of ys against sorted xs."""
+    order = sorted(range(len(xs)), key=lambda i: xs[i])
+    sx = [xs[i] for i in order]
+    blocks = [[ys[i], ws[i], sx_i] for i, sx_i in zip(order, sx)]  # value, weight, x
+    i = 0
+    while i < len(blocks) - 1:
+        if blocks[i][0] <= blocks[i + 1][0] + 1e-12:
+            i += 1
+            continue
+        v0, w0, _ = blocks[i]
+        v1, w1, x1 = blocks[i + 1]
+        merged = [(v0 * w0 + v1 * w1) / (w0 + w1), w0 + w1, x1]
+        blocks[i:i + 2] = [merged]
+        if i > 0:
+            i -= 1
+    return [b[2] for b in blocks], [b[0] for b in blocks]
+
+
+def fit_calibrator(data: list[tuple[float, bool]], min_samples: int = 50) -> tuple[list[float], list[float]] | None:
+    """Isotonic calibrator nodes (x=implied prob, y=fitted realized) from settled raw quotes.
+    None when the sample is too small to trust."""
+    if len(data) < min_samples:
+        return None
+    xs = [x for x, _ in data]
+    ys = [1.0 if won else 0.0 for _, won in data]
+    ws = [1.0] * len(data)
+    nx, ny = _pav(xs, ys, ws)
+    return (nx, ny) if len(nx) >= 2 else None
+
+
+def calibrate_probability(p: float, nodes: tuple[list[float], list[float]] | None) -> float:
+    """Map a raw probability through the isotonic calibrator (linear interp, clamped to ends)."""
+    if nodes is None:
+        return p
+    xs, ys = nodes
+    if p <= xs[0]:
+        return ys[0]
+    if p >= xs[-1]:
+        return ys[-1]
+    for i in range(1, len(xs)):
+        if p <= xs[i]:
+            x0, x1, y0, y1 = xs[i - 1], xs[i], ys[i - 1], ys[i]
+            if x1 == x0:
+                return y1
+            return y0 + (y1 - y0) * (p - x0) / (x1 - x0)
+    return ys[-1]

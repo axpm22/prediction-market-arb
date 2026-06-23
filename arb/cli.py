@@ -287,6 +287,12 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
     # SPEC §1: the +EV class exists only when consensus_enabled. watch never calls
     # The Odds API; EV uses consensus stored by the scan cadence.
     if config.consensus_enabled:
+        calibrator = None
+        if config.flb.get("apply_calibration"):  # EV#5: p_hat_calibrated from settled raw quotes
+            from .bias import fit_calibrator
+            from .quote_settlement import population_binaries
+            calibrator = fit_calibrator(population_binaries(store),
+                                        int(config.flb.get("calibration_min_samples", 200)))
         opportunities.extend(
             detect_ev_from_consensus(
                 detectable,
@@ -296,6 +302,7 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
                 e_min=config.ev_e_min,
                 config=config,
                 pregame_max_age_hours=config.consensus_pregame_max_age_hours,
+                calibrator=calibrator,
             )
         )
         opportunities.extend(
@@ -492,6 +499,7 @@ def detect_ev_from_consensus(
     config=None,
     record_below_e_min: bool = True,
     pregame_max_age_hours: int | None = None,
+    calibrator: tuple[list[float], list[float]] | None = None,
 ) -> list[Opportunity]:
     now = datetime.now(timezone.utc)
     stale_cutoff = now - timedelta(hours=max_age_hours)
@@ -512,6 +520,14 @@ def detect_ev_from_consensus(
         if entry is None:
             continue
         p_hat, computed_at = entry
+        # EV#5: apply the measured FLB calibration to p_hat before EV (the curve IS a p_hat
+        # correction). Off unless a calibrator is supplied; identity otherwise.
+        calibrated = False
+        if calibrator is not None:
+            from .bias import calibrate_probability
+            adj = q6(Decimal(str(calibrate_probability(float(p_hat), calibrator))))
+            calibrated = adj != p_hat
+            p_hat = adj
         ev = expected_value(p_hat, quote.effective_cost)
         # SPEC §1: every EV > 0 is recorded; thresholds gate display/betting, not recording.
         if ev <= 0:
@@ -519,6 +535,8 @@ def detect_ev_from_consensus(
         status, notes = status_for_legs([quote], trusted_pairs)
         edge = edge_points(p_hat, quote.effective_cost)
         notes = (*notes, f"edge_pts:{edge}")
+        if calibrated:
+            notes = (*notes, "p_hat-calibrated")
         below_e_min = e_min is not None and edge < e_min
         if below_e_min and not record_below_e_min:
             continue

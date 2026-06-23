@@ -75,3 +75,19 @@ def test_population_binaries_end_to_end(tmp_path) -> None:
     # population sample flows through calibration unchanged.
     stats = calibration(store, [0.4, 0.5, 0.6], min_samples=1, flb_min_edge=0.02, data=pairs)
     assert sum(s.n for s in stats) == 2
+
+
+def test_isotonic_calibrator_is_monotonic_and_applied() -> None:
+    from arb.bias import fit_calibrator, calibrate_probability
+    # Longshots (low cost) win LESS than implied, favorites win MORE -> the classic FLB shape.
+    data = ([(0.20, False)] * 18 + [(0.20, True)] * 2 +     # ~10% realized at 0.20
+            [(0.50, False)] * 10 + [(0.50, True)] * 10 +    # ~50% at 0.50
+            [(0.80, True)] * 18 + [(0.80, False)] * 2)       # ~90% at 0.80
+    nodes = fit_calibrator(data, min_samples=10)
+    assert nodes is not None
+    lo = calibrate_probability(0.20, nodes)
+    mid = calibrate_probability(0.50, nodes)
+    hi = calibrate_probability(0.80, nodes)
+    assert lo < mid < hi                # monotonic
+    assert lo < 0.20 and hi > 0.80      # longshot pulled down, favorite pushed up
+    assert calibrate_probability(0.5, None) == 0.5  # identity without a calibrator
