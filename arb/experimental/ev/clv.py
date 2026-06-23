@@ -19,7 +19,7 @@ from decimal import Decimal
 from statistics import mean
 
 from arb.config import load_config
-from arb.pricing import clv_points, q6
+from arb.pricing import clv_points, devig_book_method, q6
 from arb.store import Store
 
 # A flag's venue close is its outcome's last pregame quote on the SAME venue+book, mid of
@@ -121,12 +121,77 @@ def _bootstrap_ci(values: list[float], resamples: int = 10000) -> tuple[float, f
     return (round(means[int(0.025 * resamples)], 5), round(means[int(0.975 * resamples)], 5))
 
 
+def _two_sided_devig_mid(con, event_key: str, venue: str, market_type, line, target: str,
+                         at_or_before: str | None) -> Decimal | None:
+    """EV#9: de-vig the two-sided book on this venue (each outcome's last raw price at/before
+    `at_or_before`, or the close if None) and return the no-vig mid for `target`. Fees are
+    NOT included — they belong in P&L, not the CLV signal."""
+    line_clause = "line IS ?" if line in (None, "") else "line = ?"
+    outcomes = [r[0] for r in con.execute(
+        f"""SELECT DISTINCT outcome FROM quotes
+             WHERE event_key=? AND venue=? AND market_type=? AND {line_clause} AND live=0""",
+        (event_key, venue, market_type, line),
+    )]
+    if target not in outcomes or len(outcomes) < 2:
+        return None
+    raw: dict[str, Decimal] = {}
+    for outcome in outcomes:
+        params = [event_key, venue, market_type, line, outcome]
+        time_clause = ""
+        if at_or_before is not None:
+            time_clause = "AND fetched_at <= ?"
+            params.append(at_or_before)
+        row = con.execute(
+            f"""SELECT raw_price FROM quotes
+                 WHERE event_key=? AND venue=? AND market_type=? AND {line_clause} AND outcome=?
+                       AND live=0 {time_clause}
+                 ORDER BY fetched_at DESC LIMIT 1""",
+            params,
+        ).fetchone()
+        if row is None:
+            return None
+        price = Decimal(str(row["raw_price"]))
+        if price <= 1:  # venue books store $1-unit cost as raw_price; need decimal odds to devig
+            raw[outcome] = price
+    if len(raw) == len(outcomes):
+        # raw_price is already the $1-unit cost for venues; de-vig = renormalize the pair.
+        total = sum(raw.values(), Decimal("0"))
+        return q6(raw[target] / total) if total > 0 else None
+    return None
+
+
+def grade_clv_novig(store: Store) -> dict:
+    """EV#9 amendment (H-EV1): CLV in NO-VIG MID space on both ends. closing_mid - entry_mid,
+    each from the de-vigged two-sided venue book, fees excluded from the signal."""
+    flags = _ev_flags(store)
+    graded: list[float] = []
+    with store.connect() as con:
+        for f in flags:
+            close_mid = _two_sided_devig_mid(con, f["event_key"], f["venue"], "WINNER", None, f["outcome"], None)
+            entry_mid = _two_sided_devig_mid(con, f["event_key"], f["venue"], "WINNER", None, f["outcome"], f["placed_at"])
+            if close_mid is None or entry_mid is None:
+                continue
+            graded.append(float(close_mid - entry_mid))  # >0 = venue fair value moved toward us
+    if not graded:
+        return {"n": 0, "flags": len(flags)}
+    return {
+        "n": len(graded), "flags": len(flags),
+        "mean_clv": round(mean(graded), 5),
+        "positive_rate": round(sum(1 for v in graded if v > 0) / len(graded), 3),
+        "ci95": _bootstrap_ci(graded),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m arb.experimental.ev.clv")
     parser.add_argument("--min-depth", type=float, default=50.0)
+    parser.add_argument("--novig", action="store_true", help="EV#9: no-vig closing-mid CLV (fees excluded)")
     args = parser.parse_args(argv)
     store = Store(load_config().database_path)
-    r = grade_clv(store, Decimal(str(args.min_depth)))
+    if args.novig:
+        r = grade_clv_novig(store)
+    else:
+        r = grade_clv(store, Decimal(str(args.min_depth)))
     if r["n"] == 0:
         print(f"No CLV-gradeable EV flags yet ({r.get('flags', 0)} flags, none with a depth-floored venue close).")
         return 0

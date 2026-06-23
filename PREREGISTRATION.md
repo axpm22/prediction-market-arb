@@ -73,3 +73,33 @@ fixes) may change freely with dated changelog entries — fixing a parser is not
     proven to settle off the identical index (probed 2026-06: they are NOT, so the pair
     stays REVIEW and this hypothesis is dormant until the oracle match is documented). Kill:
     confirmed median ≤ 0, or oracles never provably identical.
+
+---
+
+## Amendments (dated; apply forward only, never to prior readings)
+
+### 2026-06-23 — EV#9: CLV measured in no-vig mid space (amends H-EV1 / CLV definition)
+
+The CLV gate originally compared the fee-loaded entry ask to the fee-loaded venue close
+(`venue_close` = cost + fee_cost). Loading fees on both ends biases CLV toward zero and can
+hide or fake an edge. **Amendment:** an additional grader (`grade_clv_novig`,
+`arb.experimental.ev.clv --novig`) computes `clv = closing_mid − entry_mid`, where each mid
+is the de-vigged two-sided venue book (fees excluded from the SIGNAL; fees stay in realized
+P&L). Prior CLV readings remain valid under the original definition; the no-vig CLV is the
+forward gate from this date. Same kill rule (mean CLV ≤ 0 with CI excluding a meaningful
+positive ⇒ EV dead).
+
+### 2026-06-23 — EV#10: per-segment calibration gate (amends segment-enablement)
+
+A segment could clear the ROI/score gate on variance while its `p̂` was badly calibrated.
+**Amendment:** when `scoring.calibration_gate` is on, a segment whose settled-EV ECE exceeds
+`scoring.ece_max` is BLOCKED regardless of score (ECE from `arb.forecast.scoring` over each
+segment's settled EV `p̂` = optimistic_cost + edge_points vs outcome). Default off; counts
+forward from enablement.
+
+### 2026-06-23 — pass3#9: walk-forward segment scoring (amends segment-enablement)
+
+The scorer fit and applied thresholds on the same settled sample (in-sample optimism).
+**Amendment:** `scoring.walk_forward_holdout` scores each segment on a fit window (dropping
+the most-recent holdout fraction) so the gate is not judged on the bets it will act on.
+Default 0.0 (legacy in-sample); any positive value counts forward from enablement.

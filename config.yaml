@@ -216,6 +216,12 @@ scoring:
   block_below: 30        # score < 30 -> segment hard-blocked
   recent_window: 10      # bets in the recency-weighted trend term
   tiers: { full: 80, high: 60, low: 40, minimal: 30 }
+  # pass3#9: walk-forward. Score on the fit window (drop this most-recent fraction) so the
+  # gate isn't fitted and judged on the same bets. 0 = legacy in-sample (frozen-rule amend).
+  walk_forward_holdout: 0.0
+  # EV#10: block a segment whose p_hat ECE exceeds ece_max even if ROI passes (frozen-rule).
+  calibration_gate: false
+  ece_max: 0.10
 # S1 intra-Polymarket negative-risk basket arb (single venue, no settlement mismatch).
 negrisk:
   enabled: true
