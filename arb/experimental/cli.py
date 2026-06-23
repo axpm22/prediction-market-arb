@@ -47,6 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     whales = sub.add_parser("whales", help="ingest Polymarket whale trades + qualify wallets (Phase 5)")
     whales.add_argument("--once", action="store_true", help="run a single pass and exit")
     whales.add_argument("--list", action="store_true", help="print qualified wallets and exit")
+    sub.add_parser("devig-regrade", help="offline: re-grade stored EV flags under proportional/power/shin de-vig (Lever A.3)")
     web = sub.add_parser("web", help="serve the read-only live dashboard")
     web.add_argument("--port", type=int, default=8787, help="local port to bind, default: 8787")
     annotate = sub.add_parser("annotate", help="attach an immutable tag+reason to a bet (never edits the bet)")
@@ -90,6 +91,13 @@ def main(argv: list[str] | None = None) -> int:
         return run_btc(args, config)
     if args.command == "whales":
         return run_whales(args, config)
+    if args.command == "devig-regrade":
+        from arb.experimental.analysis.devig_regrade import format_regrade, regrade
+
+        results = regrade(Store(config.database_path),
+                          config.min_books_for_consensus, config.min_books_for_consensus_totals)
+        print(format_regrade(results))
+        return 0
     if args.command == "web":
         from arb.experimental.webserver import serve
 

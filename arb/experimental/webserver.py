@@ -44,6 +44,15 @@ LOG_FILES = {
     "btc": Path("logs/btc.log"),
     "whales": Path("logs/whales.log"),
 }
+
+EDGE_SIZED_EV_BASELINE = {
+    "label": "2026-06-23 edge-sized start",
+    "max_id": 7924,
+    "settled": 487,
+    "stake": 681.18,
+    "pnl": 113.42,
+}
+
 SCANNERS = [
     {
         "id": "daemon",
@@ -675,6 +684,34 @@ def build_state(store: Store, config) -> dict[str, Any]:
                )
             """
         ).fetchone()
+        edge_sized_since = c.execute(
+            """
+            SELECT COUNT(*) settled,
+                   SUM(CASE WHEN result='WON' THEN 1 ELSE 0 END) won,
+                   SUM(CASE WHEN result='LOST' THEN 1 ELSE 0 END) lost,
+                   COALESCE(SUM(CAST(edge AS REAL) * 100.0),0) stake,
+                   COALESCE(SUM(
+                       CASE WHEN CAST(stake_usd AS REAL) > 0
+                            THEN CAST(pnl_optimistic AS REAL) * (CAST(edge AS REAL) * 100.0) / CAST(stake_usd AS REAL)
+                            ELSE 0 END
+                   ),0) pnl,
+                   COALESCE(SUM(
+                       CASE WHEN pnl_confirmed IS NOT NULL AND CAST(stake_usd AS REAL) > 0
+                            THEN CAST(pnl_confirmed AS REAL) * (CAST(edge AS REAL) * 100.0) / CAST(stake_usd AS REAL)
+                            ELSE 0 END
+                   ),0) confirmed_pnl,
+                   COALESCE(AVG(CAST(edge AS REAL) * 100.0),0) avg_stake,
+                   COALESCE(MAX(CAST(edge AS REAL) * 100.0),0) max_stake,
+                   COALESCE(MAX(id), ?) max_id
+              FROM flat_bets
+             WHERE id > ?
+               AND kind='EV'
+               AND status IN ('SETTLED','EXITED')
+               AND result IN ('WON','LOST')
+               AND quality_flag IS NULL
+            """,
+            (EDGE_SIZED_EV_BASELINE["max_id"], EDGE_SIZED_EV_BASELINE["max_id"]),
+        ).fetchone()
         # ARB gets its own lane: locked/provisional, includes RESOLVED. Never in EV totals.
         locked_arb = c.execute(
             """
@@ -966,6 +1003,34 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 if int(clean_ev["won"] or 0) + int(clean_ev["lost"] or 0) else 0.0
             ),
         },
+        "edge_sized_ev": {
+            "rule": "$1 per 1% displayed edge",
+            "baseline_label": EDGE_SIZED_EV_BASELINE["label"],
+            "baseline_max_id": int(EDGE_SIZED_EV_BASELINE["max_id"]),
+            "baseline_settled": int(EDGE_SIZED_EV_BASELINE["settled"]),
+            "baseline_stake": _money(EDGE_SIZED_EV_BASELINE["stake"]),
+            "baseline_pnl": _money(EDGE_SIZED_EV_BASELINE["pnl"]),
+            "new_settled": int(edge_sized_since["settled"] or 0),
+            "new_won": int(edge_sized_since["won"] or 0),
+            "new_lost": int(edge_sized_since["lost"] or 0),
+            "new_stake": _money(edge_sized_since["stake"]),
+            "new_pnl": _money(edge_sized_since["pnl"]),
+            "new_confirmed_pnl": _money(edge_sized_since["confirmed_pnl"]),
+            "settled": int(EDGE_SIZED_EV_BASELINE["settled"]) + int(edge_sized_since["settled"] or 0),
+            "stake": _money(float(EDGE_SIZED_EV_BASELINE["stake"]) + float(edge_sized_since["stake"] or 0)),
+            "pnl": _money(float(EDGE_SIZED_EV_BASELINE["pnl"]) + float(edge_sized_since["pnl"] or 0)),
+            "roi": (
+                round(
+                    (float(EDGE_SIZED_EV_BASELINE["pnl"]) + float(edge_sized_since["pnl"] or 0))
+                    / (float(EDGE_SIZED_EV_BASELINE["stake"]) + float(edge_sized_since["stake"] or 0)),
+                    4,
+                )
+                if float(EDGE_SIZED_EV_BASELINE["stake"]) + float(edge_sized_since["stake"] or 0) else 0.0
+            ),
+            "avg_new_stake": _money(edge_sized_since["avg_stake"]),
+            "max_new_stake": _money(edge_sized_since["max_stake"]),
+            "max_id": int(edge_sized_since["max_id"] or EDGE_SIZED_EV_BASELINE["max_id"]),
+        },
         "suspect_ev": {"n": int(suspect_ev["n"] or 0), "pnl": _money(suspect_ev["pnl"])},
         "micro_ev": {
             "active": int(micro_active["n"] or 0),
@@ -1213,6 +1278,16 @@ tr:last-child td{border-bottom:0}
         <div class="track-grid" id="track-cards"></div>
         <div id="track-detail" style="margin-top:12px"></div>
       </div>
+    </div>
+    <div class="panel full">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Edge-Sized EV</div>
+          <div class="muted" id="edge-sized-summary"></div>
+        </div>
+        <div class="status-line"><span class="pill">$1 per 1% edge</span><span class="pill">clean EV only</span></div>
+      </div>
+      <div class="panel-body"><div class="track-grid" id="edge-sized"></div></div>
     </div>
     <div class="panel full">
       <div class="panel-head">
@@ -1514,6 +1589,24 @@ function renderLiveBaseball(d) {
     `</div><div class="muted" style="margin-top:8px">VANISHED-vs-null gap, CLV at +30s/+2m/next-inning, and avg effective_state_age accrue once the Phase-1 live runner captures marks. This lane is never folded into clean pregame EV.</div>`;
 }
 
+function renderEdgeSized(d) {
+  const ev = d.edge_sized_ev;
+  if (!ev || !$("edge-sized")) return;
+  $("edge-sized-summary").textContent =
+    `${ev.rule} · starts at ${money(ev.baseline_pnl)} after ${ev.baseline_settled} settled rows`;
+  const newDetail = ev.new_settled
+    ? `${ev.new_won}W / ${ev.new_lost}L · max new stake ${usd(ev.max_new_stake)}`
+    : `waiting for row id > ${ev.baseline_max_id}`;
+  $("edge-sized").innerHTML = [
+    deltaCard("Total P&L", money(ev.pnl), `${ev.settled} settled · from ${money(ev.baseline_pnl)} start`, valClass(ev.pnl)),
+    deltaCard("Since Start", money(ev.new_pnl), newDetail, valClass(ev.new_pnl)),
+    deltaCard("Total Stake", usd(ev.stake), `${pct(ev.roi)} ROI · clean EV only`, "blue"),
+    deltaCard("New Stake", usd(ev.new_stake), ev.new_settled ? `avg ${usd(ev.avg_new_stake)} per new bet` : "no new settled rows"),
+    deltaCard("Baseline", money(ev.baseline_pnl), `${ev.baseline_settled} rows · ${usd(ev.baseline_stake)} staked`),
+    deltaCard("Watermark", `#${ev.max_id}`, `baseline row #${ev.baseline_max_id}`),
+  ].join("");
+}
+
 function renderProcesses(d) {
   $("clock").textContent = `live ${new Date(d.now).toLocaleTimeString()} | ${compact(d.health.polls)} polls`;
   $("procs").innerHTML = d.processes.map(p => `<span class="proc ${p.status}"><span class="dot"></span>${esc(p.name)}${p.status === "ok" ? "" : ` ${esc(p.status)}`}</span>`).join("");
@@ -1781,6 +1874,7 @@ function render(d) {
   renderLiveBaseball(d);
   renderMetrics(d);
   renderTracking(d);
+  renderEdgeSized(d);
   renderScanners(d);
   renderOpenBets(d);
   renderPipeline(d);

@@ -105,6 +105,42 @@ def test_live_dashboard_exposes_scanner_controls(tmp_path) -> None:
     assert "/api/scanner" in PAGE
 
 
+def test_live_dashboard_tracks_edge_sized_ev_from_baseline(tmp_path) -> None:
+    config = replace(load_config(), database_path=tmp_path / "arb.sqlite")
+    store = Store(config.database_path)
+    now = datetime.now(timezone.utc).isoformat()
+    with store.connect() as con:
+        con.execute(
+            """INSERT INTO flat_bets(id, fingerprint, opened_poll_id, category, sport, kind, trusted, live,
+                   edge, stake_usd, legs_json, optimistic_cost, pnl_optimistic,
+                   status, placed_at, settled_at, result, quality_flag, notes)
+               VALUES (7925, 'new-clean', 1, 'sports', 'baseball_mlb', 'EV', 0, 0,
+                       '0.05', '1.00', '[]', '0.50', '1.00',
+                       'SETTLED', ?, ?, 'WON', NULL, '')""",
+            (now, now),
+        )
+        con.execute(
+            """INSERT INTO flat_bets(id, fingerprint, opened_poll_id, category, sport, kind, trusted, live,
+                   edge, stake_usd, legs_json, optimistic_cost, pnl_optimistic,
+                   status, placed_at, settled_at, result, quality_flag, notes)
+               VALUES (7926, 'new-suspect', 1, 'sports', 'baseball_mlb', 'EV', 0, 0,
+                       '100.00', '1.00', '[]', '0.01', '-1.00',
+                       'SETTLED', ?, ?, 'LOST', 'suspect-edge', '')""",
+            (now, now),
+        )
+
+    state = build_state(store, config)
+    sized = state["edge_sized_ev"]
+
+    assert sized["baseline_pnl"] == 113.42
+    assert sized["baseline_max_id"] == 7924
+    assert sized["new_settled"] == 1
+    assert sized["new_stake"] == 5.0
+    assert sized["new_pnl"] == 5.0
+    assert sized["pnl"] == 118.42
+    assert "Edge-Sized EV" in PAGE
+
+
 def test_live_dashboard_does_not_count_settled_append_only_roots_as_active(tmp_path) -> None:
     config = replace(load_config(), database_path=tmp_path / "arb.sqlite")
     store = Store(config.database_path)
