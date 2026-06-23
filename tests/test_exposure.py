@@ -40,3 +40,24 @@ def test_over_bankroll_flag(tmp_path) -> None:
     exp = compute_exposure(store, bankroll=Decimal("1000"), per_venue_cap=Decimal("100"))
     assert exp.total_committed == Decimal("1200")
     assert exp.over_bankroll is True
+
+
+def test_per_venue_caps_and_duration_weighting(tmp_path) -> None:
+    from datetime import timedelta
+    store = Store(tmp_path / "arb.sqlite")
+    now = datetime(2026, 6, 20, tzinfo=timezone.utc)
+    # one bet on kalshi settling in 10 days
+    legs = [{"venue": "kalshi", "book": "b", "outcome_label": "x", "cost": "0.5", "fee_cost": "0",
+             "start_utc": (now + timedelta(days=10)).isoformat()}]
+    with store.connect() as con:
+        con.execute(
+            """INSERT INTO flat_bets(fingerprint, opened_poll_id, category, sport, kind, trusted, live,
+                   edge, stake_usd, legs_json, status, placed_at, notes)
+               VALUES ('fp', 1, 'sports', 'baseball_mlb', 'EV', 0, 0, '0.03', '20', ?, 'OPEN', ?, '')""",
+            (json.dumps(legs), now.isoformat()),
+        )
+    exp = compute_exposure(store, bankroll=Decimal("1000"), per_venue_cap=Decimal("100"),
+                           per_venue_caps={"kalshi": Decimal("10")}, now=now)
+    assert exp.over_venue == ["kalshi"]                       # 20 > the kalshi-specific $10 cap
+    assert exp.caps["kalshi"] == Decimal("10")
+    assert exp.duration_weighted_usd_days == Decimal("200.00")  # $20 locked x 10 days

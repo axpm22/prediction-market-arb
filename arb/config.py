@@ -91,6 +91,7 @@ class AppConfig:
     forecast: dict
     validation: dict
     live_baseball_ev: dict
+    per_venue_caps: dict
     odds_api_key: str | None
     stale_fee_venues: frozenset[str] = frozenset()
     database_path: Path = Path("data/arb.sqlite")
@@ -225,6 +226,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         forecast=dict(raw.get("forecast", {})),
         validation=dict(raw.get("validation", {})),
         live_baseball_ev=dict(raw.get("live_baseball_ev", {})),
+        per_venue_caps={k: _decimal(v) for k, v in (raw.get("per_venue_caps") or {}).items() if v not in (None, "")},
         odds_api_key=os.environ.get("ODDS_API_KEY") or None,
         stale_fee_venues=frozenset(stale_fee_venues),
         database_path=database_path,

@@ -153,6 +153,12 @@ settle_grace_hours: 6
 # (free, keyless, all history). It rescues bets the 3-day Odds API window misses.
 mlbstats_enabled: true
 auto_fill: false
+# does-well#10: absolute $ caps per venue pool (Kalshi USD, Polymarket/SX USDC don't move
+# instantly). Blank/absent venues fall back to bankroll * max_stake_pct.
+per_venue_caps:
+  kalshi:
+  polymarket:
+  sx:
 trusted_pairs: []
 fuzzy_match_threshold: 92
 # Fees are dated facts: each carries where it came from and when it was confirmed.

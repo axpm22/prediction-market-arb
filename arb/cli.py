@@ -110,7 +110,8 @@ def main(argv: list[str] | None = None) -> int:
         from .exposure import compute_exposure, format_exposure
 
         per_venue_cap = config.bankroll_usd * config.max_stake_pct
-        print(format_exposure(compute_exposure(store, config.bankroll_usd, per_venue_cap)))
+        print(format_exposure(compute_exposure(store, config.bankroll_usd, per_venue_cap,
+                                               per_venue_caps=config.per_venue_caps)))
         return 0
     if args.command == "scores":
         from .scoring import persist_scores, score_segments
