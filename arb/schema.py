@@ -180,6 +180,11 @@ CREATE INDEX IF NOT EXISTS idx_quotes_event ON quotes(event_key);
 """
 
 MIGRATION_COLUMNS = {
+    "consensus": {
+        # EV#3: cross-book dispersion (max-min de-vigged prob) stored beside p_hat so EV
+        # detection can gate on edge/SE and size Kelly off the lower bound of fair value.
+        "dispersion": "TEXT",
+    },
     "quotes": {
         "poll_id": "INTEGER",
         "category": "TEXT NOT NULL DEFAULT 'sports'",

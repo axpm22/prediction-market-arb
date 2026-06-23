@@ -68,6 +68,9 @@ class AppConfig:
     ev_enforce_depth_floor: bool
     ev_reject_one_sided: bool
     ev_edge_decay_per_hour: Decimal
+    ev_dispersion_gate: bool
+    ev_edge_se_min: Decimal
+    ev_dispersion_kelly_haircut: Decimal
     auto_fill: bool
     trusted_pairs: set[str]
     fuzzy_match_threshold: int
@@ -207,6 +210,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         ev_enforce_depth_floor=bool(ev.get("enforce_depth_floor", True)),
         ev_reject_one_sided=bool(ev.get("reject_one_sided_books", True)),
         ev_edge_decay_per_hour=_decimal(ev.get("edge_decay_per_hour", "0")),
+        ev_dispersion_gate=bool(ev.get("dispersion_gate", False)),
+        ev_edge_se_min=_decimal(ev.get("edge_se_min", "1.0")),
+        ev_dispersion_kelly_haircut=_decimal(ev.get("dispersion_kelly_haircut", "1.0")),
         auto_fill=bool(raw["auto_fill"]),
         trusted_pairs=set(raw["trusted_pairs"]),
         fuzzy_match_threshold=int(raw["fuzzy_match_threshold"]),

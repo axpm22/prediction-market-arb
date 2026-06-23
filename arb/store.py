@@ -89,17 +89,21 @@ class Store:
                 (_dt_text(datetime.now(timezone.utc)), credits_remaining, n_quotes, n_opps, poll_id),
             )
 
-    def save_consensus(self, probabilities: dict[tuple[str, str], Decimal], computed_at: datetime) -> None:
+    def save_consensus(self, probabilities: dict[tuple[str, str], Decimal], computed_at: datetime,
+                       dispersion: dict[tuple[str, str], Decimal] | None = None) -> None:
+        dispersion = dispersion or {}
         with self.connect() as con:
             con.executemany(
                 """
-                INSERT INTO consensus(event_key, outcome, p_hat, computed_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO consensus(event_key, outcome, p_hat, computed_at, dispersion)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(event_key, outcome) DO UPDATE
-                   SET p_hat = excluded.p_hat, computed_at = excluded.computed_at
+                   SET p_hat = excluded.p_hat, computed_at = excluded.computed_at,
+                       dispersion = excluded.dispersion
                 """,
                 [
-                    (event_key, outcome, str(p_hat), _dt_text(computed_at))
+                    (event_key, outcome, str(p_hat), _dt_text(computed_at),
+                     None if (key := (event_key, outcome)) not in dispersion else str(dispersion[key]))
                     for (event_key, outcome), p_hat in probabilities.items()
                 ],
             )
@@ -111,6 +115,12 @@ class Store:
             (row["event_key"], row["outcome"]): (Decimal(row["p_hat"]), datetime.fromisoformat(row["computed_at"]))
             for row in rows
         }
+
+    def load_consensus_dispersion(self) -> dict[tuple[str, str], Decimal]:
+        with self.connect() as con:
+            rows = list(con.execute(
+                "SELECT event_key, outcome, dispersion FROM consensus WHERE dispersion IS NOT NULL"))
+        return {(row["event_key"], row["outcome"]): Decimal(row["dispersion"]) for row in rows}
 
     def save_poll_quotes(self, poll_id: int, quotes: list[Quote]) -> None:
         with self.connect() as con:

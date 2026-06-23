@@ -15,7 +15,7 @@ from .arbitrage import build_event, detect_divergences, detect_true_arbs, split_
 from .config import load_config
 from .models import Opportunity, Quote
 from .paper import fill_opportunity
-from .pricing import consensus_outcome_key, consensus_probabilities, edge_points, expected_value, is_economic, money, q6
+from .pricing import consensus_dispersion, consensus_outcome_key, consensus_probabilities, edge_points, expected_value, is_economic, money, q6
 from .quality import classify_quality
 from .sizing import kelly_f_star, kelly_stake
 from .report import print_opportunities, print_positions, print_report
@@ -304,6 +304,7 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
                 config=config,
                 pregame_max_age_hours=config.consensus_pregame_max_age_hours,
                 calibrator=calibrator,
+                dispersion=store.load_consensus_dispersion(),
             )
         )
         opportunities.extend(
@@ -373,6 +374,7 @@ def run_scan(args: argparse.Namespace, config, store: Store) -> int:
         # EV#2: sharp-book weighting is opt-in (parallel/measurement) until it beats the median on CLV.
         sharp_books=config.sharp_books if config.weight_sharp_books else None,
         sharp_weight=config.sharp_book_weight)
+    dispersion = compute_dispersion(pregame, config.min_books_for_consensus, config.devig_method)  # EV#3
     print(f"Consensus outcomes computed: {len(consensus)} (from {len(pregame)} pregame quotes)")
 
     if args.dry_run:
@@ -381,7 +383,7 @@ def run_scan(args: argparse.Namespace, config, store: Store) -> int:
 
     poll_id = store.start_poll("scan")
     store.save_poll_quotes(poll_id, quotes)
-    store.save_consensus(consensus, computed_at)
+    store.save_consensus(consensus, computed_at, dispersion)
     store.finish_poll(poll_id, adapter.credits_remaining, len(quotes), 0)
     print(f"Persisted scan poll {poll_id}: {len(quotes)} quotes, {len(consensus)} consensus outcomes.")
     return 1 if aborted else 0
@@ -498,6 +500,18 @@ def _cheapest_quote_per_outcome(quotes: list[Quote]) -> list[Quote]:
     return [*best.values(), *passthrough]
 
 
+def compute_dispersion(quotes: list[Quote], min_books: int, method: str = "proportional") -> dict[tuple[str, str], Decimal]:
+    """EV#3: per (event, outcome) cross-book dispersion of de-vigged probs, stored beside p_hat."""
+    by_event: dict[str, list[Quote]] = defaultdict(list)
+    for quote in quotes:
+        by_event[quote.event_key].append(quote)
+    out: dict[tuple[str, str], Decimal] = {}
+    for event_key, eq in by_event.items():
+        for outcome, disp in consensus_dispersion(eq, min_books, method=method).items():
+            out[(event_key, outcome)] = disp
+    return out
+
+
 def detect_ev_from_consensus(
     quotes: list[Quote],
     consensus: dict[tuple[str, str], tuple[Decimal, datetime]],
@@ -508,6 +522,7 @@ def detect_ev_from_consensus(
     record_below_e_min: bool = True,
     pregame_max_age_hours: int | None = None,
     calibrator: tuple[list[float], list[float]] | None = None,
+    dispersion: dict[tuple[str, str], Decimal] | None = None,
 ) -> list[Opportunity]:
     now = datetime.now(timezone.utc)
     stale_cutoff = now - timedelta(hours=max_age_hours)
@@ -567,6 +582,19 @@ def detect_ev_from_consensus(
             notes = (*notes, "stale-consensus")
         if quote.depth_usd is not None:
             notes = (*notes, f"capturable:{q6(quote.depth_usd * edge)}")
+        # EV#3: consensus uncertainty. The cross-book dispersion is an SE proxy. Gate on
+        # edge/SE (a 5-pt edge from disagreeing books is weaker than from tight ones) and size
+        # Kelly off the LOWER bound of fair value (p_hat - haircut*dispersion). Off by default.
+        disp = (dispersion or {}).get((quote.event_key, outcome), Decimal("0"))
+        p_for_kelly = p_hat
+        low_edge_se = False
+        if config is not None and getattr(config, "ev_dispersion_gate", False) and disp > 0:
+            ratio = gate_edge / disp
+            notes = (*notes, f"edge_se:{q6(ratio)}")
+            if ratio < config.ev_edge_se_min:
+                low_edge_se = True
+            haircut = config.ev_dispersion_kelly_haircut * disp
+            p_for_kelly = max(Decimal("0"), q6(p_hat - haircut))
         opp = Opportunity(
             kind="EV",
             category="sports",
@@ -579,7 +607,7 @@ def detect_ev_from_consensus(
             notes=notes,
         )
         if config is not None:
-            opp = _annotate_quality_and_kelly(opp, p_hat, quote.effective_cost, config)
+            opp = _annotate_quality_and_kelly(opp, p_hat, quote.effective_cost, config, p_for_kelly)
         # #5/#3 First-class quarantine: sub-threshold and stale-line EV must not sit in the
         # CLEAN aggregate keyed on quality_flag IS NULL. Don't override a more specific flag.
         if opp.quality_flag is None:
@@ -587,6 +615,8 @@ def detect_ev_from_consensus(
                 opp = replace(opp, quality_flag="below-e-min")
             elif is_stale:
                 opp = replace(opp, quality_flag="stale-consensus")
+            elif low_edge_se:
+                opp = replace(opp, quality_flag="low-edge-se")
         opportunities.append(opp)
     return opportunities
 
@@ -638,11 +668,15 @@ def _mark_micro_ev(opp: Opportunity, config) -> Opportunity:
     )
 
 
-def _annotate_quality_and_kelly(opp: Opportunity, p_hat: Decimal, effective_cost: Decimal, config) -> Opportunity:
-    """Attach Phase 1 quality flag and Phase 3 Kelly projection to an EV opportunity."""
+def _annotate_quality_and_kelly(opp: Opportunity, p_hat: Decimal, effective_cost: Decimal, config,
+                                p_for_kelly: Decimal | None = None) -> Opportunity:
+    """Attach Phase 1 quality flag and Phase 3 Kelly projection to an EV opportunity. Kelly is
+    sized off p_for_kelly (the lower bound of fair value when EV#3 dispersion sizing is on),
+    defaulting to the point estimate p_hat."""
     quality = classify_quality(opp, config.min_executable_usd, config.ev_edge_suspect_above)
-    f_star = kelly_f_star(p_hat, effective_cost)
-    stake = kelly_stake(p_hat, effective_cost, config.sizing_kelly_fraction,
+    kelly_p = p_for_kelly if p_for_kelly is not None else p_hat
+    f_star = kelly_f_star(kelly_p, effective_cost)
+    stake = kelly_stake(kelly_p, effective_cost, config.sizing_kelly_fraction,
                         config.bankroll_usd, config.sizing_max_fraction)
     notes = opp.notes
     # pass3#4: EV = (p-c)/c assumes a clean binary, but an integer-line total can PUSH (total

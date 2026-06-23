@@ -152,6 +152,11 @@ ev:
   # EV#7: pregame info decays smoothly, not as a step. Subtract this many probability points
   # of edge per hour of consensus age before the e_min gate (0 = legacy binary behavior).
   edge_decay_per_hour: 0.0
+  # EV#3: treat p_hat as uncertain. Cross-book dispersion is an SE proxy; gate on edge/SE and
+  # size Kelly off the lower bound (p_hat - haircut*dispersion). OFF by default (parallel).
+  dispersion_gate: false
+  edge_se_min: 1.0              # require edge >= this many x dispersion to stay clean
+  dispersion_kelly_haircut: 1.0 # p_lower = p_hat - this * dispersion for Kelly sizing
 scan_times: ["10:00", "15:00", "19:00"]
 daily_report_time: "23:59"
 settle_time: "09:30"

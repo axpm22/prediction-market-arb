@@ -93,3 +93,24 @@ def test_consensus_edge_decays_with_age() -> None:
                                      pregame_max_age_hours=8)
     assert any(n.startswith("edge_decayed:") for n in opp.notes)
     assert "below-e-min" in opp.notes        # decayed below e_min even though raw edge was 0.06
+
+
+# ---- EV#3: dispersion gate + lower-bound Kelly ----
+
+def test_dispersion_gate_quarantines_and_shrinks_kelly() -> None:
+    config = replace(load_config(), ev_dispersion_gate=True, ev_edge_se_min=Decimal("2.0"),
+                     ev_dispersion_kelly_haircut=Decimal("1.0"))
+    fresh = datetime.now(timezone.utc)
+    consensus = {(EVENT, "kansas city royals"): (Decimal("0.56"), fresh)}
+    # edge 0.06 with wide dispersion 0.05 -> edge/SE = 1.2 < 2.0 -> low-edge-se.
+    disp = {(EVENT, "kansas city royals"): Decimal("0.05")}
+    [opp] = detect_ev_from_consensus([_quote("0.50", 1)], consensus, max_age_hours=8,
+                                     trusted_pairs=set(), e_min=Decimal("0.01"), config=config,
+                                     dispersion=disp)
+    assert opp.quality_flag == "low-edge-se"
+    assert any(n.startswith("edge_se:") for n in opp.notes)
+    # Kelly sized off the lower bound p_hat-0.05=0.51 is smaller than off 0.56.
+    base = detect_ev_from_consensus([_quote("0.50", 1)], consensus, max_age_hours=8,
+                                    trusted_pairs=set(), e_min=Decimal("0.01"),
+                                    config=replace(config, ev_dispersion_gate=False))[0]
+    assert opp.kelly_stake < base.kelly_stake
