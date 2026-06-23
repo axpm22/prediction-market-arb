@@ -51,6 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("devig-regrade", help="offline: re-grade stored EV flags under proportional/power/shin de-vig (Lever A.3)")
     sub.add_parser("divergence-reversion", help="offline: do large cross-venue spreads revert? (weakness#10)")
     sub.add_parser("arb-capacity", help="offline: per-arb $ before the lock goes negative, from the depth ladders")
+    sub.add_parser("devig-brier", help="offline: rank de-vig methods by Brier/log-loss on settled outcomes (PREGAME_EV #1)")
     web = sub.add_parser("web", help="serve the read-only live dashboard")
     web.add_argument("--port", type=int, default=8787, help="local port to bind, default: 8787")
     annotate = sub.add_parser("annotate", help="attach an immutable tag+reason to a bet (never edits the bet)")
@@ -111,6 +112,11 @@ def main(argv: list[str] | None = None) -> int:
         from arb.experimental.analysis.arb_capacity import format_report, run_arb_capacity
 
         print(format_report(run_arb_capacity(Store(config.database_path))))
+        return 0
+    if args.command == "devig-brier":
+        from arb.experimental.analysis.devig_brier import format_methods, score_methods
+
+        print(format_methods(score_methods(Store(config.database_path), config.min_books_for_consensus)))
         return 0
     if args.command == "web":
         from arb.experimental.webserver import serve
