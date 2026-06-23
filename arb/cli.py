@@ -610,6 +610,13 @@ def _annotate_quality_and_kelly(opp: Opportunity, p_hat: Decimal, effective_cost
     stake = kelly_stake(p_hat, effective_cost, config.sizing_kelly_fraction,
                         config.bankroll_usd, config.sizing_max_fraction)
     notes = opp.notes
+    # pass3#4: EV = (p-c)/c assumes a clean binary, but an integer-line total can PUSH (total
+    # == line -> stake returned, no payout), which lowers true EV. We have no run-distribution
+    # model to price the push, so flag it rather than overstate EV.
+    leg0 = opp.legs[0] if opp.legs else None
+    if leg0 is not None and leg0.market_type == "TOTAL" and leg0.line is not None and leg0.line == leg0.line.to_integral_value():
+        notes = (*notes, "push-risk-integer-total")
+        quality = quality or "push-risk"
     # pass3#6/weakness#8: a stale/unverified venue fee silently shifts every edge, and fees
     # are first-order at sub-4% edges. Quarantine bets whose venue fee is past fee_stale_days.
     if any(leg.venue in config.stale_fee_venues for leg in opp.legs):

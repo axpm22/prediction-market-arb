@@ -179,4 +179,9 @@ def _best_taker_order(orders: list[dict[str, Any]], maker_betting_outcome_one: b
     best = max(candidates, key=lambda order: Decimal(str(order["percentageOdds"])))
     cost = taker_cost_from_percentage_odds(str(best["percentageOdds"]))
     remaining = Decimal(str(best.get("totalBetSize") or "0")) - Decimal(str(best.get("fillAmount") or "0"))
-    return cost, remaining / USDC_SCALE
+    maker_stake = remaining / USDC_SCALE
+    # weakness#10: report the TAKER's $-notional at the ask (like Kalshi/Polymarket), not the
+    # maker's remaining stake. A maker stake M backs a taker stake T = M*c/(1-c) (the maker
+    # covers the taker's net win T*(1-c)/c <= M). Mixing the two units broke capturable depth.
+    taker_notional = q6(maker_stake * cost / (Decimal("1") - cost)) if cost < Decimal("1") else maker_stake
+    return cost, taker_notional

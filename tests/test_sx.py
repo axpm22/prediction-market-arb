@@ -19,7 +19,8 @@ def test_sx_recorded_fixture_taker_cost_exact() -> None:
     quotes = adapter.fetch_quotes("baseball_mlb")
     royals = next(q for q in quotes if q.market_type == "WINNER" and q.outcome_label == "kansas city royals")
     assert royals.cost == Decimal("0.365000")
-    assert royals.depth_usd == Decimal("1146")
+    # weakness#10: taker $-notional = maker_stake(1146) * c/(1-c) = 1146 * 0.365/0.635.
+    assert royals.depth_usd == Decimal("658.724409")
 
 
 def test_sx_fixture_parses_winner_and_totals() -> None:
