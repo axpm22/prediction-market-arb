@@ -22,6 +22,13 @@ min_books_for_consensus: 3
 # leaves totals consensus almost always dead. A lower totals threshold recovers it without
 # interpolating across lines (which would change the event being measured).
 min_books_for_consensus_totals: 2
+# De-vig method for sportsbook consensus: proportional (crude, favorite-biased), power, or
+# shin. Proportional is the historical default; power/shin correct favorite-longshot bias.
+# Pick empirically by which minimizes Brier/log-loss on settled outcomes (devig-regrade).
+devig_method: proportional
+# Drop a book whose de-vigged prob for any outcome is more than this many points from the
+# cross-book median (a stale/mis-scaled book). Blank = off (preserves frozen test vectors).
+consensus_outlier_points:
 min_liquidity_usd: 500
 min_executable_usd: 50
 # Thin books can still be worth measuring at tiny size, but they must not pollute the

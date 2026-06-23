@@ -86,7 +86,7 @@ def test_daily_report_surfaces_validation_forward_test(tmp_path) -> None:
     record_tracker_poll(store, store.start_poll("watch"), [ev_opp("0.50")])
     record_tracker_poll(store, store.start_poll("watch"), [ev_opp("0.50")])
 
-    _csv_path, md_path = write_daily_report(store, datetime.now(timezone.utc).date(), tmp_path)
+    _csv_path, md_path = write_daily_report(store, None, tmp_path)
     md = md_path.read_text()
 
     assert "### Validation Forward Test" in md

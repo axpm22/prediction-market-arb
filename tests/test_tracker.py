@@ -111,7 +111,7 @@ def test_daily_report_summarizes_base_bets_not_append_rows(tmp_path) -> None:
     poll2 = store.start_poll("watch")
     record_tracker_poll(store, poll2, [arb_opp("0.485", "0.485")])
 
-    csv_path, md_path = write_daily_report(store, datetime.now(timezone.utc).date(), tmp_path)
+    csv_path, md_path = write_daily_report(store, None, tmp_path)
 
     # One base bet was placed; the CONFIRMED append row should enrich it, not count as
     # a second daily bet.
