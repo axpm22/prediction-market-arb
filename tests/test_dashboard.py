@@ -103,6 +103,14 @@ def test_live_dashboard_exposes_scanner_controls(tmp_path) -> None:
     assert all("returns" in scanner and "next" in scanner for scanner in state["scanners"])
     assert "Scanning Controls" in PAGE
     assert "/api/scanner" in PAGE
+    assert "ARB Sizing" in PAGE
+    assert "What-if Scale" in PAGE
+    assert "arb-sizing-cards" in PAGE
+    assert "arb-sizing-tabs" in PAGE
+    assert "arb_sizing_model" in state
+    assert "arb_scale_projection" in state
+    assert state["arb_sizing_model"]["training"]["n"] == 0
+    assert state["arb_scale_projection"]["total"]["n"] == 0
 
 
 def test_live_dashboard_tracks_edge_sized_ev_from_baseline(tmp_path) -> None:

@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from arb.models import Event, Opportunity, Quote
@@ -39,6 +39,7 @@ def ev_opp(cost: str, edge: str = "0.010000") -> Opportunity:
         event=EVENT,
         legs=[quote],
         edge=Decimal(edge),
+        edge_points=Decimal(edge),
         stakes={},
         status="OK",
     )
@@ -66,8 +67,9 @@ def test_validation_rule_pending_keep_and_drop_vectors() -> None:
 
 def test_tracker_tags_validation_keep_on_second_observation(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
-    record_tracker_poll(store, store.start_poll("watch"), [ev_opp("0.50")])
-    record_tracker_poll(store, store.start_poll("watch"), [ev_opp("0.50")])
+    now = EVENT.start_utc - timedelta(hours=1)
+    record_tracker_poll(store, store.start_poll("watch"), [ev_opp("0.50")], now=now)
+    record_tracker_poll(store, store.start_poll("watch"), [ev_opp("0.50")], now=now)
 
     with store.connect() as con:
         rows = list(con.execute("SELECT status, validation_rule, validation_tag, notes FROM flat_bets ORDER BY id"))
@@ -83,10 +85,11 @@ def test_tracker_tags_validation_keep_on_second_observation(tmp_path) -> None:
 
 def test_daily_report_surfaces_validation_forward_test(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
-    record_tracker_poll(store, store.start_poll("watch"), [ev_opp("0.50")])
-    record_tracker_poll(store, store.start_poll("watch"), [ev_opp("0.50")])
+    now = EVENT.start_utc - timedelta(hours=1)
+    record_tracker_poll(store, store.start_poll("watch"), [ev_opp("0.50")], now=now)
+    record_tracker_poll(store, store.start_poll("watch"), [ev_opp("0.50")], now=now)
 
-    _csv_path, md_path = write_daily_report(store, None, tmp_path)
+    _csv_path, md_path = write_daily_report(store, now.date(), tmp_path)
     md = md_path.read_text()
 
     assert "### Validation Forward Test" in md
@@ -100,8 +103,9 @@ def test_settled_rows_copy_final_validation_tag(tmp_path) -> None:
     opp = replace(ev_opp("0.50"), event=replace(EVENT, event_key="manual:event"), legs=[
         replace(ev_opp("0.50").legs[0], event_key="manual:event")
     ])
-    record_tracker_poll(store, store.start_poll("watch"), [opp])
-    record_tracker_poll(store, store.start_poll("watch"), [opp])
+    now = EVENT.start_utc - timedelta(hours=1)
+    record_tracker_poll(store, store.start_poll("watch"), [opp], now=now)
+    record_tracker_poll(store, store.start_poll("watch"), [opp], now=now)
 
     assert settle_manual(store, "manual:event", "los angeles dodgers") == 1
     with store.connect() as con:

@@ -46,6 +46,10 @@ class Quote:
     # Wave 2 (does-well#3/weakness#2): top-of-book ladder as (cost, depth_usd) levels, best
     # first, for depth-scaled slippage and depth-capped P&L. None when not captured.
     ladder: tuple[tuple[Decimal, Decimal], ...] | None = None
+    # EV#6: when the upstream book last MOVED this line (The Odds API `last_update`), used as
+    # the consensus-age basis instead of our fetch wall-clock. None when the venue can't report
+    # it (then callers fall back to fetched_at).
+    source_updated_at: datetime | None = None
 
     @property
     def effective_cost(self) -> Decimal:

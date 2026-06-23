@@ -119,21 +119,26 @@ class Store:
     def save_scan_results(self, poll_id: int, quotes: list[Quote],
                           consensus: dict[tuple[str, str], Decimal], computed_at: datetime,
                           dispersion: dict[tuple[str, str], Decimal] | None,
-                          credits_remaining: int | None, n_quotes: int, n_opps: int) -> None:
+                          credits_remaining: int | None, n_quotes: int, n_opps: int,
+                          outcome_times: dict[tuple[str, str], datetime] | None = None) -> None:
         """pass3#7: one poll's quote + consensus + finish writes in ONE transaction, so a crash
         can't leave a half-written poll (they were three separate connections before)."""
         with self.transaction() as con:
             self.save_poll_quotes(poll_id, quotes, con)
-            self.save_consensus(consensus, computed_at, dispersion, con)
+            self.save_consensus(consensus, computed_at, dispersion, con, outcome_times=outcome_times)
             self.finish_poll(poll_id, credits_remaining, n_quotes, n_opps, con)
 
     def save_consensus(self, probabilities: dict[tuple[str, str], Decimal], computed_at: datetime,
                        dispersion: dict[tuple[str, str], Decimal] | None = None,
-                       con: sqlite3.Connection | None = None) -> None:
+                       con: sqlite3.Connection | None = None,
+                       outcome_times: dict[tuple[str, str], datetime] | None = None) -> None:
         if con is None:
             with self.connect() as own:
-                return self.save_consensus(probabilities, computed_at, dispersion, own)
+                return self.save_consensus(probabilities, computed_at, dispersion, own,
+                                           outcome_times=outcome_times)
         dispersion = dispersion or {}
+        # EV#6: stamp each row with the book's median line-move time when known, else scan clock.
+        times = outcome_times or {}
         con.executemany(
                 """
                 INSERT INTO consensus(event_key, outcome, p_hat, computed_at, dispersion)
@@ -143,7 +148,8 @@ class Store:
                        dispersion = excluded.dispersion
                 """,
                 [
-                    (event_key, outcome, str(p_hat), _dt_text(computed_at),
+                    (event_key, outcome, str(p_hat),
+                     _dt_text(times.get((event_key, outcome), computed_at)),
                      None if (key := (event_key, outcome)) not in dispersion else str(dispersion[key]))
                     for (event_key, outcome), p_hat in probabilities.items()
                 ],

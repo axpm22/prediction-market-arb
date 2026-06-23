@@ -31,13 +31,30 @@ class CapacityReport:
     rows: list[dict[str, Any]]
 
 
-def run_arb_capacity(store: Store, statuses: tuple[str, ...] = ("OPEN", "SETTLED")) -> CapacityReport:
+def run_arb_capacity(store: Store, statuses: tuple[str, ...] = ("OPEN", "SETTLED"),
+                     trusted_only: bool = True) -> CapacityReport:
     placeholders = ",".join("?" for _ in statuses)
+    # Audit B2 — only actionable arbs. trusted=1 drops the cross-venue REVIEW population
+    # (hard rule #6) that otherwise makes ~99% of the summed-profit figure non-capturable.
+    trust_clause = " AND trusted=1" if trusted_only else ""
     with store.connect() as con:
         bets = list(con.execute(
-            f"SELECT id, legs_json, edge FROM flat_bets WHERE kind='ARB' AND status IN ({placeholders}) ORDER BY id",
+            f"SELECT id, fingerprint, legs_json, edge FROM flat_bets "
+            f"WHERE kind='ARB' AND status IN ({placeholders}){trust_clause} ORDER BY id",
             statuses,
         ))
+    # Audit B2 — dedup by fingerprint. The same arb re-observed across polls is one
+    # opportunity, not N; summing over raw rows inflates capacity 4-5x. Keep the first
+    # sighting of each fingerprint.
+    seen: set[str] = set()
+    deduped = []
+    for bet in bets:
+        fp = bet["fingerprint"]
+        if fp in seen:
+            continue
+        seen.add(fp)
+        deduped.append(bet)
+    bets = deduped
     rows: list[dict[str, Any]] = []
     breakevens: list[float] = []
     profitmaxes: list[float] = []

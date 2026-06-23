@@ -99,6 +99,9 @@ def parse_odds_events(events: list[dict[str, Any]], sport: str) -> list[Quote]:
             for market in bookmaker.get("markets", []):
                 if market.get("key") not in {"h2h", "totals"}:
                     continue
+                # EV#6: the book's own last line-move time. The Odds API reports it per market
+                # (newer responses) and per bookmaker (older). Prefer the market's.
+                last_update = market.get("last_update") or bookmaker.get("last_update")
                 for outcome in market.get("outcomes", []):
                     quotes.append(
                         _quote_from_outcome(
@@ -112,6 +115,7 @@ def parse_odds_events(events: list[dict[str, Any]], sport: str) -> list[Quote]:
                             away=away,
                             aliases=aliases,
                             fetched_at=fetched_at,
+                            last_update=last_update,
                         )
                     )
     return quotes
@@ -128,8 +132,12 @@ def _quote_from_outcome(
     away: str,
     aliases: dict[str, dict[str, str]],
     fetched_at: datetime,
+    last_update: str | None = None,
 ) -> Quote:
     price = Decimal(str(outcome["price"]))
+    source_updated_at = (
+        datetime.fromisoformat(last_update.replace("Z", "+00:00")) if last_update else None
+    )
     if market_key == "totals":
         market_type = "TOTAL"
         label = str(outcome["name"]).upper()
@@ -154,4 +162,5 @@ def _quote_from_outcome(
         start_utc=start,
         home=normalize_name(home, sport, aliases),
         away=normalize_name(away, sport, aliases),
+        source_updated_at=source_updated_at,
     )

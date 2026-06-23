@@ -157,6 +157,10 @@ ev:
   dispersion_gate: false
   edge_se_min: 1.0              # require edge >= this many x dispersion to stay clean
   dispersion_kelly_haircut: 1.0 # p_lower = p_hat - this * dispersion for Kelly sizing
+  # EV#3 (ratio hazard): the headline EV ratio (p-c)/c explodes on cheap contracts, so a
+  # tiny-notional longshot can clear the per-dollar uneconomic-horizon gate. Quarantine any
+  # flag whose ABSOLUTE expected profit (Kelly stake x edge_points) is below this. 0 = off.
+  min_expected_profit_usd: 0.0
 scan_times: ["10:00", "15:00", "19:00"]
 daily_report_time: "23:59"
 settle_time: "09:30"

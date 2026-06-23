@@ -177,6 +177,24 @@ def _open_arb_bets(store: Store) -> list[sqlite3.Row]:
 
 
 def _append_arb_resolved_row(con: sqlite3.Connection, bet: sqlite3.Row) -> None:
+    # Audit A3 — timing guard. A cross-venue lock is only real if both legs were quoted
+    # before the event was live. If this row was placed at/after the event start, the
+    # "arb" is a post-hoc time artifact (a quote captured after the result was effectively
+    # known), not a lock. Record it INVALID_IN_PLAY and book no realized P&L — same gate
+    # the EV path applies in _append_settled_row.
+    leg = json.loads(bet["legs_json"])[0]
+    placed_at = _parse_utc(bet["placed_at"])
+    leg_start = _leg_start_utc(leg)
+    if placed_at is not None and leg_start is not None and placed_at >= leg_start:
+        _append_invalid_row(con, bet, "INVALID_IN_PLAY", "invalid-in-play",
+                            "score-settled; invalid-in-play")
+        return
+    # Audit A1 — REVIEW lane. Un-whitelisted cross-venue arbs (trusted=0, hard rule #6)
+    # still settle for observability, but into a flagged lane: quality_flag='REVIEW' keeps
+    # them out of every clean/headline aggregation (all of which require quality_flag IS
+    # NULL) and out of the sizing/capacity models (which require trusted=1). Only a
+    # whitelisted venue-pair (config.trusted_pairs -> status OK -> trusted=1) settles clean.
+    quality_flag = bet["quality_flag"] or (None if bet["trusted"] else "REVIEW")
     # Realized = provisional unless the venues resolved differently; scores alone cannot
     # see that, so the row is marked pending venue-resolution cross-check (corrections
     # append under the same bet id when that lands).
@@ -196,7 +214,7 @@ def _append_arb_resolved_row(con: sqlite3.Connection, bet: sqlite3.Row) -> None:
             bet["optimistic_cost"], bet["pnl_optimistic"], bet["pnl_confirmed"],
             bet["placed_at"], datetime.now(timezone.utc).isoformat(),
             "score-settled; realized=provisional; venue-resolution-cross-check-pending",
-            bet["quality_flag"], bet["kelly_f_star"], bet["kelly_stake_usd"],
+            quality_flag, bet["kelly_f_star"], bet["kelly_stake_usd"],
             bet["validation_rule"], bet["validation_tag"],
         ),
     )
@@ -309,6 +327,12 @@ def _open_ev_bets(store: Store) -> list[sqlite3.Row]:
 
 
 def _append_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, note: str) -> None:
+    leg = json.loads(bet["legs_json"])[0]
+    placed_at = _parse_utc(bet["placed_at"])
+    leg_start = _leg_start_utc(leg)
+    if bet["kind"] != "LIVE_BASEBALL_EV" and placed_at is not None and leg_start is not None and placed_at >= leg_start:
+        _append_invalid_row(con, bet, "INVALID_IN_PLAY", "invalid-in-play", f"{note}; invalid-in-play")
+        return
     confirmed = con.execute(
         """SELECT confirmed_cost, validation_rule, validation_tag
              FROM flat_bets
@@ -362,6 +386,53 @@ def _append_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, 
             validation_tag,
         ),
     )
+
+
+def _append_invalid_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, quality_flag: str, note: str) -> None:
+    con.execute(
+        """
+        INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
+                              live, edge, stake_usd, legs_json, optimistic_cost, confirmed_cost,
+                              pnl_optimistic, pnl_confirmed, pnl_kelly_optimistic, pnl_kelly_confirmed,
+                              status, placed_at, settled_at, result, notes,
+                              quality_flag, kelly_f_star, kelly_stake_usd,
+                              validation_rule, validation_tag)
+        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL,
+                'CLOSED', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            bet["fingerprint"],
+            bet["id"],
+            bet["opened_poll_id"],
+            bet["category"],
+            bet["sport"],
+            bet["kind"],
+            bet["live"],
+            bet["edge"],
+            bet["stake_usd"],
+            bet["legs_json"],
+            bet["optimistic_cost"],
+            bet["placed_at"],
+            datetime.now(timezone.utc).isoformat(),
+            result,
+            note,
+            quality_flag,
+            bet["kelly_f_star"],
+            bet["kelly_stake_usd"],
+            bet["validation_rule"],
+            bet["validation_tag"],
+        ),
+    )
+
+
+def _parse_utc(raw: str | None) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def _flat_pnl(effective_cost: str | None, result: str) -> Decimal | None:

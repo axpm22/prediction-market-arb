@@ -71,6 +71,7 @@ class AppConfig:
     ev_dispersion_gate: bool
     ev_edge_se_min: Decimal
     ev_dispersion_kelly_haircut: Decimal
+    ev_min_expected_profit_usd: Decimal
     auto_fill: bool
     trusted_pairs: set[str]
     fuzzy_match_threshold: int
@@ -219,6 +220,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         ev_dispersion_gate=bool(ev.get("dispersion_gate", False)),
         ev_edge_se_min=_decimal(ev.get("edge_se_min", "1.0")),
         ev_dispersion_kelly_haircut=_decimal(ev.get("dispersion_kelly_haircut", "1.0")),
+        ev_min_expected_profit_usd=_decimal(ev.get("min_expected_profit_usd", "0")),
         auto_fill=bool(raw["auto_fill"]),
         trusted_pairs=set(raw["trusted_pairs"]),
         fuzzy_match_threshold=int(raw["fuzzy_match_threshold"]),

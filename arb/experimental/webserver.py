@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from arb.arb_sizing import build_arb_sizing_model, recommend_arb_stake
+from arb.arb_sizing import build_arb_scale_projection, build_arb_sizing_model, recommend_arb_stake
 from arb.config import load_config
 from arb.scoring import score_segments
 from arb.store import Store
@@ -657,9 +657,10 @@ def build_state(store: Store, config) -> dict[str, Any]:
                    SUM(CASE WHEN result='SOLD' THEN 1 ELSE 0 END) sold,
                    COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl,
                    COALESCE(SUM(CAST(stake_usd AS REAL)),0) stake
-              FROM flat_bets
+             FROM flat_bets
              WHERE kind='EV' AND status IN ('SETTLED','EXITED')
                AND result IN ('WON','LOST','VOID','SOLD') AND quality_flag IS NULL
+               AND (validation_tag IS NULL OR validation_tag='KEEP')
             """
         ).fetchone()
         # Quarantined EV rows shown on their own line, never in Clean EV P&L.
@@ -669,6 +670,23 @@ def build_state(store: Store, config) -> dict[str, Any]:
              FROM flat_bets
              WHERE kind='EV' AND status IN ('SETTLED','EXITED')
                AND result IN ('WON','LOST','VOID','SOLD') AND quality_flag='suspect-edge'
+            """
+        ).fetchone()
+        rejected_ev = c.execute(
+            """
+            SELECT COUNT(*) n
+              FROM flat_bets
+             WHERE kind='EV'
+               AND status='CLOSED'
+               AND quality_flag IN (
+                   'validation-drop',
+                   'in-play-skipped',
+                   'missing-start-skipped',
+                   'terminal-fingerprint-skipped',
+                   'duplicate-position-skipped',
+                   'manual-resolver-required',
+                   'invalid-in-play'
+               )
             """
         ).fetchone()
         # Micro EV is practical-but-thin: separate from clean EV so small-depth rows do
@@ -736,15 +754,26 @@ def build_state(store: Store, config) -> dict[str, Any]:
             "broad": edge_sized_since(EDGE_SIZED_EV_BASELINES["broad"], keep_only=False),
         }
         # ARB gets its own lane: locked/provisional, includes RESOLVED. Never in EV totals.
+        # Split trusted (whitelisted pair → clean lane) from REVIEW (trusted=0, hard rule #6:
+        # provisional, never real money) so the UX shows the A1 gate, not one blended number.
         locked_arb = c.execute(
             """
             SELECT COUNT(*) settled,
                    SUM(CASE WHEN result='RESOLVED' THEN 1 ELSE 0 END) resolved,
                    COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl,
-                   COALESCE(SUM(CAST(stake_usd AS REAL)),0) stake
+                   COALESCE(SUM(CAST(stake_usd AS REAL)),0) stake,
+                   SUM(CASE WHEN trusted=1 THEN 1 ELSE 0 END) trusted_settled,
+                   COALESCE(SUM(CASE WHEN trusted=1 THEN CAST(pnl_optimistic AS REAL) ELSE 0 END),0) trusted_pnl,
+                   SUM(CASE WHEN trusted=0 THEN 1 ELSE 0 END) review_settled,
+                   COALESCE(SUM(CASE WHEN trusted=0 THEN CAST(pnl_optimistic AS REAL) ELSE 0 END),0) review_pnl,
+                   SUM(CASE WHEN quality_flag='invalid-in-play' THEN 1 ELSE 0 END) invalid_in_play
               FROM flat_bets
              WHERE kind='ARB' AND status='SETTLED'
             """
+        ).fetchone()
+        # INVALID rows are CLOSED, not SETTLED — count the A3 timing-guard rejections separately.
+        invalid_arb = c.execute(
+            "SELECT COUNT(*) n FROM flat_bets WHERE kind='ARB' AND status='CLOSED' AND quality_flag='invalid-in-play'"
         ).fetchone()
         # DIVERGENCE is a research spread signal — never settled, never P&L.
         research_open = c.execute(
@@ -836,6 +865,8 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 """
             )
         )
+        arb_sizing_model = build_arb_sizing_model(c, config.bankroll_usd, config.max_stake_pct)
+        arb_scale_projection = build_arb_scale_projection(c, config.bankroll_usd, config.max_stake_pct)
         # Research Signals: DIVERGENCE spreads, shown separately, no P&L (kept out of
         # open-bet totals entirely per the reporting rules).
         research_rows = [
@@ -1066,6 +1097,7 @@ def build_state(store: Store, config) -> dict[str, Any]:
         },
         "edge_sized_ev": edge_sized_ev,
         "suspect_ev": {"n": int(suspect_ev["n"] or 0), "pnl": _money(suspect_ev["pnl"])},
+        "rejected_ev": {"n": int(rejected_ev["n"] or 0)},
         "micro_ev": {
             "active": int(micro_active["n"] or 0),
             "active_stake": _money(micro_active["stake"]),
@@ -1082,10 +1114,16 @@ def build_state(store: Store, config) -> dict[str, Any]:
             ),
         },
         # Locked ARB P&L — ARB's own lane (locked/provisional, includes RESOLVED).
+        # trusted = whitelisted clean lane; review = trusted=0 (hard rule #6, provisional only).
         "locked_arb": {
             "settled": int(locked_arb["settled"] or 0),
             "resolved": int(locked_arb["resolved"] or 0),
             "pnl": _money(locked_arb["pnl"]),
+            "trusted_settled": int(locked_arb["trusted_settled"] or 0),
+            "trusted_pnl": _money(locked_arb["trusted_pnl"]),
+            "review_settled": int(locked_arb["review_settled"] or 0),
+            "review_pnl": _money(locked_arb["review_pnl"]),
+            "invalid_in_play": int(invalid_arb["n"] or 0),
         },
         # Research Signals — DIVERGENCE spreads, no P&L, not bets.
         "research": {
@@ -1111,7 +1149,9 @@ def build_state(store: Store, config) -> dict[str, Any]:
             "confirmed_clean": curve("pnl_confirmed", True),
         },
         "segments": segments,
-        "open_bets": [_open_bet_payload(row, now) for row in open_rows],
+        "arb_sizing_model": arb_sizing_model,
+        "arb_scale_projection": arb_scale_projection,
+        "open_bets": [_open_bet_payload(row, now, arb_sizing_model) for row in open_rows],
         "polls": poll_series,
         "recent": recent,
         "logs": {name: _log_tail(path) for name, path in LOG_FILES.items()},
@@ -1184,15 +1224,36 @@ PAGE = r"""<!doctype html>
 <title>ArbitrageModel Live</title>
 <style>
 :root{
+  /* dark (default) */
   --bg:#111315;--panel:#1a1d21;--panel-2:#22262b;--panel-3:#15181c;--line:#343a42;--line-soft:#282d34;
   --text:#f1f3f0;--muted:#a9afb7;--muted-2:#808892;
   --green:#61c88a;--red:#ff7a70;--gold:#e5b85a;--blue:#76aefc;--violet:#bca2ff;--cyan:#6fd5ce;
-  --gap:14px;--radius:8px;
+  --gap:14px;--radius:8px;--fs:14px;--pad:14px;--metric-fs:26px;
+  --grid-soft:#303238;--axis:#a4a6ad;--top-bg:rgba(17,19,21,.96);--shadow:0 1px 0 rgba(255,255,255,.03);
+  --accent:var(--blue);
 }
+:root[data-theme="dim"]{
+  --bg:#161a21;--panel:#1d222b;--panel-2:#252b35;--panel-3:#1a1f27;--line:#39414d;--line-soft:#2b323c;
+  --text:#eef1f6;--muted:#aeb6c2;--muted-2:#838b97;--grid-soft:#333b46;--axis:#aeb6c2;--top-bg:rgba(22,26,33,.96);
+}
+:root[data-theme="light"]{
+  --bg:#f4f6f9;--panel:#ffffff;--panel-2:#eef1f5;--panel-3:#f7f9fb;--line:#cdd4dd;--line-soft:#e1e6ec;
+  --text:#1a1f26;--muted:#5a626d;--muted-2:#828a95;
+  --green:#1f9d57;--red:#d23b35;--gold:#b9821a;--blue:#2f6fd6;--violet:#7a55d6;--cyan:#1f978c;
+  --grid-soft:#dfe4ea;--axis:#6a727d;--top-bg:rgba(244,246,249,.94);--shadow:0 1px 2px rgba(20,30,50,.06);
+}
+:root[data-density="compact"]{--gap:9px;--pad:10px;--fs:13px;--metric-fs:22px;--radius:7px}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.48 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-anchor:none}
+*::-webkit-scrollbar{width:11px;height:11px}
+*::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background:var(--muted-2)}
+*::-webkit-scrollbar-track{background:transparent}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+html{scroll-behavior:smooth;scroll-padding-top:84px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+body{margin:0;background:var(--bg);color:var(--text);font:var(--fs)/1.48 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-anchor:none;transition:background .2s ease,color .2s ease}
 button{font:inherit}
-.top{position:sticky;top:0;z-index:5;background:rgba(17,19,21,.96);border-bottom:1px solid var(--line-soft);backdrop-filter:blur(10px)}
+.top{position:sticky;top:0;z-index:20;background:var(--top-bg);border-bottom:1px solid var(--line-soft);backdrop-filter:blur(10px)}
 .top-inner{display:flex;align-items:center;justify-content:space-between;gap:18px;max-width:1480px;margin:0 auto;padding:16px 22px}
 .brand{display:flex;align-items:baseline;gap:12px;min-width:260px}
 h1{font-size:18px;line-height:1;margin:0;font-weight:720;letter-spacing:0}
@@ -1205,13 +1266,17 @@ h1{font-size:18px;line-height:1;margin:0;font-weight:720;letter-spacing:0}
 .duplicate .dot{background:var(--gold)}
 .wrap{max-width:1480px;margin:0 auto;padding:18px 22px 30px}
 .grid,.panels{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap)}
-.panel{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius);min-width:0;box-shadow:0 1px 0 rgba(255,255,255,.03);overflow-anchor:none}
+.panel{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius);min-width:0;box-shadow:var(--shadow);overflow-anchor:none;scroll-margin-top:84px}
+.panel.collapsed .panel-body{display:none}
 .panels{margin-top:var(--gap);align-items:start}
 .panels>.panel{container-type:inline-size}
-.metric{grid-column:span 3;padding:14px 15px;min-height:112px;display:flex;flex-direction:column;justify-content:space-between}
+.metric{grid-column:span 3;padding:var(--pad) calc(var(--pad) + 1px);min-height:112px;display:flex;flex-direction:column;justify-content:space-between;position:relative}
+.metric.clickable{cursor:pointer}
+.metric.clickable:hover{border-color:#555963}
+.metric .spark{position:absolute;right:12px;top:12px;opacity:.85}
 .wide{grid-column:span 8}.side{grid-column:span 4}.half{grid-column:span 6}.full{grid-column:span 12}
 .label{color:var(--muted-2);font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px}
-.value{font-size:26px;line-height:1.08;font-weight:760;letter-spacing:0;white-space:nowrap}
+.value{font-size:var(--metric-fs);line-height:1.08;font-weight:760;letter-spacing:0;white-space:nowrap}
 .unit{font-size:12px;color:var(--muted);font-weight:520;margin-left:5px}
 .good{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--gold)}.blue{color:var(--blue)}.muted{color:var(--muted)}
 #alerts{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
@@ -1219,8 +1284,17 @@ h1{font-size:18px;line-height:1;margin:0;font-weight:720;letter-spacing:0}
 .alert.bad{background:rgba(229,72,77,.12);border-color:rgba(229,72,77,.4);color:var(--red)}
 .alert.warn{background:rgba(214,158,46,.12);border-color:rgba(214,158,46,.35);color:var(--gold)}
 .panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px;padding:12px 14px;border-bottom:1px solid var(--line-soft)}
-.panel-title{font-size:13px;font-weight:700;letter-spacing:0}
-.panel-body{padding:14px}
+.panel-title{font-size:13px;font-weight:700;letter-spacing:0;display:flex;align-items:center;gap:7px}
+.panel-body{padding:var(--pad)}
+.collapse-btn{appearance:none;border:1px solid var(--line-soft);background:var(--panel-2);color:var(--muted);width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:13px;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+.collapse-btn:hover{border-color:#555963;color:var(--text)}
+.info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:99px;border:1px solid var(--line);color:var(--muted-2);font-size:10px;font-weight:700;cursor:help;flex:0 0 auto;user-select:none}
+.info:hover{color:var(--text);border-color:var(--accent)}
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+th.sortable:hover{color:var(--text)}
+th.sortable .arrow{opacity:.5;font-size:9px;margin-left:2px}
+.scroll-tbl{overflow:auto}
+.scroll-tbl thead th{position:sticky;top:0;background:var(--panel);z-index:2}
 .chart{width:100%;height:260px;display:block}
 .mini{height:150px}
 .bars{display:grid;gap:9px}
@@ -1281,6 +1355,60 @@ tr:last-child td{border-bottom:0}
 @media (max-width:900px){.wide,.side,.half{grid-column:span 12}.detail-grid{grid-template-columns:1fr}}
 @media (max-width:820px){.metric{grid-column:span 6}.track-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:700px){.wrap{padding:12px}.top-inner{padding:12px}.value{font-size:22px}.chart{height:230px}.log{height:260px}.scanner-row{grid-template-columns:1fr}.scanner-row>div:nth-child(n){grid-column:auto}th:nth-child(5),td:nth-child(5){display:none}}
+
+/* ---- Comfort & control layer ---- */
+.controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ctl{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--line-soft);background:var(--panel-2);color:var(--muted);border-radius:8px;cursor:pointer;font-size:12px;white-space:nowrap}
+.ctl:hover{border-color:#555963;color:var(--text)}
+.ctl.on{color:var(--text);border-color:var(--accent)}
+.ctl .dot{width:8px;height:8px;border-radius:99px;background:var(--muted)}
+.ctl.live .dot{background:var(--green);box-shadow:0 0 9px rgba(97,200,138,.7);animation:pulse 2s ease-in-out infinite}
+.ctl.paused .dot{background:var(--gold)}
+.ctl.stale .dot{background:var(--gold)}
+.ctl.offline .dot{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.seg{display:inline-flex;border:1px solid var(--line-soft);border-radius:8px;overflow:hidden;background:var(--panel-2)}
+.seg button{appearance:none;border:0;background:transparent;color:var(--muted);height:28px;padding:0 9px;cursor:pointer;font-size:12px;border-right:1px solid var(--line-soft)}
+.seg button:last-child{border-right:0}
+.seg button.active{background:var(--accent);color:#0c1116;font-weight:700}
+.seg button:hover:not(.active){color:var(--text)}
+.icon-btn{appearance:none;width:30px;height:30px;border:1px solid var(--line-soft);background:var(--panel-2);color:var(--muted);border-radius:8px;cursor:pointer;font-size:14px;display:inline-flex;align-items:center;justify-content:center}
+.icon-btn:hover{border-color:#555963;color:var(--text)}
+/* toasts */
+#toasts{position:fixed;right:18px;bottom:18px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:360px}
+.toast{padding:11px 13px;border-radius:9px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);font-size:13px;box-shadow:0 8px 28px rgba(0,0,0,.35);opacity:0;transform:translateY(8px);transition:opacity .18s,transform .18s;display:flex;gap:9px;align-items:flex-start}
+.toast.show{opacity:1;transform:none}
+.toast.bad{border-color:rgba(255,107,99,.5)}.toast.good{border-color:rgba(97,200,138,.5)}.toast.warn{border-color:rgba(229,184,90,.5)}
+.toast b{font-weight:700}
+.toast .x{margin-left:auto;cursor:pointer;color:var(--muted);background:none;border:0;font-size:14px}
+/* nav drawer + overlays */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;display:none;align-items:flex-start;justify-content:center;padding:64px 18px;backdrop-filter:blur(2px)}
+.overlay.open{display:flex}
+.sheet{background:var(--panel);border:1px solid var(--line);border-radius:12px;max-width:560px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 18px 60px rgba(0,0,0,.5)}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line-soft);position:sticky;top:0;background:var(--panel)}
+.sheet-head h2{margin:0;font-size:15px}
+.sheet-body{padding:14px 16px}
+.navlist{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.navlist a{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid var(--line-soft);border-radius:9px;color:var(--text);text-decoration:none;background:var(--panel-2);font-size:13px}
+.navlist a:hover{border-color:var(--accent)}
+.navlist a kbd{margin-left:auto}
+kbd{font:11px ui-monospace,Menlo,monospace;background:var(--panel-3);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--muted)}
+.keytable{width:100%;font-size:13px}
+.keytable td{padding:7px 4px;border-bottom:1px solid var(--line-soft)}
+.keytable td:first-child{width:120px}
+.search{height:30px;border:1px solid var(--line-soft);background:var(--panel-3);color:var(--text);border-radius:8px;padding:0 10px;font-size:12.5px;min-width:160px}
+.search:focus{border-color:var(--accent);outline:none}
+.chiprow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.hl{background:rgba(118,174,252,.28);border-radius:3px;padding:0 1px}
+/* skeleton */
+.skel{position:relative;overflow:hidden;background:var(--panel-2);border-radius:6px;min-height:14px}
+.skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.07),transparent);animation:shimmer 1.3s infinite}
+@keyframes shimmer{100%{transform:translateX(100%)}}
+.split-bar{display:flex;height:7px;border-radius:99px;overflow:hidden;background:var(--panel-3);border:1px solid var(--line-soft);margin-top:8px}
+.split-bar span{height:100%}
+.tip{position:relative}
+.miniflag{display:inline-block;font-size:10px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(229,184,90,.16);color:var(--gold);margin-left:6px;vertical-align:middle}
+@media (max-width:700px){.navlist{grid-template-columns:1fr}#toasts{left:12px;right:12px;max-width:none}.controls .hide-sm{display:none}}
 </style>
 </head>
 <body>
@@ -1288,13 +1416,70 @@ tr:last-child td{border-bottom:0}
   <div class="top-inner">
     <div class="brand">
       <h1>ArbitrageModel</h1>
-      <div class="sub" id="clock">connecting</div>
+      <div class="sub" id="clock">connecting…</div>
+    </div>
+    <div class="controls">
+      <button class="ctl live" id="refresh-toggle" title="Pause / resume auto-refresh (Space)">
+        <span class="dot"></span><span id="refresh-label">live</span>
+      </button>
+      <div class="seg hide-sm" id="interval-seg" title="Auto-refresh interval">
+        <button data-int="2000">2s</button><button data-int="5000" class="active">5s</button><button data-int="10000">10s</button><button data-int="30000">30s</button>
+      </div>
+      <button class="icon-btn" id="nav-btn" title="Jump to section (g)">☰</button>
+      <button class="icon-btn" id="theme-btn" title="Theme (t)">◐</button>
+      <button class="icon-btn hide-sm" id="density-btn" title="Density (d)">⇲</button>
+      <button class="icon-btn" id="help-btn" title="Keyboard shortcuts (?)">?</button>
     </div>
     <div class="procs" id="procs"></div>
   </div>
 </header>
+<div id="toasts"></div>
+<div class="overlay" id="nav-overlay">
+  <div class="sheet" role="dialog" aria-label="Jump to section">
+    <div class="sheet-head"><h2>Jump to section</h2><button class="icon-btn" data-close>✕</button></div>
+    <div class="sheet-body"><div class="navlist" id="navlist"></div></div>
+  </div>
+</div>
+<div class="overlay" id="help-overlay">
+  <div class="sheet" role="dialog" aria-label="Keyboard shortcuts">
+    <div class="sheet-head"><h2>Keyboard shortcuts &amp; legend</h2><button class="icon-btn" data-close>✕</button></div>
+    <div class="sheet-body">
+      <table class="keytable"><tbody>
+        <tr><td><kbd>Space</kbd></td><td>Pause / resume auto-refresh</td></tr>
+        <tr><td><kbd>r</kbd></td><td>Refresh now</td></tr>
+        <tr><td><kbd>g</kbd></td><td>Open the section jump menu</td></tr>
+        <tr><td><kbd>t</kbd></td><td>Cycle theme (dark → dim → light)</td></tr>
+        <tr><td><kbd>d</kbd></td><td>Toggle comfortable / compact density</td></tr>
+        <tr><td><kbd>/</kbd></td><td>Focus the open-bets search</td></tr>
+        <tr><td><kbd>?</kbd></td><td>This help</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Close any overlay</td></tr>
+      </tbody></table>
+      <div class="detail-title" style="margin-top:16px">Lane legend</div>
+      <table class="keytable"><tbody>
+        <tr><td><span class="badge OPEN">EV</span></td><td><b>Clean EV</b> — the headline paper track; clean, untagged or KEEP-validated.</td></tr>
+        <tr><td><span class="badge MICRO_EV">MICRO</span></td><td><b>Micro EV</b> — thin-book ($5–$50 depth), depth-capped stake, kept off the headline.</td></tr>
+        <tr><td><span class="badge SETTLED">ARB</span></td><td><b>Locked ARB</b> — cross-venue lock. <b>Trusted</b> = whitelisted clean lane; <b>REVIEW</b> = provisional only (hard rule #6), never real money until both rulebooks confirm.</td></tr>
+        <tr><td><span class="badge VANISHED">X</span></td><td><b>Vanished</b> — the flagged price was gone on recheck (not capturable).</td></tr>
+        <tr><td><span class="badge UNVERIFIABLE">?</span></td><td><b>Unverifiable</b> — could not be fast-rechecked (e.g. SX legs).</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+</div>
 <main class="wrap">
   <div id="alerts"></div>
+  <section class="panels" style="margin-top:0">
+    <div class="panel full" id="sec-hero">
+      <div class="panel-head">
+        <div class="panel-title">Total Paper Profit <span class="info" title="Cumulative settled paper P&amp;L. 'Clean' excludes quarantined/REVIEW rows; 'confirmed' uses the second-observation recheck price (the honest baseline). ARB REVIEW locks are provisional and shown separately — they are not real money (hard rule #6).">i</span></div>
+        <div class="seg" id="hero-seg" title="Profit variant">
+          <button data-variant="confirmed_clean" class="active">Clean · confirmed</button>
+          <button data-variant="optimistic_clean">Clean · optimistic</button>
+          <button data-variant="optimistic_raw">Raw · optimistic</button>
+        </div>
+      </div>
+      <div class="panel-body"><div id="hero"></div></div>
+    </div>
+  </section>
   <section class="grid" id="metrics"></section>
   <section class="panels">
     <div class="panel full">
@@ -1343,6 +1528,19 @@ tr:last-child td{border-bottom:0}
       </div>
       <div class="panel-body"><div class="open-groups" id="open-bets"></div></div>
     </div>
+    <div class="panel full">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">ARB Sizing</div>
+          <div class="muted" id="arb-sizing-summary"></div>
+        </div>
+        <div class="tabs" id="arb-sizing-tabs"></div>
+      </div>
+      <div class="panel-body">
+        <div class="track-grid" id="arb-sizing-cards"></div>
+        <div id="arb-sizing-detail" style="margin-top:12px"></div>
+      </div>
+    </div>
     <div class="panel wide">
       <div class="panel-head">
         <div class="panel-title">Settled P&L</div>
@@ -1381,6 +1579,7 @@ let state = null;
 let activeLog = "daemon";
 let activeOpenKind = "EV";
 let activeCleanEvMode = "flat";
+let activeArbSizingMode = "model";
 const colors = {raw:"#a4a6ad", clean:"#6aa8ff", confirmed:"#56c271", opps:"#e0ad3b"};
 const trackKey = "arb-dashboard-tracking-v1";
 const laneLabel = kind => ({MICRO_EV:"MICRO EV"}[kind] || kind);
@@ -1411,6 +1610,107 @@ const duration = seconds => {
   return rem ? `${hours}h ${rem}m` : `${hours}h`;
 };
 const valClass = v => num(v) >= 0 ? "good" : "bad";
+
+/* ---------- Comfort & control layer ---------- */
+const SETTINGS_KEY = "arb-dashboard-settings-v1";
+const COLLAPSE_KEY = "arb-dashboard-collapsed-v1";
+const THEMES = ["dark", "dim", "light"];
+const settings = (() => {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}"); } catch (_) { s = {}; }
+  return Object.assign({theme: "dark", density: "comfortable", intervalMs: 5000, paused: false}, s);
+})();
+function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
+function applySettings() {
+  document.documentElement.dataset.theme = settings.theme;
+  document.documentElement.dataset.density = settings.density === "compact" ? "compact" : "comfortable";
+  document.querySelectorAll("#interval-seg button").forEach(b =>
+    b.classList.toggle("active", Number(b.dataset.int) === settings.intervalMs));
+  const dn = $("density-btn"); if (dn) dn.classList.toggle("on", settings.density === "compact");
+}
+let collapsed = (() => { try { return new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "[]")); } catch (_) { return new Set(); } })();
+function saveCollapsed() { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsed])); }
+
+let lastUpdate = 0, connection = "connecting";
+let refreshTimer = null;
+
+function toast(message, level = "warn", ttl = 6000) {
+  const box = $("toasts"); if (!box) return;
+  const el = document.createElement("div");
+  el.className = `toast ${level}`;
+  el.innerHTML = `<div>${esc(message)}</div><button class="x" title="dismiss">✕</button>`;
+  el.querySelector(".x").onclick = () => el.remove();
+  box.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("show"));
+  if (ttl) setTimeout(() => { el.classList.remove("show"); setTimeout(() => el.remove(), 220); }, ttl);
+}
+
+function openOverlay(id) { const o = $(id); if (o) o.classList.add("open"); }
+function closeOverlays() { document.querySelectorAll(".overlay.open").forEach(o => o.classList.remove("open")); }
+
+// Section labels for the jump menu, in document order. Built lazily once panels exist.
+const SECTION_LABELS = {
+  "metrics": "Overview metrics", "sec-hero": "Total profit",
+};
+function panelSlug(panel, i) {
+  const t = panel.querySelector(".panel-title");
+  const base = (t ? t.textContent : `section-${i}`).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  return `sec-${base || i}`;
+}
+function decoratePanels() {
+  document.querySelectorAll("main .panel").forEach((panel, i) => {
+    if (!panel.id) panel.id = panelSlug(panel, i);
+    const head = panel.querySelector(".panel-head");
+    const titleEl = panel.querySelector(".panel-title");
+    if (head && titleEl && !head.querySelector(".collapse-btn")) {
+      const btn = document.createElement("button");
+      btn.className = "collapse-btn"; btn.type = "button"; btn.title = "Collapse / expand section";
+      btn.textContent = collapsed.has(panel.id) ? "+" : "–";
+      if (collapsed.has(panel.id)) panel.classList.add("collapsed");
+      btn.onclick = () => {
+        const now = panel.classList.toggle("collapsed");
+        btn.textContent = now ? "+" : "–";
+        if (now) collapsed.add(panel.id); else collapsed.delete(panel.id);
+        saveCollapsed();
+      };
+      // place the collapse control at the far right of the header
+      head.appendChild(btn);
+    }
+  });
+}
+function buildNav() {
+  const list = $("navlist"); if (!list) return;
+  const items = [];
+  const metrics = $("metrics"); if (metrics) items.push(["metrics", "Overview metrics"]);
+  document.querySelectorAll("main .panel").forEach(panel => {
+    const t = panel.querySelector(".panel-title");
+    if (t) items.push([panel.id, t.textContent.trim()]);
+  });
+  list.innerHTML = items.map(([id, label]) =>
+    `<a href="#${esc(id)}" data-nav="${esc(id)}">${esc(label)}</a>`).join("");
+  list.querySelectorAll("a").forEach(a => a.onclick = () => {
+    closeOverlays();
+    const el = $(a.dataset.nav); if (el) { el.classList.remove("collapsed"); }
+  });
+}
+
+function setPaused(paused) {
+  settings.paused = paused; saveSettings();
+  if (paused) { if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; } }
+  else { scheduleNext(0); }
+  updateRefreshChip();
+}
+function updateRefreshChip() {
+  const chip = $("refresh-toggle"), label = $("refresh-label");
+  if (!chip || !label) return;
+  chip.classList.remove("live", "paused", "stale", "offline");
+  if (settings.paused) { chip.classList.add("paused"); label.textContent = "paused"; return; }
+  if (connection === "offline") { chip.classList.add("offline"); label.textContent = "offline"; return; }
+  const ageMs = lastUpdate ? Date.now() - lastUpdate : null;
+  if (ageMs != null && ageMs > settings.intervalMs * 2.5) { chip.classList.add("stale"); label.textContent = "stale"; return; }
+  chip.classList.add("live");
+  label.textContent = lastUpdate ? `${Math.max(0, Math.round((Date.now() - lastUpdate) / 1000))}s ago` : "live";
+}
 
 function indexRows(rows, keyFn) {
   return Object.fromEntries((rows || []).map(row => [keyFn(row), row]));
@@ -1643,8 +1943,9 @@ function renderCleanEv(d) {
       deltaCard("Stake", usd(ce.stake), `${pct(ce.roi)} ROI · clean EV only`, "blue"),
       deltaCard("Win Rate", pct(ce.win_rate), `${ce.won + ce.lost} game outcomes`),
       deltaCard("Suspect Excluded", `${(d.suspect_ev || {}).n || 0}`, "quarantined rows not counted", "warn"),
+      deltaCard("Rejected / Invalid", `${(d.rejected_ev || {}).n || 0}`, "DROP, started, final, terminal, or duplicate blocks", "warn"),
       deltaCard("Rule", "$1 / bet", "current dashboard headline sizing"),
-      deltaCard("Lane", "Clean", "quality_flag is NULL"),
+      deltaCard("Lane", "Actionable", "clean + untagged legacy or KEEP"),
     ].join("");
     return;
   }
@@ -1738,9 +2039,11 @@ async function setScanner(scanner, action, button) {
     const payload = await response.json();
     if (!response.ok || !payload.ok) throw new Error(payload.error || "scanner update failed");
     state = payload.state;
+    lastUpdate = Date.now();
     render(state);
+    toast(`${scanner}: ${action === "stop" ? "stop requested" : (payload.message || "started")}`, "good", 3000);
   } catch (err) {
-    alert(err.message || String(err));
+    toast(err.message || String(err), "bad", 6000);
     if (button) button.disabled = false;
   }
 }
@@ -1802,7 +2105,9 @@ function renderOpenBets(d) {
         bet.cost ? `cost ${bet.cost}` : "",
         bet.stake_usd && bet.quality === "micro" ? `stake $${bet.stake_usd}` : "",
         bet.depth_usd ? `depth $${bet.depth_usd}` : "",
+        bet.arb_sizing ? `model stake ${usd(bet.arb_sizing.stake)}` : "",
       ].filter(Boolean).join(" ");
+      const sizingReason = bet.arb_sizing ? `<div class="subline">${esc(bet.arb_sizing.reason)}</div>` : "";
       const flags = [
         bet.quality !== "clean" ? `<span class="badge ${esc(bet.quality)}">${esc(bet.quality)}</span>` : "",
         bet.confirmed ? `<span class="badge CONFIRMED">CONF</span>` : "",
@@ -1813,7 +2118,7 @@ function renderOpenBets(d) {
       return `<tr>
         <td class="muted mono">${bet.id}</td>
         <td><span class="badge ${esc(bet.lane || bet.kind)}">${esc(bet.display_kind || bet.kind)}</span></td>
-        <td><div class="open-event" title="${esc(bet.event_key || bet.event)}">${esc(bet.event)}</div><div class="subline">${esc(detail || bet.legs.join(", "))}</div></td>
+        <td><div class="open-event" title="${esc(bet.event_key || bet.event)}">${esc(bet.event)}</div><div class="subline">${esc(detail || bet.legs.join(", "))}</div>${sizingReason}</td>
         <td>${esc(bet.event_date || "unknown")}<div class="subline">${esc(horizonText(bet))}</div></td>
         <td class="${valClass(bet.edge)}">${pct(bet.edge)}</td>
         <td><span class="badge ${esc(bet.status)}">${esc(bet.status)}</span><div class="subline">${flags}</div></td>
@@ -1827,6 +2132,103 @@ function renderOpenBets(d) {
       ${hidden}
     </div>`;
   }).join("");
+}
+
+function renderArbSizing(d) {
+  const model = d.arb_sizing_model || {};
+  const projection = d.arb_scale_projection || {};
+  const training = model.training || {n:0, stake:0, pnl:0, roi:0};
+  if (!$("arb-sizing-cards")) return;
+  const tabs = [["model", "Current Model"], ["whatif", "What-if Scale"]];
+  $("arb-sizing-tabs").innerHTML = tabs
+    .map(([mode, label]) => `<button class="tab ${mode === activeArbSizingMode ? "active" : ""}" data-mode="${mode}" type="button">${esc(label)}</button>`)
+    .join("");
+  $("arb-sizing-tabs").querySelectorAll("button").forEach(btn => {
+    btn.onclick = () => { activeArbSizingMode = btn.dataset.mode; renderArbSizing(state); };
+  });
+  if (activeArbSizingMode === "whatif") {
+    renderArbScaleProjection(projection);
+    return;
+  }
+  const openArbs = (d.open_bets || []).filter(bet => bet.kind === "ARB");
+  const scalable = openArbs.filter(bet => bet.arb_sizing && bet.arb_sizing.scalable).length;
+  const totalRecommended = openArbs.reduce((sum, bet) => sum + num((bet.arb_sizing || {}).stake), 0);
+  $("arb-sizing-summary").textContent =
+    `${training.n || 0} settled bet-on ARBs · ${usd(training.stake || 0)} historically staked · ${money(training.pnl || 0)} P&L`;
+  $("arb-sizing-cards").innerHTML = [
+    deltaCard("Training Bets", compact(training.n || 0), `${usd(training.stake || 0)} actually bet`),
+    deltaCard("Training P&L", money(training.pnl || 0), `${pct(training.roi || 0)} realized ROI`, valClass(training.pnl || 0)),
+    deltaCard("Max Per ARB", usd(model.max_stake || 0), "bankroll cap before depth/edge caps", "blue"),
+    deltaCard("Open ARBs", compact(openArbs.length), `${scalable} scalable · ${usd(totalRecommended)} recommended`, scalable ? "good" : "warn"),
+  ].join("");
+  const statRows = stats => Object.entries(stats || {}).map(([bucket, row]) => {
+    const pnl = num(row.pnl), stake = num(row.stake), roi = num(row.roi);
+    return `<tr><td><b>${esc(bucket)}</b></td><td>${row.n || 0}</td><td>${usd(stake)}</td><td class="${valClass(pnl)}">${money(pnl)}</td><td class="${valClass(roi)}">${pct(roi)}</td></tr>`;
+  });
+  const currentRows = openArbs.map(bet => {
+    const rec = bet.arb_sizing || {};
+    return `<tr>
+      <td class="muted mono">${bet.id}</td>
+      <td><b>${esc(bet.event)}</b><div class="subline">${esc(bet.outcome || "")} ${bet.venue ? `@${esc(bet.venue)}` : ""}</div></td>
+      <td>${usd(rec.binding_depth || 0)}</td>
+      <td>${rec.edge_points == null ? "" : pct(rec.edge_points)}</td>
+      <td class="${rec.scalable ? "good" : "warn"}">${usd(rec.stake || 1)}</td>
+      <td class="muted">${esc(rec.reason || "")}</td>
+    </tr>`;
+  });
+  $("arb-sizing-detail").innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-block"><div class="detail-title">Venue Pair</div>${table(["Pair","Bets","Bet","P&L","ROI"], statRows(model.venue_pair))}</div>
+      <div class="detail-block"><div class="detail-title">Market Size</div>${table(["Depth","Bets","Bet","P&L","ROI"], statRows(model.depth))}</div>
+      <div class="detail-block"><div class="detail-title">Edge Size</div>${table(["Edge","Bets","Bet","P&L","ROI"], statRows(model.edge))}</div>
+      <div class="detail-block"><div class="detail-title">Current ARBs</div>${table(["ID","Event","Depth","Edge","Stake","Reason"], currentRows, "No open ARBs right now")}</div>
+    </div>`;
+}
+
+function renderArbScaleProjection(projection) {
+  const total = projection.total || {n:0, scaled_n:0, actual_stake:0, actual_pnl:0, actual_roi:0, flat10_stake:0, flat10_pnl:0, flat10_roi:0, flat10_lift:0, depth_stake:0, depth_pnl:0, depth_roi:0, depth_lift:0};
+  $("arb-sizing-summary").textContent =
+    `hypothetical · ${total.n || 0} settled bet-on ARBs · ${total.scaled_n || 0} had enough recorded depth to scale`;
+  $("arb-sizing-cards").innerHTML = [
+    deltaCard("Actual $ Bet", usd(total.actual_stake || 0), `${money(total.actual_pnl || 0)} P&L · ${pct(total.actual_roi || 0)} ROI`),
+    deltaCard("$10 Where Possible", money(total.flat10_pnl || 0), `${usd(total.flat10_stake || 0)} stake · lift ${money(total.flat10_lift || 0)}`, valClass(total.flat10_pnl || 0)),
+    deltaCard("Depth-Capped", money(total.depth_pnl || 0), `${usd(total.depth_stake || 0)} stake · lift ${money(total.depth_lift || 0)}`, valClass(total.depth_pnl || 0)),
+    deltaCard("Rows Scaled", compact(total.scaled_n || 0), `${projection.no_depth_n || 0} rows had no complete depth`, total.scaled_n ? "good" : "warn"),
+    deltaCard("Largest $10 Stake", usd(total.max_flat10_stake || 0), `target ${usd(projection.target_stake || 10)} when depth allowed`, "blue"),
+    deltaCard("Largest Depth Stake", usd(total.max_depth_stake || 0), `cap ${usd(projection.max_stake || 0)} · ${(num(projection.market_depth_fraction || 0) * 100).toFixed(2)}% of depth`, "blue"),
+  ].join("");
+  const scaleRows = stats => Object.entries(stats || {}).map(([bucket, row]) => {
+    const actual = num(row.actual_pnl), flat = num(row.flat10_pnl), depth = num(row.depth_pnl);
+    return `<tr>
+      <td><b>${esc(bucket)}</b></td>
+      <td>${row.n || 0}</td>
+      <td>${row.scaled_n || 0}</td>
+      <td>${usd(row.actual_stake || 0)}</td>
+      <td class="${valClass(actual)}">${money(actual)}</td>
+      <td>${usd(row.flat10_stake || 0)}</td>
+      <td class="${valClass(flat)}">${money(flat)}</td>
+      <td>${usd(row.depth_stake || 0)}</td>
+      <td class="${valClass(depth)}">${money(depth)}</td>
+    </tr>`;
+  });
+  const exampleRows = (projection.examples || []).slice(0, 12).map(row => `
+    <tr>
+      <td class="muted mono">${row.id}</td>
+      <td><b title="${esc(row.event)}">${esc(row.event)}</b><div class="subline">${esc(row.pair)} · ${esc(row.depth_bucket)} · ${esc(row.edge_bucket)}</div></td>
+      <td>${usd(row.binding_depth || 0)}</td>
+      <td>${row.edge_points == null ? "" : pct(row.edge_points)}</td>
+      <td>${usd(row.actual_stake || 0)}<div class="subline">${money(row.actual_pnl || 0)}</div></td>
+      <td>${usd(row.flat10_stake || 0)}<div class="subline">${money(row.flat10_pnl || 0)}</div></td>
+      <td>${usd(row.depth_stake || 0)}<div class="subline ${valClass(row.depth_lift || 0)}">${money(row.depth_lift || 0)} lift</div></td>
+    </tr>`);
+  $("arb-sizing-detail").innerHTML = `
+    <div class="muted" style="margin-bottom:10px">${esc(projection.rule || "Hypothetical only; actual P&L is unchanged.")}</div>
+    <div class="detail-grid">
+      <div class="detail-block"><div class="detail-title">By Venue Pair</div>${table(["Pair","Bets","Scaled","Actual Bet","Actual P&L","$10 Bet","$10 P&L","Depth Bet","Depth P&L"], scaleRows(projection.venue_pair))}</div>
+      <div class="detail-block"><div class="detail-title">By Market Size</div>${table(["Depth","Bets","Scaled","Actual Bet","Actual P&L","$10 Bet","$10 P&L","Depth Bet","Depth P&L"], scaleRows(projection.depth))}</div>
+      <div class="detail-block"><div class="detail-title">By Edge Size</div>${table(["Edge","Bets","Scaled","Actual Bet","Actual P&L","$10 Bet","$10 P&L","Depth Bet","Depth P&L"], scaleRows(projection.edge))}</div>
+      <div class="detail-block"><div class="detail-title">Largest Scalable Historical ARBs</div>${table(["ID","Event","Depth","Edge","Actual","$10","Depth"], exampleRows, "No settled ARBs had enough recorded depth to scale.")}</div>
+    </div>`;
 }
 
 function renderTracking(d) {
@@ -1950,6 +2352,7 @@ function render(d) {
   renderCleanEv(d);
   renderScanners(d);
   renderOpenBets(d);
+  renderArbSizing(d);
   renderPipeline(d);
   renderKinds(d);
   renderRecent(d);
@@ -1964,17 +2367,75 @@ function render(d) {
 
 $("reset-track").onclick = () => resetTracking(state);
 
+function scheduleNext(delay) {
+  if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+  if (settings.paused) return;
+  refreshTimer = setTimeout(tick, delay == null ? settings.intervalMs : delay);
+}
+
+let firstLoad = true;
 async function tick() {
   try {
     const response = await fetch("/api/state", {cache:"no-store"});
-    state = await response.json();
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const next = await response.json();
+    const wasOffline = connection === "offline";
+    state = next;
+    connection = "live";
+    lastUpdate = Date.now();
     render(state);
+    if (firstLoad) { firstLoad = false; decoratePanels(); buildNav(); }
+    if (wasOffline) toast("Reconnected to dashboard server", "good", 3500);
   } catch (err) {
-    $("clock").textContent = "disconnected";
+    if (connection !== "offline") toast("Lost connection to dashboard server — retrying", "bad", 4000);
+    connection = "offline";
+  } finally {
+    updateRefreshChip();
+    scheduleNext();
   }
 }
+
+// --- control wiring ---
+$("refresh-toggle").onclick = () => setPaused(!settings.paused);
+$("interval-seg").querySelectorAll("button").forEach(b => b.onclick = () => {
+  settings.intervalMs = Number(b.dataset.int); saveSettings(); applySettings();
+  if (!settings.paused) scheduleNext(0);
+  toast(`Auto-refresh every ${settings.intervalMs / 1000}s`, "good", 2000);
+});
+$("nav-btn").onclick = () => { buildNav(); openOverlay("nav-overlay"); };
+$("help-btn").onclick = () => openOverlay("help-overlay");
+$("theme-btn").onclick = () => {
+  settings.theme = THEMES[(THEMES.indexOf(settings.theme) + 1) % THEMES.length];
+  saveSettings(); applySettings(); toast(`Theme: ${settings.theme}`, "good", 1800);
+  if (state) render(state);
+};
+$("density-btn").onclick = () => {
+  settings.density = settings.density === "compact" ? "comfortable" : "compact";
+  saveSettings(); applySettings(); toast(`Density: ${settings.density}`, "good", 1800);
+};
+document.querySelectorAll(".overlay").forEach(o => {
+  o.addEventListener("click", e => { if (e.target === o) closeOverlays(); });
+  o.querySelectorAll("[data-close]").forEach(b => b.onclick = closeOverlays);
+});
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input, textarea, select") && e.key !== "Escape") return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  switch (e.key) {
+    case " ": e.preventDefault(); setPaused(!settings.paused); break;
+    case "r": tick(); toast("Refreshed", "good", 1200); break;
+    case "g": buildNav(); openOverlay("nav-overlay"); break;
+    case "t": $("theme-btn").click(); break;
+    case "d": $("density-btn").click(); break;
+    case "?": openOverlay("help-overlay"); break;
+    case "/": { e.preventDefault(); const s = $("open-search"); if (s) s.focus(); break; }
+    case "Escape": closeOverlays(); break;
+  }
+});
+// keep the freshness chip honest even between polls
+setInterval(updateRefreshChip, 1000);
+
+applySettings();
 tick();
-setInterval(tick, 5000);
 window.addEventListener("resize", () => state && render(state));
 </script>
 </body>

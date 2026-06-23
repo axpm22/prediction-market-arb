@@ -1,8 +1,11 @@
 """Depth-aware ARB sizing projection.
 
 The training population is intentionally narrow: only ARB rows that were actually
-paper-bet and later settled. Verification/lifetime/vanished annotations are useful
-for safety gates, but they are not realized bets and must not train the sizing model.
+paper-bet, later settled, AND trusted=1 (a whitelisted venue-pair per
+config.trusted_pairs). Un-whitelisted cross-venue arbs are REVIEW-only (hard rule #6):
+their "locks" are unverified across rulebooks, so they must never train sizing.
+Verification/lifetime/vanished annotations are useful for safety gates, but they are
+not realized bets and must not train the sizing model either.
 """
 from __future__ import annotations
 
@@ -62,6 +65,57 @@ class _Stats:
         }
 
 
+@dataclass
+class _ScaleStats:
+    n: int = 0
+    scaled_n: int = 0
+    actual_stake: Decimal = Decimal("0")
+    actual_pnl: Decimal = Decimal("0")
+    flat10_stake: Decimal = Decimal("0")
+    flat10_pnl: Decimal = Decimal("0")
+    depth_stake: Decimal = Decimal("0")
+    depth_pnl: Decimal = Decimal("0")
+    max_flat10_stake: Decimal = Decimal("0")
+    max_depth_stake: Decimal = Decimal("0")
+
+    def add(self, actual_stake: Decimal, actual_pnl: Decimal,
+            flat10_stake: Decimal, flat10_pnl: Decimal,
+            depth_stake: Decimal, depth_pnl: Decimal) -> None:
+        self.n += 1
+        if flat10_stake > actual_stake or depth_stake > actual_stake:
+            self.scaled_n += 1
+        self.actual_stake += actual_stake
+        self.actual_pnl += actual_pnl
+        self.flat10_stake += flat10_stake
+        self.flat10_pnl += flat10_pnl
+        self.depth_stake += depth_stake
+        self.depth_pnl += depth_pnl
+        self.max_flat10_stake = max(self.max_flat10_stake, flat10_stake)
+        self.max_depth_stake = max(self.max_depth_stake, depth_stake)
+
+    def as_json(self) -> dict[str, Any]:
+        actual_roi = self.actual_pnl / self.actual_stake if self.actual_stake else Decimal("0")
+        flat10_roi = self.flat10_pnl / self.flat10_stake if self.flat10_stake else Decimal("0")
+        depth_roi = self.depth_pnl / self.depth_stake if self.depth_stake else Decimal("0")
+        return {
+            "n": self.n,
+            "scaled_n": self.scaled_n,
+            "actual_stake": float(money(self.actual_stake)),
+            "actual_pnl": float(money(self.actual_pnl)),
+            "actual_roi": float(actual_roi),
+            "flat10_stake": float(money(self.flat10_stake)),
+            "flat10_pnl": float(money(self.flat10_pnl)),
+            "flat10_roi": float(flat10_roi),
+            "flat10_lift": float(money(self.flat10_pnl - self.actual_pnl)),
+            "depth_stake": float(money(self.depth_stake)),
+            "depth_pnl": float(money(self.depth_pnl)),
+            "depth_roi": float(depth_roi),
+            "depth_lift": float(money(self.depth_pnl - self.actual_pnl)),
+            "max_flat10_stake": float(money(self.max_flat10_stake)),
+            "max_depth_stake": float(money(self.max_depth_stake)),
+        }
+
+
 def build_arb_sizing_model(con, bankroll: Decimal, max_stake_pct: Decimal,
                            min_sample: int = 20) -> dict[str, Any]:
     """Train from settled, staked ARB rows only."""
@@ -71,6 +125,7 @@ def build_arb_sizing_model(con, bankroll: Decimal, max_stake_pct: Decimal,
           FROM flat_bets
          WHERE kind='ARB'
            AND status='SETTLED'
+           AND trusted=1
            AND CAST(stake_usd AS REAL) > 0
            AND pnl_optimistic IS NOT NULL
         """
@@ -91,7 +146,7 @@ def build_arb_sizing_model(con, bankroll: Decimal, max_stake_pct: Decimal,
         by_edge[_bucket(edge, EDGE_BUCKETS)].add(stake, pnl)
         by_pair[pair].add(stake, pnl)
     return {
-        "rule": "settled staked ARBs only; stake scales with binding top-of-book depth after empirical gates",
+        "rule": "trusted (whitelisted) settled staked ARBs only; stake scales with binding top-of-book depth after empirical gates",
         "training": total.as_json(),
         "min_sample": min_sample,
         "market_depth_fraction": 0.01,
@@ -99,6 +154,91 @@ def build_arb_sizing_model(con, bankroll: Decimal, max_stake_pct: Decimal,
         "depth": _stats_map(by_depth),
         "edge": _stats_map(by_edge),
         "venue_pair": _stats_map(by_pair),
+    }
+
+
+def build_arb_scale_projection(con, bankroll: Decimal, max_stake_pct: Decimal,
+                               target_stake: Decimal = Decimal("10"),
+                               market_depth_fraction: Decimal = Decimal("0.01")) -> dict[str, Any]:
+    """Counterfactual larger-stake P&L for settled ARBs that were actually bet.
+
+    This is not a fill simulator. It keeps each settled ARB's observed per-dollar
+    result and only changes stake when recorded top-of-book depth could plausibly
+    absorb the larger bet.
+    """
+    rows = con.execute(
+        """
+        SELECT *
+          FROM flat_bets
+         WHERE kind='ARB'
+           AND status='SETTLED'
+           AND trusted=1
+           AND CAST(stake_usd AS REAL) > 0
+           AND pnl_optimistic IS NOT NULL
+        """
+    ).fetchall()
+    max_stake = money(bankroll * max_stake_pct)
+    total = _ScaleStats()
+    by_depth: dict[str, _ScaleStats] = defaultdict(_ScaleStats)
+    by_edge: dict[str, _ScaleStats] = defaultdict(_ScaleStats)
+    by_pair: dict[str, _ScaleStats] = defaultdict(_ScaleStats)
+    examples: list[dict[str, Any]] = []
+    no_depth = 0
+    for row in rows:
+        actual_stake = _dec(row["stake_usd"])
+        if actual_stake <= 0:
+            continue
+        actual_pnl = _dec(row["pnl_optimistic"])
+        roi_per_dollar = actual_pnl / actual_stake
+        legs = _legs(row["legs_json"])
+        binding_depth = binding_depth_usd(legs)
+        edge = edge_points(row, legs)
+        pair = venue_pair(legs)
+        depth_bucket = _bucket(binding_depth, DEPTH_BUCKETS)
+        edge_bucket = _bucket(edge, EDGE_BUCKETS)
+        if binding_depth is None:
+            no_depth += 1
+            flat10_stake = actual_stake
+            depth_stake = actual_stake
+        else:
+            capacity = money(binding_depth * market_depth_fraction)
+            flat10_stake = _scaled_stake(actual_stake, min(target_stake, max_stake, capacity))
+            edge_cap = EDGE_CAPS.get(edge_bucket)
+            depth_ceiling = actual_stake if edge_cap is None else min(max_stake, edge_cap, capacity)
+            depth_stake = _scaled_stake(actual_stake, depth_ceiling)
+        flat10_pnl = money(roi_per_dollar * flat10_stake)
+        depth_pnl = money(roi_per_dollar * depth_stake)
+        for stats in (total, by_depth[depth_bucket], by_edge[edge_bucket], by_pair[pair]):
+            stats.add(actual_stake, actual_pnl, flat10_stake, flat10_pnl, depth_stake, depth_pnl)
+        if flat10_stake > actual_stake or depth_stake > actual_stake:
+            examples.append({
+                "id": int(row["id"]),
+                "event": _event_label(legs),
+                "pair": pair,
+                "depth_bucket": depth_bucket,
+                "edge_bucket": edge_bucket,
+                "binding_depth": None if binding_depth is None else float(binding_depth),
+                "edge_points": None if edge is None else float(edge),
+                "actual_stake": float(money(actual_stake)),
+                "actual_pnl": float(money(actual_pnl)),
+                "flat10_stake": float(money(flat10_stake)),
+                "flat10_pnl": float(flat10_pnl),
+                "depth_stake": float(money(depth_stake)),
+                "depth_pnl": float(depth_pnl),
+                "depth_lift": float(money(depth_pnl - actual_pnl)),
+            })
+    examples.sort(key=lambda row: (row["depth_stake"], row["depth_lift"]), reverse=True)
+    return {
+        "rule": "Hypothetical only: settled staked ARBs, same observed per-dollar result, larger stake only when recorded depth allowed it.",
+        "target_stake": float(money(target_stake)),
+        "market_depth_fraction": float(market_depth_fraction),
+        "max_stake": float(max_stake),
+        "no_depth_n": no_depth,
+        "total": total.as_json(),
+        "depth": _scale_stats_map(by_depth),
+        "edge": _scale_stats_map(by_edge),
+        "venue_pair": _scale_stats_map(by_pair),
+        "examples": examples[:25],
     }
 
 
@@ -192,6 +332,19 @@ def _lookup(model: dict[str, Any], group: str, key: str) -> dict[str, Any]:
 
 def _stats_map(stats: dict[str, _Stats]) -> dict[str, dict[str, Any]]:
     return {key: value.as_json() for key, value in sorted(stats.items())}
+
+
+def _scale_stats_map(stats: dict[str, _ScaleStats]) -> dict[str, dict[str, Any]]:
+    return {key: value.as_json() for key, value in sorted(stats.items())}
+
+
+def _scaled_stake(actual_stake: Decimal, ceiling: Decimal) -> Decimal:
+    return money(max(actual_stake, ceiling))
+
+
+def _event_label(legs: list[dict[str, Any]]) -> str:
+    first = legs[0] if legs else {}
+    return str(first.get("event_key") or first.get("market_slug") or first.get("outcome_label") or "unknown event")
 
 
 def _bucket(value: Decimal | None, buckets: tuple[tuple[Decimal, Decimal | None, str], ...]) -> str:

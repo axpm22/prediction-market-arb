@@ -66,3 +66,38 @@ def test_arb_capacity_report(tmp_path) -> None:
     r = run_arb_capacity(store)
     assert r.n_arbs == 1 and r.n_feasible == 1 and r.n_with_ladder == 1
     assert r.median_breakeven_usd is not None and r.median_breakeven_usd > 0
+
+
+def test_arb_capacity_dedups_fingerprints_and_drops_review(tmp_path) -> None:
+    # B2: the same arb re-observed across polls is ONE opportunity, and untrusted REVIEW
+    # arbs (hard rule #6) are not actionable. Both must be excluded from the headline sum.
+    store = Store(tmp_path / "arb.sqlite")
+    legs = [
+        {"venue": "kalshi", "outcome_label": "a", "cost": "0.48", "fee_cost": "0",
+         "depth_usd": "48", "ladder": [["0.48", "48"], ["0.53", "530"]]},
+        {"venue": "polymarket", "outcome_label": "b", "cost": "0.49", "fee_cost": "0",
+         "depth_usd": "49", "ladder": [["0.49", "49"], ["0.52", "520"]]},
+    ]
+    legs_json = json.dumps(legs)
+    now = datetime.now(timezone.utc).isoformat()
+    with store.connect() as con:
+        # Same fingerprint 'a1' seen three times (re-observation inflation) + a REVIEW row.
+        for status in ("OPEN", "SETTLED", "SETTLED"):
+            con.execute(
+                """INSERT INTO flat_bets(fingerprint, opened_poll_id, category, sport, kind, trusted, live,
+                       edge, stake_usd, legs_json, status, placed_at, notes)
+                   VALUES ('a1', 1, 'sports', 'baseball_mlb', 'ARB', 1, 0, '0.0309', '1.00', ?, ?, ?, '')""",
+                (legs_json, status, now),
+            )
+        con.execute(
+            """INSERT INTO flat_bets(fingerprint, opened_poll_id, category, sport, kind, trusted, live,
+                   edge, stake_usd, legs_json, status, placed_at, notes)
+               VALUES ('review1', 1, 'sports', 'baseball_mlb', 'ARB', 0, 0, '0.0309', '1.00', ?, 'OPEN', ?, '')""",
+            (legs_json, now),
+        )
+    r = run_arb_capacity(store)
+    # 3 sightings of 'a1' collapse to 1; 'review1' (trusted=0) is dropped entirely.
+    assert r.n_arbs == 1 and r.n_feasible == 1
+    # Opting back into REVIEW rows still dedups: 'a1' + 'review1' = 2 distinct fingerprints.
+    r_all = run_arb_capacity(store, trusted_only=False)
+    assert r_all.n_arbs == 2

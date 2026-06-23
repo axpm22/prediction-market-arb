@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -8,6 +8,7 @@ from arb.models import Event, Opportunity, Quote
 from arb.settlement import settle_backfill_mlb, settle_manual, settle_sports
 from arb.store import Store
 from arb.tracker import record_tracker_poll
+from arb.validation import ValidationRule
 
 # Completed game in the recorded scores fixture: KC 5 - TEX 3 on 2026-06-09 (total 8).
 SETTLED_EVENT = "baseball_mlb:2026-06-09:kansas city royals:texas rangers"
@@ -48,6 +49,7 @@ def ev_opp(
     return Opportunity(
         kind="EV", category="sports", event=event, legs=[quote],
         edge=Decimal("0.03"),
+        edge_points=Decimal("0.01"),
         stakes={} if stake is None else {outcome: Decimal(stake)},
         status="OK",
         quality_flag=quality_flag,
@@ -58,7 +60,14 @@ def ev_opp(
 
 def place_bets(store: Store, opps) -> None:
     poll = store.start_poll("watch")
-    record_tracker_poll(store, poll, opps)
+    first_start = min(opp.event.start_utc for opp in opps)
+    record_tracker_poll(
+        store,
+        poll,
+        opps,
+        validation_rule=ValidationRule(min_cost=Decimal("0"), max_cost=Decimal("1"), max_flagged_edge=Decimal("1")),
+        now=first_start - timedelta(hours=1),
+    )
 
 
 def settled_rows(store: Store):
@@ -101,6 +110,22 @@ def test_settlement_is_idempotent_and_append_only(tmp_path) -> None:
     with store.connect() as con:
         statuses = [r["status"] for r in con.execute("SELECT status FROM flat_bets ORDER BY id")]
     assert statuses == ["OPEN", "SETTLED"]
+
+
+def test_settlement_invalidates_pregame_bet_placed_after_start(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    place_bets(store, [ev_opp("kansas city royals", "0.50")])
+    with store.connect() as con:
+        con.execute("UPDATE flat_bets SET placed_at = ? WHERE status = 'OPEN'", ((START + timedelta(minutes=1)).isoformat(),))
+
+    assert settle_sports(store, load_config(), Path("tests/fixtures")) == 1
+
+    with store.connect() as con:
+        rows = list(con.execute("SELECT status, result, quality_flag, notes FROM flat_bets ORDER BY id"))
+    assert [row["status"] for row in rows] == ["OPEN", "CLOSED"]
+    assert rows[-1]["result"] == "INVALID_IN_PLAY"
+    assert rows[-1]["quality_flag"] == "invalid-in-play"
+    assert "invalid-in-play" in rows[-1]["notes"]
 
 
 def test_confirmed_fill_settles_from_second_observation_price(tmp_path) -> None:
@@ -405,3 +430,77 @@ def test_mlb_backfill_supports_legacy_event_keys_without_bucket(tmp_path) -> Non
 
     assert settle_backfill_mlb(store, fixture_dir) == 1
     assert settled_rows(store)[0]["result"] == "WON"
+
+
+# --- ARB settlement audit fixes (A1 REVIEW lane, A3 timing guard) -----------------------
+
+def arb_opp(status: str, *, start: datetime = START, venue_b: str = "polymarket") -> Opportunity:
+    """Two-leg cross-venue arb on the settled KC/TEX fixture event.
+
+    status="OK" -> trusted=1 (whitelisted pair); status="REVIEW" -> trusted=0 (hard rule #6).
+    """
+    legs = [
+        Quote(
+            event_key=SETTLED_EVENT, venue="kalshi", book="KX-KC", market_type="WINNER",
+            line=None, outcome_label="kansas city royals", raw_price=Decimal("0.48"),
+            cost=Decimal("0.48"), fee_cost=Decimal("0"), depth_usd=Decimal("500"),
+            live=False, fetched_at=datetime.now(timezone.utc), start_utc=start,
+        ),
+        Quote(
+            event_key=SETTLED_EVENT, venue=venue_b, book="PM-TEX", market_type="WINNER",
+            line=None, outcome_label="texas rangers", raw_price=Decimal("0.49"),
+            cost=Decimal("0.49"), fee_cost=Decimal("0"), depth_usd=Decimal("500"),
+            live=False, fetched_at=datetime.now(timezone.utc), start_utc=start,
+        ),
+    ]
+    total = sum((leg.effective_cost for leg in legs), Decimal("0"))
+    event = Event(
+        event_key=SETTLED_EVENT, category="sports", sport="baseball_mlb",
+        home="kansas city royals", away="texas rangers", start_utc=start,
+    )
+    return Opportunity(
+        kind="ARB", category="sports", event=event, legs=legs,
+        edge=Decimal("1") / total - Decimal("1"), stakes={}, status=status,
+    )
+
+
+def test_review_arb_settles_into_flagged_lane_not_clean_pnl(tmp_path) -> None:
+    # A1: an un-whitelisted cross-venue arb (trusted=0) still settles for observability,
+    # but is tagged quality_flag='REVIEW' so headline/sizing/capacity all exclude it.
+    store = Store(tmp_path / "arb.sqlite")
+    place_bets(store, [arb_opp("REVIEW")])
+    assert settle_sports(store, load_config(), Path("tests/fixtures")) == 1
+    row = settled_rows(store)[0]
+    assert row["kind"] == "ARB"
+    assert int(row["trusted"]) == 0
+    assert row["quality_flag"] == "REVIEW"
+    assert row["result"] == "RESOLVED"
+
+
+def test_trusted_arb_settles_clean_with_no_review_flag(tmp_path) -> None:
+    # A1: a whitelisted pair (status OK -> trusted=1) keeps quality_flag NULL and is
+    # eligible for the clean/headline P&L lane.
+    store = Store(tmp_path / "arb.sqlite")
+    place_bets(store, [arb_opp("OK")])
+    assert settle_sports(store, load_config(), Path("tests/fixtures")) == 1
+    row = settled_rows(store)[0]
+    assert int(row["trusted"]) == 1
+    assert row["quality_flag"] is None
+    assert row["result"] == "RESOLVED"
+
+
+def test_arb_placed_after_event_start_is_invalidated(tmp_path) -> None:
+    # A3: a quote captured at/after the event start is a time artifact, not a lock.
+    store = Store(tmp_path / "arb.sqlite")
+    place_bets(store, [arb_opp("REVIEW")])
+    with store.connect() as con:
+        con.execute("UPDATE flat_bets SET placed_at = ? WHERE status = 'OPEN'",
+                    ((START + timedelta(minutes=1)).isoformat(),))
+    assert settle_sports(store, load_config(), Path("tests/fixtures")) == 1
+    with store.connect() as con:
+        rows = list(con.execute("SELECT status, result, quality_flag FROM flat_bets ORDER BY id"))
+    assert [r["status"] for r in rows] == ["OPEN", "CLOSED"]
+    assert rows[-1]["result"] == "INVALID_IN_PLAY"
+    assert rows[-1]["quality_flag"] == "invalid-in-play"
+    # No RESOLVED lock was booked.
+    assert not settled_rows(store)

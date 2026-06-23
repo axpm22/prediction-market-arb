@@ -3,7 +3,8 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
-from statistics import median
+from datetime import datetime, timezone
+from statistics import median, stdev
 
 from .models import Quote
 
@@ -145,8 +146,12 @@ def depth_scaled_buffer(levels: list[tuple[Decimal, Decimal]], stake_usd: Decima
 
 
 def consensus_outcome_key(market_type: str, line: Decimal | None, outcome_label: str) -> str:
-    # Totals consensus is only comparable on the exact same line (8.5 ≠ 9.0).
-    if market_type == "TOTAL" and line is not None:
+    # Any line-bearing market is only comparable on the exact same line (total 8.5 ≠ 9.0;
+    # likewise a handicap/spread line is its own market). Key on the line whenever one is
+    # present so different lines — or a moneyline vs a same-label handicap — never collide on
+    # one consensus entry. (Today only WINNER[line=None] and TOTAL exist, so this is a no-op
+    # for current markets and future-proofs the moment spreads are added.)
+    if line is not None:
         return f"{outcome_label}:{line}"
     return outcome_label
 
@@ -226,9 +231,14 @@ def _drop_book_outliers(devigged: list[dict[str, Decimal]], complete: frozenset,
 
 
 def consensus_dispersion(quotes: list[Quote], min_books: int, method: str = "proportional") -> dict[str, Decimal]:
-    """EV#3 / pass3#2: per-outcome cross-book dispersion (max-min spread of de-vigged probs)
-    as a confidence signal — wide book disagreement should widen e_min / shrink trust, not be
-    silently swallowed by the median. Keyed like consensus_probabilities."""
+    """EV#3 / pass3#2: per-outcome cross-book STANDARD ERROR of the de-vigged probs as a
+    confidence signal — wide book disagreement should widen e_min / shrink trust, not be
+    silently swallowed by the median. Keyed like consensus_probabilities.
+
+    EV#7: this is a true SE — `stdev(probs)/sqrt(n)` — not the max-min range. The range grows
+    mechanically with the number of books, so it overstated dispersion exactly where more
+    books should mean MORE confidence; the SE is what the edge/SE gate and the Kelly haircut
+    actually want. Needs >= 2 surviving books to have a defined stdev."""
     raw_books: dict[tuple[str, str, Decimal | None], dict[str, Decimal]] = defaultdict(dict)
     for quote in quotes:
         if quote.venue != "oddsapi" or quote.raw_price < Decimal("1.002") or quote.raw_price > Decimal("500"):
@@ -249,9 +259,46 @@ def consensus_dispersion(quotes: list[Quote], min_books: int, method: str = "pro
                 for outcome, prob in devig_book_method(odds, method).items():
                     per_outcome[outcome].append(prob)
         for outcome, probs in per_outcome.items():
-            if len(probs) >= min_books:
-                dispersion[outcome] = q6(max(probs) - min(probs))
+            n = len(probs)
+            if n >= max(2, min_books):
+                se = stdev(float(p) for p in probs) / math.sqrt(n)
+                dispersion[outcome] = q6(Decimal(str(se)))
     return dispersion
+
+
+def consensus_outcome_times(quotes: list[Quote], min_books: int,
+                            min_books_totals: int | None = None) -> dict[str, datetime]:
+    """EV#6: per-outcome consensus AGE basis — the median `source_updated_at` (the book's own
+    last line-move time) across the books that quote that outcome, falling back to a quote's
+    `fetched_at` when a book can't report a move time. Stamping consensus with this instead of
+    the scan wall-clock makes staleness/decay measure 'time since the line moved', not 'time
+    since we last scanned'. Gated and keyed exactly like consensus_probabilities."""
+    raw_times: dict[tuple[str, str, Decimal | None], dict[str, datetime]] = defaultdict(dict)
+    for quote in quotes:
+        if quote.venue != "oddsapi" or quote.raw_price < Decimal("1.002") or quote.raw_price > Decimal("500"):
+            continue
+        key = consensus_outcome_key(quote.market_type, quote.line, quote.outcome_label)
+        raw_times[(quote.book, quote.market_type, quote.line)][key] = quote.source_updated_at or quote.fetched_at
+    by_market: dict[tuple[str, Decimal | None], list[dict[str, datetime]]] = defaultdict(list)
+    for (_book, market_type, line), times in raw_times.items():
+        by_market[(market_type, line)].append(times)
+    totals_min = min_books_totals if min_books_totals is not None else min_books
+    out: dict[str, datetime] = {}
+    for (market_type, _line), books in by_market.items():
+        complete = max((frozenset(t) for t in books), key=len)
+        if len(complete) < 2:
+            continue
+        per_outcome: dict[str, list[datetime]] = defaultdict(list)
+        for times in books:
+            if frozenset(times) == complete:
+                for outcome, ts in times.items():
+                    per_outcome[outcome].append(ts)
+        gate = totals_min if market_type == "TOTAL" else min_books
+        for outcome, tss in per_outcome.items():
+            if len(tss) >= gate:
+                epoch = median(t.timestamp() for t in tss)
+                out[outcome] = datetime.fromtimestamp(epoch, tz=timezone.utc)
+    return out
 
 
 def kalshi_fee_cost(price: Decimal, fee_rate: Decimal) -> Decimal:

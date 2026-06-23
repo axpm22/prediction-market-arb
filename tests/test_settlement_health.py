@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -42,16 +42,21 @@ def ev_opp(event_day: str, cost: str = "0.50") -> Opportunity:
         event=event,
         legs=[quote],
         edge=Decimal("0.01"),
+        edge_points=Decimal("0.01"),
         stakes={},
         status="OK",
     )
 
 
+def record_before_start(store: Store, opp: Opportunity) -> None:
+    record_tracker_poll(store, store.start_poll("watch"), [opp], now=opp.event.start_utc - timedelta(hours=1))
+
+
 def test_settle_health_counts_overdue_after_grace_and_dedupes_confirmed(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     opp = ev_opp("2026-06-21")
-    record_tracker_poll(store, store.start_poll("watch"), [opp])
-    record_tracker_poll(store, store.start_poll("watch"), [opp])
+    record_before_start(store, opp)
+    record_before_start(store, opp)
     now = datetime(2026, 6, 22, 7, 0, tzinfo=ZoneInfo("America/New_York"))
 
     health = settle_health(store, "America/New_York", grace_hours=6, now=now)
@@ -68,7 +73,7 @@ def test_settle_health_counts_overdue_after_grace_and_dedupes_confirmed(tmp_path
 
 def test_settle_health_grace_window_avoids_midnight_false_alarm(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
-    record_tracker_poll(store, store.start_poll("watch"), [ev_opp("2026-06-21")])
+    record_before_start(store, ev_opp("2026-06-21"))
     now = datetime(2026, 6, 22, 5, 30, tzinfo=ZoneInfo("America/New_York"))
 
     health = settle_health(store, "America/New_York", grace_hours=6, now=now)
@@ -80,7 +85,7 @@ def test_settle_health_grace_window_avoids_midnight_false_alarm(tmp_path) -> Non
 def test_settle_health_ignores_settled_fingerprints(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     opp = ev_opp("2026-06-20")
-    record_tracker_poll(store, store.start_poll("watch"), [opp])
+    record_before_start(store, opp)
     with store.connect() as con:
         base = con.execute("SELECT * FROM flat_bets WHERE status = 'OPEN'").fetchone()
         con.execute(
@@ -109,7 +114,7 @@ def test_settle_health_ignores_settled_fingerprints(tmp_path) -> None:
 def test_settle_health_ignores_exited_fingerprints(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     opp = ev_opp("2026-06-20")
-    record_tracker_poll(store, store.start_poll("watch"), [opp])
+    record_before_start(store, opp)
     with store.connect() as con:
         base = con.execute("SELECT * FROM flat_bets WHERE status = 'OPEN'").fetchone()
         con.execute(
@@ -138,8 +143,8 @@ def test_settle_health_ignores_closed_fingerprints(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     opp = ev_opp("2026-06-20")
     poll = store.start_poll("watch")
-    record_tracker_poll(store, poll, [opp])
-    record_tracker_poll(store, store.start_poll("watch"), [])
+    record_tracker_poll(store, poll, [opp], now=opp.event.start_utc - timedelta(hours=1))
+    record_tracker_poll(store, store.start_poll("watch"), [], now=opp.event.start_utc - timedelta(minutes=30))
     now = datetime(2026, 6, 22, 12, 0, tzinfo=ZoneInfo("America/New_York"))
 
     health = settle_health(store, "America/New_York", grace_hours=6, now=now)
@@ -151,7 +156,7 @@ def test_settle_health_ignores_closed_fingerprints(tmp_path) -> None:
 def test_settle_health_cli_exit_code_alarms_on_overdue(tmp_path, monkeypatch, capsys) -> None:
     config = replace(load_config(), database_path=tmp_path / "arb.sqlite", settle_health_overdue_max=0)
     store = Store(config.database_path)
-    record_tracker_poll(store, store.start_poll("watch"), [ev_opp("2026-06-20")])
+    record_before_start(store, ev_opp("2026-06-20"))
     monkeypatch.setattr("arb.cli.load_config", lambda: config)
 
     code = main(["settle-health"])
