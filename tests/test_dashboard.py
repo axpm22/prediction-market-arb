@@ -113,31 +113,50 @@ def test_live_dashboard_tracks_edge_sized_ev_from_baseline(tmp_path) -> None:
         con.execute(
             """INSERT INTO flat_bets(id, fingerprint, opened_poll_id, category, sport, kind, trusted, live,
                    edge, stake_usd, legs_json, optimistic_cost, pnl_optimistic,
-                   status, placed_at, settled_at, result, quality_flag, notes)
+                   status, placed_at, settled_at, result, quality_flag, validation_tag, notes)
                VALUES (7925, 'new-clean', 1, 'sports', 'baseball_mlb', 'EV', 0, 0,
                        '0.05', '1.00', '[]', '0.50', '1.00',
-                       'SETTLED', ?, ?, 'WON', NULL, '')""",
+                       'SETTLED', ?, ?, 'WON', NULL, 'KEEP', '')""",
             (now, now),
         )
         con.execute(
             """INSERT INTO flat_bets(id, fingerprint, opened_poll_id, category, sport, kind, trusted, live,
                    edge, stake_usd, legs_json, optimistic_cost, pnl_optimistic,
-                   status, placed_at, settled_at, result, quality_flag, notes)
+                   status, placed_at, settled_at, result, quality_flag, validation_tag, notes)
                VALUES (7926, 'new-suspect', 1, 'sports', 'baseball_mlb', 'EV', 0, 0,
                        '100.00', '1.00', '[]', '0.01', '-1.00',
-                       'SETTLED', ?, ?, 'LOST', 'suspect-edge', '')""",
+                       'SETTLED', ?, ?, 'LOST', 'suspect-edge', 'KEEP', '')""",
+            (now, now),
+        )
+        con.execute(
+            """INSERT INTO flat_bets(id, fingerprint, opened_poll_id, category, sport, kind, trusted, live,
+                   edge, stake_usd, legs_json, optimistic_cost, pnl_optimistic,
+                   status, placed_at, settled_at, result, quality_flag, validation_tag, notes)
+               VALUES (7927, 'new-drop', 1, 'sports', 'baseball_mlb', 'EV', 0, 0,
+                       '0.10', '1.00', '[]', '0.50', '-1.00',
+                       'SETTLED', ?, ?, 'LOST', NULL, 'DROP', '')""",
             (now, now),
         )
 
     state = build_state(store, config)
     sized = state["edge_sized_ev"]
+    keep = sized["variants"]["keep"]
+    broad = sized["variants"]["broad"]
 
-    assert sized["baseline_pnl"] == 113.42
-    assert sized["baseline_max_id"] == 7924
-    assert sized["new_settled"] == 1
-    assert sized["new_stake"] == 5.0
-    assert sized["new_pnl"] == 5.0
-    assert sized["pnl"] == 118.42
+    assert keep["baseline_pnl"] == 8.01
+    assert keep["baseline_max_id"] == 7924
+    assert keep["baseline_settled"] == 35
+    assert keep["new_settled"] == 1
+    assert keep["new_stake"] == 5.0
+    assert keep["new_pnl"] == 5.0
+    assert keep["pnl"] == 13.01
+    assert broad["baseline_pnl"] == 113.42
+    assert broad["baseline_max_id"] == 7924
+    assert broad["baseline_settled"] == 487
+    assert broad["new_settled"] == 2
+    assert broad["new_stake"] == 15.0
+    assert broad["new_pnl"] == -5.0
+    assert broad["pnl"] == 108.42
     assert "Clean EV" in PAGE
     assert "clean-ev-tabs" in PAGE
     assert "Edge-sized" in PAGE

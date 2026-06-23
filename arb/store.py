@@ -42,6 +42,30 @@ class Store:
         with self.connect() as con:
             con.executescript(SCHEMA_SQL)
             self._migrate_existing_tables(con)
+            self._ensure_unique_indexes(con)
+
+    def _ensure_unique_indexes(self, con: sqlite3.Connection) -> None:
+        # pass3#7: dedup integrity at the DB layer for QUOTES (true within-poll duplicates;
+        # re-observations across polls have a different poll_id and stay allowed). Best-effort:
+        # a dirty live DB (pre-dedup) must still open, so swallow the violation and warn —
+        # `migrate-unique --apply` does the dedup then this succeeds. NOTE: flat_bets gets NO
+        # such constraint — it is append-only with a DERIVED lifecycle (multiple OPEN rows
+        # across reappearances are normal; "open" = latest lifecycle row, not the OPEN status),
+        # so its one-open-per-fingerprint invariant is enforced in app logic + poll atomicity.
+        try:
+            con.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_unique "
+                "ON quotes(poll_id, event_key, venue, book, market_type, line, outcome)"
+            )
+        except sqlite3.IntegrityError:
+            print("store: WARNING quotes have within-poll duplicates; run `migrate-unique --apply` to dedup.")
+
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        """A single connection whose writes commit together (or roll back together on error).
+        Use to make one poll's quote+consensus+finish writes atomic (pass3#7)."""
+        with self.connect() as con:
+            yield con
 
     def _migrate_existing_tables(self, con: sqlite3.Connection) -> None:
         for table, columns in MIGRATION_COLUMNS.items():
@@ -78,22 +102,39 @@ class Store:
             )
             return int(cur.lastrowid)
 
-    def finish_poll(self, poll_id: int, credits_remaining: int | None, n_quotes: int, n_opps: int) -> None:
-        with self.connect() as con:
-            con.execute(
-                """
-                UPDATE polls
-                   SET finished_at = ?, credits_remaining = ?, n_quotes = ?, n_opps = ?
-                 WHERE id = ?
-                """,
-                (_dt_text(datetime.now(timezone.utc)), credits_remaining, n_quotes, n_opps, poll_id),
-            )
+    def finish_poll(self, poll_id: int, credits_remaining: int | None, n_quotes: int, n_opps: int,
+                    con: sqlite3.Connection | None = None) -> None:
+        if con is None:
+            with self.connect() as own:
+                return self.finish_poll(poll_id, credits_remaining, n_quotes, n_opps, own)
+        con.execute(
+            """
+            UPDATE polls
+               SET finished_at = ?, credits_remaining = ?, n_quotes = ?, n_opps = ?
+             WHERE id = ?
+            """,
+            (_dt_text(datetime.now(timezone.utc)), credits_remaining, n_quotes, n_opps, poll_id),
+        )
+
+    def save_scan_results(self, poll_id: int, quotes: list[Quote],
+                          consensus: dict[tuple[str, str], Decimal], computed_at: datetime,
+                          dispersion: dict[tuple[str, str], Decimal] | None,
+                          credits_remaining: int | None, n_quotes: int, n_opps: int) -> None:
+        """pass3#7: one poll's quote + consensus + finish writes in ONE transaction, so a crash
+        can't leave a half-written poll (they were three separate connections before)."""
+        with self.transaction() as con:
+            self.save_poll_quotes(poll_id, quotes, con)
+            self.save_consensus(consensus, computed_at, dispersion, con)
+            self.finish_poll(poll_id, credits_remaining, n_quotes, n_opps, con)
 
     def save_consensus(self, probabilities: dict[tuple[str, str], Decimal], computed_at: datetime,
-                       dispersion: dict[tuple[str, str], Decimal] | None = None) -> None:
+                       dispersion: dict[tuple[str, str], Decimal] | None = None,
+                       con: sqlite3.Connection | None = None) -> None:
+        if con is None:
+            with self.connect() as own:
+                return self.save_consensus(probabilities, computed_at, dispersion, own)
         dispersion = dispersion or {}
-        with self.connect() as con:
-            con.executemany(
+        con.executemany(
                 """
                 INSERT INTO consensus(event_key, outcome, p_hat, computed_at, dispersion)
                 VALUES (?, ?, ?, ?, ?)
@@ -122,11 +163,14 @@ class Store:
                 "SELECT event_key, outcome, dispersion FROM consensus WHERE dispersion IS NOT NULL"))
         return {(row["event_key"], row["outcome"]): Decimal(row["dispersion"]) for row in rows}
 
-    def save_poll_quotes(self, poll_id: int, quotes: list[Quote]) -> None:
-        with self.connect() as con:
-            con.executemany(
+    def save_poll_quotes(self, poll_id: int, quotes: list[Quote], con: sqlite3.Connection | None = None) -> None:
+        if con is None:
+            with self.connect() as own:
+                return self.save_poll_quotes(poll_id, quotes, own)
+        con.executemany(
+                # OR IGNORE: the unique index drops true within-poll duplicates at write time.
                 """
-                INSERT INTO quotes(poll_id, scan_id, fetched_at, event_key, category, sport, venue, book,
+                INSERT OR IGNORE INTO quotes(poll_id, scan_id, fetched_at, event_key, category, sport, venue, book,
                                    market_type, line, outcome, raw_price, cost, fee_cost, depth_usd,
                                    max_size_usd, live)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

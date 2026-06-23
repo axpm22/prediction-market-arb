@@ -55,6 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
         "settle-backfill",
         help="settle MLB bets via the MLB Stats API (no 3-day window; rescues orphaned bets)")
     backfill.add_argument("--fixtures", action="store_true", help="use recorded mlbstats fixtures")
+    migrate = sub.add_parser("migrate-unique", help="dedup within-poll duplicate quotes + add UNIQUE index (pass3#7)")
+    migrate.add_argument("--apply", action="store_true", help="back up, dedup, and create the index (default: dry-run)")
     sub.add_parser("settle-health", help="report overdue open EV/ARB bets and last settlement time")
     sub.add_parser("reconcile", help="cross-check settled ARBs against venue-actual resolution (audit fix #1)")
     sub.add_parser("exposure", help="total + per-venue committed capital across active bets (audit fix #3)")
@@ -105,6 +107,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {counts['corrected']} SETTLER-ERROR(s) — realized P&L differed from the lock.")
         if counts["skipped"]:
             print(f"  {counts['skipped']} skipped (a leg's venue resolution not available yet).")
+        return 0
+    if args.command == "migrate-unique":
+        from .migrations import format_migration, migrate_unique
+
+        print(format_migration(migrate_unique(store, apply=args.apply)))
         return 0
     if args.command == "exposure":
         from .exposure import compute_exposure, format_exposure
@@ -382,9 +389,8 @@ def run_scan(args: argparse.Namespace, config, store: Store) -> int:
         return 1 if aborted else 0
 
     poll_id = store.start_poll("scan")
-    store.save_poll_quotes(poll_id, quotes)
-    store.save_consensus(consensus, computed_at, dispersion)
-    store.finish_poll(poll_id, adapter.credits_remaining, len(quotes), 0)
+    store.save_scan_results(poll_id, quotes, consensus, computed_at, dispersion,
+                            adapter.credits_remaining, len(quotes), 0)  # pass3#7 atomic
     print(f"Persisted scan poll {poll_id}: {len(quotes)} quotes, {len(consensus)} consensus outcomes.")
     return 1 if aborted else 0
 

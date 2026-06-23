@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from arb.arb_sizing import build_arb_sizing_model, recommend_arb_stake
 from arb.config import load_config
 from arb.scoring import score_segments
 from arb.store import Store
@@ -45,12 +46,23 @@ LOG_FILES = {
     "whales": Path("logs/whales.log"),
 }
 
-EDGE_SIZED_EV_BASELINE = {
-    "label": "2026-06-23 KEEP-only edge-sized start",
-    "max_id": 7924,
-    "settled": 35,
-    "stake": 22.20,
-    "pnl": 8.01,
+EDGE_SIZED_EV_BASELINES = {
+    "keep": {
+        "label": "2026-06-23 KEEP-only edge-sized start",
+        "max_id": 7924,
+        "settled": 35,
+        "stake": 22.20,
+        "pnl": 8.01,
+        "filter_label": "validation_tag=KEEP",
+    },
+    "broad": {
+        "label": "2026-06-23 all-clean edge-sized start",
+        "max_id": 7924,
+        "settled": 487,
+        "stake": 681.18,
+        "pnl": 113.42,
+        "filter_label": "no validation filter",
+    },
 }
 
 SCANNERS = [
@@ -303,7 +315,7 @@ def _compact_event_name(event_key: str | None) -> str:
     return event_key
 
 
-def _open_bet_payload(row, now: datetime) -> dict[str, Any]:
+def _open_bet_payload(row, now: datetime, arb_sizing_model: dict[str, Any] | None = None) -> dict[str, Any]:
     try:
         legs = json.loads(row["legs_json"])
     except (TypeError, json.JSONDecodeError):
@@ -322,7 +334,7 @@ def _open_bet_payload(row, now: datetime) -> dict[str, Any]:
     notes = [note for note in str(row["notes"] or "").split(",") if note]
     quality = row["quality_flag"] or "clean"
     lane = "MICRO_EV" if row["kind"] == "EV" and quality == "micro" else row["kind"]
-    return {
+    payload = {
         "id": int(row["id"]),
         "kind": row["kind"],
         "lane": lane,
@@ -356,6 +368,9 @@ def _open_bet_payload(row, now: datetime) -> dict[str, Any]:
         "vanished": int(row["vanished_n"] or 0),
         "lifetime": int(row["lifetime_n"] or 0),
     }
+    if row["kind"] == "ARB" and arb_sizing_model is not None:
+        payload["arb_sizing"] = recommend_arb_stake(legs, row["edge_points"], arb_sizing_model)
+    return payload
 
 
 def _leg_start(leg: dict[str, Any], event_key: str | None) -> datetime | None:
@@ -684,35 +699,42 @@ def build_state(store: Store, config) -> dict[str, Any]:
                )
             """
         ).fetchone()
-        edge_sized_since = c.execute(
-            """
-            SELECT COUNT(*) settled,
-                   SUM(CASE WHEN result='WON' THEN 1 ELSE 0 END) won,
-                   SUM(CASE WHEN result='LOST' THEN 1 ELSE 0 END) lost,
-                   COALESCE(SUM(CAST(edge AS REAL) * 100.0),0) stake,
-                   COALESCE(SUM(
-                       CASE WHEN CAST(stake_usd AS REAL) > 0
-                            THEN CAST(pnl_optimistic AS REAL) * (CAST(edge AS REAL) * 100.0) / CAST(stake_usd AS REAL)
-                            ELSE 0 END
-                   ),0) pnl,
-                   COALESCE(SUM(
-                       CASE WHEN pnl_confirmed IS NOT NULL AND CAST(stake_usd AS REAL) > 0
-                            THEN CAST(pnl_confirmed AS REAL) * (CAST(edge AS REAL) * 100.0) / CAST(stake_usd AS REAL)
-                            ELSE 0 END
-                   ),0) confirmed_pnl,
-                   COALESCE(AVG(CAST(edge AS REAL) * 100.0),0) avg_stake,
-                   COALESCE(MAX(CAST(edge AS REAL) * 100.0),0) max_stake,
-                   COALESCE(MAX(id), ?) max_id
-              FROM flat_bets
-             WHERE id > ?
-               AND kind='EV'
-               AND status IN ('SETTLED','EXITED')
-               AND result IN ('WON','LOST')
-               AND quality_flag IS NULL
-               AND validation_tag='KEEP'
-            """,
-            (EDGE_SIZED_EV_BASELINE["max_id"], EDGE_SIZED_EV_BASELINE["max_id"]),
-        ).fetchone()
+        def edge_sized_since(baseline: dict[str, Any], keep_only: bool) -> Any:
+            validation_filter = "AND validation_tag='KEEP'" if keep_only else ""
+            return c.execute(
+                f"""
+                SELECT COUNT(*) settled,
+                       SUM(CASE WHEN result='WON' THEN 1 ELSE 0 END) won,
+                       SUM(CASE WHEN result='LOST' THEN 1 ELSE 0 END) lost,
+                       COALESCE(SUM(CAST(edge AS REAL) * 100.0),0) stake,
+                       COALESCE(SUM(
+                           CASE WHEN CAST(stake_usd AS REAL) > 0
+                                THEN CAST(pnl_optimistic AS REAL) * (CAST(edge AS REAL) * 100.0) / CAST(stake_usd AS REAL)
+                                ELSE 0 END
+                       ),0) pnl,
+                       COALESCE(SUM(
+                           CASE WHEN pnl_confirmed IS NOT NULL AND CAST(stake_usd AS REAL) > 0
+                                THEN CAST(pnl_confirmed AS REAL) * (CAST(edge AS REAL) * 100.0) / CAST(stake_usd AS REAL)
+                                ELSE 0 END
+                       ),0) confirmed_pnl,
+                       COALESCE(AVG(CAST(edge AS REAL) * 100.0),0) avg_stake,
+                       COALESCE(MAX(CAST(edge AS REAL) * 100.0),0) max_stake,
+                       COALESCE(MAX(id), ?) max_id
+                  FROM flat_bets
+                 WHERE id > ?
+                   AND kind='EV'
+                   AND status IN ('SETTLED','EXITED')
+                   AND result IN ('WON','LOST')
+                   AND quality_flag IS NULL
+                   {validation_filter}
+                """,
+                (baseline["max_id"], baseline["max_id"]),
+            ).fetchone()
+
+        edge_sized_rows = {
+            "keep": edge_sized_since(EDGE_SIZED_EV_BASELINES["keep"], keep_only=True),
+            "broad": edge_sized_since(EDGE_SIZED_EV_BASELINES["broad"], keep_only=False),
+        }
         # ARB gets its own lane: locked/provisional, includes RESOLVED. Never in EV totals.
         locked_arb = c.execute(
             """
@@ -952,6 +974,44 @@ def build_state(store: Store, config) -> dict[str, Any]:
         "settled_n": int(live_pnl_row["n"]),
         "total": sum(live_counts.values()),
     }
+
+    def _edge_sized_payload(key: str) -> dict[str, Any]:
+        baseline = EDGE_SIZED_EV_BASELINES[key]
+        row = edge_sized_rows[key]
+        settled_new = int(row["settled"] or 0)
+        stake_new = float(row["stake"] or 0.0)
+        pnl_new = float(row["pnl"] or 0.0)
+        stake_total = float(baseline["stake"]) + stake_new
+        pnl_total = float(baseline["pnl"]) + pnl_new
+        return {
+            "label": str(baseline["label"]),
+            "filter_label": str(baseline["filter_label"]),
+            "baseline_max_id": int(baseline["max_id"]),
+            "baseline_settled": int(baseline["settled"]),
+            "baseline_stake": _money(baseline["stake"]),
+            "baseline_pnl": _money(baseline["pnl"]),
+            "new_settled": settled_new,
+            "new_won": int(row["won"] or 0),
+            "new_lost": int(row["lost"] or 0),
+            "new_stake": _money(stake_new),
+            "new_pnl": _money(pnl_new),
+            "new_confirmed_pnl": _money(row["confirmed_pnl"]),
+            "settled": int(baseline["settled"]) + settled_new,
+            "stake": _money(stake_total),
+            "pnl": _money(pnl_total),
+            "roi": round(pnl_total / stake_total, 4) if stake_total else 0.0,
+            "avg_new_stake": _money(row["avg_stake"]),
+            "max_new_stake": _money(row["max_stake"]),
+            "max_id": int(row["max_id"] or baseline["max_id"]),
+        }
+
+    edge_sized_ev = {
+        "rule": "$1 per 1% displayed edge",
+        "variants": {
+            "keep": _edge_sized_payload("keep"),
+            "broad": _edge_sized_payload("broad"),
+        },
+    }
     return {
         "now": now.isoformat(),
         "alerts": alerts,
@@ -1004,34 +1064,7 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 if int(clean_ev["won"] or 0) + int(clean_ev["lost"] or 0) else 0.0
             ),
         },
-        "edge_sized_ev": {
-            "rule": "$1 per 1% displayed edge",
-            "baseline_label": EDGE_SIZED_EV_BASELINE["label"],
-            "baseline_max_id": int(EDGE_SIZED_EV_BASELINE["max_id"]),
-            "baseline_settled": int(EDGE_SIZED_EV_BASELINE["settled"]),
-            "baseline_stake": _money(EDGE_SIZED_EV_BASELINE["stake"]),
-            "baseline_pnl": _money(EDGE_SIZED_EV_BASELINE["pnl"]),
-            "new_settled": int(edge_sized_since["settled"] or 0),
-            "new_won": int(edge_sized_since["won"] or 0),
-            "new_lost": int(edge_sized_since["lost"] or 0),
-            "new_stake": _money(edge_sized_since["stake"]),
-            "new_pnl": _money(edge_sized_since["pnl"]),
-            "new_confirmed_pnl": _money(edge_sized_since["confirmed_pnl"]),
-            "settled": int(EDGE_SIZED_EV_BASELINE["settled"]) + int(edge_sized_since["settled"] or 0),
-            "stake": _money(float(EDGE_SIZED_EV_BASELINE["stake"]) + float(edge_sized_since["stake"] or 0)),
-            "pnl": _money(float(EDGE_SIZED_EV_BASELINE["pnl"]) + float(edge_sized_since["pnl"] or 0)),
-            "roi": (
-                round(
-                    (float(EDGE_SIZED_EV_BASELINE["pnl"]) + float(edge_sized_since["pnl"] or 0))
-                    / (float(EDGE_SIZED_EV_BASELINE["stake"]) + float(edge_sized_since["stake"] or 0)),
-                    4,
-                )
-                if float(EDGE_SIZED_EV_BASELINE["stake"]) + float(edge_sized_since["stake"] or 0) else 0.0
-            ),
-            "avg_new_stake": _money(edge_sized_since["avg_stake"]),
-            "max_new_stake": _money(edge_sized_since["max_stake"]),
-            "max_id": int(edge_sized_since["max_id"] or EDGE_SIZED_EV_BASELINE["max_id"]),
-        },
+        "edge_sized_ev": edge_sized_ev,
         "suspect_ev": {"n": int(suspect_ev["n"] or 0), "pnl": _money(suspect_ev["pnl"])},
         "micro_ev": {
             "active": int(micro_active["n"] or 0),
@@ -1615,18 +1648,35 @@ function renderCleanEv(d) {
     ].join("");
     return;
   }
+  const variants = ev.variants || {keep: ev, broad: null};
+  const keep = variants.keep;
+  const broad = variants.broad;
+  if (!keep || !broad) {
+    $("clean-ev-summary").textContent = `${ev.rule || "$1 per 1% displayed edge"} · waiting for comparison data`;
+    $("clean-ev-panel").innerHTML = [
+      deltaCard("Edge-sized", "No data", "reload once the state API includes KEEP and all-clean variants", "warn"),
+    ].join("");
+    return;
+  }
+  const keepDetail = keep.new_settled
+    ? `${keep.new_won}W / ${keep.new_lost}L · max ${usd(keep.max_new_stake)}`
+    : `waiting for row id > ${keep.baseline_max_id}`;
+  const broadDetail = broad.new_settled
+    ? `${broad.new_won}W / ${broad.new_lost}L · max ${usd(broad.max_new_stake)}`
+    : `waiting for row id > ${broad.baseline_max_id}`;
+  const validationGap = num(broad.new_pnl) - num(keep.new_pnl);
+  const totalGap = num(broad.pnl) - num(keep.pnl);
   $("clean-ev-summary").textContent =
-    `${ev.rule} · starts at ${money(ev.baseline_pnl)} after ${ev.baseline_settled} settled rows`;
-  const newDetail = ev.new_settled
-    ? `${ev.new_won}W / ${ev.new_lost}L · max new stake ${usd(ev.max_new_stake)}`
-    : `waiting for row id > ${ev.baseline_max_id}`;
+    `${ev.rule} · KEEP-only beside all clean EV rows`;
   $("clean-ev-panel").innerHTML = [
-    deltaCard("Total P&L", money(ev.pnl), `${ev.settled} settled · from ${money(ev.baseline_pnl)} start`, valClass(ev.pnl)),
-    deltaCard("Since Start", money(ev.new_pnl), newDetail, valClass(ev.new_pnl)),
-    deltaCard("Total Stake", usd(ev.stake), `${pct(ev.roi)} ROI · clean EV only`, "blue"),
-    deltaCard("New Stake", usd(ev.new_stake), ev.new_settled ? `avg ${usd(ev.avg_new_stake)} per new bet` : "no new settled rows"),
-    deltaCard("Baseline", money(ev.baseline_pnl), `${ev.baseline_settled} rows · ${usd(ev.baseline_stake)} staked`),
-    deltaCard("Watermark", `#${ev.max_id}`, `baseline row #${ev.baseline_max_id}`),
+    deltaCard("KEEP P&L", money(keep.pnl), `${keep.settled} settled · from ${money(keep.baseline_pnl)} start`, valClass(keep.pnl)),
+    deltaCard("All Clean P&L", money(broad.pnl), `${broad.settled} settled · from ${money(broad.baseline_pnl)} start`, valClass(broad.pnl)),
+    deltaCard("KEEP Since", money(keep.new_pnl), keepDetail, valClass(keep.new_pnl)),
+    deltaCard("All Clean Since", money(broad.new_pnl), broadDetail, valClass(broad.new_pnl)),
+    deltaCard("KEEP Stake", usd(keep.stake), `${pct(keep.roi)} ROI · avg new ${usd(keep.avg_new_stake)}`, "blue"),
+    deltaCard("All Clean Stake", usd(broad.stake), `${pct(broad.roi)} ROI · avg new ${usd(broad.avg_new_stake)}`, "blue"),
+    deltaCard("Validation Gap", money(validationGap), `all clean minus KEEP since start · total gap ${money(totalGap)}`, valClass(validationGap)),
+    deltaCard("Filters", "Clean only", `KEEP adds ${esc(keep.filter_label)} · all clean uses ${esc(broad.filter_label)}`),
   ].join("");
 }
 
