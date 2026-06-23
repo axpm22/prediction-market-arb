@@ -202,6 +202,10 @@ execution:
   # changes every cost vector, so treat it as a versioned change, not a silent edit.
   slippage_model: flat
   slippage_ref_stake_usd: 50
+  # Size arbs by the depth ladder (profit-max size walked from the book), capped by the
+  # bankroll per-bet limit, instead of flat bankroll*max_stake_pct. Off by default (measurement;
+  # the capacity is always reported as a `capacity:` note regardless).
+  arb_size_by_ladder: false
 odds_api: { region: us, warn_below_credits: 100, abort_below_credits: 50 }
 parlay: { enabled: false, divergence_threshold: 0.05 }
 # Phase 3 parallel Kelly sizing (projection only; flat-$1 stays the headline).

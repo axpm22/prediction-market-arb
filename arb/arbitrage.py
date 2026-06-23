@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from .capacity import max_economic_arb_size_quotes
 from .models import Event, Opportunity, Quote
 from .pricing import is_economic, money, q6
 
@@ -104,6 +105,7 @@ def detect_true_arbs(
     max_start_drift_mins: int | None = None,
     match_suspect_prob_diff: Decimal | None = None,
     capital_charge_annual: Decimal | None = None,
+    size_by_ladder: bool = False,
 ) -> list[Opportunity]:
     # An arb must cover the outcomes of ONE market: group per event + market type + exact
     # line so team winners never blend with OVER/UNDER or with a different total line.
@@ -136,7 +138,13 @@ def detect_true_arbs(
         if match_suspect_prob_diff is not None and same_outcome_spread(event_quotes) > match_suspect_prob_diff:
             continue
         roi = q6(Decimal("1") / total_cost - Decimal("1"))
-        stakes, guaranteed_floor = equalized_arb_stakes(best_legs, budget, total_cost)
+        # Microstructure capacity from the depth ladders: break-even size (where the lock goes
+        # negative), profit-max size, and whether edge or depth is the binding limit.
+        cap = max_economic_arb_size_quotes(best_legs)
+        arb_budget = budget
+        if size_by_ladder and cap.feasible and cap.profitmax_stake_usd > 0:
+            arb_budget = money(min(cap.profitmax_stake_usd * Decimal("0.5"), budget))
+        stakes, guaranteed_floor = equalized_arb_stakes(best_legs, arb_budget, total_cost)
         status, notes = status_for_legs(best_legs, trusted_pairs)
         # #8 report the REAL guaranteed worst-case profit after cent-rounding, not the
         # idealized ROI. If rounding pushed the worst leg negative the lock didn't hold.
@@ -152,6 +160,11 @@ def detect_true_arbs(
             notes = tuple([*notes, f"time-skew:{int(leg_skew_secs(best_legs))}s"])
         # #6 capacity lower bound (top-of-book; books refill, so this is a floor).
         notes = tuple([*notes, f"capturable:{capturable_lower_bound(best_legs, roi)}"])
+        # Ladder capacity: $ you can stake before the lock goes negative (break-even), the
+        # profit-max size, and whether edge or depth binds. Measurement; needs captured ladders.
+        if cap.feasible:
+            notes = tuple([*notes, f"capacity:be={cap.breakeven_stake_usd},"
+                           f"max={cap.profitmax_stake_usd}@{cap.max_profit_usd},by={cap.limited_by}"])
         # Capital charge: a tiny lock held to a far settlement may not beat cash. Tag it
         # 'uneconomic' (still recorded) so the daily report can separate real from trivial.
         if capital_charge_annual is not None:

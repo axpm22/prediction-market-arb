@@ -82,6 +82,7 @@ class AppConfig:
     taker_price_buffer: Decimal
     taker_slippage_model: str
     slippage_ref_stake_usd: Decimal
+    arb_size_by_ladder: bool
     odds_api_region: str
     odds_api_warn_below_credits: int
     odds_api_abort_below_credits: int
@@ -229,6 +230,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         taker_price_buffer=_decimal(raw.get("execution", {}).get("taker_price_buffer", "0")),
         taker_slippage_model=str(raw.get("execution", {}).get("slippage_model", "flat")),
         slippage_ref_stake_usd=_decimal(raw.get("execution", {}).get("slippage_ref_stake_usd", "50")),
+        arb_size_by_ladder=bool(raw.get("execution", {}).get("arb_size_by_ladder", False)),
         odds_api_region=str(odds_api["region"]),
         odds_api_warn_below_credits=int(odds_api["warn_below_credits"]),
         odds_api_abort_below_credits=int(odds_api["abort_below_credits"]),
