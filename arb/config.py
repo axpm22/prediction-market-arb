@@ -37,6 +37,9 @@ class AppConfig:
     min_books_for_consensus_totals: int
     devig_method: str
     consensus_outlier_points: Decimal | None
+    sharp_books: frozenset[str]
+    weight_sharp_books: bool
+    sharp_book_weight: int
     min_liquidity_usd: Decimal
     min_executable_usd: Decimal
     micro_enabled: bool
@@ -173,6 +176,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         devig_method=str(raw.get("devig_method", "proportional")),
         consensus_outlier_points=(None if raw.get("consensus_outlier_points") in (None, "")
                                   else _decimal(raw.get("consensus_outlier_points"))),
+        sharp_books=frozenset(raw.get("sharp_books") or []),
+        weight_sharp_books=bool(raw.get("weight_sharp_books", False)),
+        sharp_book_weight=int(raw.get("sharp_book_weight", 2)),
         min_liquidity_usd=_decimal(raw["min_liquidity_usd"]),
         min_executable_usd=_decimal(raw["min_executable_usd"]),
         micro_enabled=bool(micro.get("enabled", False)),

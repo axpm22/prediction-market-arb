@@ -116,7 +116,9 @@ def consensus_outcome_key(market_type: str, line: Decimal | None, outcome_label:
 
 
 def consensus_probabilities(quotes: list[Quote], min_books: int, min_books_totals: int | None = None,
-                            method: str = "proportional", outlier_points: Decimal | None = None) -> dict[str, Decimal]:
+                            method: str = "proportional", outlier_points: Decimal | None = None,
+                            sharp_books: frozenset[str] | set[str] | None = None,
+                            sharp_weight: int = 2) -> dict[str, Decimal]:
     """Median de-vigged consensus per market, with two correctness guards:
 
     #2 only books carrying the COMPLETE outcome set vote — a book missing the soccer DRAW
@@ -135,28 +137,36 @@ def consensus_probabilities(quotes: list[Quote], min_books: int, min_books_total
         key = consensus_outcome_key(quote.market_type, quote.line, quote.outcome_label)
         raw_books[(quote.book, quote.market_type, quote.line)][key] = quote.raw_price
 
-    # Group books by market and find that market's complete outcome set (max cardinality seen).
-    books_by_market: dict[tuple[str, Decimal | None], list[dict[str, Decimal]]] = defaultdict(list)
-    for (_book, market_type, line), odds in raw_books.items():
-        books_by_market[(market_type, line)].append(odds)
+    # Group books by market (carry the book name so EV#2 can weight sharp books).
+    books_by_market: dict[tuple[str, Decimal | None], list[tuple[str, dict[str, Decimal]]]] = defaultdict(list)
+    for (book, market_type, line), odds in raw_books.items():
+        books_by_market[(market_type, line)].append((book, odds))
 
+    sharp_set = frozenset(sharp_books) if sharp_books else frozenset()
+    weight = max(1, int(sharp_weight))
     totals_min = min_books_totals if min_books_totals is not None else min_books
     consensus: dict[str, Decimal] = {}
-    for (market_type, _line), books in books_by_market.items():
-        complete = max((frozenset(o) for o in books), key=len)
+    for (market_type, _line), named_books in books_by_market.items():
+        complete = max((frozenset(o) for _b, o in named_books), key=len)
         if len(complete) < 2:
             continue  # a single-outcome market can't be de-vigged
-        devigged = [devig_book_method(odds, method) for odds in books if frozenset(odds) == complete]
-        devigged = _drop_book_outliers(devigged, complete, outlier_points)  # pass3#5
+        devigged = [(b, devig_book_method(o, method)) for b, o in named_books if frozenset(o) == complete]
+        kept = _drop_book_outliers([p for _b, p in devigged], complete, outlier_points)  # pass3#5
+        # EV#2: a sharp/low-hold book (config sharp_books) counts `weight` times in the
+        # median; off when sharp_books is empty -> plain median (frozen behavior preserved).
         per_outcome: dict[str, list[Decimal]] = defaultdict(list)
-        for book_probs in devigged:
+        for book, book_probs in devigged:
+            if book_probs not in kept:
+                continue
+            reps = weight if book in sharp_set else 1
             for outcome, prob in book_probs.items():
-                per_outcome[outcome].append(prob)
+                per_outcome[outcome].extend([prob] * reps)
         # #3 totals are line-fragmented (books rarely share the exact line), so a 3-book
         # gate makes totals consensus nearly always dead. Use a lower totals threshold —
-        # NOT half-point interpolation, which would change the event definition.
+        # NOT half-point interpolation, which would change the event definition. Gate on the
+        # count of distinct surviving books, not the (sharp-)weighted vote count.
         gate = totals_min if market_type == "TOTAL" else min_books
-        if any(len(per_outcome.get(o, [])) < gate for o in complete):
+        if len(kept) < gate or any(o not in per_outcome for o in complete):
             continue
         medians = {o: Decimal(str(median(per_outcome[o]))) for o in complete}
         total = sum(medians.values(), Decimal("0"))

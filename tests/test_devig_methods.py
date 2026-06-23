@@ -41,3 +41,26 @@ def test_all_methods_sum_to_one() -> None:
 def test_dispatcher_falls_back_to_proportional_on_unknown() -> None:
     book = _odds(("a", "1.91"), ("b", "1.91"))
     assert devig_book_method(book, "nonsense") == devig_book(book)
+
+
+def test_sharp_book_weighting_pulls_consensus_toward_sharp_book() -> None:
+    from datetime import datetime, timezone
+    from arb.models import Quote
+    from arb.pricing import consensus_probabilities
+
+    def oq(book, outcome, odds):
+        return Quote(event_key="e", venue="oddsapi", book=book, market_type="WINNER", line=None,
+                     outcome_label=outcome, raw_price=Decimal(odds), cost=Decimal("0"),
+                     fee_cost=Decimal("0"), depth_usd=None, live=False,
+                     fetched_at=datetime.now(timezone.utc))
+    # two soft books say ~0.50/0.50, one sharp book says fav is stronger (~0.60/0.40).
+    quotes = [
+        oq("soft1", "fav", "2.00"), oq("soft1", "dog", "2.00"),
+        oq("soft2", "fav", "2.00"), oq("soft2", "dog", "2.00"),
+        oq("lowvig", "fav", "1.55"), oq("lowvig", "dog", "2.55"),
+    ]
+    plain = consensus_probabilities(quotes, min_books=3)
+    weighted = consensus_probabilities(quotes, min_books=3, sharp_books={"lowvig"}, sharp_weight=3)
+    # weighting the sharp book up moves the median toward its (higher) fav probability.
+    assert weighted["fav"] > plain["fav"]
+    assert sum(weighted.values()) == Decimal("1.000000")

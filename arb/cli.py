@@ -367,7 +367,12 @@ def run_scan(args: argparse.Namespace, config, store: Store) -> int:
     pregame, in_play = split_pregame(quotes, computed_at)
     quotes = [*pregame, *in_play]
     # In-play sportsbook odds must never become "pregame consensus".
-    consensus = compute_consensus(pregame, config.min_books_for_consensus, config.min_books_for_consensus_totals, method=config.devig_method, outlier_points=config.consensus_outlier_points)
+    consensus = compute_consensus(
+        pregame, config.min_books_for_consensus, config.min_books_for_consensus_totals,
+        method=config.devig_method, outlier_points=config.consensus_outlier_points,
+        # EV#2: sharp-book weighting is opt-in (parallel/measurement) until it beats the median on CLV.
+        sharp_books=config.sharp_books if config.weight_sharp_books else None,
+        sharp_weight=config.sharp_book_weight)
     print(f"Consensus outcomes computed: {len(consensus)} (from {len(pregame)} pregame quotes)")
 
     if args.dry_run:
@@ -463,14 +468,16 @@ def split_depth_lanes(quotes: list[Quote], config) -> tuple[list[Quote], list[Qu
 
 
 def compute_consensus(quotes: list[Quote], min_books: int, min_books_totals: int | None = None,
-                      method: str = "proportional", outlier_points: Decimal | None = None) -> dict[tuple[str, str], Decimal]:
+                      method: str = "proportional", outlier_points: Decimal | None = None,
+                      sharp_books=None, sharp_weight: int = 2) -> dict[tuple[str, str], Decimal]:
     by_event: dict[str, list[Quote]] = defaultdict(list)
     for quote in quotes:
         by_event[quote.event_key].append(quote)
     consensus: dict[tuple[str, str], Decimal] = {}
     for event_key, event_quotes in by_event.items():
         for outcome, p_hat in consensus_probabilities(event_quotes, min_books, min_books_totals,
-                                                       method=method, outlier_points=outlier_points).items():
+                                                       method=method, outlier_points=outlier_points,
+                                                       sharp_books=sharp_books, sharp_weight=sharp_weight).items():
             consensus[(event_key, outcome)] = p_hat
     return consensus
 

@@ -29,6 +29,12 @@ devig_method: proportional
 # Drop a book whose de-vigged prob for any outcome is more than this many points from the
 # cross-book median (a stale/mis-scaled book). Blank = off (preserves frozen test vectors).
 consensus_outlier_points:
+# EV#2: sharp/low-hold books in THIS Odds API feed (no Pinnacle/Circa available — frozen from
+# the observed hold ranking). Weighting is OFF by default (parallel/measurement) until it is
+# shown to beat the plain median on CLV; flip weight_sharp_books to apply it to live consensus.
+sharp_books: [lowvig, betonlineag, betus]
+weight_sharp_books: false
+sharp_book_weight: 2
 min_liquidity_usd: 500
 min_executable_usd: 50
 # Thin books can still be worth measuring at tiny size, but they must not pollute the
