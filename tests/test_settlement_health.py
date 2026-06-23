@@ -106,6 +106,48 @@ def test_settle_health_ignores_settled_fingerprints(tmp_path) -> None:
     assert health.last_settlement_timestamp == "2026-06-21T12:00:00+00:00"
 
 
+def test_settle_health_ignores_exited_fingerprints(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    opp = ev_opp("2026-06-20")
+    record_tracker_poll(store, store.start_poll("watch"), [opp])
+    with store.connect() as con:
+        base = con.execute("SELECT * FROM flat_bets WHERE status = 'OPEN'").fetchone()
+        con.execute(
+            """INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind,
+                   trusted, live, edge, stake_usd, legs_json, status, placed_at, settled_at, result, notes)
+               VALUES (?, ?, ?, 'sports', 'baseball_mlb', 'EV', 1, 0, '0.01', '1.00', ?,
+                       'EXITED', ?, ?, 'SOLD', 'test-exited')""",
+            (
+                base["fingerprint"],
+                base["id"],
+                base["opened_poll_id"],
+                base["legs_json"],
+                base["placed_at"],
+                "2026-06-21T12:00:00+00:00",
+            ),
+        )
+    now = datetime(2026, 6, 22, 12, 0, tzinfo=ZoneInfo("America/New_York"))
+
+    health = settle_health(store, "America/New_York", grace_hours=6, now=now)
+
+    assert health.open_count == 0
+    assert health.overdue_count == 0
+
+
+def test_settle_health_ignores_closed_fingerprints(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    opp = ev_opp("2026-06-20")
+    poll = store.start_poll("watch")
+    record_tracker_poll(store, poll, [opp])
+    record_tracker_poll(store, store.start_poll("watch"), [])
+    now = datetime(2026, 6, 22, 12, 0, tzinfo=ZoneInfo("America/New_York"))
+
+    health = settle_health(store, "America/New_York", grace_hours=6, now=now)
+
+    assert health.open_count == 0
+    assert health.overdue_count == 0
+
+
 def test_settle_health_cli_exit_code_alarms_on_overdue(tmp_path, monkeypatch, capsys) -> None:
     config = replace(load_config(), database_path=tmp_path / "arb.sqlite", settle_health_overdue_max=0)
     store = Store(config.database_path)

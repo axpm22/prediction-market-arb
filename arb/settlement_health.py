@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from .store import Store
 
-LIFECYCLE_STATUSES = {"OPEN", "CONFIRMED", "CLOSED", "SETTLED"}
+LIFECYCLE_STATUSES = {"OPEN", "CONFIRMED", "CLOSED", "SETTLED", "EXITED"}
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,7 @@ def _active_sports_bets(store: Store):
                 """
                 SELECT *
                   FROM flat_bets
-                 WHERE kind IN ('EV', 'ARB') AND status IN ('OPEN', 'CONFIRMED', 'CLOSED', 'SETTLED')
+                 WHERE kind IN ('EV', 'ARB', 'CLOSE') AND status IN ('OPEN', 'CONFIRMED', 'CLOSED', 'SETTLED', 'EXITED')
                  ORDER BY id
                 """
             )

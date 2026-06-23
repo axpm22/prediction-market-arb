@@ -169,7 +169,7 @@ def _open_arb_bets(store: Store) -> list[sqlite3.Row]:
                 SELECT * FROM flat_bets b
                  WHERE b.kind = 'ARB' AND b.status = 'OPEN'
                    AND NOT EXISTS (SELECT 1 FROM flat_bets s
-                                    WHERE s.status = 'SETTLED' AND s.reappearance_of = b.id)
+                                    WHERE s.status IN ('SETTLED','CLOSED','EXITED') AND s.reappearance_of = b.id)
                  ORDER BY b.id
                 """
             )
@@ -301,7 +301,7 @@ def _open_ev_bets(store: Store) -> list[sqlite3.Row]:
                 SELECT * FROM flat_bets b
                  WHERE b.kind = 'EV' AND b.status = 'OPEN'
                    AND NOT EXISTS (SELECT 1 FROM flat_bets s
-                                    WHERE s.status IN ('SETTLED','EXITED') AND s.reappearance_of = b.id)
+                                    WHERE s.status IN ('SETTLED','CLOSED','EXITED') AND s.reappearance_of = b.id)
                  ORDER BY b.id
                 """
             )

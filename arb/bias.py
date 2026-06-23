@@ -75,8 +75,11 @@ def _pre_fee_cost(legs_json, optimistic_cost) -> float | None:
         return None
 
 
-def calibration(store: Store, bands: list[float], min_samples: int, flb_min_edge: float) -> list[BandStat]:
-    data = _settled_binaries(store)
+def calibration(store: Store, bands: list[float], min_samples: int, flb_min_edge: float,
+                data: list[tuple[float, bool]] | None = None) -> list[BandStat]:
+    # `data` lets the caller pass the population sample (settled persisted quotes); when None
+    # we fall back to the selection-biased flagged-bet sample (see SELECTION_CAVEAT).
+    data = _settled_binaries(store) if data is None else data
     stats: list[BandStat] = []
     for lo, hi in zip(bands, bands[1:]):
         in_band = [(c, won) for c, won in data if lo <= c < hi]

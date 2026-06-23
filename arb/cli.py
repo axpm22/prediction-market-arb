@@ -125,11 +125,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "backtest-flb":
         from .bias import SELECTION_CAVEAT, calibration
+        from .quote_settlement import population_binaries
 
         flb = config.flb
-        stats = calibration(store, list(flb.get("bands", [])), int(flb.get("min_samples_per_band", 200)),
-                            float(flb.get("flb_min_edge", 0.02)))
-        print(SELECTION_CAVEAT)
+        bands = list(flb.get("bands", []))
+        min_samples = int(flb.get("min_samples_per_band", 200))
+        min_edge = float(flb.get("flb_min_edge", 0.02))
+        # Prefer the population sample (settled persisted moneyline quotes, de-vigged); fall
+        # back to the selection-biased flagged-bet sample only if none could be settled.
+        population = population_binaries(store)
+        if population:
+            print(f"POPULATION sample: {len(population)} settled pregame moneyline observations (de-vigged).")
+            stats = calibration(store, bands, min_samples, min_edge, data=population)
+        else:
+            print(SELECTION_CAVEAT)
+            stats = calibration(store, bands, min_samples, min_edge)
         print(f"{'BAND':>14} {'N':>6} {'MEAN_COST':>10} {'REALIZED':>9} {'EDGE':>8}  SIGNAL")
         for s in stats:
             print(f"  [{s.lo:.2f},{s.hi:.2f}) {s.n:>6} {s.mean_cost:>10.1%} {s.realized_win_rate:>9.1%} {s.edge:>+8.1%}  {s.signal}")
