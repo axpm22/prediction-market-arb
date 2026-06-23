@@ -12,6 +12,7 @@ from arb.config import AppConfig
 from arb.matching import event_key, load_aliases, normalize_name
 from arb.models import Quote
 from arb.pricing import all_in_fee_cost, q6
+from arb.venues.slippage import effective_buffer
 
 BASE_URL = "https://api.sx.bet"
 PCT_SCALE = Decimal("100000000000000000000")
@@ -39,7 +40,7 @@ class SxAdapter:
     def fetch_quotes(self, sport: str) -> list[Quote]:
         if self.fixture_dir is not None:
             data = json.loads((self.fixture_dir / f"sx_{sport}.json").read_text())
-            return parse_sx_payload(data, sport, fee_rate=self.config.sx_fee_rate, taker_buffer=self.config.taker_price_buffer)
+            return parse_sx_payload(data, sport, fee_rate=self.config.sx_fee_rate, taker_buffer=self.config.taker_price_buffer, slippage_model=self.config.taker_slippage_model, slippage_ref_stake=self.config.slippage_ref_stake_usd)
         if self.config.sx_fee_rate is None:
             raise RuntimeError("SX adapter refuses live runs while sx.fee_rate is null.")
         sport_id = SPORT_IDS.get(sport)
@@ -53,7 +54,7 @@ class SxAdapter:
             markets.extend(self._fetch_league_markets(int(league["leagueId"])))
         markets = [m for m in markets if int(m.get("type", 0)) in {MONEYLINE, TOTALS}]
         orders = self._fetch_orders([str(m["marketHash"]) for m in markets])
-        return parse_sx_payload({"markets": markets, "orders": orders}, sport, fee_rate=self.config.sx_fee_rate, taker_buffer=self.config.taker_price_buffer)
+        return parse_sx_payload({"markets": markets, "orders": orders}, sport, fee_rate=self.config.sx_fee_rate, taker_buffer=self.config.taker_price_buffer, slippage_model=self.config.taker_slippage_model, slippage_ref_stake=self.config.slippage_ref_stake_usd)
 
     def _fetch_league_markets(self, league_id: int) -> list[dict[str, Any]]:
         markets: list[dict[str, Any]] = []
@@ -92,6 +93,8 @@ def parse_sx_payload(
     sport: str,
     fee_rate: Decimal | None,
     taker_buffer: Decimal = Decimal("0"),
+    slippage_model: str = "flat",
+    slippage_ref_stake: Decimal = Decimal("50"),
 ) -> list[Quote]:
     fetched_at = datetime.now(timezone.utc)
     aliases = load_aliases()
@@ -114,10 +117,13 @@ def parse_sx_payload(
         market_type = "WINNER" if market_type_code == MONEYLINE else "TOTAL"
         line = Decimal(str(market["line"])) if market.get("line") is not None else None
         for index, maker_side in [(1, False), (2, True)]:
-            best = _best_taker_order(orders_by_hash.get(market_hash, []), maker_side)
+            side_orders = orders_by_hash.get(market_hash, [])
+            best = _best_taker_order(side_orders, maker_side)
             if best is None:
                 continue
             cost, depth = best
+            ladder = _taker_ladder(side_orders, maker_side)
+            buffer = effective_buffer(ladder, slippage_model, slippage_ref_stake, taker_buffer)
             raw_label = str(market.get(f"outcome{'One' if index == 1 else 'Two'}Name") or (home if index == 1 else away))
             if market_type == "TOTAL":
                 label = "OVER" if raw_label.upper().startswith("OVER") else "UNDER"
@@ -133,8 +139,9 @@ def parse_sx_payload(
                     outcome_label=label,
                     raw_price=cost,
                     cost=cost,
-                    fee_cost=all_in_fee_cost(cost, fee_rate, taker_buffer, basis="linear"),
+                    fee_cost=all_in_fee_cost(cost, fee_rate, buffer, basis="linear"),
                     depth_usd=depth,
+                    ladder=ladder,
                     live=False,
                     fetched_at=fetched_at,
                     start_utc=start,
@@ -167,6 +174,22 @@ def requote_sx_leg(market_hash: str, ref: str | None, fee_rate: Decimal | None,
     cost, _depth = best
     rate = fee_rate if fee_rate is not None else Decimal("0")
     return q6(cost + all_in_fee_cost(cost, rate, taker_buffer, basis="linear"))
+
+
+def _taker_ladder(orders: list[dict[str, Any]], maker_betting_outcome_one: bool) -> tuple[tuple[Decimal, Decimal], ...] | None:
+    """Wave 2: all taker orders on this side as (cost, taker $-notional) levels, best first."""
+    levels: list[tuple[Decimal, Decimal]] = []
+    for order in orders:
+        if bool(order.get("isMakerBettingOutcomeOne")) is not maker_betting_outcome_one:
+            continue
+        cost = taker_cost_from_percentage_odds(str(order["percentageOdds"]))
+        maker_stake = (Decimal(str(order.get("totalBetSize") or "0"))
+                       - Decimal(str(order.get("fillAmount") or "0"))) / USDC_SCALE
+        if cost <= 0 or cost >= 1 or maker_stake <= 0:
+            continue
+        levels.append((cost, q6(maker_stake * cost / (Decimal("1") - cost))))
+    levels.sort(key=lambda level: level[0])
+    return tuple(levels) or None
 
 
 def _best_taker_order(orders: list[dict[str, Any]], maker_betting_outcome_one: bool) -> tuple[Decimal, Decimal] | None:

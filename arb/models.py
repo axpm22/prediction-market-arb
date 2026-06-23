@@ -43,6 +43,9 @@ class Quote:
     # Venue-specific re-quote hint so a stored leg can be re-priced later. For SX it is
     # the outcome side ("1"/"2") needed to pick the right maker orders; None elsewhere.
     ref: str | None = None
+    # Wave 2 (does-well#3/weakness#2): top-of-book ladder as (cost, depth_usd) levels, best
+    # first, for depth-scaled slippage and depth-capped P&L. None when not captured.
+    ladder: tuple[tuple[Decimal, Decimal], ...] | None = None
 
     @property
     def effective_cost(self) -> Decimal:

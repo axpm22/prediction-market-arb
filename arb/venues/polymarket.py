@@ -14,6 +14,7 @@ from arb.config import AppConfig
 from arb.matching import event_key, load_aliases, normalize_name
 from arb.models import Quote
 from arb.pricing import all_in_fee_cost, q6
+from arb.venues.slippage import effective_buffer
 
 GAMMA_URL = "https://gamma-api.polymarket.com"
 CLOB_URL = "https://clob.polymarket.com"
@@ -67,6 +68,8 @@ class PolymarketAdapter:
             self.config.min_liquidity_usd,
             self.config.polymarket_sports_fee_rate,
             self.config.taker_price_buffer,
+            slippage_model=self.config.taker_slippage_model,
+            slippage_ref_stake=self.config.slippage_ref_stake_usd,
         )
 
 
@@ -76,6 +79,8 @@ def parse_polymarket_events(
     min_liquidity: Decimal,
     fee_rate: Decimal,
     taker_buffer: Decimal = Decimal("0"),
+    slippage_model: str = "flat",
+    slippage_ref_stake: Decimal = Decimal("50"),
 ) -> list[Quote]:
     fetched_at = datetime.now(timezone.utc)
     aliases = load_aliases()
@@ -109,6 +114,11 @@ def parse_polymarket_events(
                     label = "OVER" if str(outcome).upper().startswith("O") else "UNDER"
                 else:
                     label = normalize_name(str(outcome), sport, aliases)
+                # Batch markets endpoint exposes top-of-book only (one ask price+depth); a
+                # multi-level ladder would need per-token /book fetches. 1-level ladder here
+                # means slippage stays flat for Polymarket until book-fetching is added.
+                ladder = ((price, depth),) if depth and depth > 0 else None
+                buffer = effective_buffer(ladder, slippage_model, slippage_ref_stake, taker_buffer)
                 quotes.append(
                     Quote(
                         event_key=key,
@@ -119,8 +129,9 @@ def parse_polymarket_events(
                         outcome_label=label,
                         raw_price=price,
                         cost=price,
-                        fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer, basis="linear"),
+                        fee_cost=all_in_fee_cost(price, fee_rate, buffer, basis="linear"),
                         depth_usd=depth,
+                        ladder=ladder,
                         live=False,
                         fetched_at=fetched_at,
                         start_utc=start,

@@ -108,6 +108,42 @@ def devig_book_method(outcome_to_decimal_odds: dict[str, Decimal], method: str =
     return DEVIG_METHODS.get(method, devig_book)(outcome_to_decimal_odds)
 
 
+def walk_ladder(levels: list[tuple[Decimal, Decimal]], stake_usd: Decimal) -> tuple[Decimal, Decimal]:
+    """Walk a top-of-book ladder to fill `stake_usd` of $-notional and return
+    (volume-weighted cost per $1 payout, filled $-notional). `levels` are (cost, depth_usd)
+    best (lowest cost) first. If the ladder is too thin, filled < stake_usd (depth-capped)."""
+    if not levels:
+        return (Decimal("0"), Decimal("0"))
+    filled = Decimal("0")
+    contracts = Decimal("0")
+    for cost, depth in levels:
+        if cost <= 0 or depth <= 0:
+            continue
+        take = min(stake_usd - filled, depth)
+        if take <= 0:
+            break
+        contracts += take / cost
+        filled += take
+        if filled >= stake_usd:
+            break
+    if contracts <= 0:
+        return (levels[0][0], Decimal("0"))
+    return (q6(filled / contracts), q6(filled))
+
+
+def depth_scaled_buffer(levels: list[tuple[Decimal, Decimal]], stake_usd: Decimal,
+                        base_buffer: Decimal) -> Decimal:
+    """does-well#2 / EV#6: slippage as a function of stake/depth, not a flat constant. The
+    buffer is how far the volume-weighted fill price for `stake_usd` is above the top of book,
+    floored at base_buffer (latency/queue risk that exists even at zero size)."""
+    if not levels:
+        return base_buffer
+    vwap, filled = walk_ladder(levels, stake_usd)
+    top = levels[0][0]
+    walked = (vwap - top) if filled > 0 else Decimal("0")
+    return q6(max(base_buffer, walked))
+
+
 def consensus_outcome_key(market_type: str, line: Decimal | None, outcome_label: str) -> str:
     # Totals consensus is only comparable on the exact same line (8.5 ≠ 9.0).
     if market_type == "TOTAL" and line is not None:

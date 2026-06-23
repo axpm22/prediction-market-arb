@@ -15,6 +15,7 @@ from arb.config import AppConfig
 from arb.matching import event_key, load_aliases, normalize_name
 from arb.models import Quote
 from arb.pricing import all_in_fee_cost
+from arb.venues.slippage import effective_buffer
 
 BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"
 SERIES_CACHE = Path("data/kalshi_series.json")
@@ -60,7 +61,10 @@ class KalshiAdapter:
             for market in markets
             if not _is_empty_book(market)
         }
-        return parse_kalshi_payload({"markets": markets, "orderbooks": orderbooks}, sport, self.config.kalshi_fee_rate, self.config.taker_price_buffer)
+        return parse_kalshi_payload({"markets": markets, "orderbooks": orderbooks}, sport,
+                                    self.config.kalshi_fee_rate, self.config.taker_price_buffer,
+                                    slippage_model=self.config.taker_slippage_model,
+                                    slippage_ref_stake=self.config.slippage_ref_stake_usd)
 
     def _fetch_series_markets(self, series_ticker: str) -> list[dict[str, Any]]:
         markets: list[dict[str, Any]] = []
@@ -95,6 +99,8 @@ def parse_kalshi_payload(
     sport: str,
     fee_rate: Decimal,
     taker_buffer: Decimal = Decimal("0"),
+    slippage_model: str = "flat",
+    slippage_ref_stake: Decimal = Decimal("50"),
 ) -> list[Quote]:
     if isinstance(payload, list):
         payload = {"markets": payload}
@@ -133,6 +139,8 @@ def parse_kalshi_payload(
                 price = Decimal(str(market[f"{side}_ask_dollars"]))
                 if price <= 0 or price >= 1:
                     continue
+                ladder = _ladder_at_ask(book, side)
+                buffer = effective_buffer(ladder, slippage_model, slippage_ref_stake, taker_buffer)
                 quotes.append(
                     Quote(
                         market_type="TOTAL",
@@ -140,8 +148,9 @@ def parse_kalshi_payload(
                         outcome_label=label,
                         raw_price=price,
                         cost=price,
-                        fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer, basis="quadratic"),
+                        fee_cost=all_in_fee_cost(price, fee_rate, buffer, basis="quadratic"),
                         depth_usd=_depth_at_ask(book, side, price),
+                        ladder=ladder,
                         **common,
                     )
                 )
@@ -149,6 +158,8 @@ def parse_kalshi_payload(
             price = Decimal(str(market["yes_ask_dollars"]))
             if price <= 0 or price >= 1:
                 continue
+            ladder = _ladder_at_ask(book, "yes")
+            buffer = effective_buffer(ladder, slippage_model, slippage_ref_stake, taker_buffer)
             quotes.append(
                 Quote(
                     market_type="WINNER",
@@ -156,8 +167,9 @@ def parse_kalshi_payload(
                     outcome_label=normalize_name(subtitle or home, sport, aliases),
                     raw_price=price,
                     cost=price,
-                    fee_cost=all_in_fee_cost(price, fee_rate, taker_buffer, basis="quadratic"),
+                    fee_cost=all_in_fee_cost(price, fee_rate, buffer, basis="quadratic"),
                     depth_usd=_depth_at_ask(book, "yes", price),
+                    ladder=ladder,
                     **common,
                 )
             )
@@ -192,6 +204,24 @@ def _teams_from_title(title: str) -> tuple[str, str] | None:
     if not match:
         return None
     return match.group(1).strip(), match.group(2).strip()
+
+
+def _ladder_at_ask(orderbook: dict[str, Any], side: str) -> tuple[tuple[Decimal, Decimal], ...] | None:
+    """Wave 2: the YES(or NO)-fill ladder as (cost, depth_usd) levels, best first. Taking YES
+    consumes resting NO bids, so a NO bid at price p offers YES at cost (1-p); deeper levels
+    are worse prices. Used for depth-scaled slippage and depth-capped P&L."""
+    book = orderbook.get("orderbook_fp") or orderbook.get("orderbook") or {}
+    opposing = book.get("no_dollars" if side == "yes" else "yes_dollars") or []
+    levels: list[tuple[Decimal, Decimal]] = []
+    for entry in opposing:
+        p = Decimal(str(entry[0]))
+        size = Decimal(str(entry[1]))
+        cost = Decimal("1") - p
+        if cost <= 0 or cost >= 1 or size <= 0:
+            continue
+        levels.append((cost, (size * cost).quantize(Decimal("0.01"))))
+    levels.sort(key=lambda level: level[0])  # best (lowest) cost first
+    return tuple(levels) or None
 
 
 def _depth_at_ask(orderbook: dict[str, Any], side: str, ask: Decimal) -> Decimal | None:

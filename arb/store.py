@@ -279,4 +279,7 @@ def quote_to_json(quote: Quote) -> dict[str, str | None]:
         "live": str(quote.live),
         "start_utc": None if quote.start_utc is None else _dt_text(quote.start_utc),
         "ref": quote.ref,
+        # Wave 2: ladder stored as [[cost, depth], ...] so a bet leg keeps its fillable depth
+        # for depth-capped P&L and offline slippage re-grade. Omitted when not captured.
+        "ladder": None if quote.ladder is None else [[str(c), str(d)] for c, d in quote.ladder],
     }

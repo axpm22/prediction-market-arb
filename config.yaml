@@ -196,6 +196,12 @@ execution:
   # Additive per-contract taker buffer in $1-payout units. 0.005 = half a cent.
   # This makes top-of-book edges survive slippage/latency/queue risk before display.
   taker_price_buffer: 0.005
+  # Wave 2 (does-well#2): slippage model. 'flat' = the constant buffer above (legacy, keeps
+  # the ledger's cost comparability). 'ladder' = scale the buffer by how far filling
+  # slippage_ref_stake_usd walks the captured top-of-book ladder. Switching to 'ladder'
+  # changes every cost vector, so treat it as a versioned change, not a silent edit.
+  slippage_model: flat
+  slippage_ref_stake_usd: 50
 odds_api: { region: us, warn_below_credits: 100, abort_below_credits: 50 }
 parlay: { enabled: false, divergence_threshold: 0.05 }
 # Phase 3 parallel Kelly sizing (projection only; flat-$1 stays the headline).
