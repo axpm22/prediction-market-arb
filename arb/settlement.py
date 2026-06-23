@@ -299,7 +299,7 @@ def _open_ev_bets(store: Store) -> list[sqlite3.Row]:
             con.execute(
                 """
                 SELECT * FROM flat_bets b
-                 WHERE b.kind = 'EV' AND b.status = 'OPEN'
+                 WHERE b.kind IN ('EV', 'LIVE_BASEBALL_EV') AND b.status = 'OPEN'
                    AND NOT EXISTS (SELECT 1 FROM flat_bets s
                                     WHERE s.status IN ('SETTLED','CLOSED','EXITED') AND s.reappearance_of = b.id)
                  ORDER BY b.id

@@ -90,6 +90,7 @@ class AppConfig:
     flb: dict
     forecast: dict
     validation: dict
+    live_baseball_ev: dict
     odds_api_key: str | None
     database_path: Path = Path("data/arb.sqlite")
 
@@ -216,6 +217,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         flb=dict(raw.get("flb", {})),
         forecast=dict(raw.get("forecast", {})),
         validation=dict(raw.get("validation", {})),
+        live_baseball_ev=dict(raw.get("live_baseball_ev", {})),
         odds_api_key=os.environ.get("ODDS_API_KEY") or None,
         database_path=database_path,
     )

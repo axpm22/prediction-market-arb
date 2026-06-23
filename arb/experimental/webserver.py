@@ -790,6 +790,19 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 """
             )
         ]
+        # LIVE_BASEBALL_EV — isolated lane (LIVE_BASEBALL_EV_SPEC §2), never folded into clean
+        # pregame totals. Counts by lifecycle/quarantine flag + settled paper P&L.
+        live_counts = {
+            (r["quality_flag"], r["status"]): int(r["n"])
+            for r in c.execute(
+                """SELECT quality_flag, status, COUNT(*) n FROM flat_bets
+                    WHERE kind='LIVE_BASEBALL_EV' GROUP BY quality_flag, status"""
+            )
+        }
+        live_pnl_row = c.execute(
+            """SELECT COALESCE(SUM(CAST(pnl_optimistic AS REAL)),0) pnl, COUNT(*) n
+                 FROM flat_bets WHERE kind='LIVE_BASEBALL_EV' AND status='SETTLED'"""
+        ).fetchone()
         poll_series = [
             dict(r)
             for r in c.execute(
@@ -884,9 +897,27 @@ def build_state(store: Store, config) -> dict[str, Any]:
     credits_left = credits[0] if credits else None
     if credits_left is not None and credits_left < 100:
         alerts.append({"level": "warn", "text": f"Odds API credits low: {credits_left} left"})
+    # Derive the live-lane summary (counts keyed by quarantine flag set in record_live_candidate).
+    def _live_n(flag):
+        return sum(n for (qf, _status), n in live_counts.items() if qf == flag)
+    live_confirmed = sum(n for (qf, _s), n in live_counts.items() if qf is None)
+    live_vanished = _live_n("live-vanished")
+    live_denom = live_confirmed + live_vanished
+    live_baseball = {
+        "confirmed": live_confirmed,
+        "vanished": live_vanished,
+        "vanished_rate": round(live_vanished / live_denom, 4) if live_denom else None,
+        "research": _live_n("live-research"),
+        "stale_rejected": _live_n("live-rejected_stale"),
+        "suspension_rejected": _live_n("live-rejected_unstable"),
+        "settled_pnl": round(float(live_pnl_row["pnl"]), 2),
+        "settled_n": int(live_pnl_row["n"]),
+        "total": sum(live_counts.values()),
+    }
     return {
         "now": now.isoformat(),
         "alerts": alerts,
+        "live_baseball": live_baseball,
         "exposure": {
             "committed": float(exp.total_committed), "bankroll": float(exp.bankroll),
             "over_bankroll": exp.over_bankroll, "by_venue": {v: float(a) for v, a in exp.by_venue.items()},
@@ -1222,6 +1253,10 @@ tr:last-child td{border-bottom:0}
       <div class="panel-head"><div class="panel-title">Recent Bets</div><div class="muted">append-only ledger</div></div>
       <div class="panel-body" id="recent"></div>
     </div>
+    <div class="panel half">
+      <div class="panel-head"><div class="panel-title">Live Baseball EV</div><div class="muted">measurement-only · betting OFF · isolated lane</div></div>
+      <div class="panel-body" id="live-baseball"></div>
+    </div>
     <div class="panel full">
       <div class="panel-head">
         <div class="panel-title">Live Output</div>
@@ -1453,6 +1488,30 @@ function renderAlerts(d) {
   const a = d.alerts || [];
   if (!a.length) { $("alerts").innerHTML = ""; return; }
   $("alerts").innerHTML = a.map(x => `<div class="alert ${x.level}">${esc(x.text)}</div>`).join("");
+}
+
+function renderLiveBaseball(d) {
+  const lb = d.live_baseball;
+  if (!lb || !$("live-baseball")) return;
+  if (!lb.total) {
+    $("live-baseball").innerHTML = `<div class="muted">No live candidates recorded yet (Phase 0/1 feasibility first; betting OFF).</div>`;
+    return;
+  }
+  const vr = lb.vanished_rate === null ? "—" : pct(lb.vanished_rate);
+  const cells = [
+    ["Confirmed candidates", lb.confirmed, "blue"],
+    ["VANISHED", `${lb.vanished} (${vr})`, lb.vanished_rate > 0.5 ? "bad" : "warn"],
+    ["Settled paper P&L", money(lb.settled_pnl), valClass(lb.settled_pnl)],
+    ["Settled", lb.settled_n, "muted"],
+    ["Research (<3 books)", lb.research, "muted"],
+    ["Stale-rejected", lb.stale_rejected, "muted"],
+    ["Suspension-rejected", lb.suspension_rejected, "muted"],
+  ];
+  $("live-baseball").innerHTML =
+    `<div class="track-grid">` +
+    cells.map(([label, val, cls]) =>
+      `<div class="track-card"><div class="label">${esc(label)}</div><div class="value ${cls || ""}">${val}</div></div>`).join("") +
+    `</div><div class="muted" style="margin-top:8px">VANISHED-vs-null gap, CLV at +30s/+2m/next-inning, and avg effective_state_age accrue once the Phase-1 live runner captures marks. This lane is never folded into clean pregame EV.</div>`;
 }
 
 function renderProcesses(d) {
@@ -1719,6 +1778,7 @@ function render(d) {
   const scroll = captureScroll();
   renderProcesses(d);
   renderAlerts(d);
+  renderLiveBaseball(d);
   renderMetrics(d);
   renderTracking(d);
   renderScanners(d);
