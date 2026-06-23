@@ -6,6 +6,8 @@ from arb.models import Event, Opportunity, Quote
 from arb.store import Store
 from arb.tracker import record_tracker_poll, tracker_bet_view, write_daily_report
 
+NOW = datetime(2026, 6, 20, 20, 0, tzinfo=timezone.utc)
+
 
 def arb_opp(cost_a: str, cost_b: str) -> Opportunity:
     event = Event(
@@ -64,6 +66,7 @@ def ev_opp(cost: str) -> Opportunity:
         event=event,
         legs=[quote("los angeles dodgers", cost)],
         edge=Decimal("0.03"),
+        edge_points=Decimal("0.01"),
         stakes={},
         status="OK",
     )
@@ -72,11 +75,11 @@ def ev_opp(cost: str) -> Opportunity:
 def test_ev_reappearance_creates_new_linked_row_first_confirmed_null(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     poll1 = store.start_poll("watch")
-    record_tracker_poll(store, poll1, [ev_opp("0.50")])
+    record_tracker_poll(store, poll1, [ev_opp("0.50")], now=NOW)
     poll2 = store.start_poll("watch")
-    record_tracker_poll(store, poll2, [])  # absent for one completed poll → lifetime closed
+    record_tracker_poll(store, poll2, [], now=NOW)  # absent for one completed poll → lifetime closed
     poll3 = store.start_poll("watch")
-    record_tracker_poll(store, poll3, [ev_opp("0.49")])
+    record_tracker_poll(store, poll3, [ev_opp("0.49")], now=NOW)
 
     with store.connect() as con:
         rows = list(con.execute("SELECT * FROM flat_bets ORDER BY id"))
@@ -89,9 +92,9 @@ def test_ev_reappearance_creates_new_linked_row_first_confirmed_null(tmp_path) -
 def test_tracker_arb_optimistic_and_confirmed_append_only(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     poll1 = store.start_poll("watch")
-    record_tracker_poll(store, poll1, [arb_opp("0.48", "0.48")])
+    record_tracker_poll(store, poll1, [arb_opp("0.48", "0.48")], now=NOW)
     poll2 = store.start_poll("watch")
-    record_tracker_poll(store, poll2, [arb_opp("0.485", "0.485")])
+    record_tracker_poll(store, poll2, [arb_opp("0.485", "0.485")], now=NOW)
 
     with store.connect() as con:
         rows = list(con.execute("SELECT * FROM flat_bets ORDER BY id"))
@@ -107,11 +110,11 @@ def test_tracker_arb_optimistic_and_confirmed_append_only(tmp_path) -> None:
 def test_daily_report_summarizes_base_bets_not_append_rows(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     poll1 = store.start_poll("watch")
-    record_tracker_poll(store, poll1, [arb_opp("0.48", "0.48")])
+    record_tracker_poll(store, poll1, [arb_opp("0.48", "0.48")], now=NOW)
     poll2 = store.start_poll("watch")
-    record_tracker_poll(store, poll2, [arb_opp("0.485", "0.485")])
+    record_tracker_poll(store, poll2, [arb_opp("0.485", "0.485")], now=NOW)
 
-    csv_path, md_path = write_daily_report(store, None, tmp_path)
+    csv_path, md_path = write_daily_report(store, NOW.date(), tmp_path)
 
     # One base bet was placed; the CONFIRMED append row should enrich it, not count as
     # a second daily bet.
@@ -132,7 +135,7 @@ def test_tracker_persists_opportunity_notes_with_lifecycle_note(tmp_path) -> Non
         quality_flag="segment-blocked",
         kelly_stake=Decimal("0.00"),
     )
-    record_tracker_poll(store, poll1, [opp])
+    record_tracker_poll(store, poll1, [opp], now=NOW)
 
     with store.connect() as con:
         [row] = list(con.execute("SELECT notes, quality_flag, kelly_stake_usd FROM flat_bets"))
@@ -151,9 +154,59 @@ def test_tracker_records_ev_stake_from_opportunity_sizing(tmp_path) -> None:
         stakes={"los angeles dodgers": Decimal("7.50")},
         quality_flag="micro",
     )
-    record_tracker_poll(store, poll1, [opp])
+    record_tracker_poll(store, poll1, [opp], now=NOW)
 
     with store.connect() as con:
         [row] = list(con.execute("SELECT stake_usd, quality_flag FROM flat_bets"))
     assert row["stake_usd"] == "7.50"
     assert row["quality_flag"] == "micro"
+
+
+def test_tracker_rejects_started_pregame_opportunity(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    record_tracker_poll(store, store.start_poll("watch"), [ev_opp("0.50")], now=datetime(2026, 6, 21, 0, 0, tzinfo=timezone.utc))
+
+    with store.connect() as con:
+        [row] = list(con.execute("SELECT status, stake_usd, quality_flag, notes FROM flat_bets"))
+    assert row["status"] == "CLOSED"
+    assert row["stake_usd"] == "0"
+    assert row["quality_flag"] == "in-play-skipped"
+    assert "skip-started-event" in row["notes"]
+
+
+def test_tracker_does_not_reopen_settled_fingerprint(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    opp = ev_opp("0.50")
+    record_tracker_poll(store, store.start_poll("watch"), [opp], now=NOW)
+    with store.connect() as con:
+        base = con.execute("SELECT * FROM flat_bets WHERE status='OPEN'").fetchone()
+        con.execute(
+            """INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind,
+                   trusted, live, edge, stake_usd, legs_json, status, placed_at, settled_at, result, notes)
+               VALUES (?, ?, ?, 'sports', 'baseball_mlb', 'EV', 1, 0, '0.01', '1.00', ?,
+                       'SETTLED', ?, ?, 'WON', 'test-settled')""",
+            (base["fingerprint"], base["id"], base["opened_poll_id"], base["legs_json"], base["placed_at"], NOW.isoformat()),
+        )
+
+    record_tracker_poll(store, store.start_poll("watch"), [opp], now=NOW)
+
+    with store.connect() as con:
+        rows = list(con.execute("SELECT status, quality_flag, notes FROM flat_bets ORDER BY id"))
+    assert [row["status"] for row in rows] == ["OPEN", "SETTLED", "CLOSED"]
+    assert rows[-1]["quality_flag"] == "terminal-fingerprint-skipped"
+    assert "skip-terminal-fingerprint:SETTLED" in rows[-1]["notes"]
+
+
+def test_tracker_blocks_duplicate_position_same_poll(tmp_path) -> None:
+    store = Store(tmp_path / "arb.sqlite")
+    base = ev_opp("0.50")
+    alt_leg = replace(base.legs[0], venue="polymarket", book="poly-los-angeles-dodgers")
+    duplicate_venue = replace(base, legs=[alt_leg], fingerprint="")
+
+    record_tracker_poll(store, store.start_poll("watch"), [base, duplicate_venue], now=NOW)
+
+    with store.connect() as con:
+        rows = list(con.execute("SELECT status, quality_flag, notes FROM flat_bets ORDER BY id"))
+    assert [row["status"] for row in rows] == ["OPEN", "CLOSED"]
+    assert rows[-1]["quality_flag"] == "duplicate-position-skipped"
+    assert "skip-duplicate-position" in rows[-1]["notes"]

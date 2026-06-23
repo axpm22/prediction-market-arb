@@ -1580,6 +1580,8 @@ let activeLog = "daemon";
 let activeOpenKind = "EV";
 let activeCleanEvMode = "flat";
 let activeArbSizingMode = "model";
+let activeHeroVariant = "confirmed_clean";
+let openSearch = "";
 const colors = {raw:"#a4a6ad", clean:"#6aa8ff", confirmed:"#56c271", opps:"#e0ad3b"};
 const trackKey = "arb-dashboard-tracking-v1";
 const laneLabel = kind => ({MICRO_EV:"MICRO EV"}[kind] || kind);
@@ -1869,6 +1871,40 @@ function horizonText(bet) {
   return `${bet.days_to_event}d`;
 }
 
+const HERO_LABELS = {
+  confirmed_clean: "Clean · confirmed — the honest baseline",
+  optimistic_clean: "Clean · optimistic",
+  optimistic_raw: "Raw · optimistic — every settled row",
+};
+function seriesTotal(series) { const a = series || []; return a.length ? num(a[a.length - 1].y) : 0; }
+function renderHero(d) {
+  const seg = $("hero-seg"); if (!seg || !$("hero")) return;
+  seg.querySelectorAll("button").forEach(b => {
+    b.classList.toggle("active", b.dataset.variant === activeHeroVariant);
+    b.onclick = () => { activeHeroVariant = b.dataset.variant; renderHero(state); };
+  });
+  const total = seriesTotal((d.equity || {})[activeHeroVariant]);
+  const la = d.locked_arb || {}, ce = d.clean_ev || {}, me = d.micro_ev || {};
+  const chips = [
+    ["Clean EV", ce.pnl, `${ce.settled || 0} settled · ${pct(ce.roi || 0)} ROI`],
+    ["Micro EV", me.pnl, `${me.settled || 0} settled · ${me.active || 0} open`],
+    ["Locked ARB · trusted", la.trusted_pnl, `${la.trusted_settled || 0} settled (clean lane)`],
+  ];
+  const reviewChip = la.review_settled
+    ? `<span class="miniflag" title="Provisional cross-venue locks — not real money until both rulebooks confirm the same oracle (hard rule #6).">REVIEW ${la.review_settled} · ${money(la.review_pnl)} provisional</span>` : "";
+  const invalidChip = la.invalid_in_play
+    ? `<span class="miniflag" title="ARB rows placed at/after event start — rejected by the timing guard, no P&L booked.">${la.invalid_in_play} invalid-in-play</span>` : "";
+  const points = ((d.equity || {})[activeHeroVariant] || []).length;
+  $("hero").innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:16px;margin-bottom:2px">
+      <div style="font-size:46px;font-weight:800;line-height:1" class="${valClass(total)}">${money(total)}</div>
+      <div class="muted">${esc(HERO_LABELS[activeHeroVariant])} · ${points} settled points ${reviewChip}${invalidChip}</div>
+    </div>
+    <div class="track-grid" style="margin-top:12px">
+      ${chips.map(([l, v, s]) => `<div class="track-card"><div class="label">${esc(l)}</div><div class="value ${valClass(v)}" style="font-size:19px">${money(v)}</div><div class="muted">${esc(s)}</div></div>`).join("")}
+    </div>`;
+}
+
 function renderMetrics(d) {
   const running = d.processes.filter(p => p.status === "ok").length;
   const unhealthy = d.processes.filter(p => !["ok","disabled"].includes(p.status));
@@ -1876,14 +1912,14 @@ function renderMetrics(d) {
   const workerDetail = unhealthy.length
     ? unhealthy.map(p => `${p.status}: ${p.name}`).join(" · ")
     : `${running}/${enabled || d.processes.length} enabled workers running`;
-  const ce = d.clean_ev || {pnl:0,won:0,lost:0,sold:0,settled:0,roi:0}, se = d.suspect_ev || {n:0,pnl:0}, me = d.micro_ev || {active:0,pnl:0,sold:0,settled:0,roi:0,active_stake:0}, la = d.locked_arb || {pnl:0,resolved:0,settled:0};
+  const ce = d.clean_ev || {pnl:0,won:0,lost:0,sold:0,settled:0,roi:0}, se = d.suspect_ev || {n:0,pnl:0}, me = d.micro_ev || {active:0,pnl:0,sold:0,settled:0,roi:0,active_stake:0}, la = d.locked_arb || {pnl:0,resolved:0,settled:0,trusted_pnl:0,trusted_settled:0,review_pnl:0,review_settled:0};
   const suspectNote = se.n ? ` · suspect: ${se.n} (${money(se.pnl)})` : "";
   const cleanSold = ce.sold ? ` · ${ce.sold} sold` : "";
   const microSold = me.sold ? ` · ${me.sold} sold` : "";
   $("metrics").innerHTML = [
     metric("Clean EV P&L", `<span class="${valClass(ce.pnl)}">${money(ce.pnl)}</span>`, `${ce.won}W / ${ce.lost}L${cleanSold} · ${ce.settled} realized · ${pct(ce.roi)} ROI${suspectNote}`),
     metric("Micro EV", `<span class="${valClass(me.pnl)}">${money(me.pnl)}</span>`, `${me.active} open · ${me.settled} realized${microSold} · ${pct(me.roi)} ROI · open stake ${usd(me.active_stake)}`, "blue"),
-    metric("Locked ARB P&L", `<span class="${valClass(la.pnl)}">${money(la.pnl)}</span>`, `${la.settled} settled (${la.resolved} resolved) · provisional`),
+    metric("Locked ARB (trusted)", `<span class="${valClass(la.trusted_pnl)}">${money(la.trusted_pnl)}</span>`, `${la.trusted_settled||0} clean · REVIEW ${la.review_settled||0} = ${money(la.review_pnl)} provisional${la.invalid_in_play?` · ${la.invalid_in_play} invalid`:""}`, la.trusted_settled?"":"warn"),
     metric("Open Bets", compact(d.health.open_bets), `${compact(d.health.flat_bets)} ledger rows`, "blue"),
     metric("ARB Verification", `<span class="good">${d.arb.verified}</span><span class="muted"> / </span><span class="bad">${d.arb.vanished}</span>`, `${d.arb.unverifiable} unverifiable`),
     metric("Capital Exposure", `<span class="${(d.exposure&&d.exposure.over_bankroll)?'bad':''}">${usd((d.exposure||{}).committed||0)}</span>`,
@@ -2347,6 +2383,7 @@ function render(d) {
   renderProcesses(d);
   renderAlerts(d);
   renderLiveBaseball(d);
+  renderHero(d);
   renderMetrics(d);
   renderTracking(d);
   renderCleanEv(d);
