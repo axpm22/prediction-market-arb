@@ -57,6 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
     backfill.add_argument("--fixtures", action="store_true", help="use recorded mlbstats fixtures")
     migrate = sub.add_parser("migrate-unique", help="dedup within-poll duplicate quotes + add UNIQUE index (pass3#7)")
     migrate.add_argument("--apply", action="store_true", help="back up, dedup, and create the index (default: dry-run)")
+    parlay_scan = sub.add_parser("parlay-scan", help="detect parlay mispricings (SPEC §11); REVIEW-only, own ledger lane")
+    parlay_scan.add_argument("--fixtures", action="store_true", help="load parlay markets from tests/fixtures/parlays/markets.json")
+    parlay_scan.add_argument("--file", help="path to a parlay markets JSON file (venue-agnostic schema)")
+    parlay_scan.add_argument("--dry-run", action="store_true", help="detect and display without persisting")
     sub.add_parser("settle-health", help="report overdue open EV/ARB bets and last settlement time")
     sub.add_parser("reconcile", help="cross-check settled ARBs against venue-actual resolution (audit fix #1)")
     sub.add_parser("exposure", help="total + per-venue committed capital across active bets (audit fix #3)")
@@ -220,6 +224,8 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:  # noqa: BLE001
                 print(f"settle: reconciliation failed (settle still stands): {exc}")
         return 0
+    if args.command == "parlay-scan":
+        return _run_parlay_scan(store, config, args)
     if args.command == "settle-backfill":
         fixture_dir = Path("tests/fixtures") if args.fixtures else None
         settled = settle_backfill_mlb(store, fixture_dir)
@@ -362,6 +368,52 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
             fill_opportunity(store, poll_id, opportunity, config.bankroll_usd, config.max_stake_pct)
     store.finish_poll(poll_id, None, len(quotes), len(kept))
     print(f"Persisted watch poll {poll_id}: {len(quotes)} quotes, {len(kept)} opportunities.")
+    return 0
+
+
+def _run_parlay_scan(store: Store, config, args: argparse.Namespace) -> int:
+    """Detect parlay mispricings (SPEC §11) and record them as REVIEW-only PARLAY bets in their
+    own ledger lane. Fixtures-first: live Kalshi MVE / Polymarket CAOC / SX parlay field-mapping
+    must be verified before live use (hard rule #3), so markets come from a fixture/JSON file."""
+    import json
+
+    from .parlay import detect_parlays, load_parlay_markets
+
+    if not config.parlay_enabled and not args.dry_run:
+        print("parlay-scan: parlay.enabled is false — forcing --dry-run (no ledger writes). "
+              "Set parlay.enabled: true in config.yaml to record.")
+        args.dry_run = True
+
+    path = args.file or ("tests/fixtures/parlays/markets.json" if args.fixtures else None)
+    if path is None:
+        print("parlay-scan: no live parlay adapters yet — Kalshi MVE / Polymarket CAOC / SX "
+              "field-mapping is unverified (hard rule #3). Pass --fixtures or --file PATH.")
+        return 1
+    if not Path(path).exists():
+        print(f"parlay-scan: markets file not found: {path}")
+        return 1
+
+    markets = load_parlay_markets(json.loads(Path(path).read_text()))
+    opportunities = detect_parlays(
+        markets, config.parlay_divergence_threshold, config.parlay_min_liquidity_usd
+    )
+    print(f"Parlay markets scanned: {len(markets)}; signals: {len(opportunities)}")
+    for opp in opportunities:
+        klass = next((n for n in opp.notes if n.startswith("parlay-")), "parlay")
+        print(f"  [{opp.status}] {opp.event.sport} {klass} edge_pts={opp.edge_points} legs={len(opp.legs) - 1}")
+    if args.dry_run:
+        print("(dry-run — nothing recorded)")
+        return 0
+
+    poll_id = store.start_poll("parlay")
+    quotes = [leg for opp in opportunities for leg in opp.legs]
+    store.save_poll_quotes(poll_id, quotes)
+    store.save_poll_opportunities(poll_id, opportunities)
+    # only_kinds scopes the lifetime bookkeeping to PARLAY so this separate cadence never
+    # closes the watch stream's active ARB/EV fingerprints.
+    record_tracker_poll(store, poll_id, opportunities, load_validation_rule(config),
+                        only_kinds=("PARLAY",))
+    print(f"Recorded {len(opportunities)} parlay signal(s) into the ledger (kind=PARLAY, REVIEW).")
     return 0
 
 

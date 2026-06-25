@@ -139,8 +139,10 @@ class AppConfig:
     odds_api_region: str
     odds_api_warn_below_credits: int
     odds_api_abort_below_credits: int
+    odds_api_sport_aliases: dict
     parlay_enabled: bool
     parlay_divergence_threshold: Decimal
+    parlay_min_liquidity_usd: Decimal
     sizing_kelly_fraction: Decimal
     sizing_max_fraction: Decimal
     scoring: dict
@@ -318,8 +320,10 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         odds_api_region=str(odds_api["region"]),
         odds_api_warn_below_credits=int(odds_api["warn_below_credits"]),
         odds_api_abort_below_credits=int(odds_api["abort_below_credits"]),
+        odds_api_sport_aliases={str(k): str(v) for k, v in (raw.get("odds_api_sport_aliases") or {}).items()},
         parlay_enabled=bool(parlay["enabled"]),
         parlay_divergence_threshold=_decimal(parlay["divergence_threshold"]),
+        parlay_min_liquidity_usd=_decimal(parlay.get("min_liquidity_usd", raw.get("min_liquidity_usd", "500"))),
         sizing_kelly_fraction=_decimal(sizing.get("kelly_fraction", "0.25")),
         sizing_max_fraction=_decimal(sizing.get("max_kelly_fraction_of_bankroll", "0.05")),
         scoring=dict(raw.get("scoring", {})),

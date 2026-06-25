@@ -9,7 +9,7 @@ from typing import Any
 import requests
 
 from arb.config import AppConfig
-from arb.matching import event_key, load_aliases, normalize_name
+from arb.matching import canonical_sport, event_key, load_aliases, normalize_name
 from arb.models import Quote
 from arb.pricing import implied_from_decimal_odds, q6
 
@@ -31,11 +31,13 @@ class OddsApiAdapter:
         self.credits_remaining: int | None = None
 
     def fetch_quotes(self, sport: str) -> list[Quote]:
+        aliases = self.config.odds_api_sport_aliases
         if self.fixture_dir is not None:
             data = json.loads((self.fixture_dir / f"oddsapi_{sport}.json").read_text())
-            return parse_odds_events(data, sport)
+            return parse_odds_events(data, sport, aliases)
         if not self.config.odds_api_key:
             raise RuntimeError("ODDS_API_KEY is required for live Odds API scans.")
+        # The fetch URL uses the real Odds-API key; only the event_key prefix is canonicalized.
         url = f"{BASE_URL}/sports/{sport}/odds/"
         response = requests.get(
             url,
@@ -49,7 +51,7 @@ class OddsApiAdapter:
         )
         response.raise_for_status()
         self._track_credits(response.headers.get("x-requests-remaining"))
-        return parse_odds_events(response.json(), sport)
+        return parse_odds_events(response.json(), sport, aliases)
 
     def fetch_scores(self, sport: str, days_from: int) -> list[dict[str, Any]]:
         # SPEC §9: EV settlement comes from Odds API scores, fetched daily by `settle`.
@@ -86,15 +88,19 @@ class OddsApiAdapter:
             )
 
 
-def parse_odds_events(events: list[dict[str, Any]], sport: str) -> list[Quote]:
+def parse_odds_events(events: list[dict[str, Any]], sport: str,
+                      sport_aliases: dict[str, str] | None = None) -> list[Quote]:
     fetched_at = datetime.now(timezone.utc)
     aliases = load_aliases()
+    # Normalize the Odds-API sport key to the venue-canonical prefix so consensus event_keys
+    # join venue quotes (e.g. soccer_fifa_world_cup -> soccer). Identity when unmapped.
+    canonical = canonical_sport(sport, sport_aliases)
     quotes: list[Quote] = []
     for event in events:
         start = datetime.fromisoformat(event["commence_time"].replace("Z", "+00:00"))
         home = event["home_team"]
         away = event["away_team"]
-        key = event_key(sport, home, away, start, aliases)
+        key = event_key(canonical, home, away, start, aliases)
         for bookmaker in event.get("bookmakers", []):
             for market in bookmaker.get("markets", []):
                 if market.get("key") not in {"h2h", "totals"}:
@@ -107,7 +113,7 @@ def parse_odds_events(events: list[dict[str, Any]], sport: str) -> list[Quote]:
                         _quote_from_outcome(
                             market_key=str(market["key"]),
                             outcome=outcome,
-                            sport=sport,
+                            sport=canonical,
                             key=key,
                             book=str(bookmaker["key"]),
                             start=start,

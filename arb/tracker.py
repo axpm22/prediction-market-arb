@@ -33,14 +33,21 @@ def _local_date(placed_at: str | None) -> date | None:
 
 def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportunity],
                         validation_rule: ValidationRule | None = None,
-                        now: datetime | None = None) -> None:
+                        now: datetime | None = None,
+                        only_kinds: tuple[str, ...] | None = None) -> None:
+    """Record one poll's opportunities into the append-only ledger.
+
+    `only_kinds` scopes the lifetime bookkeeping (the absent→closed and dedup logic) to a kind
+    set. A separate cadence — e.g. parlay-scan running apart from `watch` — passes its own kind
+    so it never closes the other stream's active fingerprints (they're simply not in this poll).
+    """
     validation_rule = validation_rule or ValidationRule()
     current = {opp.fingerprint: opp for opp in opportunities}
     now = now or datetime.now(timezone.utc)
     now = _as_utc(now)
     with store.connect() as con:
-        active = _active_rows(con)
-        active_positions = _active_position_keys(con)
+        active = _active_rows(con, only_kinds)
+        active_positions = _active_position_keys(con, only_kinds)
         seen_positions: set[str] = set()
         for fingerprint, row in active.items():
             if fingerprint not in current:
@@ -142,16 +149,16 @@ def tracker_bet_view(store: Store) -> dict[str, dict[str, Decimal | None]]:
     return dict(view)
 
 
-def _active_rows(con) -> dict[str, object]:
+def _active_rows(con, only_kinds: tuple[str, ...] | None = None) -> dict[str, object]:
     # Flash verification and hot lifetime rows are annotations on an opportunity's
     # lifecycle, not lifecycle transitions. OPEN/CONFIRMED/CLOSED/SETTLED/EXITED rows decide
     # whether a fingerprint is still active or can reappear as a new bet.
     # S1: read only candidate-active rows via the fingerprint index (was SELECT * every poll).
-    return active_rows_via_index(con)
+    return active_rows_via_index(con, only_kinds)
 
 
-def _active_position_keys(con) -> dict[str, object]:
-    active = active_rows_via_index(con)  # S1: indexed, not a full flat_bets scan
+def _active_position_keys(con, only_kinds: tuple[str, ...] | None = None) -> dict[str, object]:
+    active = active_rows_via_index(con, only_kinds)  # S1: indexed, not a full flat_bets scan
     keyed: dict[str, object] = {}
     for row in active.values():
         key = _position_key_from_row(row)
@@ -181,6 +188,19 @@ def _latest_closed_id(con, fingerprint: str) -> int | None:
 
 def _actionability_rejection(opp: Opportunity, now: datetime) -> tuple[str, str, int | None] | None:
     starts = [leg.start_utc for leg in opp.legs]
+    # PARLAY is pregame-only and never auto-filled. It must have at least one known leg start
+    # (else it can't be validated pregame or settled by start time), and every known leg start
+    # must be in the future — a parlay with any in-play leg is skipped. Nonsports parlays need
+    # a manual resolver, like nonsports EV.
+    if opp.kind == "PARLAY":
+        leg_starts = [_as_utc(start) for start in starts if start is not None]
+        if not leg_starts:
+            return ("skip-missing-start", "missing-start-skipped", None)
+        if any(start <= now for start in leg_starts):
+            return ("skip-started-event", "in-play-skipped", None)
+        if opp.category != "sports":
+            return ("skip-nonsports-auto-action", "manual-resolver-required", None)
+        return None
     if opp.kind in {"EV", "ARB"} and opp.event.start_utc is None:
         return ("skip-missing-start", "missing-start-skipped", None)
     event_start = _as_utc(opp.event.start_utc)
@@ -334,6 +354,7 @@ def _opportunity_stake(opp: Opportunity) -> Decimal:
         return Decimal("0")
     if opp.kind == "EV" and opp.legs:
         return opp.stakes.get(opp.legs[0].outcome_label, Decimal("1.00"))
+    # PARLAY: $1 flat on the basket (settles later as the AND of its legs).
     return Decimal("1.00")
 
 
@@ -352,6 +373,10 @@ def _opportunity_cost(opp: Opportunity) -> Decimal | None:
     if opp.kind == "ARB":
         return q6(sum((leg.effective_cost for leg in opp.legs), Decimal("0")))
     if opp.kind == "EV":
+        return q6(opp.legs[0].effective_cost)
+    # PARLAY: legs[0] is the synthetic basket carrying the fee-adjusted ask (cost per $1 if
+    # all legs win). P&L realizes at settlement, so optimistic_pnl is left pending like EV.
+    if opp.kind == "PARLAY":
         return q6(opp.legs[0].effective_cost)
     return None
 

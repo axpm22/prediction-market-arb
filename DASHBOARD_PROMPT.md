@@ -13,12 +13,21 @@ authenticated endpoint.
 ## Goal
 
 Replace the current dashboard with a **modern, legible, clean, to-the-point control center**
-that (a) shows all the information and P&L I need at a glance, (b) lets me **turn every
-strategy and every strategy *version* on and off**, (c) shows **total profit** prominently,
-and (d) renders **graphs** of profit/equity over time. Today the UX is split between a
-static `reports/dashboard.html` (Chart.js from a JSON dump) and a richer live server in
-`arb/experimental/webserver.py` serving `/api/state` on :8787. Consolidate into one good
-surface.
+that:
+(a) keeps **every type of betting active and measured at once, but tracked separately** —
+    no bet type is silently folded into another;
+(b) shows **total profit** prominently as the headline, then a **clear per-bet-type section**
+    where I can see each type's performance as both a **percentage (ROI / win rate)** and a
+    **total ($)**;
+(c) shows, within a type, its **different versions side by side** — e.g. **weighted ARB vs
+    unweighted**, and **weighted (sharp-book) EV vs unweighted** — so I can compare variants
+    head-to-head;
+(d) lets me **turn every strategy and every strategy version on and off**;
+(e) renders **graphs** of profit/equity over time, per type and per version.
+
+Today the UX is split between a static `reports/dashboard.html` (Chart.js from a JSON dump)
+and a richer live server in `arb/experimental/webserver.py` serving `/api/state` on :8787.
+Consolidate into one good surface.
 
 ## What exists now (don't rediscover from scratch — read these)
 
@@ -90,15 +99,42 @@ and toggle these (read `config.yaml` for exact keys; add any I missed):
 For each version show: on/off, a one-line description of what it changes, and — where the
 ledger supports it — its **own P&L line** so I can compare versions head-to-head.
 
-## Total profit + graphs (the headline)
+## Total profit + per-type performance section (the headline)
 
 - **Total profit** as the top hero number, with the four honest variants selectable:
   optimistic vs confirmed × raw vs clean, and flat-$1 vs quarter-Kelly. Default the headline
   to **confirmed / clean / flat-$1** (the project's honest baseline) and label it as such.
+  This is the *only* number that aggregates across types — everything below it is separated.
+
+- **Per-bet-type performance section** (the core new requirement). Directly under the hero
+  total, render a clear table/card grid with **one row per bet type** — at minimum `ARB`,
+  `EV`, `DIVERGENCE`, `CLOSE`, `NEGRISK`, and `LIVE_BASEBALL_EV` — each showing:
+  - **total P&L ($)** and **ROI (%)** (P&L ÷ total staked),
+  - **win rate (%)** and **n** (settled bet count),
+  - a small **sparkline** of that type's equity curve,
+  - status (active / measurement-only / betting-gated).
+  Compute every figure from `flat_bets` grouped by `kind`, confirmed/clean by default.
+  Each type is its own line — never blended into a sibling type.
+
+- **Versions side-by-side (A/B within a type).** For types that have variants, add an
+  expandable sub-section comparing each version on the **same metrics (% and $)** so I can
+  see which variant wins:
+  - **EV: weighted vs unweighted** — sharp-book-weighted consensus (EV#2) vs the equal-weight
+    median. If both gradings exist in/derivable from the ledger, show two rows; if the
+    weighted grading isn't yet persisted, compute it as a parallel column and label it as a
+    re-grade, not a separate set of bets.
+  - **ARB: weighted vs unweighted** — depth/capacity-weighted sizing vs flat-stake (and, if
+    applicable, sharp-book-weighted vs raw). Show ROI and total for each.
+  - **De-vig method** (`proportional | power | shin`) and **slippage model** (`flat | scaled`)
+    as additional version axes where they change a type's P&L.
+  Be explicit in the UI about whether a version row is *distinct bets* or a *re-grade of the
+  same bets under a different rule* — never present a re-grade as independent evidence.
+
 - **Equity-over-time graph** (cumulative P&L by `placed_at`/`settled_at`), with a series
-  toggle for each variant above and a **per-strategy / per-version breakdown** (stacked or
-  multi-line). Include **drawdown** and **profit attribution by strategy** (which `kind`
-  made/lost money).
+  toggle per **type** and per **version**, plus the optimistic/confirmed × raw/clean and
+  flat/Kelly variant toggles. Include **drawdown** and **profit attribution by type** (which
+  `kind` made/lost money).
+
 - Secondary charts: EV edge buckets (raw vs clean), segment scores/tiers, optimistic−confirmed
   "mirage gap", and bet counts. Keep Chart.js (already a CDN dep) unless you have a strong
   reason; do not add a build step.
@@ -127,8 +163,12 @@ typography and spacing.
 ## Acceptance / verification (do this before declaring done)
 
 - `pytest` green, including new tests.
-- Start the server, load the page, and **take a screenshot** of: the hero total, the strategy/
-  version toggle panel, and the equity graph with multiple series on. Confirm legibility.
+- Start the server, load the page, and **take a screenshot** of: the hero total, the
+  **per-bet-type performance section** (with % and $ per type), at least one version A/B
+  comparison (weighted vs unweighted EV or ARB), the strategy/version toggle panel, and the
+  equity graph with multiple series on. Confirm legibility and that each type is separated.
+- Spot-check one type's ROI/total in the UI against a direct SQL aggregate over `flat_bets`
+  for that `kind` — they must match.
 - Flip a config-flag toggle; show the `config.yaml` diff + that a backup was written and the
   ledger was untouched (`git diff` shows only config + UI files).
 - Confirm `grep -ri "ODDS_API_KEY\|api_key" reports/ ` and the served JSON contain no secret.

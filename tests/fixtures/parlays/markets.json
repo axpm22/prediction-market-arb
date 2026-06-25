@@ -1,0 +1,47 @@
+[
+  {
+    "venue": "kalshi",
+    "market_id": "MVE-FRECHET-001",
+    "ask": "0.12",
+    "bid": null,
+    "fee_rate": "0.0",
+    "depth_usd": "300",
+    "liquidity_usd": "1200",
+    "same_game": false,
+    "category": "sports",
+    "legs": [
+      {"event_key": "baseball_mlb:2026-07-01:los angeles dodgers:new york yankees", "sport": "baseball_mlb", "market_type": "WINNER", "outcome_label": "los angeles dodgers", "prob": "0.60", "start_utc": "2026-07-01T23:05:00Z", "home": "los angeles dodgers", "away": "new york yankees"},
+      {"event_key": "baseball_mlb:2026-07-01:chicago cubs:st louis cardinals", "sport": "baseball_mlb", "market_type": "WINNER", "outcome_label": "chicago cubs", "prob": "0.55", "start_utc": "2026-07-01T23:40:00Z", "home": "chicago cubs", "away": "st louis cardinals"}
+    ]
+  },
+  {
+    "venue": "polymarket",
+    "market_id": "CAOC-INDEP-002",
+    "ask": "0.25",
+    "bid": null,
+    "fee_rate": "0.0",
+    "depth_usd": "400",
+    "liquidity_usd": "900",
+    "same_game": false,
+    "category": "sports",
+    "legs": [
+      {"event_key": "basketball_nba:2026-07-01:boston celtics:miami heat", "sport": "basketball_nba", "market_type": "WINNER", "outcome_label": "boston celtics", "prob": "0.60", "start_utc": "2026-07-01T23:30:00Z", "home": "boston celtics", "away": "miami heat"},
+      {"event_key": "basketball_nba:2026-07-01:denver nuggets:phoenix suns", "sport": "basketball_nba", "market_type": "WINNER", "outcome_label": "denver nuggets", "prob": "0.55", "start_utc": "2026-07-02T01:30:00Z", "home": "denver nuggets", "away": "phoenix suns"}
+    ]
+  },
+  {
+    "venue": "kalshi",
+    "market_id": "MVE-SAMEGAME-003",
+    "ask": "0.25",
+    "bid": null,
+    "fee_rate": "0.0",
+    "depth_usd": "300",
+    "liquidity_usd": "1000",
+    "same_game": true,
+    "category": "sports",
+    "legs": [
+      {"event_key": "baseball_mlb:2026-07-01:houston astros:texas rangers", "sport": "baseball_mlb", "market_type": "WINNER", "outcome_label": "houston astros", "prob": "0.60", "start_utc": "2026-07-01T20:10:00Z", "home": "houston astros", "away": "texas rangers"},
+      {"event_key": "baseball_mlb:2026-07-01:houston astros:texas rangers", "sport": "baseball_mlb", "market_type": "TOTAL", "outcome_label": "OVER", "prob": "0.55", "line": "8.5", "start_utc": "2026-07-01T20:10:00Z", "home": "houston astros", "away": "texas rangers"}
+    ]
+  }
+]

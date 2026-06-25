@@ -40,6 +40,14 @@ def normalize_name(name: str, sport: str, aliases: dict[str, dict[str, str]] | N
     return sport_aliases.get(raw, raw)
 
 
+def canonical_sport(odds_api_key: str, aliases: dict[str, str] | None = None) -> str:
+    """Map an Odds-API sport key to the venue-canonical event_key prefix, so consensus rows
+    join venue quotes (the venues key on `soccer`, the Odds API exposes `soccer_fifa_world_cup`).
+    Identity for unmapped keys — `baseball_mlb` already equals its venue prefix and is unchanged.
+    """
+    return (aliases or {}).get(odds_api_key, odds_api_key)
+
+
 def event_key(sport: str, home: str, away: str, start_utc: datetime, aliases: dict[str, dict[str, str]] | None = None) -> str:
     # #4: NO sub-day bucket. A 6h floor bucket split two venues listing the same game at
     # 17:55 vs 18:05 (and any pair straddling a 6h boundary — evening games cluster at the

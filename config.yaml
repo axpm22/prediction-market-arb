@@ -53,10 +53,16 @@ micro:
 max_days_to_settlement: 14
 nonsports_max_days: 7
 sports: [baseball_mlb, basketball_nba, soccer, tennis, mma]
-# Sports the consensus scan sends to The Odds API. Only keys valid there belong here;
-# soccer/tennis/mma need per-league key discovery and would exceed the 500/mo budget.
-# 2 sports x 2 credits x 3 scans/day = 12/day, ~360/mo.
-consensus_sports: [baseball_mlb, basketball_nba]
+# Sports the consensus scan sends to The Odds API. Only in-season keys valid there belong here.
+# NBA is off-season (0 consensus rows); club soccer/tennis/mma need per-league key discovery and
+# would exceed budget — but the World Cup is a SINGLE verified key (soccer_fifa_world_cup) with the
+# same cost profile as MLB. 2 keys x 2 credits x 3 scans/day = 12/day, ~360/mo (< 500).
+consensus_sports: [baseball_mlb, soccer_fifa_world_cup]
+# Odds-API sport key -> canonical event_key prefix. The prefix MUST match the venues' prefix so
+# consensus rows join venue quotes (venues key World Cup matches as `soccer`, the Odds API exposes
+# `soccer_fifa_world_cup`). Identity for keys not listed (baseball_mlb already equals its prefix).
+odds_api_sport_aliases:
+  soccer_fifa_world_cup: soccer
 scan_breaks: true
 break_windows:
   basketball_nba: [48, 15]
@@ -263,7 +269,12 @@ execution:
   # clusters by start time (gap > this many secs = different game) so game-1 and game-2 never pair.
   doubleheader_cluster_tol_secs: 7200
 odds_api: { region: us, warn_below_credits: 100, abort_below_credits: 50 }
-parlay: { enabled: false, divergence_threshold: 0.05 }
+# Parlay class (SPEC §11). EV-style signals only — a parlay can never be locked risk-free
+# (no static replication), so every parlay flag is REVIEW and never auto-filled; it lives in
+# its own ledger lane (kind=PARLAY) and settles as the AND of its legs. enabled gates the
+# parlay-scan command. min_liquidity_usd is enforced strictly (observed zero-liquidity Kalshi
+# MVE books). divergence_threshold gates the cross-game independence signal only.
+parlay: { enabled: false, divergence_threshold: 0.05, min_liquidity_usd: 500 }
 # Phase 3 parallel Kelly sizing (projection only; flat-$1 stays the headline).
 sizing:
   kelly_fraction: 0.25                  # quarter-Kelly

@@ -1,0 +1,45 @@
+[
+  {
+    "id": "wc-ecu-ger-2026-07-09",
+    "sport_key": "soccer_fifa_world_cup",
+    "sport_title": "FIFA World Cup",
+    "commence_time": "2026-07-09T18:00:00Z",
+    "home_team": "Germany",
+    "away_team": "Ecuador",
+    "bookmakers": [
+      {
+        "key": "draftkings",
+        "last_update": "2026-07-09T16:00:00Z",
+        "markets": [
+          {"key": "h2h", "last_update": "2026-07-09T16:00:00Z", "outcomes": [
+            {"name": "Germany", "price": 1.55},
+            {"name": "Ecuador", "price": 6.0},
+            {"name": "Draw", "price": 4.2}
+          ]}
+        ]
+      },
+      {
+        "key": "fanduel",
+        "last_update": "2026-07-09T16:05:00Z",
+        "markets": [
+          {"key": "h2h", "last_update": "2026-07-09T16:05:00Z", "outcomes": [
+            {"name": "Germany", "price": 1.57},
+            {"name": "Ecuador", "price": 5.8},
+            {"name": "Draw", "price": 4.1}
+          ]}
+        ]
+      },
+      {
+        "key": "betmgm",
+        "last_update": "2026-07-09T16:02:00Z",
+        "markets": [
+          {"key": "h2h", "last_update": "2026-07-09T16:02:00Z", "outcomes": [
+            {"name": "Germany", "price": 1.53},
+            {"name": "Ecuador", "price": 6.2},
+            {"name": "Draw", "price": 4.3}
+          ]}
+        ]
+      }
+    ]
+  }
+]

@@ -23,7 +23,8 @@ def settle_sports(store: Store, config, fixture_dir: Path | None = None) -> int:
     """
     bets = [*_open_ev_bets(store), *_open_arb_bets(store)]
     if not bets:
-        return 0
+        # No EV/ARB to settle, but parlays may still be open (own ledger lane, SPEC §11).
+        return settle_parlays(store, config, fixture_dir)
     adapter = OddsApiAdapter(config, fixture_dir)
     results: dict[str, dict[str, Decimal]] = {}
     for sport in sorted({str(bet["sport"]) for bet in bets}):
@@ -48,7 +49,126 @@ def settle_sports(store: Store, config, fixture_dir: Path | None = None) -> int:
                 continue
             _append_settled_row(con, bet, result, "score-settled")
             settled += 1
+    # Parlays settle in their own lane on the same scores pass (SPEC §11).
+    settled += settle_parlays(store, config, fixture_dir)
     return settled
+
+
+def settle_parlays(store: Store, config, fixture_dir: Path | None = None) -> int:
+    """Resolve open PARLAY bets as the AND of their component legs (SPEC §11).
+
+    A parlay pays $1 iff EVERY leg wins. Each component leg is resolved against final scores
+    exactly like an EV leg; the basket result is the conjunction:
+      - all legs WON                -> WON   (P&L = (1−ask)/ask on the $1 stake)
+      - any leg LOST                -> LOST  (−$1)
+      - no loss but a leg VOID      -> VOID  ($0) — conservative until per-venue parlay void
+                                       rules are verified (some venues drop the void leg).
+      - any leg not yet resolved    -> stay OPEN (skip this pass).
+    Append-only; idempotent (settled parlays are excluded by the open query).
+    """
+    bets = _open_parlay_bets(store)
+    if not bets:
+        return 0
+    adapter = OddsApiAdapter(config, fixture_dir)
+    results: dict[str, dict[str, Decimal]] = {}
+    sports = {str(leg.get("sport") or _sport_from_event_key(leg)) for bet in bets
+              for leg in _parlay_component_legs(bet)}
+    for sport in sorted(s for s in sports if s):
+        try:
+            events = adapter.fetch_scores(sport, config.settle_days_from)
+        except FileNotFoundError:
+            continue
+        results.update(score_results(events, sport))
+    settled = 0
+    with store.connect() as con:
+        for bet in bets:
+            components = _parlay_component_legs(bet)
+            leg_results: list[str] = []
+            for leg in components:
+                scores = results.get(str(leg["event_key"]))
+                if scores is None:
+                    break
+                res = _leg_result(leg, scores)
+                if res is None:
+                    break
+                leg_results.append(res)
+            if len(leg_results) != len(components):
+                continue  # at least one leg unresolved — leave OPEN for a later pass
+            result = _parlay_result(leg_results)
+            _append_parlay_settled_row(con, bet, result, "parlay-score-settled")
+            settled += 1
+    return settled
+
+
+def _parlay_result(leg_results: list[str]) -> str:
+    if "LOST" in leg_results:
+        return "LOST"
+    if "VOID" in leg_results:
+        return "VOID"
+    return "WON"
+
+
+def _parlay_component_legs(bet: sqlite3.Row) -> list[dict[str, Any]]:
+    """Component single-leg quotes of a parlay bet: every leg except the synthetic PARLAY
+    basket leg (market_type='PARLAY', outcome_label='PARLAY')."""
+    legs = json.loads(bet["legs_json"] or "[]")
+    return [leg for leg in legs if leg.get("market_type") != "PARLAY"]
+
+
+def _parlay_basket_leg(bet: sqlite3.Row) -> dict[str, Any] | None:
+    legs = json.loads(bet["legs_json"] or "[]")
+    for leg in legs:
+        if leg.get("market_type") == "PARLAY":
+            return leg
+    return None
+
+
+def _sport_from_event_key(leg: dict[str, Any]) -> str:
+    return str(leg.get("event_key") or "").split(":", 1)[0]
+
+
+def _append_parlay_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, note: str) -> None:
+    # Pregame-only guard (mirrors EV/ARB): a parlay placed at/after the earliest leg start is a
+    # post-hoc artifact, not a pregame bet — record INVALID_IN_PLAY with no P&L.
+    placed_at = _parse_utc(bet["placed_at"])
+    starts = [_leg_start_utc(leg) for leg in _parlay_component_legs(bet)]
+    earliest = min((s for s in starts if s is not None), default=None)
+    if placed_at is not None and earliest is not None and placed_at >= earliest:
+        _append_invalid_row(con, bet, "INVALID_IN_PLAY", "invalid-in-play", f"{note}; invalid-in-play")
+        return
+    pnl = _sized_pnl(bet["optimistic_cost"], result, bet["stake_usd"])
+    con.execute(
+        """
+        INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
+                              live, edge, stake_usd, legs_json, optimistic_cost, confirmed_cost,
+                              pnl_optimistic, pnl_confirmed, status, placed_at, settled_at, result, notes,
+                              quality_flag, kelly_f_star, kelly_stake_usd, validation_rule, validation_tag)
+        VALUES (?, ?, ?, ?, ?, 'PARLAY', ?, ?, ?, ?, ?, ?, NULL, ?, NULL, 'SETTLED', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            bet["fingerprint"], bet["id"], bet["opened_poll_id"], bet["category"], bet["sport"],
+            bet["trusted"], bet["live"], bet["edge"], bet["stake_usd"], bet["legs_json"],
+            bet["optimistic_cost"], None if pnl is None else str(pnl),
+            bet["placed_at"], datetime.now(timezone.utc).isoformat(), result, note,
+            bet["quality_flag"], bet["kelly_f_star"], bet["kelly_stake_usd"],
+            bet["validation_rule"], bet["validation_tag"],
+        ),
+    )
+
+
+def _open_parlay_bets(store: Store) -> list[sqlite3.Row]:
+    with store.connect() as con:
+        return list(
+            con.execute(
+                """
+                SELECT * FROM flat_bets b
+                 WHERE b.kind = 'PARLAY' AND b.status = 'OPEN'
+                   AND NOT EXISTS (SELECT 1 FROM flat_bets s
+                                    WHERE s.status IN ('SETTLED','CLOSED','EXITED') AND s.reappearance_of = b.id)
+                 ORDER BY b.id
+                """
+            )
+        )
 
 
 def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
