@@ -40,7 +40,7 @@ class SxAdapter:
     def fetch_quotes(self, sport: str) -> list[Quote]:
         if self.fixture_dir is not None:
             data = json.loads((self.fixture_dir / f"sx_{sport}.json").read_text())
-            return parse_sx_payload(data, sport, fee_rate=self.config.sx_fee_rate, taker_buffer=self.config.taker_price_buffer, slippage_model=self.config.taker_slippage_model, slippage_ref_stake=self.config.slippage_ref_stake_usd)
+            return parse_sx_payload(data, sport, fee_rate=self.config.sx_fee_rate, taker_buffer=self.config.taker_price_buffer, slippage_model=self.config.taker_slippage_model, slippage_ref_stake=self.config.slippage_ref_stake_usd, win_fee_rate=self.config.sx_win_fee_rate)
         if self.config.sx_fee_rate is None:
             raise RuntimeError("SX adapter refuses live runs while sx.fee_rate is null.")
         sport_id = SPORT_IDS.get(sport)
@@ -54,7 +54,7 @@ class SxAdapter:
             markets.extend(self._fetch_league_markets(int(league["leagueId"])))
         markets = [m for m in markets if int(m.get("type", 0)) in {MONEYLINE, TOTALS}]
         orders = self._fetch_orders([str(m["marketHash"]) for m in markets])
-        return parse_sx_payload({"markets": markets, "orders": orders}, sport, fee_rate=self.config.sx_fee_rate, taker_buffer=self.config.taker_price_buffer, slippage_model=self.config.taker_slippage_model, slippage_ref_stake=self.config.slippage_ref_stake_usd)
+        return parse_sx_payload({"markets": markets, "orders": orders}, sport, fee_rate=self.config.sx_fee_rate, taker_buffer=self.config.taker_price_buffer, slippage_model=self.config.taker_slippage_model, slippage_ref_stake=self.config.slippage_ref_stake_usd, win_fee_rate=self.config.sx_win_fee_rate)
 
     def _fetch_league_markets(self, league_id: int) -> list[dict[str, Any]]:
         markets: list[dict[str, Any]] = []
@@ -95,6 +95,7 @@ def parse_sx_payload(
     taker_buffer: Decimal = Decimal("0"),
     slippage_model: str = "flat",
     slippage_ref_stake: Decimal = Decimal("50"),
+    win_fee_rate: Decimal | None = None,
 ) -> list[Quote]:
     fetched_at = datetime.now(timezone.utc)
     aliases = load_aliases()
@@ -103,6 +104,12 @@ def parse_sx_payload(
     if fee_rate is None:
         fee_rate = Decimal("0")
         notes = (*notes, "fee-rate-unverified")
+    # D3: SX charges its fee only on WINNING bets. An arb always has exactly one winning leg, so
+    # a winning SX leg DOES pay this fee — pricing it at zero overstates every polymarket+sx edge.
+    # Charge it conservatively (as if this leg wins) at win_fee_rate * (1 - cost). 0 → no change.
+    win_rate = win_fee_rate if win_fee_rate is not None else Decimal("0")
+    if win_rate > 0:
+        notes = (*notes, "sx-win-fee-modeled")
     orders_by_hash = payload.get("orders", {})
     quotes: list[Quote] = []
     for market in payload.get("markets", []):
@@ -139,7 +146,7 @@ def parse_sx_payload(
                     outcome_label=label,
                     raw_price=cost,
                     cost=cost,
-                    fee_cost=all_in_fee_cost(cost, fee_rate, buffer, basis="linear"),
+                    fee_cost=all_in_fee_cost(cost, fee_rate, buffer, basis="linear") + q6(win_rate * (Decimal("1") - cost)),
                     depth_usd=depth,
                     ladder=ladder,
                     live=False,

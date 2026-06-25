@@ -68,6 +68,30 @@ def test_arb_sizing_scales_with_depth_when_empirical_buckets_pass(tmp_path) -> N
     assert large_rec["stake"] <= model["max_stake"]
 
 
+def test_g2_config_overrides_buckets_and_caps(tmp_path) -> None:
+    # G2: the depth fraction + edge caps are config-driven (were hardcoded). A model built with
+    # a higher fraction and cap must size a deep arb larger than the default model, and the model
+    # must carry the resolved knobs so recommend_arb_stake bins/caps consistently.
+    store = Store(tmp_path / "arb.sqlite")
+    with store.connect() as con:
+        for _ in range(4):
+            _insert_arb(con, status="SETTLED", stake="1.00", pnl="0.04", depth="5000")
+        default_model = build_arb_sizing_model(con, Decimal("1000"), Decimal("0.10"), min_sample=1)
+        boosted_model = build_arb_sizing_model(
+            con, Decimal("1000"), Decimal("0.10"), min_sample=1,
+            cfg={"market_depth_fraction": "0.05",
+                 "edge_caps": {"0.5-1%": 5, "1-2%": 15, "2-5%": 200, "5%+": 100}})
+    deep = [
+        {"venue": "kalshi", "cost": "0.48", "fee_cost": "0", "depth_usd": "5000"},
+        {"venue": "polymarket", "cost": "0.48", "fee_cost": "0", "depth_usd": "5000"},
+    ]
+    default_rec = recommend_arb_stake(deep, Decimal("0.04"), default_model)
+    boosted_rec = recommend_arb_stake(deep, Decimal("0.04"), boosted_model)
+    assert default_model["market_depth_fraction"] == 0.01      # default preserved
+    assert boosted_model["market_depth_fraction"] == 0.05      # config override honored
+    assert boosted_rec["stake"] > default_rec["stake"]         # bigger fraction + cap -> bigger stake
+
+
 def test_arb_sizing_refuses_unproven_venue_pair(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     with store.connect() as con:

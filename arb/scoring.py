@@ -28,6 +28,9 @@ class SegmentScore:
     roi: float
     score: float
     tier: str
+    confirmation_rate: float = 1.0   # I1/I2: fraction of the segment's scored P&L that is real
+                                     # (EV: pnl_confirmed not NULL; ARB: lock present). The
+                                     # headline finding — a low rate means most P&L is zeroed.
 
 
 def _sigmoid_norm(x: float, scale: float = 0.1) -> float:
@@ -54,11 +57,18 @@ def _settled_clean_bets(store: Store) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def segment_calibration(bets_by_segment: dict[str, list[dict]], bins: int = 10) -> dict[str, float]:
+def segment_calibration(bets_by_segment: dict[str, list[dict]], bins: int = 10,
+                        min_n: int | None = None) -> dict[str, float]:
     """EV#10: per-segment ECE from settled EV bets' (p_hat, won). p_hat = optimistic_cost +
     edge_points (edge_points = p_hat - effective_cost). A segment can clear the ROI gate on
-    variance while its p_hat is badly calibrated; this measures that directly."""
+    variance while its p_hat is badly calibrated; this measures that directly.
+
+    B10: ECE over ~1 sample/bin is pure noise, so a segment with only `bins` rows must not be
+    blocked on it. `min_n` is the minimum calibratable sample before ECE is reported at all;
+    a segment below it returns no ECE (and so is never calibration-blocked). Defaults to `bins`
+    (legacy behavior); callers should pass a real floor (e.g. 200) when the gate is enabled."""
     from arb.forecast.scoring import calibration_bins, expected_calibration_error
+    floor = max(bins, int(min_n)) if min_n is not None else bins
     out: dict[str, float] = {}
     for seg, bets in bets_by_segment.items():
         rows = []
@@ -68,7 +78,7 @@ def segment_calibration(bets_by_segment: dict[str, list[dict]], bins: int = 10) 
             p_hat = float(b["optimistic_cost"]) + float(b["edge_points"])
             if 0.0 < p_hat < 1.0:
                 rows.append({"p_you": p_hat, "outcome": 1 if b["result"] == "WON" else 0})
-        if len(rows) >= bins:
+        if len(rows) >= floor:
             out[seg] = expected_calibration_error(calibration_bins(rows, bins), len(rows))
     return out
 
@@ -90,12 +100,15 @@ def score_segments(store: Store, scoring_cfg: dict) -> list[SegmentScore]:
     # EV#10: optionally block a segment whose p_hat is badly calibrated even if ROI looks fine.
     calibration_gate = bool(scoring_cfg.get("calibration_gate", False))
     ece_max = float(scoring_cfg.get("ece_max", 0.10))
+    # B10: minimum calibratable sample before the calibration gate may fire (ECE on ~1/bin is
+    # noise). Only consulted when calibration_gate is on.
+    ece_min_n = int(scoring_cfg.get("ece_min_n", 200))
 
     by_segment: dict[str, list[dict]] = {}
     for bet in _settled_clean_bets(store):
         seg = f"{bet['sport'] or 'unknown'}:{bet['kind']}"
         by_segment.setdefault(seg, []).append(bet)
-    ece_by_segment = segment_calibration(by_segment) if calibration_gate else {}
+    ece_by_segment = segment_calibration(by_segment, min_n=ece_min_n) if calibration_gate else {}
 
     scores: list[SegmentScore] = []
     for seg, all_bets in sorted(by_segment.items()):
@@ -105,21 +118,32 @@ def score_segments(store: Store, scoring_cfg: dict) -> list[SegmentScore]:
         n = len(bets)
         wins = sum(1 for b in bets if b["result"] == "WON")
         win_rate = wins / n if n else 0.0
-        # #6 score on the CONFIRMED (realistic) fill, not the optimistic "mirage". A bet
-        # that never confirmed (NULL) was uncapturable -> 0 P&L, which correctly drags ROI.
-        def _confirmed(b) -> float:
+        # I1/I2: pick the right P&L per kind. EV scores on the CONFIRMED fill (#6) — a bet that
+        # never confirmed (NULL) was uncapturable, so 0 correctly drags ROI. But an ARB locks its
+        # realized P&L AT ENTRY (pnl_optimistic); the EV "confirmed fill" concept doesn't map onto
+        # a lock, and arbs always have NULL pnl_confirmed — scoring them via _confirmed zeroed
+        # every arb segment and could wrongly BLOCK a profitable one. Score arbs on the lock.
+        def _pnl(b) -> float:
+            if b["kind"] == "ARB":
+                return float(b["pnl_optimistic"]) if b["pnl_optimistic"] is not None else 0.0
             return float(b["pnl_confirmed"]) if b["pnl_confirmed"] is not None else 0.0
-        pnl = sum(_confirmed(b) for b in bets)
+
+        def _is_confirmed(b) -> bool:
+            return (b["pnl_optimistic"] if b["kind"] == "ARB" else b["pnl_confirmed"]) is not None
+
+        confirmation_rate = sum(1 for b in bets if _is_confirmed(b)) / n if n else 1.0
+        pnl = sum(_pnl(b) for b in bets)
         staked = sum(float(b["stake_usd"] or 0) for b in bets) or 1.0
         roi = pnl / staked
         # #10 trend distinct from win_rate: recency-weighted ROI MAGNITUDE over the recent
         # window (not the sign of each bet, which was nearly collinear with win_rate).
         recent = bets[-recent_window:]
-        recent_pnl = sum(_confirmed(b) for b in recent)
+        recent_pnl = sum(_pnl(b) for b in recent)
         recent_stake = sum(float(b["stake_usd"] or 0) for b in recent) or 1.0
         trend = recent_pnl / recent_stake
         if n < min_n:
-            scores.append(SegmentScore(seg, n, round(win_rate, 4), round(roi, 4), 0.0, INSUFFICIENT))
+            scores.append(SegmentScore(seg, n, round(win_rate, 4), round(roi, 4), 0.0,
+                                       INSUFFICIENT, round(confirmation_rate, 4)))
             continue
         raw = 100.0 * (
             w_roi * _sigmoid_norm(roi)
@@ -133,7 +157,8 @@ def score_segments(store: Store, scoring_cfg: dict) -> list[SegmentScore]:
         # the ROI gate while p_hat is wrong).
         if calibration_gate and ece_by_segment.get(seg, 0.0) > ece_max:
             tier = BLOCKED
-        scores.append(SegmentScore(seg, n, round(win_rate, 4), round(roi, 4), score, tier))
+        scores.append(SegmentScore(seg, n, round(win_rate, 4), round(roi, 4), score, tier,
+                                   round(confirmation_rate, 4)))
     return scores
 
 
@@ -161,10 +186,15 @@ def persist_scores(store: Store, scores: list[SegmentScore]) -> None:
         con.execute(
             """CREATE TABLE IF NOT EXISTS segment_scores(
                  computed_at TEXT, segment TEXT, n INTEGER, win_rate REAL,
-                 roi REAL, score REAL, tier TEXT)"""
+                 roi REAL, score REAL, tier TEXT, confirmation_rate REAL)"""
         )
+        # I1/I2: add the column to pre-existing tables (append-only schema evolution).
+        cols = {r[1] for r in con.execute("PRAGMA table_info(segment_scores)")}
+        if "confirmation_rate" not in cols:
+            con.execute("ALTER TABLE segment_scores ADD COLUMN confirmation_rate REAL")
         now = datetime.now(timezone.utc).isoformat()
         con.executemany(
-            "INSERT INTO segment_scores(computed_at, segment, n, win_rate, roi, score, tier) VALUES (?,?,?,?,?,?,?)",
-            [(now, s.segment, s.n, s.win_rate, s.roi, s.score, s.tier) for s in scores],
+            "INSERT INTO segment_scores(computed_at, segment, n, win_rate, roi, score, tier, confirmation_rate) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            [(now, s.segment, s.n, s.win_rate, s.roi, s.score, s.tier, s.confirmation_rate) for s in scores],
         )

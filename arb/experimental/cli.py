@@ -111,7 +111,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "arb-capacity":
         from arb.experimental.analysis.arb_capacity import format_report, run_arb_capacity
 
-        print(format_report(run_arb_capacity(Store(config.database_path))))
+        print(format_report(run_arb_capacity(
+            Store(config.database_path),
+            min_ladder_fraction=float(config.arb_min_ladder_fraction),
+            fillable_fraction=config.arb_fillable_fraction)))
         return 0
     if args.command == "devig-brier":
         from arb.experimental.analysis.devig_brier import format_methods, score_methods

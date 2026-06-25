@@ -134,6 +134,17 @@ def record_closing_bets(
             ev = expected_value(p_hat, quote.effective_cost)
             if ev <= 0:
                 continue
+            # C13: keep the closing lane's edge definition consistent with the main EV lane. The
+            # main lane prices push risk on integer totals (B11); decay (age≈0 at the close) and
+            # dispersion (parallel/off) don't apply here, but push does — so apply the same
+            # haircut instead of pricing an integer total as a clean binary.
+            if getattr(config, "ev_push_pricing", False) and quote.market_type == "TOTAL" and quote.line is not None:
+                from arb.pricing import push_adjusted_edge, push_probability_poisson
+                u = push_probability_poisson(quote.line)
+                if u > 0:
+                    ev = push_adjusted_edge(ev, u)
+                    if ev <= 0:
+                        continue
             if poll_id is None:
                 poll_id = store.start_poll("closing")
             _insert_closing_bet(con, poll_id, quote, ev, now)

@@ -18,7 +18,8 @@ from pathlib import Path
 from typing import Any
 
 from arb.arb_sizing import build_arb_scale_projection, build_arb_sizing_model, recommend_arb_stake
-from arb.config import load_config
+from arb.config import load_config, overlay_path
+from arb.experimental import control
 from arb.scoring import score_segments
 from arb.store import Store
 
@@ -865,8 +866,10 @@ def build_state(store: Store, config) -> dict[str, Any]:
                 """
             )
         )
-        arb_sizing_model = build_arb_sizing_model(c, config.bankroll_usd, config.max_stake_pct)
-        arb_scale_projection = build_arb_scale_projection(c, config.bankroll_usd, config.max_stake_pct)
+        arb_sizing_model = build_arb_sizing_model(c, config.bankroll_usd, config.max_stake_pct,
+                                                  cfg=config.arb_sizing)
+        arb_scale_projection = build_arb_scale_projection(c, config.bankroll_usd, config.max_stake_pct,
+                                                          cfg=config.arb_sizing)
         # Research Signals: DIVERGENCE spreads, shown separately, no P&L (kept out of
         # open-bet totals entirely per the reporting rules).
         research_rows = [
@@ -908,7 +911,7 @@ def build_state(store: Store, config) -> dict[str, Any]:
         settled_rows = list(
             c.execute(
                 """
-                SELECT placed_at, pnl_optimistic, pnl_confirmed, quality_flag
+                SELECT placed_at, pnl_optimistic, pnl_confirmed, quality_flag, kind, trusted, validation_tag
                   FROM flat_bets
                  WHERE status IN ('SETTLED','EXITED') AND result IN ('WON','LOST','RESOLVED','VOID','SOLD')
                  ORDER BY placed_at
@@ -921,16 +924,79 @@ def build_state(store: Store, config) -> dict[str, Any]:
             "SELECT COUNT(*) FROM flat_bets WHERE status='CORRECTED' AND result='SETTLER-ERROR'"
         ).fetchone()[0]
 
+    def _is_headline(row) -> bool:
+        # ONE canonical "headline / clean" definition, used by every aggregate so the hero
+        # number, its lane chips, the equity curve, the per-strategy breakdown and attribution
+        # all reconcile. A row counts toward the headline paper book iff:
+        #   - it is not quarantined/thin (quality_flag IS NULL: excludes micro/suspect/below-e-min/stale),
+        #   - it is not a REVIEW cross-venue arb (kind=ARB AND trusted=0 → provisional, hard rule #6),
+        #     regardless of quality_flag (pre-A1-fix rows are NULL-flagged but still trusted=0), and
+        #   - for EV, it passes the de-vig validation gate (validation_tag IS NULL or KEEP).
+        if row["quality_flag"] is not None:
+            return False
+        if row["kind"] == "ARB" and not row["trusted"]:
+            return False
+        if row["kind"] == "EV" and row["validation_tag"] not in (None, "KEEP"):
+            return False
+        return True
+
     def curve(field: str, clean: bool) -> list[dict[str, Any]]:
         cum, out = 0.0, []
         for row in settled_rows:
-            if clean and row["quality_flag"] is not None:
+            if clean and not _is_headline(row):
                 continue
             if row[field] is None:
                 continue
             cum += float(row[field])
             out.append({"t": row["placed_at"], "y": round(cum, 4)})
         return out
+
+    def curve_by_kind() -> dict[str, list[dict[str, Any]]]:
+        # Per-strategy cumulative headline optimistic P&L (same predicate as the hero), so the
+        # By-strategy lines and attribution sum to the headline total. ARB here is trusted-only.
+        cums: dict[str, float] = {}
+        series: dict[str, list[dict[str, Any]]] = {}
+        for row in settled_rows:
+            if not _is_headline(row) or row["pnl_optimistic"] is None:
+                continue
+            kind = row["kind"] or "?"
+            cums[kind] = cums.get(kind, 0.0) + float(row["pnl_optimistic"])
+            series.setdefault(kind, []).append({"t": row["placed_at"], "y": round(cums[kind], 4)})
+        return series
+
+    def headline_summary() -> dict[str, Any]:
+        # Authoritative headline totals + the lane breakdown that sums to them, plus the
+        # explicitly-excluded buckets so the UI can show "what's NOT in this number" honestly.
+        by_lane: dict[str, dict[str, float]] = {}
+        opt = conf = 0.0
+        excl_review = excl_review_n = 0.0
+        excl_quarantined = excl_quarantined_n = 0.0
+        for row in settled_rows:
+            po = float(row["pnl_optimistic"]) if row["pnl_optimistic"] is not None else 0.0
+            pc = float(row["pnl_confirmed"]) if row["pnl_confirmed"] is not None else 0.0
+            if _is_headline(row):
+                lane = by_lane.setdefault(row["kind"] or "?", {"optimistic": 0.0, "confirmed": 0.0, "n": 0})
+                lane["optimistic"] += po
+                lane["confirmed"] += pc
+                lane["n"] += 1
+                opt += po
+                conf += pc
+            elif row["kind"] == "ARB" and not row["trusted"]:
+                excl_review += po
+                excl_review_n += 1
+            elif row["quality_flag"] is not None:
+                excl_quarantined += po
+                excl_quarantined_n += 1
+        return {
+            "optimistic": _money(opt),
+            "confirmed": _money(conf),
+            "by_lane": {k: {"optimistic": _money(v["optimistic"]), "confirmed": _money(v["confirmed"]),
+                            "n": int(v["n"])} for k, v in sorted(by_lane.items())},
+            "excluded_review_pnl": _money(excl_review),
+            "excluded_review_n": int(excl_review_n),
+            "excluded_quarantined_pnl": _money(excl_quarantined),
+            "excluded_quarantined_n": int(excl_quarantined_n),
+        }
 
     segments = [
         {
@@ -945,6 +1011,21 @@ def build_state(store: Store, config) -> dict[str, Any]:
     ]
 
     clv = _cached_clv(store)
+
+    # Control plane — per-version P&L head-to-head where the ledger attributes it (lanes map to
+    # a kind; pure model versions have no historical per-row tag, so their P&L stays null).
+    pnl_by_kind: dict[str, float] = {str(r["kind"]): float(r.get("pnl") or 0.0) for r in kind_rows}
+    for r in quality_rows:
+        pnl_by_kind[f"{r['kind']}:{r['quality']}"] = float(r.get("pnl") or 0.0)
+    controls = control.effective_controls(pnl_by_kind=pnl_by_kind)
+    headline = headline_summary()
+    # Attribution is the headline lane breakdown — same predicate as the hero, so the bars sum
+    # to the headline total and ARB shows the trusted lane only (REVIEW is excluded, not hidden).
+    attribution = sorted(
+        [{"kind": k, "pnl": lane["optimistic"], "n": lane["n"]} for k, lane in headline["by_lane"].items()],
+        key=lambda r: r["pnl"], reverse=True,
+    )
+    overlay_active = overlay_path().exists()
 
     won_n, won_p = int(settled.get("WON", {}).get("n", 0)), float(settled.get("WON", {}).get("pnl", 0.0))
     lost_n, lost_p = int(settled.get("LOST", {}).get("n", 0)), float(settled.get("LOST", {}).get("pnl", 0.0))
@@ -1149,6 +1230,11 @@ def build_state(store: Store, config) -> dict[str, Any]:
             "confirmed_clean": curve("pnl_confirmed", True),
         },
         "segments": segments,
+        "controls": controls,
+        "config_overlay_active": overlay_active,
+        "headline": headline,
+        "attribution": attribution,
+        "equity_by_kind": curve_by_kind(),
         "arb_sizing_model": arb_sizing_model,
         "arb_scale_projection": arb_scale_projection,
         "open_bets": [_open_bet_payload(row, now, arb_sizing_model) for row in open_rows],
@@ -1174,6 +1260,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif self.path.startswith("/api/config"):
+            _send_json(self, {"ok": True, "controls": control.effective_controls(),
+                              "overlay_active": overlay_path().exists()})
         elif self.path in ("/", "/index.html"):
             body = PAGE.encode()
             self.send_response(200)
@@ -1187,14 +1276,23 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_POST(self):  # noqa: N802
-        if self.path != "/api/scanner":
+        if self.path not in ("/api/scanner", "/api/config"):
             self.send_response(404)
             self.end_headers()
+            return
+        # Same-origin guard: the server is localhost-bound, but reject cross-site POSTs too.
+        origin = self.headers.get("Origin")
+        if origin and not (origin.endswith("//localhost:" + str(self.server.server_address[1]))
+                           or origin.endswith("//127.0.0.1:" + str(self.server.server_address[1]))):
+            _send_json(self, {"ok": False, "error": "cross-origin POST refused"}, 403)
             return
         try:
             length = int(self.headers.get("Content-Length") or "0")
             payload = json.loads(self.rfile.read(length) or b"{}")
-            result = _set_scanner_state(str(payload.get("scanner", "")), str(payload.get("action", "")))
+            if self.path == "/api/config":
+                result = control.set_control(str(payload.get("id", "")), payload.get("value"))
+            else:
+                result = _set_scanner_state(str(payload.get("scanner", "")), str(payload.get("action", "")))
             if not result.get("ok"):
                 _send_json(self, result, 400)
                 return
@@ -1408,6 +1506,32 @@ kbd{font:11px ui-monospace,Menlo,monospace;background:var(--panel-3);border:1px 
 .split-bar span{height:100%}
 .tip{position:relative}
 .miniflag{display:inline-block;font-size:10px;font-weight:700;padding:1px 5px;border-radius:5px;background:rgba(229,184,90,.16);color:var(--gold);margin-left:6px;vertical-align:middle}
+/* control plane */
+.ctrl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:8px}
+.ctrl-row{display:grid;grid-template-columns:1fr auto;gap:10px 14px;align-items:center;background:var(--panel-3);border:1px solid var(--line-soft);border-radius:9px;padding:11px 13px;min-width:0}
+.ctrl-row.betting{border-color:rgba(229,184,90,.5);background:rgba(229,184,90,.07)}
+.ctrl-meta{min-width:0}
+.ctrl-name{font-weight:700;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.ctrl-desc{color:var(--muted);font-size:11.5px;margin-top:3px;line-height:1.4}
+.ctrl-pnl{font-size:11px;margin-top:5px;display:inline-block}
+.src{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:5px;background:var(--panel-2);color:var(--muted-2);border:1px solid var(--line-soft);text-transform:uppercase;letter-spacing:.04em}
+.src.overlay{color:var(--blue);border-color:rgba(118,174,252,.5)}
+.switch{position:relative;width:42px;height:24px;flex:0 0 auto;display:inline-block}
+.switch input{opacity:0;width:0;height:0;position:absolute}
+.switch .track{position:absolute;inset:0;background:var(--panel-2);border:1px solid var(--line);border-radius:99px;transition:.15s;cursor:pointer}
+.switch .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:99px;background:var(--muted);transition:.15s}
+.switch input:checked+.track{background:rgba(97,200,138,.28);border-color:var(--green)}
+.switch input:checked+.track .knob{left:20px;background:var(--green)}
+.switch input:disabled+.track{opacity:.5;cursor:not-allowed}
+.ctrl-select{height:30px;border-radius:7px;border:1px solid var(--line-soft);background:var(--panel-2);color:var(--text);padding:0 8px;cursor:pointer}
+.ctrl-num{width:92px;height:30px;border-radius:7px;border:1px solid var(--line-soft);background:var(--panel-3);color:var(--text);padding:0 8px}
+.lock{font-size:11px;color:var(--gold);white-space:nowrap}
+.attrib{display:grid;gap:6px;margin-top:12px}
+.attrib-row{display:grid;grid-template-columns:96px 1fr 96px;align-items:center;gap:10px;font-size:12px}
+.attrib-track{height:14px;position:relative;background:var(--panel-3);border:1px solid var(--line-soft);border-radius:5px}
+.attrib-fill{position:absolute;top:0;bottom:0;border-radius:4px}
+.attrib-zero{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--muted-2);opacity:.6}
+@media (max-width:760px){.ctrl-grid{grid-template-columns:1fr}}
 @media (max-width:700px){.navlist{grid-template-columns:1fr}#toasts{left:12px;right:12px;max-width:none}.controls .hide-sm{display:none}}
 </style>
 </head>
@@ -1519,12 +1643,25 @@ kbd{font:11px ui-monospace,Menlo,monospace;background:var(--panel-3);border:1px 
       <div class="panel-body"><div class="scanner-list" id="scanners"></div></div>
     </div>
     <div class="panel full">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Strategy &amp; Version Controls <span class="info" title="Toggle strategy lanes and model versions. Writes go only to config.local.yaml (a merged overlay) — the canonical config.yaml is never touched, and reverting is deleting the key. Most changes need the named worker restarted. Betting flags are read-only here: this is a paper-only instrument.">i</span></div>
+          <div class="muted" id="controls-summary"></div>
+        </div>
+        <div class="status-line"><span class="pill" id="overlay-pill">overlay</span><span class="pill">measurement-only · no orders</span></div>
+      </div>
+      <div class="panel-body"><div id="controls"></div></div>
+    </div>
+    <div class="panel full">
       <div class="panel-head open-toolbar">
         <div>
           <div class="panel-title">Open Bets &amp; EV</div>
           <div class="muted" id="open-summary"></div>
         </div>
-        <div class="tabs" id="open-tabs"></div>
+        <div class="controls">
+          <input class="search" id="open-search" type="search" placeholder="Filter event / venue / id…  ( / )" autocomplete="off">
+          <div class="tabs" id="open-tabs"></div>
+        </div>
       </div>
       <div class="panel-body"><div class="open-groups" id="open-bets"></div></div>
     </div>
@@ -1543,10 +1680,13 @@ kbd{font:11px ui-monospace,Menlo,monospace;background:var(--panel-3);border:1px 
     </div>
     <div class="panel wide">
       <div class="panel-head">
-        <div class="panel-title">Settled P&L</div>
-        <div class="status-line"><span class="pill">raw</span><span class="pill">clean</span><span class="pill">confirmed</span></div>
+        <div>
+          <div class="panel-title">Settled P&L</div>
+          <div class="muted" id="equity-summary"></div>
+        </div>
+        <div class="tabs" id="equity-tabs"></div>
       </div>
-      <div class="panel-body"><svg class="chart" id="equity"></svg></div>
+      <div class="panel-body"><svg class="chart" id="equity"></svg><div class="attrib" id="attribution"></div></div>
     </div>
     <div class="panel side">
       <div class="panel-head"><div class="panel-title">Bet Pipeline</div><div class="muted" id="pipeline-total"></div></div>
@@ -1581,7 +1721,10 @@ let activeOpenKind = "EV";
 let activeCleanEvMode = "flat";
 let activeArbSizingMode = "model";
 let activeHeroVariant = "confirmed_clean";
+let activeEquityMode = "headline";
 let openSearch = "";
+const KIND_COLORS = {EV:"#76aefc", ARB:"#bca2ff", NEGRISK:"#6fd5ce", LIVE_BASEBALL_EV:"#e5b85a", DIVERGENCE:"#a4a6ad", PARLAY:"#ff7a70"};
+const kindColor = k => KIND_COLORS[k] || "#9aa0aa";
 const colors = {raw:"#a4a6ad", clean:"#6aa8ff", confirmed:"#56c271", opps:"#e0ad3b"};
 const trackKey = "arb-dashboard-tracking-v1";
 const laneLabel = kind => ({MICRO_EV:"MICRO EV"}[kind] || kind);
@@ -1769,6 +1912,10 @@ function metric(label, value, detail, cls="") {
 }
 
 function drawLines(svg, series, opts={}) {
+  const cs = getComputedStyle(document.documentElement);
+  const cGrid = (cs.getPropertyValue("--grid-soft").trim() || "#303238");
+  const cAxis = (cs.getPropertyValue("--axis").trim() || "#a4a6ad");
+  const cText = (cs.getPropertyValue("--text").trim() || "#f2f3f0");
   const w = svg.clientWidth || 800, h = svg.clientHeight || 260;
   const padL = opts.padLeft ?? 54, padR = opts.padRight ?? 18, padT = opts.padTop ?? 36, padB = opts.padBottom ?? 34;
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
@@ -1777,7 +1924,7 @@ function drawLines(svg, series, opts={}) {
   const points = cleanSeries.flatMap(s => s.data);
   svg.innerHTML = "";
   if (!points.length) {
-    svg.innerHTML = `<text x="${w/2}" y="${h/2}" fill="#a4a6ad" text-anchor="middle">No settled points yet</text>`;
+    svg.innerHTML = `<text x="${w/2}" y="${h/2}" fill="${cAxis}" text-anchor="middle">No settled points yet</text>`;
     return;
   }
   const xs = points.map(p => Date.parse(p.t));
@@ -1794,19 +1941,19 @@ function drawLines(svg, series, opts={}) {
   const yTicks = niceTicks(minY, maxY, 5);
   yTicks.forEach(t => {
     const yy = y(t);
-    svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${w-padR}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#303238" stroke-width="1" opacity=".55"/>`);
-    svg.insertAdjacentHTML("beforeend", `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" fill="#a4a6ad" text-anchor="end" font-size="11">${axisMoney(t)}</text>`);
+    svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${w-padR}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="${cGrid}" stroke-width="1" opacity=".55"/>`);
+    svg.insertAdjacentHTML("beforeend", `<text x="${padL-8}" y="${(yy+4).toFixed(1)}" fill="${cAxis}" text-anchor="end" font-size="11">${axisMoney(t)}</text>`);
   });
   const xTicks = timeTicks(minX, maxX, 4);
   xTicks.forEach(t => {
     const xx = padL + ((t - minX) / Math.max(1, maxX - minX)) * plotW;
-    svg.insertAdjacentHTML("beforeend", `<text x="${xx.toFixed(1)}" y="${h-10}" fill="#a4a6ad" text-anchor="middle" font-size="11">${timeTickLabel(t, minX, maxX)}</text>`);
+    svg.insertAdjacentHTML("beforeend", `<text x="${xx.toFixed(1)}" y="${h-10}" fill="${cAxis}" text-anchor="middle" font-size="11">${timeTickLabel(t, minX, maxX)}</text>`);
   });
-  svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${padL}" y1="${padT}" y2="${h-padB}" stroke="#303238" stroke-width="1"/>`);
-  svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${w-padR}" y1="${h-padB}" y2="${h-padB}" stroke="#303238" stroke-width="1"/>`);
+  svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${padL}" y1="${padT}" y2="${h-padB}" stroke="${cGrid}" stroke-width="1"/>`);
+  svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${w-padR}" y1="${h-padB}" y2="${h-padB}" stroke="${cGrid}" stroke-width="1"/>`);
   const zero = y(0);
   if (zero >= padT && zero <= h - padB) {
-    svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${w-padR}" y1="${zero.toFixed(1)}" y2="${zero.toFixed(1)}" stroke="#f2f3f0" stroke-width="1" opacity=".28"/>`);
+    svg.insertAdjacentHTML("beforeend", `<line x1="${padL}" x2="${w-padR}" y1="${zero.toFixed(1)}" y2="${zero.toFixed(1)}" stroke="${cText}" stroke-width="1" opacity=".28"/>`);
   }
   cleanSeries.forEach(s => {
     const sampled = sampleLineData(s.data, opts.maxPoints ?? 180);
@@ -1817,7 +1964,7 @@ function drawLines(svg, series, opts={}) {
     const last = (s.data || [])[s.data.length - 1];
     return last ? `<span style="color:${s.color}">${esc(s.label)} ${money(last.y)}</span>` : "";
   }).filter(Boolean).join(" &nbsp; ");
-  svg.insertAdjacentHTML("beforeend", `<foreignObject x="${padL}" y="7" width="${w-padL-padR}" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="font:12px system-ui;color:#a4a6ad;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${latest}</div></foreignObject>`);
+  svg.insertAdjacentHTML("beforeend", `<foreignObject x="${padL}" y="7" width="${w-padL-padR}" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="font:12px system-ui;color:${cAxis};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${latest}</div></foreignObject>`);
 }
 
 function niceTicks(min, max, target=5) {
@@ -1871,10 +2018,117 @@ function horizonText(bet) {
   return `${bet.days_to_event}d`;
 }
 
+function postConfig(id, value) {
+  return fetch("/api/config", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id, value})})
+    .then(r => r.json().then(p => ({ok: r.ok, p})));
+}
+function controlInput(c) {
+  if (c.locked) return `<span class="lock" title="${esc(c.desc)}">🔒 locked (config.yaml only)</span>`;
+  if (c.type === "bool")
+    return `<label class="switch"><input type="checkbox" data-id="${esc(c.id)}" ${c.value ? "checked" : ""}><span class="track"><span class="knob"></span></span></label>`;
+  if (c.type === "enum")
+    return `<select class="ctrl-select" data-id="${esc(c.id)}">${(c.options || []).map(o => `<option ${o === c.value ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+  if (c.type === "number")
+    return `<input class="ctrl-num" type="number" data-id="${esc(c.id)}" value="${esc(c.value)}" ${c.min != null ? `min="${c.min}"` : ""} ${c.max != null ? `max="${c.max}"` : ""} step="${c.step ?? "any"}">`;
+  return "";
+}
+function renderControls(d) {
+  const cs = d.controls || []; if (!$("controls")) return;
+  // Never rebuild while the user is mid-interaction with a toggle/select/number in this panel.
+  if ($("controls").contains(document.activeElement)) return;
+  const overridden = cs.filter(c => c.source === "overlay").length;
+  $("controls-summary").textContent = `${cs.length} flags · ${overridden} overridden via config.local.yaml · most changes need the named worker restarted to apply`;
+  const op = $("overlay-pill");
+  if (op) { op.textContent = d.config_overlay_active ? "config.local overlay active" : "no overlay · canonical config"; op.classList.toggle("on", !!d.config_overlay_active); }
+  const groups = ["Lanes", "Versions", "Guardrail"];
+  $("controls").innerHTML = groups.map(g => {
+    const rows = cs.filter(c => c.group === g);
+    if (!rows.length) return "";
+    return `<div class="detail-title" style="margin:4px 0 8px">${esc(g)}</div><div class="ctrl-grid">` + rows.map(c => {
+      const pnl = c.pnl != null
+        ? `<span class="ctrl-pnl ${valClass(c.pnl)}">${money(c.pnl)} realized (this lane)</span>`
+        : (c.pnl_kind ? `<span class="ctrl-pnl muted">no realized rows yet</span>` : `<span class="ctrl-pnl muted">version — changes future rows only</span>`);
+      const restart = c.restart ? `<span class="miniflag" title="Restart this worker to apply the change">↻ ${esc(c.restart)}</span>` : "";
+      const cost = c.versioned_cost ? `<span class="miniflag" title="Changes every recorded cost — versioned, not silent">cost-vector</span>` : "";
+      return `<div class="ctrl-row ${c.betting ? "betting" : ""}">
+        <div class="ctrl-meta">
+          <div class="ctrl-name">${esc(c.label)} <span class="src ${esc(c.source)}">${esc(c.source)}</span> ${restart} ${cost}</div>
+          <div class="ctrl-desc">${esc(c.desc)}</div>
+          <div>${pnl}</div>
+        </div>
+        <div>${controlInput(c)}</div>
+      </div>`;
+    }).join("") + `</div>`;
+  }).join("");
+  $("controls").querySelectorAll("[data-id]").forEach(el => {
+    el.onchange = async () => {
+      const id = el.dataset.id;
+      const value = el.type === "checkbox" ? el.checked : el.value;
+      el.disabled = true;
+      try {
+        const {ok, p} = await postConfig(id, value);
+        if (!ok || !p.ok) { toast(p.error || "config update failed", "bad", 6000); if (state) renderControls(state); return; }
+        state = p.state; lastUpdate = Date.now();
+        toast(p.message || "updated", "good", 4500);
+        render(state);
+      } catch (err) { toast(String(err), "bad", 6000); if (state) renderControls(state); }
+      finally { el.disabled = false; }
+    };
+  });
+}
+
+function renderAttribution(d) {
+  const rows = d.attribution || []; if (!$("attribution")) return;
+  if (!rows.length) { $("attribution").innerHTML = `<div class="muted" style="margin-top:10px">No settled headline rows to attribute yet.</div>`; return; }
+  const max = Math.max(1, ...rows.map(r => Math.abs(num(r.pnl))));
+  const sum = rows.reduce((a, r) => a + num(r.pnl), 0);
+  $("attribution").innerHTML = `<div class="detail-title" style="margin:4px 0 2px">Profit attribution by strategy <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· sums to headline ${money(sum)} (trusted/clean only)</span></div>` + rows.map(r => {
+    const v = num(r.pnl), w = Math.abs(v) / max * 50;
+    const fill = v >= 0
+      ? `<span class="attrib-fill" style="left:50%;width:${w}%;background:var(--green)"></span>`
+      : `<span class="attrib-fill" style="right:50%;width:${w}%;background:var(--red)"></span>`;
+    return `<div class="attrib-row"><span class="mono">${esc(laneLabel(r.kind))}</span><span class="attrib-track">${fill}<span class="attrib-zero" style="left:50%"></span></span><span class="${valClass(v)}" style="text-align:right">${money(v)} <span class="muted">${r.n}</span></span></div>`;
+  }).join("");
+}
+
+function drawDrawdown(svg, curve) {
+  let peak = -Infinity;
+  const dd = (curve || []).map(p => { peak = Math.max(peak, num(p.y)); return {t: p.t, y: round4(num(p.y) - peak)}; });
+  drawLines(svg, [{label: "drawdown", color: colors.raw, data: dd}], {maxPoints: 200});
+}
+function round4(v) { return Math.round(num(v) * 1e4) / 1e4; }
+
+function renderEquity(d) {
+  const tabs = [["headline", "Headline"], ["strategy", "By strategy"], ["drawdown", "Drawdown"]];
+  if ($("equity-tabs")) {
+    $("equity-tabs").innerHTML = tabs.map(([m, l]) => `<button class="tab ${m === activeEquityMode ? "active" : ""}" data-mode="${m}" type="button">${esc(l)}</button>`).join("");
+    $("equity-tabs").querySelectorAll("button").forEach(b => b.onclick = () => { activeEquityMode = b.dataset.mode; renderEquity(state); });
+  }
+  const svg = $("equity"); if (!svg) return;
+  if (activeEquityMode === "strategy") {
+    const byKind = d.equity_by_kind || {};
+    const series = Object.keys(byKind).filter(k => (byKind[k] || []).length)
+      .map(k => ({label: laneLabel(k), color: kindColor(k), data: byKind[k]}));
+    if ($("equity-summary")) $("equity-summary").textContent = "cumulative clean optimistic P&L per strategy (ARB = trusted lane only)";
+    drawLines(svg, series);
+  } else if (activeEquityMode === "drawdown") {
+    if ($("equity-summary")) $("equity-summary").textContent = "peak-to-trough of the clean optimistic curve";
+    drawDrawdown(svg, (d.equity || {}).optimistic_clean);
+  } else {
+    if ($("equity-summary")) $("equity-summary").textContent = "raw · clean · confirmed cumulative settled P&L";
+    drawLines(svg, [
+      {label: "raw", color: colors.raw, data: d.equity.optimistic_raw},
+      {label: "clean", color: colors.clean, data: d.equity.optimistic_clean},
+      {label: "confirmed", color: colors.confirmed, data: d.equity.confirmed_clean},
+    ]);
+  }
+  renderAttribution(d);
+}
+
 const HERO_LABELS = {
   confirmed_clean: "Clean · confirmed — the honest baseline",
   optimistic_clean: "Clean · optimistic",
-  optimistic_raw: "Raw · optimistic — every settled row",
+  optimistic_raw: "All settled rows — incl. provisional & quarantined",
 };
 function seriesTotal(series) { const a = series || []; return a.length ? num(a[a.length - 1].y) : 0; }
 function renderHero(d) {
@@ -1883,26 +2137,32 @@ function renderHero(d) {
     b.classList.toggle("active", b.dataset.variant === activeHeroVariant);
     b.onclick = () => { activeHeroVariant = b.dataset.variant; renderHero(state); };
   });
-  const total = seriesTotal((d.equity || {})[activeHeroVariant]);
-  const la = d.locked_arb || {}, ce = d.clean_ev || {}, me = d.micro_ev || {};
-  const chips = [
-    ["Clean EV", ce.pnl, `${ce.settled || 0} settled · ${pct(ce.roi || 0)} ROI`],
-    ["Micro EV", me.pnl, `${me.settled || 0} settled · ${me.active || 0} open`],
-    ["Locked ARB · trusted", la.trusted_pnl, `${la.trusted_settled || 0} settled (clean lane)`],
-  ];
-  const reviewChip = la.review_settled
-    ? `<span class="miniflag" title="Provisional cross-venue locks — not real money until both rulebooks confirm the same oracle (hard rule #6).">REVIEW ${la.review_settled} · ${money(la.review_pnl)} provisional</span>` : "";
-  const invalidChip = la.invalid_in_play
-    ? `<span class="miniflag" title="ARB rows placed at/after event start — rejected by the timing guard, no P&L booked.">${la.invalid_in_play} invalid-in-play</span>` : "";
-  const points = ((d.equity || {})[activeHeroVariant] || []).length;
+  const h = d.headline || {by_lane: {}, optimistic: 0, confirmed: 0, excluded_review_pnl: 0, excluded_review_n: 0, excluded_quarantined_pnl: 0, excluded_quarantined_n: 0};
+  const me = d.micro_ev || {};
+  const isConfirmed = activeHeroVariant === "confirmed_clean";
+  const isRaw = activeHeroVariant === "optimistic_raw";
+  const field = isConfirmed ? "confirmed" : "optimistic";
+  // The clean/confirmed total IS the sum of the headline lane chips below it — one definition,
+  // so the number always equals its parts. Raw = that plus the explicitly-excluded buckets.
+  const total = isRaw ? seriesTotal((d.equity || {}).optimistic_raw) : (isConfirmed ? num(h.confirmed) : num(h.optimistic));
+  const lanes = Object.entries(h.by_lane || {});
+  const chips = lanes.length
+    ? lanes.map(([k, v]) => `<div class="track-card"><div class="label">${esc(laneLabel(k))}</div><div class="value ${valClass(v[field])}" style="font-size:19px">${money(v[field])}</div><div class="muted">${v.n} settled${k === "ARB" ? " · trusted lane" : ""}</div></div>`).join("")
+    : `<div class="muted">No settled headline rows yet.</div>`;
+  // Everything intentionally NOT in the headline number, shown so nothing looks "missing".
+  const excluded = [];
+  if (h.excluded_review_n) excluded.push(`<span class="miniflag" title="Provisional cross-venue locks — not real money until both rulebooks confirm (hard rule #6).">REVIEW arb ${money(h.excluded_review_pnl)} · ${h.excluded_review_n} provisional</span>`);
+  if (me.settled) excluded.push(`<span class="miniflag" title="Thin-book lane, kept off the headline. Shown in its own metric card.">Micro EV ${money(me.pnl)} · ${me.settled}</span>`);
+  if (h.excluded_quarantined_n) excluded.push(`<span class="miniflag" title="Suspect-edge / below-floor / stale rows quarantined out of the clean book.">quarantined ${money(h.excluded_quarantined_pnl)} · ${h.excluded_quarantined_n}</span>`);
+  const exclLine = excluded.length
+    ? `<div class="muted" style="margin-top:10px">${isRaw ? "This number adds back:" : "Excluded from this number:"} ${excluded.join(" ")}</div>` : "";
   $("hero").innerHTML = `
     <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:16px;margin-bottom:2px">
       <div style="font-size:46px;font-weight:800;line-height:1" class="${valClass(total)}">${money(total)}</div>
-      <div class="muted">${esc(HERO_LABELS[activeHeroVariant])} · ${points} settled points ${reviewChip}${invalidChip}</div>
+      <div class="muted">${esc(HERO_LABELS[activeHeroVariant])}${isRaw ? "" : " · = sum of the lanes below"}</div>
     </div>
-    <div class="track-grid" style="margin-top:12px">
-      ${chips.map(([l, v, s]) => `<div class="track-card"><div class="label">${esc(l)}</div><div class="value ${valClass(v)}" style="font-size:19px">${money(v)}</div><div class="muted">${esc(s)}</div></div>`).join("")}
-    </div>`;
+    <div class="track-grid" style="margin-top:12px">${chips}</div>
+    ${exclLine}`;
 }
 
 function renderMetrics(d) {
@@ -2120,17 +2380,26 @@ function renderOpenBets(d) {
   if (!kinds.includes(activeOpenKind)) activeOpenKind = kinds.includes("EV") ? "EV" : (kinds[0] || "ALL");
   $("open-tabs").innerHTML = kinds.map(kind => `<button class="tab ${kind === activeOpenKind ? "active" : ""}" data-kind="${esc(kind)}">${esc(laneLabel(kind))} ${counts[kind]}</button>`).join("");
   $("open-tabs").querySelectorAll("button").forEach(btn => btn.onclick = () => { activeOpenKind = btn.dataset.kind; renderOpenBets(state); });
-  const shown = (d.open_bets || []).filter(bet => activeOpenKind === "ALL" || (bet.lane || bet.kind) === activeOpenKind);
+  const searchEl = $("open-search");
+  if (searchEl && searchEl.oninput === null) searchEl.oninput = () => { openSearch = searchEl.value; renderOpenBets(state); };
+  const byKind = (d.open_bets || []).filter(bet => activeOpenKind === "ALL" || (bet.lane || bet.kind) === activeOpenKind);
+  const q = openSearch.trim().toLowerCase();
+  const shown = q
+    ? byKind.filter(bet => `${bet.id} ${bet.event || ""} ${bet.venue || ""} ${bet.outcome || ""} ${bet.sport || ""} ${(bet.legs || []).join(" ")}`.toLowerCase().includes(q))
+    : byKind;
   const clean = shown.filter(bet => bet.quality === "clean").length;
   const hiddenNote = d.negrisk_hidden ? ` · ${d.negrisk_hidden} NEGRISK not executable (hidden)` : "";
-  $("open-summary").textContent = `${shown.length} shown · ${clean} clean · grouped by event date${hiddenNote}`;
+  const filterNote = q ? ` · filtered by “${esc(q)}” (${shown.length}/${byKind.length})` : "";
+  $("open-summary").innerHTML = `${shown.length} shown · ${clean} clean · grouped by event date${hiddenNote}${filterNote}`;
   const order = ["overdue", "today", "tomorrow", "week", "later", "unknown"];
   const labels = {overdue:"Awaiting settlement", today:"Today", tomorrow:"Tomorrow", week:"2-7 days", later:"8+ days", unknown:"No event date"};
   const groups = order
     .map(key => [key, shown.filter(bet => bet.horizon === key)])
     .filter(([, bets]) => bets.length);
   if (!groups.length) {
-    $("open-bets").innerHTML = `<div class="muted">No open ${esc(laneLabel(activeOpenKind))} bets right now.</div>`;
+    $("open-bets").innerHTML = q
+      ? `<div class="muted">No open ${esc(laneLabel(activeOpenKind))} bets match “${esc(q)}”.</div>`
+      : `<div class="muted">No open ${esc(laneLabel(activeOpenKind))} bets right now.</div>`;
     return;
   }
   $("open-bets").innerHTML = groups.map(([key, bets]) => {
@@ -2388,17 +2657,14 @@ function render(d) {
   renderTracking(d);
   renderCleanEv(d);
   renderScanners(d);
+  renderControls(d);
   renderOpenBets(d);
   renderArbSizing(d);
   renderPipeline(d);
   renderKinds(d);
   renderRecent(d);
   renderLogs(d);
-  drawLines($("equity"), [
-    {label:"raw", color:colors.raw, data:d.equity.optimistic_raw},
-    {label:"clean", color:colors.clean, data:d.equity.optimistic_clean},
-    {label:"confirmed", color:colors.confirmed, data:d.equity.confirmed_clean},
-  ]);
+  renderEquity(d);
   restoreScroll(scroll);
 }
 

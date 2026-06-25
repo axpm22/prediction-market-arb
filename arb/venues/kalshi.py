@@ -118,8 +118,17 @@ def parse_kalshi_payload(
         home, away = teams
         start = _start_from_ticker(str(market["ticker"]))
         if start is None:
-            start = datetime.fromisoformat(str(market["close_time"]).replace("Z", "+00:00"))
-        key = event_key(sport, home, away, start, aliases)
+            # D1 (ARB_LADDER_AND_FRICTIONS_SPEC §4): NEVER fall back to close_time — it is days
+            # after the game, so it corrupts the event_key date, every time guard, and the
+            # settlement bucket. Leave start unset and tag the quote 'start-unknown' (non-
+            # actionable); key on close_time's date for research display only — a different date
+            # than the game means it will not match a real-start quote in detection.
+            start_note: tuple[str, ...] = ("start-unknown",)
+            key_basis = datetime.fromisoformat(str(market["close_time"]).replace("Z", "+00:00"))
+            key = event_key(sport, home, away, key_basis, aliases)
+        else:
+            start_note = ()
+            key = event_key(sport, home, away, start, aliases)
         book = orderbooks.get(str(market["ticker"]), {})
         subtitle = str(market.get("yes_sub_title", ""))
         over = OVER_SUBTITLE.match(subtitle)
@@ -132,6 +141,7 @@ def parse_kalshi_payload(
             start_utc=start,
             home=normalize_name(home, sport, aliases),
             away=normalize_name(away, sport, aliases),
+            notes=start_note,
         )
         if over:
             line = Decimal(over.group(1))

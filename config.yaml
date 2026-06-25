@@ -17,6 +17,11 @@ match_suspect_prob_diff: 0.15
 # annualized rate (pro-rated over days-to-settlement) is tagged 'uneconomic' — recorded
 # but separated from real edges in the report. 0.05 = 5%/yr (roughly cash/T-bills).
 capital_charge_annual: 0.05
+# C4 (ARB_LADDER_AND_FRICTIONS_SPEC §3): a cross-venue lock ties up capital until BOTH venues
+# settle, not until the game starts. hold_days = max over legs of (start + game duration + venue
+# payout lag); it feeds is_economic so a tiny far-dated lock is correctly tagged uneconomic.
+sport_typical_duration_hours: { baseball_mlb: 3.5, basketball_nba: 2.5, soccer: 2.0, tennis: 2.5, mma: 1.0 }
+venue_settlement_lag_hours: { kalshi: 24, polymarket: 48, sx: 24 }   # verify empirically
 min_books_for_consensus: 3
 # Totals are line-fragmented (books rarely quote the identical total), so a 3-book gate
 # leaves totals consensus almost always dead. A lower totals threshold recovers it without
@@ -161,6 +166,26 @@ ev:
   # tiny-notional longshot can clear the per-dollar uneconomic-horizon gate. Quarantine any
   # flag whose ABSOLUTE expected profit (Kelly stake x edge_points) is below this. 0 = off.
   min_expected_profit_usd: 0.0
+  # B6: books are not independent (shared feeds), so stdev/sqrt(n) understates the consensus
+  # SE. This is the assumed cross-book correlation rho in [0,1); n_eff = n/(1+(n-1)*rho) widens
+  # the SE used by the dispersion gate / Kelly haircut. 0 = legacy independent-book SE.
+  dispersion_book_correlation: 0.0
+  # B7: a thin-consensus p_hat is not point-truth. Shrink it toward `shrink_prior` with the
+  # cross-book SE as the sampling sd and `shrink_prior_strength` as the prior sd (normal-normal).
+  # strength 0 = off (no shrinkage); 0.05-0.15 is a mild, sensible range once turned on.
+  shrink_prior: 0.5
+  shrink_prior_strength: 0.0
+  # B11: integer totals can PUSH (stake returned). When true, the edge on an integer-line total
+  # is scaled by (1 - push_prob) from a Poisson run-total model instead of only being flagged.
+  push_pricing: false
+  # B12: an EV bet's capital is locked until SETTLEMENT, not first pitch. Add this many hours to
+  # the event start when charging the holding-period capital cost (uneconomic-horizon gate).
+  settlement_lag_hours: 0
+  # B8: correlation-aware Kelly across same-event EV bets. rho is the assumed outcome correlation
+  # within a group; group_cap_fraction caps the GROUP's joint stake as a fraction of bankroll.
+  # rho 0 and cap 0 = off (independent per-bet Kelly, unchanged).
+  correlation_rho: 0.0
+  correlation_group_cap_fraction: 0.0
 scan_times: ["10:00", "15:00", "19:00"]
 daily_report_time: "23:59"
 settle_time: "09:30"
@@ -194,6 +219,11 @@ polymarket:
   confirmed_on: 2026-06-22
 sx:
   fee_rate: 0.0   # taker 0%, maker 0%, parlays 5% (fees only on winning bets)
+  # D3: SX charges its fee only on WINNING bets. An arb always has exactly one winning leg, so a
+  # winning SX leg incurs this fee even when the taker/maker rate is 0. Charged conservatively as
+  # win_fee_rate * (1 - cost) on every SX leg. Keep 0.0 until SX's live single-bet winning-fee
+  # schedule is re-verified (the adapter already refuses live runs while fee_rate is null).
+  win_fee_rate: 0.0
   source_url: "https://docs.sx.bet/user-guides/trading/fees"
   confirmed_on: 2026-06-10
 execution:
@@ -210,12 +240,60 @@ execution:
   # bankroll per-bet limit, instead of flat bankroll*max_stake_pct. Off by default (measurement;
   # the capacity is always reported as a `capacity:` note regardless).
   arb_size_by_ladder: false
+  # B3/B4 ladder capacity: displayed top-of-book is not 100% takeable (queue/latency/partial
+  # fills); haircut the per-level taker notional used for SIZING only (the raw stored book stays
+  # honest). 1.0 = no haircut (default; flip toward ~0.5 once live fills calibrate it).
+  fillable_fraction: 1.0
+  # Fraction of the depth/edge profit-max size to actually stake (the rest is buffer against
+  # the lock crossing negative before you finish filling). Was a hardcoded 0.5; now tunable.
+  arb_size_safety_frac: 0.5
+  # The arb-capacity report stays UNKNOWN (INSUFFICIENT_DEPTH_DATA) until at least this fraction
+  # of feasible arbs carry a real multi-level ladder — top-of-book-only numbers are fiction.
+  min_ladder_fraction: 0.5
+  # C1 simultaneity haircut (ARB_LADDER_AND_FRICTIONS_SPEC §1). Legs fetched seconds apart were
+  # not live together, so the edge may have decayed. adj_edge = edge_points - skew_secs*velocity.
+  # REVIEW if skew exceeds max_actionable_skew_secs or adj_edge <= min_adj_edge_points.
+  max_actionable_skew_secs: 10
+  min_adj_edge_points: 0.002
+  line_velocity_points_per_sec:   # probability points/sec the line drifts (seed; recalibrate monthly)
+    default: 0.001
+    baseball_mlb: 0.0008
+    basketball_nba: 0.0015
+  # D2 doubleheader leg clustering (§5): inside detection, split a market group's legs into
+  # clusters by start time (gap > this many secs = different game) so game-1 and game-2 never pair.
+  doubleheader_cluster_tol_secs: 7200
 odds_api: { region: us, warn_below_credits: 100, abort_below_credits: 50 }
 parlay: { enabled: false, divergence_threshold: 0.05 }
 # Phase 3 parallel Kelly sizing (projection only; flat-$1 stays the headline).
 sizing:
   kelly_fraction: 0.25                  # quarter-Kelly
   max_kelly_fraction_of_bankroll: 0.05  # hard per-bet cap regardless of f*
+# G2: depth-aware ARB sizing projection knobs (were hardcoded in arb_sizing.py). All defaults
+# reproduce the previous constants exactly, so an absent block is behavior-preserving.
+arb_sizing:
+  market_depth_fraction: 0.01    # stake at most this fraction of binding top-of-book depth
+  min_sample: 20                 # a depth/edge/pair bucket needs this many settled ARBs to scale
+  target_stake: 10               # counterfactual "flat $10" projection target
+  min_edge_to_scale: 0.005       # below this edge, past bet-on ARBs never justified scaling
+  min_bucket_roi: 0.01           # a bucket whose realized ROI is below this never scales
+  # Per-edge-bucket hard $ caps on a scaled stake (label -> max $).
+  edge_caps: { "0.5-1%": 5, "1-2%": 15, "2-5%": 50, "5%+": 100 }
+  # Binding-depth buckets as [lower, upper|null, label] (upper exclusive). Labels are the keys
+  # the trained model/report group on; edge_caps keys must match the edge-bucket labels.
+  depth_buckets:
+    - [0, 100, "<$100"]
+    - [100, 250, "$100-250"]
+    - [250, 500, "$250-500"]
+    - [500, 1000, "$500-1k"]
+    - [1000, 5000, "$1k-5k"]
+    - [5000, null, "$5k+"]
+  edge_buckets:
+    - [0, 0.0025, "<0.25%"]
+    - [0.0025, 0.005, "0.25-0.5%"]
+    - [0.005, 0.01, "0.5-1%"]
+    - [0.01, 0.02, "1-2%"]
+    - [0.02, 0.05, "2-5%"]
+    - [0.05, null, "5%+"]
 # Phase 2 per-segment edge scorer (computed from settled clean bets only).
 scoring:
   weights: { roi: 0.40, trend: 0.25, sample: 0.20, win_rate: 0.15 }

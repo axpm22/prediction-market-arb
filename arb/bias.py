@@ -107,8 +107,15 @@ def calibration(store: Store, bands: list[float], min_samples: int, flb_min_edge
 # detection historically used raw p_hat; this fits a monotonic (isotonic) map from the
 # population sample and lets detection apply p_hat_calibrated. Gated by config (default off).
 
-def _pav(xs: list[float], ys: list[float], ws: list[float]) -> tuple[list[float], list[float]]:
-    """Pool-adjacent-violators: weighted isotonic (non-decreasing) fit of ys against sorted xs."""
+def _pav(xs: list[float], ys: list[float], ws: list[float],
+         min_block_weight: float = 1.0) -> tuple[list[float], list[float]]:
+    """Pool-adjacent-violators: weighted isotonic (non-decreasing) fit of ys against sorted xs.
+
+    B9: `min_block_weight` regularizes the fit by enforcing a minimum mass per node. Raw PAV on
+    binary outcomes can emit single-sample blocks (a node defined by one settled bet) — pure
+    noise that an in-sample calibrator then bakes into p_hat. After the monotone pool, adjacent
+    under-mass blocks are merged into a neighbor so every surviving node rests on >= that many
+    observations. Default 1.0 == legacy behavior (every point is already weight 1)."""
     order = sorted(range(len(xs)), key=lambda i: xs[i])
     sx = [xs[i] for i in order]
     blocks = [[ys[i], ws[i], sx_i] for i, sx_i in zip(order, sx)]  # value, weight, x
@@ -123,19 +130,69 @@ def _pav(xs: list[float], ys: list[float], ws: list[float]) -> tuple[list[float]
         blocks[i:i + 2] = [merged]
         if i > 0:
             i -= 1
+    if min_block_weight > 1.0:  # B9: enforce minimum node mass (monotonicity preserved)
+        i = 0
+        while i < len(blocks) and len(blocks) > 1:
+            if blocks[i][1] >= min_block_weight:
+                i += 1
+                continue
+            j = i + 1 if i == 0 else i - 1  # merge into the only/previous neighbor
+            a, b = sorted((i, j))
+            v0, w0, _ = blocks[a]
+            v1, w1, x1 = blocks[b]
+            blocks[a:b + 1] = [[(v0 * w0 + v1 * w1) / (w0 + w1), w0 + w1, x1]]
+            i = max(0, a - 1)
     return [b[2] for b in blocks], [b[0] for b in blocks]
 
 
-def fit_calibrator(data: list[tuple[float, bool]], min_samples: int = 50) -> tuple[list[float], list[float]] | None:
+def fit_calibrator(data: list[tuple[float, bool]], min_samples: int = 50,
+                   min_block_weight: float = 1.0, holdout: float = 0.0) -> tuple[list[float], list[float]] | None:
     """Isotonic calibrator nodes (x=implied prob, y=fitted realized) from settled raw quotes.
-    None when the sample is too small to trust."""
+    None when the sample is too small to trust.
+
+    B9: `holdout` fits a walk-forward FIT WINDOW only — drop the most recent `holdout` fraction
+    (the data arrives time-ordered) so the map that detection applies going forward was not fit
+    on the very bets it will grade, mirroring the scorer's walk_forward_holdout. `min_block_weight`
+    regularizes node mass (see _pav). Both default to the legacy in-sample, unregularized fit."""
     if len(data) < min_samples:
         return None
-    xs = [x for x, _ in data]
-    ys = [1.0 if won else 0.0 for _, won in data]
-    ws = [1.0] * len(data)
-    nx, ny = _pav(xs, ys, ws)
+    fit = data[: len(data) - int(len(data) * holdout)] if holdout > 0 else data
+    if len(fit) < min_samples:
+        return None
+    xs = [x for x, _ in fit]
+    ys = [1.0 if won else 0.0 for _, won in fit]
+    ws = [1.0] * len(fit)
+    nx, ny = _pav(xs, ys, ws, min_block_weight)
     return (nx, ny) if len(nx) >= 2 else None
+
+
+def crossval_calibration_gain(data: list[tuple[float, bool]], folds: int = 5,
+                              min_block_weight: float = 1.0) -> float | None:
+    """B9: out-of-fold Brier improvement of the calibrator vs the raw implied prob. Positive
+    means the FLB map generalizes (helps on held-out bets); <= 0 means it is fitting noise and
+    should NOT be applied. The caller can gate `apply_calibration` on this being > 0. None when
+    the sample is too thin to cross-validate."""
+    n = len(data)
+    if folds < 2 or n < folds * 10:
+        return None
+    raw_sq = 0.0
+    cal_sq = 0.0
+    cnt = 0
+    for k in range(folds):
+        test = [d for i, d in enumerate(data) if i % folds == k]
+        train = [d for i, d in enumerate(data) if i % folds != k]
+        nodes = fit_calibrator(train, min_samples=max(10, len(train) // 2),
+                               min_block_weight=min_block_weight)
+        if nodes is None:
+            continue
+        for x, won in test:
+            y = 1.0 if won else 0.0
+            raw_sq += (x - y) ** 2
+            cal_sq += (calibrate_probability(x, nodes) - y) ** 2
+            cnt += 1
+    if cnt == 0:
+        return None
+    return round((raw_sq - cal_sq) / cnt, 6)  # >0: calibrator beats raw out-of-fold
 
 
 def calibrate_probability(p: float, nodes: tuple[list[float], list[float]] | None) -> float:

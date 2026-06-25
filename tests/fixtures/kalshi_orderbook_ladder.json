@@ -1,0 +1,7 @@
+{
+  "_comment": "Recorded Kalshi orderbook (ARB_LADDER_SPEC §0 calibration). Taking YES consumes resting NO bids: a NO bid at price p, size s -> YES at cost (1-p), taker_notional = s*(1-p). contracts = taker_notional/cost = s.",
+  "orderbook": {
+    "no_dollars": [["0.52", "100"], ["0.47", "200"]],
+    "yes_dollars": [["0.46", "150"], ["0.41", "300"]]
+  }
+}

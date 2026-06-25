@@ -1,0 +1,7 @@
+{
+  "_comment": "Recorded SX orders for one market (ARB_LADDER_SPEC §0 calibration). taker cost = 1 - percentageOdds/1e20 over maker orders on the opposite side; a maker with remaining stake M (USDC*1e6) at cost c backs taker notional T = M*c/(1-c). contracts = T/c = M/(1-c). Orders here are isMakerBettingOutcomeOne=false, so the taker takes outcome one.",
+  "orders": [
+    {"percentageOdds": "52000000000000000000", "totalBetSize": "48000000", "fillAmount": "0", "isMakerBettingOutcomeOne": false},
+    {"percentageOdds": "47000000000000000000", "totalBetSize": "200000000", "fillAmount": "0", "isMakerBettingOutcomeOne": false}
+  ]
+}

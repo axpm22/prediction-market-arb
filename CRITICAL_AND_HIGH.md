@@ -11,6 +11,33 @@ final targeted sweep, not yet in another doc).
 
 ---
 
+## Remediation status (closeout) — see `FIXES_REPORT.md`
+
+All CRITICAL/HIGH items below are now **FIXED**, each with a named regression test; `pytest` is
+green (335). `config.trusted_pairs` is deliberately left **empty** (whitelisting is the user's
+policy call).
+
+| ID | Status | Test that locks it |
+|----|--------|--------------------|
+| A2 | **FIXED** — `polymarket_leg_result` + `sx_leg_result` + per-venue dispatch; arb P&L labeled `provisional` until cross-checked | `tests/test_reconcile.py` |
+| N1 | **FIXED** — no-vig CLV is the default verdict; `quality_flag IS NULL` filter on `_ev_flags` | `tests/test_clv_novig_default.py` |
+| H1/H2 | **FIXED** — EV-exit stores optimistic/confirmed separately (NULL→NULL); reads via rate-limited session | `tests/test_ev_exit.py` |
+| E4/E5 | **FIXED** — abort preserves prior consensus; null-start → research lane | `tests/test_ev_lifecycle_fixes.py` |
+| C0 | **FIXED** — neg-risk priced with linear fee on both sides | `tests/test_negrisk*.py` |
+| S1 | **FIXED** — candidate-active fingerprint reads, no full-table scan | `tests/test_tracker.py` |
+| B1/B3/B4 | **FIXED (machinery)** — Polymarket multi-level ladder, shared `depth_usd` invariant, `INSUFFICIENT_DEPTH_DATA` gate; stays UNKNOWN until live captures accumulate | `tests/test_ladder_capacity_phase7.py` |
+| G1 | **FIXED** — empty trusted population surfaced as explicit flat $1 | `tests/test_ladder_capacity_phase7.py` |
+| I1/I2 | **FIXED** — arbs scored on the locked P&L; per-segment `confirmation_rate` reported | `tests/test_scoring_i1i2.py` |
+| G2 | **FIXED** — `arb_sizing` magic numbers moved to `config.arb_sizing` | `tests/test_arb_sizing.py` |
+
+> A2 caveat: the SX live settled-resolution endpoint/`outcome` field are not in SPEC §3.3; the
+> resolver is correct against fixtures and fails closed, but needs a one-time live verification
+> before SX reconciliation is trusted in production.
+>
+> C/D microstructure frictions (C1/D1/D2/D3) + B10 were delivered by a parallel workstream.
+
+---
+
 ## CRITICAL
 
 | ID | Issue | Where | Status |

@@ -75,7 +75,7 @@ def venue_close(store: Store, event_key: str, venue: str, book: str, outcome: st
     return Decimal(str(row["cost"])) + Decimal(str(row["fee_cost"]))
 
 
-def grade_clv(store: Store, min_depth: Decimal) -> dict:
+def grade_clv(store: Store, min_depth: Decimal, resamples: int = 10000) -> dict:
     flags = _ev_flags(store)
     # Reuse ONE connection for all per-flag closes. The old code opened a fresh
     # connection (PRAGMA setup) per flag; the indexed LIMIT-1 lookup itself is sub-ms.
@@ -109,7 +109,7 @@ def grade_clv(store: Store, min_depth: Decimal) -> dict:
         "flags": len(flags),
         "mean_clv": round(mean(values), 5),
         "positive_rate": round(sum(1 for v in values if v > 0) / len(values), 3),
-        "ci95": _bootstrap_ci(values),
+        "ci95": _bootstrap_ci(values, resamples),
     }
 
 
@@ -164,7 +164,7 @@ def _two_sided_devig_mid(con, event_key: str, venue: str, market_type, line, tar
     return None
 
 
-def grade_clv_novig(store: Store) -> dict:
+def grade_clv_novig(store: Store, resamples: int = 10000) -> dict:
     """EV#9 amendment (H-EV1): CLV in NO-VIG MID space on both ends. closing_mid - entry_mid,
     each from the de-vigged two-sided venue book, fees excluded from the signal."""
     flags = _ev_flags(store)
@@ -182,16 +182,19 @@ def grade_clv_novig(store: Store) -> dict:
         "n": len(graded), "flags": len(flags),
         "mean_clv": round(mean(graded), 5),
         "positive_rate": round(sum(1 for v in graded if v > 0) / len(graded), 3),
-        "ci95": _bootstrap_ci(graded),
+        "ci95": _bootstrap_ci(graded, resamples),
     }
 
 
-def clv_result(store: Store, fee_loaded: bool, min_depth: Decimal) -> dict:
+def clv_result(store: Store, fee_loaded: bool, min_depth: Decimal, resamples: int = 10000) -> dict:
     """N1: the no-vig CLV is the DEFAULT verdict instrument. Loading fees on both ends
     (`grade_clv`) biases mean CLV toward/below zero, so the pre-registered gate
     `ci95_low > 0` produces a false negative on your own edge and keeps EV disabled. The
-    fee-loaded metric stays available behind `--fee-loaded` for comparison only."""
-    return grade_clv(store, min_depth) if fee_loaded else grade_clv_novig(store)
+    fee-loaded metric stays available behind `--fee-loaded` for comparison only.
+
+    D21: `resamples` controls the bootstrap cost (10000 pure-Python resamples is slow on large
+    flag sets); lower it for a faster report, keep it high for a tight CI."""
+    return grade_clv(store, min_depth, resamples) if fee_loaded else grade_clv_novig(store, resamples)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -203,9 +206,12 @@ def main(argv: list[str] | None = None) -> int:
     # Back-compat: --novig was the opt-in for the no-vig metric; it is now the default, so the
     # flag is accepted but a no-op (the prompt's `clv --novig` still works).
     parser.add_argument("--novig", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--resamples", type=int, default=10000,
+                        help="D21: bootstrap resamples for the 95%% CI (lower = faster report)")
     args = parser.parse_args(argv)
     store = Store(load_config().database_path)
-    r = clv_result(store, fee_loaded=args.fee_loaded, min_depth=Decimal(str(args.min_depth)))
+    r = clv_result(store, fee_loaded=args.fee_loaded, min_depth=Decimal(str(args.min_depth)),
+                   resamples=args.resamples)
     metric = "fee-loaded (BIASED — comparison only)" if args.fee_loaded else "no-vig mid (default gate)"
     if r["n"] == 0:
         print(f"No CLV-gradeable EV flags yet ({r.get('flags', 0)} flags, none with a depth-floored venue close).")

@@ -15,7 +15,7 @@ from .arbitrage import build_event, detect_divergences, detect_true_arbs, split_
 from .config import load_config
 from .models import Opportunity, Quote
 from .paper import fill_opportunity
-from .pricing import consensus_dispersion, consensus_outcome_key, consensus_outcome_times, consensus_probabilities, edge_points, expected_value, is_economic, money, q6
+from .pricing import consensus_all, consensus_dispersion, consensus_outcome_key, consensus_outcome_times, consensus_probabilities, edge_points, expected_value, is_economic, money, q6
 from .quality import classify_quality
 from .sizing import kelly_f_star, kelly_stake
 from .report import print_opportunities, print_positions, print_report
@@ -124,9 +124,10 @@ def main(argv: list[str] | None = None) -> int:
 
         scores = score_segments(store, config.scoring)
         persist_scores(store, scores)
-        print(f"{'SEGMENT':28s} {'N':>4} {'WR':>6} {'ROI':>8} {'SCORE':>6}  TIER")
+        print(f"{'SEGMENT':28s} {'N':>4} {'WR':>6} {'ROI':>8} {'CONF%':>6} {'SCORE':>6}  TIER")
         for s in scores:
-            print(f"{s.segment:28s} {s.n:>4} {s.win_rate:>6.1%} {s.roi:>8.2%} {s.score:>6.1f}  {s.tier}")
+            print(f"{s.segment:28s} {s.n:>4} {s.win_rate:>6.1%} {s.roi:>8.2%} "
+                  f"{s.confirmation_rate:>6.0%} {s.score:>6.1f}  {s.tier}")
         if not scores:
             print("(no settled clean bets yet — INSUFFICIENT_DATA across the board)")
         return 0
@@ -296,6 +297,14 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
         match_suspect_prob_diff=config.match_suspect_prob_diff,
         capital_charge_annual=config.capital_charge_annual,
         size_by_ladder=config.arb_size_by_ladder,
+        size_safety_frac=config.arb_size_safety_frac,
+        fillable_fraction=config.arb_fillable_fraction,
+        line_velocity=config.arb_line_velocity,
+        max_actionable_skew_secs=config.arb_max_actionable_skew_secs,
+        min_adj_edge_points=config.arb_min_adj_edge_points,
+        doubleheader_cluster_tol_secs=config.arb_doubleheader_cluster_tol_secs,
+        sport_duration_hours=config.sport_duration_hours,
+        venue_settlement_lag_hours=config.venue_settlement_lag_hours,
     )
     opportunities.extend(
         detect_divergences(
@@ -336,6 +345,7 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
         left_edge = sum((opp.edge for opp in left_on_table), Decimal("0"))
         print(f"Left on table: {len(left_on_table)} flags (summed edge {left_edge}) killed by liquidity/depth/horizon filters.")
     kept = apply_segment_gates(kept, store, config)
+    kept = apply_correlation_sizing(kept, config)  # B8
     print_opportunities(kept, ev_display_threshold=config.ev_threshold)
 
     if args.dry_run:
@@ -386,16 +396,18 @@ def run_scan(args: argparse.Namespace, config, store: Store) -> int:
     pregame, in_play = split_pregame(quotes, computed_at)
     quotes = [*pregame, *in_play]
     # In-play sportsbook odds must never become "pregame consensus".
-    consensus = compute_consensus(
+    # D19: one shared de-vig pass yields both consensus and dispersion (was two passes).
+    consensus, dispersion = compute_consensus_and_dispersion(
         pregame, config.min_books_for_consensus, config.min_books_for_consensus_totals,
         method=config.devig_method, outlier_points=config.consensus_outlier_points,
         # EV#2: sharp-book weighting is opt-in (parallel/measurement) until it beats the median on CLV.
         sharp_books=config.sharp_books if config.weight_sharp_books else None,
-        sharp_weight=config.sharp_book_weight)
-    dispersion = compute_dispersion(pregame, config.min_books_for_consensus, config.devig_method)  # EV#3
+        sharp_weight=config.sharp_book_weight,
+        book_correlation=float(config.ev_dispersion_book_correlation))  # EV#3/B6
     # EV#6: stamp each consensus row with the books' median line-move time, not the scan clock.
     line_times = compute_line_times(pregame, config.min_books_for_consensus,
-                                    config.min_books_for_consensus_totals)
+                                    config.min_books_for_consensus_totals,
+                                    require_move_time=config.ev_require_move_time)  # C16
     print(f"Consensus outcomes computed: {len(consensus)} (from {len(pregame)} pregame quotes)")
 
     if args.dry_run:
@@ -536,27 +548,56 @@ def _cheapest_quote_per_outcome(quotes: list[Quote]) -> list[Quote]:
     return [*best.values(), *passthrough]
 
 
-def compute_dispersion(quotes: list[Quote], min_books: int, method: str = "proportional") -> dict[tuple[str, str], Decimal]:
-    """EV#3: per (event, outcome) cross-book dispersion of de-vigged probs, stored beside p_hat."""
+def compute_dispersion(quotes: list[Quote], min_books: int, method: str = "proportional",
+                       book_correlation: float = 0.0) -> dict[tuple[str, str], Decimal]:
+    """EV#3: per (event, outcome) cross-book dispersion of de-vigged probs, stored beside p_hat.
+    B6: `book_correlation` widens the SE for non-independent books (n_eff correction)."""
     by_event: dict[str, list[Quote]] = defaultdict(list)
     for quote in quotes:
         by_event[quote.event_key].append(quote)
     out: dict[tuple[str, str], Decimal] = {}
     for event_key, eq in by_event.items():
-        for outcome, disp in consensus_dispersion(eq, min_books, method=method).items():
+        for outcome, disp in consensus_dispersion(eq, min_books, method=method,
+                                                   book_correlation=book_correlation).items():
             out[(event_key, outcome)] = disp
     return out
 
 
+def compute_consensus_and_dispersion(quotes: list[Quote], min_books: int, min_books_totals: int | None,
+                                     method: str, outlier_points: Decimal | None, sharp_books,
+                                     sharp_weight: int, book_correlation: float
+                                     ) -> tuple[dict[tuple[str, str], Decimal], dict[tuple[str, str], Decimal]]:
+    """D19: compute consensus probabilities and dispersion together, sharing ONE de-vig pass per
+    event (the scan used to de-vig every book twice). Output equals compute_consensus +
+    compute_dispersion called separately (pricing.consensus_all is equivalence-tested)."""
+    by_event: dict[str, list[Quote]] = defaultdict(list)
+    for quote in quotes:
+        by_event[quote.event_key].append(quote)
+    consensus: dict[tuple[str, str], Decimal] = {}
+    dispersion: dict[tuple[str, str], Decimal] = {}
+    for event_key, eq in by_event.items():
+        probs, disp = consensus_all(eq, min_books, min_books_totals, method=method,
+                                    outlier_points=outlier_points, sharp_books=sharp_books,
+                                    sharp_weight=sharp_weight, book_correlation=book_correlation)
+        for outcome, p_hat in probs.items():
+            consensus[(event_key, outcome)] = p_hat
+        for outcome, d in disp.items():
+            dispersion[(event_key, outcome)] = d
+    return consensus, dispersion
+
+
 def compute_line_times(quotes: list[Quote], min_books: int,
-                       min_books_totals: int | None = None) -> dict[tuple[str, str], datetime]:
-    """EV#6: per (event, outcome) median book line-move time, used to stamp consensus age."""
+                       min_books_totals: int | None = None,
+                       require_move_time: bool = False) -> dict[tuple[str, str], datetime]:
+    """EV#6: per (event, outcome) median book line-move time, used to stamp consensus age.
+    C16: `require_move_time` excludes books without a real move time (don't mix clocks)."""
     by_event: dict[str, list[Quote]] = defaultdict(list)
     for quote in quotes:
         by_event[quote.event_key].append(quote)
     out: dict[tuple[str, str], datetime] = {}
     for event_key, eq in by_event.items():
-        for outcome, ts in consensus_outcome_times(eq, min_books, min_books_totals).items():
+        for outcome, ts in consensus_outcome_times(eq, min_books, min_books_totals,
+                                                    require_move_time=require_move_time).items():
             out[(event_key, outcome)] = ts
     return out
 
@@ -613,15 +654,37 @@ def detect_ev_from_consensus(
             calib_slope = q6(Decimal(str(abs(hi - lo) / (2 * h))))
             calibrated = adj != p_hat
             p_hat = adj
+        # B7: shrink a thin-consensus p_hat toward the prior using the cross-book SE as the
+        # sampling sd. Off unless shrink_prior_strength > 0; identity otherwise.
+        shrunk = False
+        if config is not None and getattr(config, "ev_shrink_prior_strength", Decimal("0")) > 0:
+            from .pricing import shrink_probability
+            raw_disp = (dispersion or {}).get((quote.event_key, outcome), Decimal("0"))
+            p_shrunk = shrink_probability(p_hat, 0, raw_disp, config.ev_shrink_prior,
+                                          float(config.ev_shrink_prior_strength))
+            shrunk = p_shrunk != p_hat
+            p_hat = p_shrunk
         ev = expected_value(p_hat, quote.effective_cost)
         # SPEC §1: every EV > 0 is recorded; thresholds gate display/betting, not recording.
         if ev <= 0:
             continue
         status, notes = status_for_legs([quote], trusted_pairs)
         edge = edge_points(p_hat, quote.effective_cost)
+        # B11: integer totals can PUSH (stake returned) — scale the edge by (1-push_prob) instead
+        # of pricing it as a clean binary. Off unless push_pricing is on; non-integer lines no-op.
+        if config is not None and getattr(config, "ev_push_pricing", False) \
+                and quote.market_type == "TOTAL" and quote.line is not None:
+            from .pricing import push_adjusted_edge, push_probability_poisson
+            push_prob = push_probability_poisson(quote.line)
+            if push_prob > 0:
+                edge = push_adjusted_edge(edge, push_prob)
+                ev = q6(edge / quote.effective_cost)
+                notes = (*notes, f"push-priced:{push_prob}")
         notes = (*notes, f"edge_pts:{edge}")
         if calibrated:
             notes = (*notes, "p_hat-calibrated")
+        if shrunk:
+            notes = (*notes, "p_hat-shrunk")
         # EV#7: decay edge continuously by consensus age (pregame info decays smoothly, not as
         # a step). The decayed edge — not the raw one — is what the e_min gate sees.
         gate_edge = edge
@@ -770,7 +833,11 @@ def _annotate_quality_and_kelly(opp: Opportunity, p_hat: Decimal, effective_cost
     # arb that locks at entry. Gate on edge-PER-DAY-held: if the expected return doesn't beat
     # the capital charge over the holding period, quarantine it (uneconomic-horizon).
     if opp.event.start_utc is not None:
-        days = max(0.0, (opp.event.start_utc - datetime.now(timezone.utc)).total_seconds() / 86400.0)
+        # B12: capital is locked until SETTLEMENT, not first pitch. Add the configured settlement
+        # lag so the holding-period charge reflects when the money actually frees up.
+        lag_hours = float(getattr(config, "ev_settlement_lag_hours", Decimal("0")))
+        settle_at = opp.event.start_utc + timedelta(hours=lag_hours)
+        days = max(0.0, (settle_at - datetime.now(timezone.utc)).total_seconds() / 86400.0)
         if not is_economic(opp.edge, days, config.capital_charge_annual):
             notes = (*notes, f"uneconomic-horizon:{days:.1f}d")
             quality = quality or "uneconomic-horizon"
@@ -820,6 +887,30 @@ def apply_segment_gates(opportunities: list[Opportunity], store: Store, config) 
                 kelly_stake_value = Decimal("0.00")
         gated.append(replace(opp, status=status, notes=tuple(notes), quality_flag=quality, kelly_stake=kelly_stake_value))
     return gated
+
+
+def apply_correlation_sizing(opportunities: list[Opportunity], config) -> list[Opportunity]:
+    """B8: correlation-aware Kelly across same-event EV bets. Independent per-bet Kelly over-bets
+    correlated outcomes (moneyline + total on one game, both sides of a shared driver); this
+    haircuts and caps the joint stake within each event group. Off (rho 0 / cap 0) -> unchanged."""
+    rho = getattr(config, "ev_correlation_rho", Decimal("0"))
+    cap = getattr(config, "ev_correlation_group_cap_fraction", Decimal("0"))
+    if (rho <= 0 and cap <= 0) or not opportunities:
+        return opportunities
+    from .sizing import group_correlated_stakes
+    ev_opps = [o for o in opportunities if o.kind == "EV" and o.kelly_stake is not None]
+    if len(ev_opps) < 2:
+        return opportunities
+    adjusted = group_correlated_stakes(ev_opps, rho, cap, config.bankroll_usd)
+    out: list[Opportunity] = []
+    for opp in opportunities:
+        new_stake = adjusted.get(id(opp))
+        if new_stake is not None and new_stake != opp.kelly_stake:
+            out.append(replace(opp, kelly_stake=new_stake,
+                               notes=(*opp.notes, f"corr-sized:{new_stake}")))
+        else:
+            out.append(opp)
+    return out
 
 
 def apply_opportunity_filters(opportunities: list[Opportunity], config) -> tuple[list[Opportunity], list[Opportunity]]:

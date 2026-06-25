@@ -103,16 +103,18 @@ def arb_capacity(ladders: list[Ladder]) -> ArbCapacity:
     )
 
 
-def _leg_ladder(leg: dict) -> Ladder:
+def _leg_ladder(leg: dict, fillable_fraction: Decimal = Decimal("1")) -> Ladder:
     """Effective-cost ladder for a stored leg: prefer the captured ladder (raw cost + the leg's
-    per-$1 fee), else a single top-of-book level from cost+fee_cost & depth_usd."""
+    per-$1 fee), else a single top-of-book level from cost+fee_cost & depth_usd. B3: the
+    fillable-fraction haircut scales each level's taker notional for SIZING only (displayed
+    top-of-book is not 100% takeable); the stored book is untouched. 1.0 = no haircut."""
     fee = _dec(leg.get("fee_cost"))
     raw = leg.get("ladder")
     if raw:
         out: Ladder = []
         for level in raw:
             cost = _dec(level[0]) + fee
-            depth = _dec(level[1])
+            depth = _dec(level[1]) * fillable_fraction
             if cost > 0 and depth > 0:
                 out.append((cost, depth))
         if out:
@@ -120,34 +122,41 @@ def _leg_ladder(leg: dict) -> Ladder:
     cost = _dec(leg.get("cost")) + fee
     depth = leg.get("depth_usd")
     if cost > 0 and depth not in (None, ""):
-        return [(cost, _dec(depth))]
+        return [(cost, _dec(depth) * fillable_fraction)]
     return []
 
 
-def max_economic_arb_size(legs: list[dict]) -> ArbCapacity:
+def max_economic_arb_size(legs: list[dict], fillable_fraction: Decimal = Decimal("1")) -> ArbCapacity:
     """Capacity for a stored arb (legs from legs_json)."""
-    return arb_capacity([_leg_ladder(leg) for leg in legs])
+    return arb_capacity([_leg_ladder(leg, fillable_fraction) for leg in legs])
 
 
-def _quote_ladder(quote) -> Ladder:
-    """Effective-cost ladder for a live Quote (raw ladder level + the leg's per-$1 fee)."""
+def _quote_ladder(quote, fillable_fraction: Decimal = Decimal("1")) -> Ladder:
+    """Effective-cost ladder for a live Quote (raw ladder level + the leg's per-$1 fee). B3:
+    the fillable-fraction haircut scales each level's taker notional for SIZING only (displayed
+    top-of-book is not 100% takeable); the stored book is untouched. 1.0 = no haircut."""
     if quote.ladder:
-        out = [(c + quote.fee_cost, d) for c, d in quote.ladder if (c + quote.fee_cost) > 0 and d > 0]
+        out = [(c + quote.fee_cost, d * fillable_fraction)
+               for c, d in quote.ladder if (c + quote.fee_cost) > 0 and d > 0]
         if out:
             return out
     if quote.depth_usd and quote.depth_usd > 0:
-        return [(quote.effective_cost, quote.depth_usd)]
+        return [(quote.effective_cost, quote.depth_usd * fillable_fraction)]
     return []
 
 
-def max_economic_arb_size_quotes(legs) -> ArbCapacity:
+def max_economic_arb_size_quotes(legs, fillable_fraction: Decimal = Decimal("1")) -> ArbCapacity:
     """Capacity for live Quote legs (used in detection)."""
-    return arb_capacity([_quote_ladder(q) for q in legs])
+    return arb_capacity([_quote_ladder(q, fillable_fraction) for q in legs])
 
 
 def ladder_scaled_stake_quotes(legs, bankroll: Decimal, max_stake_pct: Decimal,
-                               safety_frac: Decimal = Decimal("0.5")) -> Decimal:
-    cap = max_economic_arb_size_quotes(legs)
+                               safety_frac: Decimal = Decimal("0.5"),
+                               fillable_fraction: Decimal = Decimal("1")) -> Decimal:
+    """Depth/edge-scaled total budget for live Quote legs: a `safety_frac` of the profit-max
+    ladder size (which jointly encodes edge = margin below $1 and depth = how far you can walk
+    each book before the lock crosses), capped by the bankroll per-bet limit. 0 = no ladder."""
+    cap = max_economic_arb_size_quotes(legs, fillable_fraction)
     if not cap.feasible or cap.profitmax_stake_usd <= 0:
         return Decimal("0")
     return money(min(cap.profitmax_stake_usd * safety_frac, bankroll * max_stake_pct))

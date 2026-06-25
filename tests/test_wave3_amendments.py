@@ -40,8 +40,10 @@ def test_calibration_gate_blocks_miscalibrated_segment(tmp_path) -> None:
         _settled_ev(con, "baseball_mlb", "LOST", "0.05", "0.50", 2, "2026-06-01T00:00:00+00:00")
     ungated = {s.segment: s.tier for s in score_segments(store, {"score_min_n": 5})}
     assert ungated["baseball_mlb:EV"] != "BLOCKED"   # ROI alone does not block it
+    # B10: the calibration gate only fires once the segment clears ece_min_n (ECE on ~1/bin is
+    # noise); this fixture has 20 rows, so set the floor low enough to exercise the gate.
     gated = {s.segment: s.tier for s in score_segments(
-        store, {"score_min_n": 5, "calibration_gate": True, "ece_max": 0.10})}
+        store, {"score_min_n": 5, "calibration_gate": True, "ece_max": 0.10, "ece_min_n": 5})}
     assert gated["baseball_mlb:EV"] == "BLOCKED"      # calibration does
 
 

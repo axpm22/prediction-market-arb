@@ -6,9 +6,11 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-OpportunityKind = Literal["ARB", "EV", "DIVERGENCE"]
+OpportunityKind = Literal["ARB", "EV", "DIVERGENCE", "PARLAY"]
 OpportunityStatus = Literal["OK", "REVIEW"]
-MarketType = Literal["WINNER", "TOTAL"]
+# PARLAY: the synthetic basket leg that carries the whole-parlay ask/bid as one instrument.
+# Its component single-leg quotes stay WINNER/TOTAL so they settle through the normal path.
+MarketType = Literal["WINNER", "TOTAL", "PARLAY"]
 Category = Literal["sports", "nonsports"]
 
 

@@ -3,6 +3,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from arb.config import load_config
+from arb.pricing import q6
 from arb.venues.sx import SxAdapter, parse_sx_payload, taker_cost_from_percentage_odds
 
 FIXTURE = Path("tests/fixtures/sx_baseball_mlb.json")
@@ -41,3 +42,18 @@ def test_sx_quotes_flag_unverified_fee_only_while_rate_is_null() -> None:
     verified = parse_sx_payload(payload, "baseball_mlb", fee_rate=Decimal("0"))
     assert all("fee-rate-unverified" not in q.notes for q in verified)
     assert all("settlement-rule-review" in q.notes for q in verified)
+
+
+def test_sx_winning_bet_fee_is_charged_on_the_leg() -> None:
+    # D3 (ARB_LADDER_AND_FRICTIONS_SPEC §6): an arb always has one winning leg, and SX charges
+    # only on winnings, so a winning SX leg pays win_fee_rate*(1-cost). At 0 the fee is unchanged;
+    # at 0.05 every SX leg's fee_cost rises by exactly q6(0.05*(1-cost)) and is flagged.
+    payload = json.loads(FIXTURE.read_text())
+    base = parse_sx_payload(payload, "baseball_mlb", fee_rate=Decimal("0"))
+    winfee = parse_sx_payload(payload, "baseball_mlb", fee_rate=Decimal("0"), win_fee_rate=Decimal("0.05"))
+    assert base and len(base) == len(winfee)
+    assert all("sx-win-fee-modeled" not in q.notes for q in base)
+    assert all("sx-win-fee-modeled" in q.notes for q in winfee)
+    for b, w in zip(base, winfee):
+        assert w.fee_cost == b.fee_cost + q6(Decimal("0.05") * (Decimal("1") - b.cost))
+        assert w.effective_cost > b.effective_cost  # the SX leg got more expensive → arbs can drop

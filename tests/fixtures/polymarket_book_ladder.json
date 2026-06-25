@@ -1,0 +1,7 @@
+{
+  "_comment": "Recorded Polymarket CLOB /book asks side (ARB_LADDER_SPEC §0 calibration). Each ask is {price, size(shares)}; taker_notional = price*shares ($). contracts = taker_notional/cost = shares.",
+  "asks": [
+    {"price": "0.48", "size": "100"},
+    {"price": "0.53", "size": "200"}
+  ]
+}

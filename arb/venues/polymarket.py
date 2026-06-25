@@ -114,10 +114,12 @@ def parse_polymarket_events(
                     label = "OVER" if str(outcome).upper().startswith("O") else "UNDER"
                 else:
                     label = normalize_name(str(outcome), sport, aliases)
-                # Batch markets endpoint exposes top-of-book only (one ask price+depth); a
-                # multi-level ladder would need per-token /book fetches. 1-level ladder here
-                # means slippage stays flat for Polymarket until book-fetching is added.
-                ladder = ((price, depth),) if depth and depth > 0 else None
+                # B4: prefer the full multi-level ladder captured per token from the CLOB /book
+                # (clobAskLadders, attached by _attach_clob_books on the live path). The fixture
+                # path has no ladders -> fall back to the 1-level top-of-book ladder.
+                ladders = market.get("clobAskLadders")
+                captured = ladders[index] if ladders is not None and index < len(ladders) else None
+                ladder = captured or (((price, depth),) if depth and depth > 0 else None)
                 buffer = effective_buffer(ladder, slippage_model, slippage_ref_stake, taker_buffer)
                 quotes.append(
                     Quote(
@@ -156,16 +158,34 @@ def _json_list(value: Any) -> list[Any]:
     return list(value)
 
 
-def _fetch_book(token_id: Any) -> tuple[str, str]:
+def polymarket_ladder(asks: list[dict[str, Any]]) -> tuple[tuple[Decimal, Decimal], ...] | None:
+    """B3/B4 canonical ladder: fee-exclusive (cost_per_$1_payout, taker_notional_usd) levels,
+    best (lowest ask) first, from a CLOB /book asks side. Each ask is {price, size(shares)};
+    the $ you STAKE to consume the level is price·shares, so contracts = taker_notional/cost =
+    shares — the same taker-$-notional invariant Kalshi/SX report (ARB_LADDER_SPEC §0)."""
+    levels: list[tuple[Decimal, Decimal]] = []
+    for level in asks:
+        price = Decimal(str(level["price"]))
+        size = Decimal(str(level["size"]))
+        if not (Decimal("0") < price < Decimal("1")) or size <= 0:
+            continue
+        levels.append((price, q6(price * size)))
+    levels.sort(key=lambda lvl: lvl[0])
+    return tuple(levels) or None
+
+
+def _fetch_book(token_id: Any) -> tuple[str, str, tuple[tuple[Decimal, Decimal], ...] | None]:
     response = requests.get(f"{CLOB_URL}/book", params={"token_id": token_id}, timeout=30)
     if response.status_code == 404:  # token has no book yet — not a quote
-        return "", "0"
+        return "", "0", None
     response.raise_for_status()
-    best = _best_ask(response.json().get("asks", []))
+    asks = response.json().get("asks", [])
+    ladder = polymarket_ladder(asks)
+    best = _best_ask(asks)
     if best is None:
-        return "", "0"
+        return "", "0", None
     price, depth = best
-    return str(price), str(depth)
+    return str(price), str(depth), ladder
 
 
 def _attach_clob_books(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -185,8 +205,11 @@ def _attach_clob_books(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         results = books[cursor:cursor + len(tokens)]
         cursor += len(tokens)
         # Lists stay index-aligned with `outcomes`; empty string marks an empty book.
-        market["clobAskPrices"] = [price for price, _ in results]
-        market["clobAskDepths"] = [depth for _, depth in results]
+        market["clobAskPrices"] = [price for price, _, _ in results]
+        market["clobAskDepths"] = [depth for _, depth, _ in results]
+        # B4: the full multi-level taker ladder per token, so an arb's Polymarket leg is no
+        # longer permanently single-level (the binding leg's slippage becomes modelable).
+        market["clobAskLadders"] = [ladder for _, _, ladder in results]
     return events
 
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from .capacity import max_economic_arb_size_quotes
+from .capacity import ladder_scaled_stake_quotes, max_economic_arb_size_quotes
 from .models import Event, Opportunity, Quote
 from .pricing import is_economic, money, q6
 
@@ -106,6 +106,14 @@ def detect_true_arbs(
     match_suspect_prob_diff: Decimal | None = None,
     capital_charge_annual: Decimal | None = None,
     size_by_ladder: bool = False,
+    size_safety_frac: Decimal = Decimal("0.5"),
+    fillable_fraction: Decimal = Decimal("1"),
+    line_velocity: dict | None = None,
+    max_actionable_skew_secs: int | None = None,
+    min_adj_edge_points: Decimal | None = None,
+    doubleheader_cluster_tol_secs: int | None = None,
+    sport_duration_hours: dict | None = None,
+    venue_settlement_lag_hours: dict | None = None,
 ) -> list[Opportunity]:
     # An arb must cover the outcomes of ONE market: group per event + market type + exact
     # line so team winners never blend with OVER/UNDER or with a different total line.
@@ -118,7 +126,14 @@ def detect_true_arbs(
 
     opportunities: list[Opportunity] = []
     budget = bankroll * max_stake_pct
-    for (event_key, _market_type, _line), event_quotes in by_market.items():
+    # D2: split each market group into start-time clusters so a doubleheader's game-1 and game-2
+    # legs never pair (same teams + same date = same event_key). Untimed legs (D1 start-unknown)
+    # are dropped here → never actionable. tol None = legacy single-group behavior.
+    groups: list[tuple[str, str, list[Quote]]] = []
+    for (event_key, market_type, _line), group_quotes in by_market.items():
+        for cluster in _cluster_by_start(group_quotes, doubleheader_cluster_tol_secs):
+            groups.append((event_key, market_type, cluster))
+    for event_key, _market_type, event_quotes in groups:
         by_outcome: dict[str, list[Quote]] = defaultdict(list)
         for quote in event_quotes:
             by_outcome[quote.outcome_label].append(quote)
@@ -143,7 +158,16 @@ def detect_true_arbs(
         cap = max_economic_arb_size_quotes(best_legs)
         arb_budget = budget
         if size_by_ladder and cap.feasible and cap.profitmax_stake_usd > 0:
-            arb_budget = money(min(cap.profitmax_stake_usd * Decimal("0.5"), budget))
+            # Stake a safety fraction of the profit-max ladder size — the size that jointly
+            # encodes EDGE (margin below $1) and DEPTH (how far each book can be walked before
+            # the lock crosses negative). Capped by the bankroll per-bet limit. The haircut
+            # (fillable_fraction) discounts displayed depth for sizing; the stored book is left
+            # honest. Both knobs live in config (no magic numbers, hard rule #4).
+            sized = ladder_scaled_stake_quotes(
+                best_legs, bankroll, max_stake_pct, size_safety_frac, fillable_fraction
+            )
+            if sized > 0:
+                arb_budget = sized
         stakes, guaranteed_floor = equalized_arb_stakes(best_legs, arb_budget, total_cost)
         status, notes = status_for_legs(best_legs, trusted_pairs)
         # #8 report the REAL guaranteed worst-case profit after cent-rounding, not the
@@ -158,6 +182,21 @@ def detect_true_arbs(
         if max_leg_skew_secs is not None and leg_skew_secs(best_legs) > max_leg_skew_secs:
             status = "REVIEW"
             notes = tuple([*notes, f"time-skew:{int(leg_skew_secs(best_legs))}s"])
+        # C1 simultaneity haircut (continuous): legs fetched seconds apart were not live together,
+        # so decay the edge by skew·velocity and bar the arb if it was never simultaneous or the
+        # adjusted margin is gone. adj_edge (not raw edge) is what sizing/ranking should trust.
+        if line_velocity is not None:
+            skew = leg_skew_secs(best_legs)
+            velocity = line_velocity.get(event_quotes[0].sport, line_velocity.get("default", Decimal("0.001")))
+            haircut = q6(Decimal(str(skew)) * Decimal(str(velocity)))
+            adj_edge = q6(q6(Decimal("1") - total_cost) - haircut)
+            notes = tuple([*notes, f"skew={int(skew)}s,haircut={haircut},adj_edge={adj_edge}"])
+            if max_actionable_skew_secs is not None and skew > max_actionable_skew_secs:
+                status = "REVIEW"
+                notes = tuple([*notes, "skew-nonsimultaneous"])
+            elif min_adj_edge_points is not None and adj_edge <= min_adj_edge_points:
+                status = "REVIEW"
+                notes = tuple([*notes, "skew-edge-eroded"])
         # #6 capacity lower bound (top-of-book; books refill, so this is a floor).
         notes = tuple([*notes, f"capturable:{capturable_lower_bound(best_legs, roi)}"])
         # Ladder capacity: $ you can stake before the lock goes negative (break-even), the
@@ -168,8 +207,15 @@ def detect_true_arbs(
         # Capital charge: a tiny lock held to a far settlement may not beat cash. Tag it
         # 'uneconomic' (still recorded) so the daily report can separate real from trivial.
         if capital_charge_annual is not None:
-            start = best_legs[0].start_utc
-            days = ((start - datetime.now(timezone.utc)).total_seconds() / 86400.0) if start else 0.0
+            now = datetime.now(timezone.utc)
+            # C4: charge over the time capital is ACTUALLY locked — to the slowest venue's
+            # settlement (game end + payout lag), not to event start. Falls back to the
+            # start-based day count when the duration/lag tables aren't supplied.
+            if sport_duration_hours is not None and venue_settlement_lag_hours is not None:
+                days = float(_hold_days(best_legs, now, sport_duration_hours, venue_settlement_lag_hours))
+            else:
+                start = best_legs[0].start_utc
+                days = ((start - now).total_seconds() / 86400.0) if start else 0.0
             if not is_economic(roi, days, capital_charge_annual):
                 notes = tuple([*notes, "uneconomic"])
         # #1 an arb with any unverifiable leg can never be confirmed → RESEARCH:
@@ -191,6 +237,43 @@ def detect_true_arbs(
             )
         )
     return opportunities
+
+
+def _hold_days(legs: list[Quote], now: datetime, sport_duration_hours: dict,
+               venue_settlement_lag_hours: dict) -> Decimal:
+    """C4 — days the arb's capital is locked: the MAX across legs of (start + game duration +
+    that venue's payout lag). Capital releases only when the slowest venue settles. Untimed
+    legs are skipped; if no leg has a start the hold is 0 (the start-based gate took over)."""
+    finals: list[datetime] = []
+    for leg in legs:
+        if leg.start_utc is None:
+            continue
+        dur = sport_duration_hours.get(leg.sport, Decimal("4"))
+        lag = venue_settlement_lag_hours.get(leg.venue, Decimal("24"))
+        finals.append(leg.start_utc + timedelta(hours=float(dur) + float(lag)))
+    if not finals:
+        return Decimal("0")
+    return q6(Decimal(str(max((final - now).total_seconds() for final in finals))) / Decimal("86400"))
+
+
+def _cluster_by_start(quotes: list[Quote], tol_secs: int | None) -> list[list[Quote]]:
+    """D2 — split a market group's legs into start-time clusters. None preserves the legacy
+    single group (no clustering, untimed legs kept). When set, legs whose starts gap by more
+    than tol_secs are different games, and untimed legs (D1 start-unknown) are dropped so they
+    can never be an actionable arb leg."""
+    if tol_secs is None:
+        return [quotes]
+    timed = sorted([q for q in quotes if q.start_utc is not None], key=lambda q: q.start_utc)
+    clusters: list[list[Quote]] = []
+    current: list[Quote] = []
+    for quote in timed:
+        if current and (quote.start_utc - current[-1].start_utc).total_seconds() > tol_secs:
+            clusters.append(current)
+            current = []
+        current.append(quote)
+    if current:
+        clusters.append(current)
+    return clusters
 
 
 def detect_divergences(
