@@ -121,6 +121,30 @@ CREATE TABLE IF NOT EXISTS annotations(
     created_at TEXT NOT NULL,
     FOREIGN KEY(bet_id) REFERENCES flat_bets(id)
 );
+-- MODEL_FOUNDATIONS Phase C: post-entry price path per bet (adverse-selection measurement).
+-- Analysis data, may UPDATE (cross-cutting rule) — never feeds an append-only P&L cell directly;
+-- pnl_markout is computed from it for reporting only.
+CREATE TABLE IF NOT EXISTS markouts(
+    bet_id INTEGER NOT NULL,
+    horizon_secs INTEGER NOT NULL,
+    mid TEXT,
+    ask TEXT,
+    bid TEXT,
+    recorded_at TEXT NOT NULL,
+    PRIMARY KEY(bet_id, horizon_secs)
+);
+-- MODEL_FOUNDATIONS Phase D: operational visibility for the multi-loop daemon. NOT a ledger —
+-- one row per process, UPDATEd each beat (cross-cutting rule: operational tables may UPDATE).
+CREATE TABLE IF NOT EXISTS heartbeats(
+    process TEXT PRIMARY KEY,
+    pid INTEGER NOT NULL,
+    git_head TEXT,
+    dirty INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT NOT NULL,
+    last_beat_at TEXT NOT NULL,
+    polls_done INTEGER NOT NULL DEFAULT 0,
+    interval_secs INTEGER
+);
 CREATE TABLE IF NOT EXISTS consensus(
     event_key TEXT NOT NULL,
     outcome TEXT NOT NULL,
@@ -128,6 +152,23 @@ CREATE TABLE IF NOT EXISTS consensus(
     computed_at TEXT NOT NULL,
     PRIMARY KEY(event_key, outcome)
 );
+CREATE TABLE IF NOT EXISTS live_probe_samples(
+    -- LIVE_BASEBALL_EV Phase 0 feasibility probe. Append-only raw samples (no detection, no bet):
+    -- 'state' rows carry MLB Stats publish lag + game context; 'venue_quote' rows carry live
+    -- top-of-book depth/suspension/age per venue; 'odds_book' rows carry the live-book count and
+    -- credits_remaining. The report reduces these to the freshness/depth verdict (§5).
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at TEXT NOT NULL,          -- OUR fetch wall clock (UTC ISO) — never a feed clock
+    game_pk INTEGER NOT NULL,
+    sample_type TEXT NOT NULL,          -- state | venue_quote | odds_book
+    publish_lag_secs REAL,              -- state: our_fetch - feed_embedded_time
+    inning INTEGER, half TEXT, outs INTEGER, game_status TEXT,
+    venue TEXT, outcome_label TEXT, market_type TEXT,
+    ask TEXT, bid TEXT, depth_usd TEXT, suspended INTEGER, quote_age_secs REAL,
+    n_live_books INTEGER, credits_remaining INTEGER,
+    notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_live_probe_recorded ON live_probe_samples(recorded_at);
 CREATE TABLE IF NOT EXISTS nonsports_verdicts(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     checked_at TEXT NOT NULL,

@@ -450,13 +450,19 @@ live_baseball_ev:
   enabled: true                 # measurement only; betting gated separately
   betting_enabled: false        # never true until the §3 promotion gate clears
   # freshness (measured against your own fetch clock, never by differencing feed clocks)
-  max_venue_age_secs: 5
-  max_state_age_secs: 5
-  max_consensus_age_secs: 5
+  # PHASE 0 MEASURED (2026-07-02, 2 live games, SHORT probe n=6 state samples — rerun longer to
+  # firm up): MLB Stats state publish-lag p50=42.5s, p90=79.5s, min=15.8s. The old 5s state gate
+  # is REFUTED — even the freshest sample was 15.8s. Between plays the state is naturally tens of
+  # seconds old (nothing happened), so the gate should be "no play since fetch" + this lag term,
+  # not an absolute 5s. max_state_age_secs raised to the measured band; Phase 1 go/no-go pending
+  # a longer probe (see LIVE_BASEBALL_EV Phase 0 report).
+  max_venue_age_secs: 5         # venue quotes ARE fresh (we fetch them); depth p50 ~$671, 80% >= $50
+  max_state_age_secs: 45        # was 5 (refuted); ~p50 of measured MLB-Stats lag, revisit after longer probe
+  max_consensus_age_secs: 5     # live sportsbook consensus rarely available on the credit budget anyway
   suspend_cooldown_secs: 10
   post_event_freeze_secs: 10
   reopen_stabilize_secs: 5
-  mlb_publish_lag_secs: 0       # measured in Phase 0; added to state age -> effective_state_age
+  mlb_publish_lag_secs: 43      # Phase 0 measured p50 (n=6, short probe); added to state age -> effective_state_age
   # consensus
   min_live_books: 3
   book_outlier_points: 0.09     # exclude a live book this far from median (as stale)
@@ -480,6 +486,10 @@ live_baseball_ev:
   # win-probability model: logged but may not set fair value until calibrated
   wp_model_enabled: false
   wp_model_min_brier_improvement: 0.0
+  # Phase 0 feasibility probe (LIVE_BASEBALL_BUILD_PROMPT). Venue quotes + MLB Stats are free;
+  # live Odds API books are the hard blocker (§5.1) — capped per day, nowhere near a feed.
+  probe_poll_secs: 10
+  max_odds_api_calls_per_day: 20
 
 # Phase 5 whale-flow tracker (Polymarket on-chain; measurement/debunk only).
 whale_tracker:
@@ -491,3 +501,9 @@ whale_tracker:
   min_category_share: 0.50
   skip_categories: [btc_15m, eth_15m]
   copy_fill: next_executable
+
+# MODEL_FOUNDATIONS Phase D — supervisor owns these loops (threads/subprocesses) and restarts any
+# that stops beating for 3x its interval; a second copy of any loop refuses to double-run.
+supervisor:
+  processes: { watch: true }
+  commands: { watch: "watch --once" }

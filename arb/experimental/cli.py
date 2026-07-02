@@ -58,6 +58,10 @@ def build_parser() -> argparse.ArgumentParser:
     annotate.add_argument("bet_id", type=int)
     annotate.add_argument("tag", help="e.g. bug:in-play-pricing, settler-error, match-suspect")
     annotate.add_argument("reason", nargs="+", help="written reason (mandatory)")
+    probe = sub.add_parser("live-baseball-probe", help="LIVE_BASEBALL_EV Phase 0 feasibility probe (measurement only)")
+    probe.add_argument("--games", type=int, default=2, help="number of live games to probe")
+    probe.add_argument("--minutes", type=float, default=5.0, help="how long to probe")
+    probe.add_argument("--report", action="store_true", help="print the freshness/depth verdict and exit")
     return parser
 
 
@@ -73,6 +77,8 @@ def extras_config(block: str) -> dict:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     config = load_config()
+    if args.command == "live-baseball-probe":
+        return run_live_baseball_probe(args, config)
     if args.command == "niche":
         return run_niche(config)
     if args.command == "nonsports-suggest":
@@ -155,6 +161,17 @@ def main(argv: list[str] | None = None) -> int:
             print("closing: stop flag found, exiting cleanly.")
             return 0
         time.sleep(CHECK_INTERVAL_SECS)
+
+
+def run_live_baseball_probe(args: argparse.Namespace, config) -> int:
+    from arb.experimental.live_baseball_probe import probe_report, run_probe
+
+    store = Store(config.database_path)
+    if args.report:
+        print(probe_report(store, config))
+        return 0
+    run_probe(config, store, n_games=args.games, minutes=args.minutes)
+    return 0
 
 
 def run_nonsports(args: argparse.Namespace, config) -> int:
