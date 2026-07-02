@@ -169,6 +169,29 @@ CREATE TABLE IF NOT EXISTS live_probe_samples(
     notes TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_live_probe_recorded ON live_probe_samples(recorded_at);
+CREATE TABLE IF NOT EXISTS live_candidates(
+    -- LIVE_BASEBALL_EV Phase 1 candidate recorder. Append-only, measurement-ONLY: this lane
+    -- NEVER writes flat_bets (betting is off and the promotion gate is uncleared), so its
+    -- experimental rows can never leak into a paper total. Every evaluation lands here, including
+    -- rejections and NO-CONSENSUS snapshots — the rejection/VANISHED mix IS the product of Phase 1.
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at TEXT NOT NULL,
+    game_pk INTEGER,
+    fingerprint TEXT NOT NULL,       -- (event, venue, book, outcome, game-state) — dedup key
+    event_key TEXT NOT NULL,
+    venue TEXT, outcome_label TEXT, market_type TEXT,
+    status TEXT NOT NULL,            -- FRESH_CANDIDATE | REJECTED_STALE | REJECTED_UNSTABLE | RESEARCH | NONE
+    reason TEXT,
+    recheck_result TEXT,             -- CONFIRMED | LIVE_VANISHED | NULL (never rechecked)
+    no_consensus INTEGER NOT NULL DEFAULT 0,
+    n_books INTEGER,
+    raw_edge TEXT, adjusted_edge TEXT, promoted INTEGER,
+    executable_cost TEXT, fair_value TEXT, depth_usd TEXT,
+    effective_state_age REAL, venue_age_secs REAL,
+    inning INTEGER, half TEXT, outs INTEGER, bases TEXT, score TEXT,
+    notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_live_candidates_recorded ON live_candidates(recorded_at);
 CREATE TABLE IF NOT EXISTS nonsports_verdicts(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     checked_at TEXT NOT NULL,
@@ -342,5 +365,8 @@ MIGRATION_COLUMNS = {
         "unit_a": "TEXT", "unit_b": "TEXT",
         "data_source_a": "TEXT", "data_source_b": "TEXT",
         "rounding_a": "TEXT", "rounding_b": "TEXT",
+        # MODEL_FOUNDATIONS Phase E: the verdict is about the RULES TEXTS, not the pair. Storing
+        # each side's rules hash lets a cached verdict expire when a venue edits its rules.
+        "rules_hash_a": "TEXT", "rules_hash_b": "TEXT",
     },
 }

@@ -62,6 +62,10 @@ def build_parser() -> argparse.ArgumentParser:
     probe.add_argument("--games", type=int, default=2, help="number of live games to probe")
     probe.add_argument("--minutes", type=float, default=5.0, help="how long to probe")
     probe.add_argument("--report", action="store_true", help="print the freshness/depth verdict and exit")
+    watch = sub.add_parser("live-baseball-watch", help="LIVE_BASEBALL_EV Phase 1 candidate recorder (measurement only, betting OFF)")
+    watch.add_argument("--games", type=int, default=4, help="max live games to watch")
+    watch.add_argument("--minutes", type=float, default=10.0, help="how long to watch")
+    watch.add_argument("--report", action="store_true", help="print the rejection/no-consensus histogram and exit")
     return parser
 
 
@@ -79,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config()
     if args.command == "live-baseball-probe":
         return run_live_baseball_probe(args, config)
+    if args.command == "live-baseball-watch":
+        return run_live_baseball_watch(args, config)
     if args.command == "niche":
         return run_niche(config)
     if args.command == "nonsports-suggest":
@@ -171,6 +177,17 @@ def run_live_baseball_probe(args: argparse.Namespace, config) -> int:
         print(probe_report(store, config))
         return 0
     run_probe(config, store, n_games=args.games, minutes=args.minutes)
+    return 0
+
+
+def run_live_baseball_watch(args: argparse.Namespace, config) -> int:
+    from arb.experimental.live_baseball_watch import run_watch, watch_report
+
+    store = Store(config.database_path)
+    if args.report:
+        print(watch_report(store))
+        return 0
+    run_watch(config, store, minutes=args.minutes, n_games=args.games)
     return 0
 
 
