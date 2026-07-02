@@ -11,28 +11,37 @@ from typing import Any
 import requests
 
 from arb.config import AppConfig
-from arb.matching import event_key, load_aliases, normalize_name
+from arb.matching import EVENT_DATE_TZ, event_key, load_aliases, mma_start_anchor, normalize_name
 from arb.models import Quote
-from arb.pricing import all_in_fee_cost, q6
-from arb.venues.slippage import effective_buffer
+from arb.pricing import q6
+from arb.venues.slippage import leg_fee_cost
 
 GAMMA_URL = "https://gamma-api.polymarket.com"
 CLOB_URL = "https://clob.polymarket.com"
 
-# SPEC §3.2: Gamma discovery is tag_slug ∈ {mlb|nba|soccer|tennis|mma}.
+# SPEC §3.2: Gamma discovery is tag_slug ∈ {mlb|nba|soccer|tennis|mma}. The canonical sport
+# string stays "mma" everywhere (event_key prefix, quotes.sport, config, Odds API alias); only
+# the Gamma query slug differs.
 TAG_SLUGS = {
     "baseball_mlb": "mlb",
     "basketball_nba": "nba",
     "soccer": "soccer",
     "tennis": "tennis",
-    "mma": "mma",
+    # Gamma's "mma" tag is futures-only since ~mid-2026; fight cards live under "ufc" (verified 2026-07-02).
+    "mma": "ufc",
 }
 # v1 scope is winner + totals only (SPEC §1); other sportsMarketTypes are ignored.
 MARKET_TYPES = {"moneyline": "WINNER", "totals": "TOTAL"}
 TITLE_SPLIT = re.compile(r"^(.+?)\s+(?:vs\.?|at)\s+(.+?)$", flags=re.IGNORECASE)
+# UFC event titles carry a "(Weight, Card)" suffix ("... vs. Benoît Saint Denis (Lightweight,
+# Main Card)") that would otherwise pollute the away name and break the cross-venue event_key.
+TITLE_PARENS = re.compile(r"\s*\([^)]*\)\s*$")
 # CLOB book reads are independent; a small pool keeps total fetch time low without
 # hammering the API the way unbounded concurrency would.
 BOOK_WORKERS = 6
+# K16: Gamma /events pagination. 10 pages x 100 covers any realistic concurrent tag.
+EVENT_PAGE_SIZE = 100
+MAX_EVENT_PAGES = 10
 
 
 class PolymarketAdapter:
@@ -55,13 +64,22 @@ class PolymarketAdapter:
         tag_slug = TAG_SLUGS.get(sport)
         if tag_slug is None:
             raise RuntimeError(f"No Polymarket tag_slug mapped for sport {sport!r}; SPEC §3.2 lists mlb/nba/soccer/tennis/mma only.")
-        response = requests.get(
-            f"{GAMMA_URL}/events",
-            params={"tag_slug": tag_slug, "closed": "false", "limit": 100},
-            timeout=30,
-        )
-        response.raise_for_status()
-        events = _attach_clob_books(response.json())
+        # K16: paginate — a busy tag (soccer) can exceed one page, and an unpaginated read
+        # silently drops the overflow (an opportunity leak, not a pricing error).
+        events: list[dict[str, Any]] = []
+        for page in range(MAX_EVENT_PAGES):
+            response = requests.get(
+                f"{GAMMA_URL}/events",
+                params={"tag_slug": tag_slug, "closed": "false",
+                        "limit": EVENT_PAGE_SIZE, "offset": page * EVENT_PAGE_SIZE},
+                timeout=30,
+            )
+            response.raise_for_status()
+            batch = response.json()
+            events.extend(batch)
+            if len(batch) < EVENT_PAGE_SIZE:
+                break
+        events = _attach_clob_books(events)
         return parse_polymarket_events(
             events,
             sport,
@@ -86,7 +104,8 @@ def parse_polymarket_events(
     aliases = load_aliases()
     quotes: list[Quote] = []
     for event in events:
-        teams = TITLE_SPLIT.match(str(event.get("title", "")).strip())
+        title = TITLE_PARENS.sub("", str(event.get("title", "")).strip())
+        teams = TITLE_SPLIT.match(title)
         if not teams:
             continue
         home, away = teams.group(1).strip(), teams.group(2).strip()
@@ -99,17 +118,24 @@ def parse_polymarket_events(
             if liquidity < min_liquidity:
                 continue
             start = _parse_start(str(start_text))
+            if sport == "mma":
+                # gameStartTime is the card start; anchor to the fight's ET date so this leg's
+                # event_key + start line up with Kalshi's (see matching.mma_start_anchor).
+                start = mma_start_anchor(start.astimezone(EVENT_DATE_TZ).date())
             key = event_key(sport, home, away, start, aliases)
             line = Decimal(str(market["line"])) if market.get("line") is not None else None
             outcomes = _json_list(market.get("outcomes", []))
             prices = _json_list(market.get("clobAskPrices", []))
             depths = _json_list(market.get("clobAskDepths", []))
             token_ids = _json_list(market.get("clobTokenIds", []))
+            bids = market.get("clobBestBids")
             for index, outcome in enumerate(outcomes):
                 if index >= len(prices) or not str(prices[index]):
                     continue
                 price = Decimal(str(prices[index]))
-                depth = Decimal(str(depths[index])) if index < len(depths) else liquidity
+                # K17/B3: NO event-liquidity fallback — depth unknown stays None and the
+                # depth-unknown guard (D4) decides, instead of a fake per-quote depth.
+                depth = Decimal(str(depths[index])) if index < len(depths) and str(depths[index]) else None
                 if market_type == "TOTAL":
                     label = "OVER" if str(outcome).upper().startswith("O") else "UNDER"
                 else:
@@ -120,7 +146,9 @@ def parse_polymarket_events(
                 ladders = market.get("clobAskLadders")
                 captured = ladders[index] if ladders is not None and index < len(ladders) else None
                 ladder = captured or (((price, depth),) if depth and depth > 0 else None)
-                buffer = effective_buffer(ladder, slippage_model, slippage_ref_stake, taker_buffer)
+                best_bid = None
+                if bids is not None and index < len(bids) and bids[index] is not None:
+                    best_bid = Decimal(str(bids[index]))
                 quotes.append(
                     Quote(
                         event_key=key,
@@ -131,9 +159,11 @@ def parse_polymarket_events(
                         outcome_label=label,
                         raw_price=price,
                         cost=price,
-                        fee_cost=all_in_fee_cost(price, fee_rate, buffer, basis="linear"),
+                        fee_cost=leg_fee_cost("polymarket", price, fee_rate, ladder,
+                                              slippage_model, slippage_ref_stake, taker_buffer),
                         depth_usd=depth,
                         ladder=ladder,
+                        best_bid=best_bid,
                         live=False,
                         fetched_at=fetched_at,
                         start_utc=start,
@@ -174,18 +204,23 @@ def polymarket_ladder(asks: list[dict[str, Any]]) -> tuple[tuple[Decimal, Decima
     return tuple(levels) or None
 
 
-def _fetch_book(token_id: Any) -> tuple[str, str, tuple[tuple[Decimal, Decimal], ...] | None]:
+def _fetch_book(token_id: Any) -> tuple[str, str, tuple[tuple[Decimal, Decimal], ...] | None, str | None]:
     response = requests.get(f"{CLOB_URL}/book", params={"token_id": token_id}, timeout=30)
     if response.status_code == 404:  # token has no book yet — not a quote
-        return "", "0", None
+        return "", "0", None, None
     response.raise_for_status()
-    asks = response.json().get("asks", [])
+    body = response.json()
+    asks = body.get("asks", [])
     ladder = polymarket_ladder(asks)
     best = _best_ask(asks)
     if best is None:
-        return "", "0", None
+        return "", "0", None, None
     price, depth = best
-    return str(price), str(depth), ladder
+    # K12: best resting bid, so a true (bid+ask)/2 mid is computable downstream.
+    bid_prices = [Decimal(str(level["price"])) for level in body.get("bids", [])
+                  if Decimal(str(level["price"])) > 0]
+    best_bid = str(max(bid_prices)) if bid_prices else None
+    return str(price), str(depth), ladder, best_bid
 
 
 def _attach_clob_books(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -205,11 +240,12 @@ def _attach_clob_books(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         results = books[cursor:cursor + len(tokens)]
         cursor += len(tokens)
         # Lists stay index-aligned with `outcomes`; empty string marks an empty book.
-        market["clobAskPrices"] = [price for price, _, _ in results]
-        market["clobAskDepths"] = [depth for _, depth, _ in results]
+        market["clobAskPrices"] = [price for price, _, _, _ in results]
+        market["clobAskDepths"] = [depth for _, depth, _, _ in results]
         # B4: the full multi-level taker ladder per token, so an arb's Polymarket leg is no
         # longer permanently single-level (the binding leg's slippage becomes modelable).
-        market["clobAskLadders"] = [ladder for _, _, ladder in results]
+        market["clobAskLadders"] = [ladder for _, _, ladder, _ in results]
+        market["clobBestBids"] = [bid for _, _, _, bid in results]
     return events
 
 

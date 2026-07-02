@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import string
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -34,10 +34,55 @@ def _basic_normalize(name: str) -> str:
 
 
 def normalize_name(name: str, sport: str, aliases: dict[str, dict[str, str]] | None = None) -> str:
+    # Venue titles prefix a tournament tag onto the first participant ("Wimbledon ATP:
+    # Rafael Jodar") — team names never legitimately contain a colon, so drop everything
+    # up to the last one or the event_key never joins other venues / the consensus.
+    name = name.rsplit(":", 1)[-1]
     raw = _basic_normalize(name)
     aliases = aliases if aliases is not None else load_aliases()
     sport_aliases = aliases.get(sport, {})
     return sport_aliases.get(raw, raw)
+
+
+# MMA legs anchor to this ET hour of the fight date (see mma_start_anchor). Late-evening keeps the
+# card "upcoming" through its whole ET calendar day so the activity gate stays ACTIVE on fight day
+# (a midnight anchor is already in the past by fight time → sport wrongly reads dormant). UFC main
+# cards run ~6pm–1am ET, so 23:00 sits inside the card window.
+MMA_ANCHOR_HOUR_ET = 23
+
+
+def mma_start_anchor(et_date: date) -> datetime:
+    """MMA has no reliable per-fight start both venues agree on: Polymarket's gameStartTime is
+    the card-level start (~21:00Z) while Kalshi exposes only a fight *date* in the ticker plus a
+    per-fight expected-conclusion time (occurrence_datetime, 7-10h later, past the ET midnight
+    seam). A fighter pair fights once per card (no doubleheaders), so the fight is uniquely keyed
+    by date+names — not sub-day time. Both adapters anchor MMA legs to the same ET hour of the
+    shared fight date so their event_key dates match AND their starts are byte-identical (0 drift),
+    which lets them survive detection's start clustering + start-drift gate instead of being split
+    apart, and keeps the activity gate ACTIVE across the fight day."""
+    anchor = datetime(et_date.year, et_date.month, et_date.day, MMA_ANCHOR_HOUR_ET, tzinfo=EVENT_DATE_TZ)
+    return anchor.astimezone(timezone.utc)
+
+
+def event_start_map(quotes, unreliable_start_venues: dict[str, list[str]] | None = None) -> dict[str, datetime]:
+    """golf_slate_tennis_fix Part 1.0: per-event start = the EARLIEST start any RELIABLE venue
+    claims for the event. Kalshi/SX starts are verified-reliable, so the earliest claim wins — a
+    too-early start is safe (routes to the live/non-actionable lane), a too-late one is the bug
+    that booked in-play tennis as pregame EV. Venues in `unreliable_start_venues` for the event's
+    sport (Polymarket's nominal Gamma slot for tennis) are excluded as a start source; an event
+    whose ONLY start comes from an unreliable venue therefore maps to nothing here → start unknown
+    → non-actionable (E5)."""
+    unreliable = unreliable_start_venues or {}
+    starts: dict[str, datetime] = {}
+    for quote in quotes:
+        if quote.start_utc is None:
+            continue
+        if quote.sport in unreliable.get(quote.venue, ()):  # unreliable start source for this sport
+            continue
+        current = starts.get(quote.event_key)
+        if current is None or quote.start_utc < current:
+            starts[quote.event_key] = quote.start_utc
+    return starts
 
 
 def canonical_sport(odds_api_key: str, aliases: dict[str, str] | None = None) -> str:

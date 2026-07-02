@@ -82,6 +82,10 @@ class AppConfig:
     micro_min_depth_usd: Decimal
     micro_max_stake_usd: Decimal
     micro_e_min: Decimal
+    micro_e_min_thin: Decimal
+    micro_assume_thin_venues: frozenset[str]
+    micro_max_event_exposure_usd: Decimal
+    micro_max_venue_exposure_usd: Decimal
     max_days_to_settlement: int
     nonsports_max_days: int
     scan_times: list[str]
@@ -90,8 +94,10 @@ class AppConfig:
     settle_days_from: int
     settle_health_overdue_max: int
     settle_grace_hours: int
+    tracker_terminal_mute_grace_mins: int
     sports: list[str]
     consensus_sports: list[str]
+    activity_lookahead_hours: int
     scan_breaks: bool
     break_windows: dict[str, list[int]]
     watch_interval_secs: int
@@ -110,12 +116,17 @@ class AppConfig:
     ev_min_expected_profit_usd: Decimal
     ev_dispersion_book_correlation: Decimal
     ev_shrink_prior: Decimal
-    ev_shrink_prior_strength: Decimal
+    ev_shrink_prior_sd: Decimal
+    ev_shrink_prior_pseudocount: Decimal
     ev_push_pricing: bool
     ev_settlement_lag_hours: Decimal
     ev_correlation_rho: Decimal
     ev_correlation_group_cap_fraction: Decimal
     ev_require_move_time: bool
+    # golf_slate_tennis_fix Part 1: EV correctness gates.
+    ev_max_edge: Decimal                      # edge above this = data error, no bet (SPEC §12 trap)
+    ev_require_exact_match: list[str]          # surname-matched sports need an exact alias entry for EV
+    unreliable_start_venues: dict[str, list[str]]  # venue -> sports whose start_utc from it is nominal
     auto_fill: bool
     trusted_pairs: set[str]
     fuzzy_match_threshold: int
@@ -140,6 +151,8 @@ class AppConfig:
     odds_api_warn_below_credits: int
     odds_api_abort_below_credits: int
     odds_api_sport_aliases: dict
+    odds_api_markets: dict
+    ai_matcher: dict
     parlay_enabled: bool
     parlay_divergence_threshold: Decimal
     parlay_min_liquidity_usd: Decimal
@@ -205,6 +218,20 @@ def _warn_stale_fees(raw: dict[str, Any], venues: dict[str, dict[str, Any]]) -> 
     return stale
 
 
+def _shrink_keys(ev: dict[str, Any]) -> dict[str, Decimal]:
+    """K7: one knob had two incompatible meanings (prior sd vs pseudo-count, regime picked at
+    runtime). Split into shrink_prior_sd / shrink_prior_pseudocount; setting both — or the
+    retired shrink_prior_strength — is a config error, not a silent misbehavior."""
+    sd = _decimal(ev.get("shrink_prior_sd", "0"))
+    pseudo = _decimal(ev.get("shrink_prior_pseudocount", "0"))
+    if sd > 0 and pseudo > 0:
+        raise ValueError("config: set only ONE of ev.shrink_prior_sd / ev.shrink_prior_pseudocount")
+    if _decimal(ev.get("shrink_prior_strength", "0")) > 0:
+        raise ValueError("config: ev.shrink_prior_strength is retired (it mixed two scales); "
+                         "use ev.shrink_prior_sd (prob units) or ev.shrink_prior_pseudocount (books)")
+    return {"ev_shrink_prior_sd": sd, "ev_shrink_prior_pseudocount": pseudo}
+
+
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
     _load_env()
     if not path.exists():
@@ -256,6 +283,10 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         micro_min_depth_usd=_decimal(micro.get("min_depth_usd", "5")),
         micro_max_stake_usd=_decimal(micro.get("max_stake_usd", "25")),
         micro_e_min=_decimal(micro.get("e_min", ev.get("e_min", "0.05"))),
+        micro_e_min_thin=_decimal(micro.get("e_min_thin", "0.15")),
+        micro_assume_thin_venues=frozenset(micro.get("assume_thin_venues") or []),
+        micro_max_event_exposure_usd=_decimal(micro.get("max_event_exposure_usd", "50")),
+        micro_max_venue_exposure_usd=_decimal(micro.get("max_venue_exposure_usd", "100")),
         max_days_to_settlement=int(raw["max_days_to_settlement"]),
         nonsports_max_days=int(raw["nonsports_max_days"]),
         scan_times=list(raw["scan_times"]),
@@ -264,8 +295,10 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         settle_days_from=int(raw["settle_days_from"]),
         settle_health_overdue_max=int(raw.get("settle_health_overdue_max", 0)),
         settle_grace_hours=int(raw.get("settle_grace_hours", 6)),
+        tracker_terminal_mute_grace_mins=int((raw.get("tracker") or {}).get("terminal_mute_grace_mins", 180)),
         sports=list(raw["sports"]),
         consensus_sports=list(raw["consensus_sports"]),
+        activity_lookahead_hours=int(raw.get("activity_lookahead_hours", 48)),
         scan_breaks=bool(raw["scan_breaks"]),
         break_windows=dict(raw["break_windows"]),
         watch_interval_secs=int(raw["watch_interval_secs"]),
@@ -284,9 +317,11 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         ev_min_expected_profit_usd=_decimal(ev.get("min_expected_profit_usd", "0")),
         # B6: effective-sample-size correction for correlated books (0 = legacy independent SE).
         ev_dispersion_book_correlation=_decimal(ev.get("dispersion_book_correlation", "0")),
-        # B7: shrink thin-consensus p_hat toward this prior; strength 0 = off (no shrinkage).
+        # B7/K7: shrink thin-consensus p_hat toward this prior. TWO explicit knobs — the old
+        # single shrink_prior_strength meant a prior sd in one regime and a pseudo-count in
+        # the other (~100x apart); _shrink_keys errors if both (or the legacy key) are set.
         ev_shrink_prior=_decimal(ev.get("shrink_prior", "0.5")),
-        ev_shrink_prior_strength=_decimal(ev.get("shrink_prior_strength", "0")),
+        **_shrink_keys(ev),
         # B11: price the push risk on integer totals instead of only flagging it.
         ev_push_pricing=bool(ev.get("push_pricing", False)),
         # B12: capital is locked until settlement, not first pitch; add this lag to start_utc.
@@ -297,6 +332,11 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         # C16: stamp consensus age only from books reporting a real line-move time (don't mix the
         # move clock with our fetch clock). False = legacy fetched_at fallback.
         ev_require_move_time=bool(ev.get("require_move_time", False)),
+        # golf_slate_tennis_fix Part 1: no-magic-numbers — ceiling, exact-match sports, and the
+        # per-venue unreliable-start map all live in config.
+        ev_max_edge=_decimal(ev.get("max_edge", "0.15")),
+        ev_require_exact_match=list(ev.get("require_exact_match", [])),
+        unreliable_start_venues={str(k): list(v) for k, v in (raw.get("unreliable_start_venues", {}) or {}).items()},
         auto_fill=bool(raw["auto_fill"]),
         trusted_pairs=set(raw["trusted_pairs"]),
         fuzzy_match_threshold=int(raw["fuzzy_match_threshold"]),
@@ -321,6 +361,8 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         odds_api_warn_below_credits=int(odds_api["warn_below_credits"]),
         odds_api_abort_below_credits=int(odds_api["abort_below_credits"]),
         odds_api_sport_aliases={str(k): str(v) for k, v in (raw.get("odds_api_sport_aliases") or {}).items()},
+        odds_api_markets={str(k): str(v) for k, v in (raw.get("odds_api_markets") or {}).items()},
+        ai_matcher=dict(raw.get("ai_matcher") or {}),
         parlay_enabled=bool(parlay["enabled"]),
         parlay_divergence_threshold=_decimal(parlay["divergence_threshold"]),
         parlay_min_liquidity_usd=_decimal(parlay.get("min_liquidity_usd", raw.get("min_liquidity_usd", "500"))),

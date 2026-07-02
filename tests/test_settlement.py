@@ -92,8 +92,8 @@ def test_score_settlement_vectors(tmp_path) -> None:
     assert settle_sports(store, config, Path("tests/fixtures")) == 4
     rows = {(r["result"], r["pnl_optimistic"]) for r in settled_rows(store)}
     # SPEC §9 vector: win at effective cost 0.5175 pays (1-0.5175)/0.5175 = $0.93 to the cent.
-    assert ("WON", "0.93") in rows
-    assert ("LOST", "-1.00") in rows
+    assert ("WON", "0.932367") in rows
+    assert ("LOST", "-1.000000") in rows
     won = [r for r in settled_rows(store) if r["result"] == "WON"]
     lost = [r for r in settled_rows(store) if r["result"] == "LOST"]
     assert len(won) == 2 and len(lost) == 2
@@ -135,8 +135,8 @@ def test_confirmed_fill_settles_from_second_observation_price(tmp_path) -> None:
     config = load_config()
     assert settle_sports(store, config, Path("tests/fixtures")) == 1
     row = settled_rows(store)[0]
-    assert row["pnl_optimistic"] == "0.93"   # entry at 0.5175 effective
-    assert row["pnl_confirmed"] == "1.40"    # confirmed at 0.4175 effective: (1-c)/c
+    assert row["pnl_optimistic"] == "0.932367"   # entry at 0.5175 effective
+    assert row["pnl_confirmed"] == "1.395210"    # confirmed at 0.4175 effective: (1-c)/c
     assert row["placed_at"] is not None
 
 
@@ -147,9 +147,9 @@ def test_settlement_records_kelly_pnl_from_base_sizing(tmp_path) -> None:
     config = load_config()
     assert settle_sports(store, config, Path("tests/fixtures")) == 1
     row = settled_rows(store)[0]
-    assert row["pnl_kelly_optimistic"] == "9.32"
+    assert row["pnl_kelly_optimistic"] == "9.323671"
     # Confirmed P&L uses the second-observation cost, but the base row's Kelly size.
-    assert row["pnl_kelly_confirmed"] == "13.95"
+    assert row["pnl_kelly_confirmed"] == "13.952096"
     assert row["kelly_stake_usd"] == "10.00"
 
 
@@ -162,8 +162,8 @@ def test_settlement_uses_recorded_ev_stake_for_micro_bets(tmp_path) -> None:
     config = load_config()
     assert settle_sports(store, config, Path("tests/fixtures")) == 2
     rows = {(r["result"], r["pnl_optimistic"], r["stake_usd"]) for r in settled_rows(store)}
-    assert ("WON", "4.66", "5.00") in rows
-    assert ("LOST", "-5.00", "5.00") in rows
+    assert ("WON", "4.661836", "5.00") in rows
+    assert ("LOST", "-5.000000", "5.00") in rows
 
 
 def test_settlement_carries_quality_flag_to_scoring_row(tmp_path) -> None:

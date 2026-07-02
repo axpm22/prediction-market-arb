@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -34,35 +34,62 @@ def _local_date(placed_at: str | None) -> date | None:
 def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportunity],
                         validation_rule: ValidationRule | None = None,
                         now: datetime | None = None,
-                        only_kinds: tuple[str, ...] | None = None) -> None:
+                        only_kinds: tuple[str, ...] | None = None,
+                        terminal_mute_grace_mins: int = 180,
+                        failed_venues: set[str] | None = None,
+                        dormant_sports: set[str] | None = None,
+                        event_starts: dict[str, datetime] | None = None) -> None:
     """Record one poll's opportunities into the append-only ledger.
 
     `only_kinds` scopes the lifetime bookkeeping (the absent→closed and dedup logic) to a kind
     set. A separate cadence — e.g. parlay-scan running apart from `watch` — passes its own kind
     so it never closes the other stream's active fingerprints (they're simply not in this poll).
+
+    `failed_venues` (K3): venues whose fetch failed/returned nothing this poll. A fingerprint
+    whose legs touch one is EXEMPT from absent-closing — "venue didn't answer" is not "gone
+    from the book", and closing it corrupts lifetimes with close/reappear storms.
+
+    `dormant_sports`: sports skipped this poll for having no near-future fixtures. Their
+    quotes never entered detection, so their fingerprints' absence proves nothing —
+    exempt them exactly like a failed venue (no manufactured CLOSE storms).
     """
     validation_rule = validation_rule or ValidationRule()
     current = {opp.fingerprint: opp for opp in opportunities}
     now = now or datetime.now(timezone.utc)
     now = _as_utc(now)
+    failed_venues = failed_venues or set()
     with store.connect() as con:
         active = _active_rows(con, only_kinds)
         active_positions = _active_position_keys(con, only_kinds)
         seen_positions: set[str] = set()
         for fingerprint, row in active.items():
-            if fingerprint not in current:
+            if (fingerprint not in current
+                    and not _touches_failed_venue(row, failed_venues)
+                    and row["sport"] not in (dormant_sports or ())):
                 _insert_close_row(con, poll_id, fingerprint, int(row["id"]), "absent-one-poll")
         for opp in opportunities:
             row = active.get(opp.fingerprint)
-            rejection = _actionability_rejection(opp, now)
-            if rejection is None and row is None:
+            rejection = None
+            # Weakness #4 anti-inflation: don't re-record a fingerprint whose lifetime is
+            # genuinely over. Checked BEFORE the in-play actionability gate so a finished+settled
+            # fingerprint reads "terminal-fingerprint-skipped" (the accurate reason), not the
+            # generic in-play skip. The mute is bounded two ways so it no longer swallows clean
+            # flags: (a) only SETTLED counts (EXITED reappears as a new bet via _latest_closed_id),
+            # and (b) it fires ONLY once the event has actually ended — a SETTLED row for a still-
+            # future event is premature/own-settlement, so the re-sighting routes to the normal
+            # open/reappearance path.
+            if row is None:
                 terminal = _latest_hard_terminal(con, opp.fingerprint)
-                if terminal is not None:
+                if terminal is not None and _event_over(opp, now, terminal_mute_grace_mins):
                     rejection = (
                         f"skip-terminal-fingerprint:{terminal['status']}",
                         "terminal-fingerprint-skipped",
                         int(terminal["id"]),
                     )
+            if rejection is None:
+                rejection = _actionability_rejection(opp, now, event_starts)
+                if rejection is not None and rejection[1] == "inplay-bet-refused":
+                    print(f"inplay-bet-refused fingerprint={opp.fingerprint} event={opp.event.event_key}")
             if rejection is None and row is None:
                 position_key = _position_key(opp)
                 active_position = active_positions.get(position_key)
@@ -133,14 +160,58 @@ def write_daily_report(store: Store, report_date: date | None = None, output_dir
         writer.writeheader()
         for record in records:
             writer.writerow(_csv_record(record))
-    md_path.write_text(_daily_markdown(report_date, records, cumulative_records))
+    md_path.write_text(_daily_markdown(report_date, records, cumulative_records,
+                                       store.load_left_on_table(report_date),
+                                       _data_quality(store, report_date)))
     return csv_path, md_path
 
 
+def _data_quality_lines(data_quality: dict[str, object] | None) -> list[str]:
+    """The 'Data Quality' block for the daily report: voided (annotated) bets are out of every
+    P&L cell above and shown here only, plus the in-play-refused counter (both zero => omitted)."""
+    dq = data_quality or {}
+    voided = dict(dq.get("voided") or {})
+    refused = int(dq.get("inplay_refused") or 0)
+    total_voided = sum(voided.values())
+    if not total_voided and not refused:
+        return []
+    breakdown = ", ".join(f"{tag}={n}" for tag, n in sorted(voided.items())) or "none"
+    return [
+        "## Data Quality",
+        "",
+        f"- voided — data error: {total_voided} (excluded from all P&L; reasons: {breakdown})",
+        f"- inplay-bet-refused: {refused} (bets blocked at the tracker boundary as in-play/unknown-start)",
+        "",
+    ]
+
+
+def _data_quality(store: Store, report_date: date | None) -> dict[str, object]:
+    """stop_inplay_betting_fix: the two safety counters the daily report surfaces so a voided
+    incident and a refused in-play bet are never invisible — voided (annotated) bets by tag, and
+    in-play-refused rows, both bucketed to the report's local date (all-time when report_date=None)."""
+    from .experimental.annotations import annotated_ids
+
+    voided: dict[str, int] = defaultdict(int)
+    with store.connect() as con:
+        annotated_ids(con)  # ensure the annotations table exists on a fresh DB
+        for row in con.execute(
+                "SELECT b.placed_at, a.tag FROM annotations a JOIN flat_bets b ON b.id = a.bet_id"):
+            if report_date is None or _local_date(row["placed_at"]) == report_date:
+                voided[str(row["tag"])] += 1
+        refused = sum(
+            1 for row in con.execute(
+                "SELECT placed_at FROM flat_bets WHERE quality_flag = 'inplay-bet-refused'")
+            if report_date is None or _local_date(row["placed_at"]) == report_date)
+    return {"voided": dict(voided), "inplay_refused": refused}
+
+
 def tracker_bet_view(store: Store) -> dict[str, dict[str, Decimal | None]]:
+    from .experimental.annotations import annotated_ids
     view: dict[str, dict[str, Decimal | None]] = defaultdict(lambda: {"optimistic": None, "confirmed": None})
     with store.connect() as con:
-        rows = list(con.execute("SELECT * FROM flat_bets WHERE kind != 'CLOSE' ORDER BY id"))
+        excluded = annotated_ids(con)  # PURGE_LOOP_PNL: annotated loop rows never enter the P&L view
+        rows = [row for row in con.execute("SELECT * FROM flat_bets WHERE kind != 'CLOSE' ORDER BY id")
+                if int(row["id"]) not in excluded]
     for row in rows:
         if row["status"] == "OPEN" and view[row["fingerprint"]]["optimistic"] is None and row["pnl_optimistic"]:
             view[row["fingerprint"]]["optimistic"] = Decimal(row["pnl_optimistic"])
@@ -167,15 +238,40 @@ def _active_position_keys(con, only_kinds: tuple[str, ...] | None = None) -> dic
     return keyed
 
 
+def _touches_failed_venue(row: Any, failed_venues: set[str]) -> bool:
+    """K3: True when any of the bet's legs sits on a venue that failed this poll — the
+    fingerprint's absence proves nothing, so it must not be absent-closed."""
+    if not failed_venues:
+        return False
+    try:
+        legs = json.loads(row["legs_json"] or "[]")
+    except (TypeError, json.JSONDecodeError):
+        return False
+    return any(str(leg.get("venue")) in failed_venues for leg in legs)
+
+
 def _latest_hard_terminal(con, fingerprint: str):
+    # Only SETTLED mutes — EXITED (an ev-exit take-profit/stop mid-life) must be allowed to
+    # reappear as a new bet via _latest_closed_id, not be permanently silenced.
     return con.execute(
         """
         SELECT id, status FROM flat_bets
-         WHERE fingerprint = ? AND status IN ('SETTLED','EXITED')
+         WHERE fingerprint = ? AND status = 'SETTLED'
          ORDER BY id DESC LIMIT 1
         """,
         (fingerprint,),
     ).fetchone()
+
+
+def _event_over(opp: Opportunity, now: datetime, grace_mins: int) -> bool:
+    """True only when the opportunity's event has genuinely ended — its (earliest) start is in
+    the past by at least grace_mins. An unknown start is treated as NOT over (route to the normal
+    reappearance path) so a missing time never permanently mutes a fingerprint."""
+    starts = [opp.event.start_utc, *(leg.start_utc for leg in opp.legs)]
+    known = [_as_utc(start) for start in starts if start is not None]
+    if not known:
+        return False
+    return min(known) <= now - timedelta(minutes=grace_mins)
 
 
 def _latest_closed_id(con, fingerprint: str) -> int | None:
@@ -186,7 +282,17 @@ def _latest_closed_id(con, fingerprint: str) -> int | None:
     return None if row is None else int(row["id"])
 
 
-def _actionability_rejection(opp: Opportunity, now: datetime) -> tuple[str, str, int | None] | None:
+def _actionability_rejection(opp: Opportunity, now: datetime,
+                             event_starts: dict[str, datetime] | None = None) -> tuple[str, str, int | None] | None:
+    # Belt-and-braces (stop_inplay_betting_fix): the last-line guard trusts the AUTHORITATIVE
+    # event-level start (earliest reliable venue, unreliable venues excluded) over opp.event.start_utc,
+    # which can be a mislabeled nominal slot (Polymarket tennis). A started or unknown reliable start
+    # refuses the EV/ARB bet even when the per-opportunity start still looks pregame — the exact hole
+    # that booked 340% in-play tennis EV. This is one invariant check, not a second routing system.
+    if opp.kind in {"EV", "ARB"} and event_starts is not None:
+        reliable = event_starts.get(opp.event.event_key)
+        if reliable is None or _as_utc(reliable) <= now:
+            return ("inplay-bet-refused", "inplay-bet-refused", None)
     starts = [leg.start_utc for leg in opp.legs]
     # PARLAY is pregame-only and never auto-filled. It must have at least one known leg start
     # (else it can't be validated pregame or settled by start time), and every known leg start
@@ -203,16 +309,22 @@ def _actionability_rejection(opp: Opportunity, now: datetime) -> tuple[str, str,
         return None
     if opp.kind in {"EV", "ARB"} and opp.event.start_utc is None:
         return ("skip-missing-start", "missing-start-skipped", None)
-    event_start = _as_utc(opp.event.start_utc)
+    # K9: event start can be None for non-EV/ARB kinds (never invented anymore).
+    event_start = None if opp.event.start_utc is None else _as_utc(opp.event.start_utc)
     leg_starts = [_as_utc(start) for start in starts if start is not None]
     if opp.kind in {"EV", "ARB"} and (event_start <= now or any(start <= now for start in leg_starts)):
         return ("skip-started-event", "in-play-skipped", None)
-    if opp.category != "sports" and opp.kind in {"EV", "ARB"}:
+    if opp.category != "sports" and opp.kind in {"EV", "ARB"} and not opp.event.ai_matched:
+        # STRIKE_AWARE amendment: AI-matched nonsports pairs ARE paper-booked (the evidence
+        # lane, settled by the same per-venue resolvers as sports arbs) — only human-mapped
+        # nonsports stays manual-resolver-only. Both remain REVIEW/untrusted, out of the headline.
         return ("skip-nonsports-auto-action", "manual-resolver-required", None)
     return None
 
 
-def _as_utc(dt: datetime) -> datetime:
+def _as_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
     return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
@@ -267,11 +379,12 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
     con.execute(
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
-                              live, edge, edge_points, stake_usd, legs_json, optimistic_cost, confirmed_cost,
+                              live, edge, edge_points, adj_edge, p_hat, stake_usd, legs_json,
+                              optimistic_cost, confirmed_cost,
                               pnl_optimistic, pnl_confirmed, status, placed_at, notes,
                               quality_flag, kelly_f_star, kelly_stake_usd,
-                              validation_rule, validation_tag)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              validation_rule, validation_tag, ai_matched)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             current_opp.fingerprint,
@@ -284,6 +397,8 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
             int(any(leg.live for leg in current_opp.legs)),
             str(current_opp.edge),
             None if current_opp.edge_points is None else str(current_opp.edge_points),
+            None if current_opp.adj_edge is None else str(current_opp.adj_edge),
+            None if current_opp.p_hat is None else str(current_opp.p_hat),
             str(stake_usd),
             json.dumps([quote_to_json(leg) for leg in current_opp.legs]),
             str(cost),
@@ -298,6 +413,7 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
             None if current_opp.kelly_stake is None else str(current_opp.kelly_stake),
             rule_id,
             validation_tag,
+            int(current_opp.event.ai_matched),
         ),
     )
 
@@ -312,11 +428,12 @@ def _insert_rejected_row(con, poll_id: int, current_opp: Opportunity, reappearan
     con.execute(
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
-                              live, edge, edge_points, stake_usd, legs_json, optimistic_cost, confirmed_cost,
+                              live, edge, edge_points, adj_edge, p_hat, stake_usd, legs_json,
+                              optimistic_cost, confirmed_cost,
                               pnl_optimistic, pnl_confirmed, status, placed_at, notes,
                               quality_flag, kelly_f_star, kelly_stake_usd,
-                              validation_rule, validation_tag)
-        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, '0', ?, ?, NULL, NULL, NULL, 'CLOSED', ?, ?, ?, ?, ?, ?, ?)
+                              validation_rule, validation_tag, ai_matched)
+        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, '0', ?, ?, NULL, NULL, NULL, 'CLOSED', ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             current_opp.fingerprint,
@@ -328,6 +445,8 @@ def _insert_rejected_row(con, poll_id: int, current_opp: Opportunity, reappearan
             int(any(leg.live for leg in current_opp.legs)) or int(quality_flag == "in-play-skipped"),
             str(current_opp.edge),
             None if current_opp.edge_points is None else str(current_opp.edge_points),
+            None if current_opp.adj_edge is None else str(current_opp.adj_edge),
+            None if current_opp.p_hat is None else str(current_opp.p_hat),
             json.dumps([quote_to_json(leg) for leg in current_opp.legs]),
             None if cost is None else str(cost),
             (placed_at or datetime.now(timezone.utc)).isoformat(),
@@ -337,6 +456,7 @@ def _insert_rejected_row(con, poll_id: int, current_opp: Opportunity, reappearan
             None if current_opp.kelly_stake is None else str(current_opp.kelly_stake),
             rule_id,
             validation_tag,
+            int(current_opp.event.ai_matched),
         ),
     )
 
@@ -386,29 +506,42 @@ def _optimistic_pnl(opp: Opportunity) -> Decimal | None:
     if cost is None or cost <= 0:
         return None
     if opp.kind == "ARB":
-        return money(Decimal("1") / cost - Decimal("1"))
+        # K10: store at q6 — cent-rounding booked every sub-0.5%-ROI arb as exactly $0.00
+        # and erased the 0-1% edge band the harness exists to measure. Cents are display.
+        return q6(Decimal("1") / cost - Decimal("1"))
     return None
 
 
 def _bet_records_for_date(store: Store, report_date: date | None):
     # #1 Bucket by EST/EDT local date, not the UTC calendar date. SQLite can't tz-convert,
     # so filter in Python on the attribution-tz date of placed_at.
+    from .experimental.annotations import annotated_ids
     with store.connect() as con:
+        # PURGE_LOOP_PNL: exclude annotated rows (bug:settled-rebook-loop) from the report. The loop
+        # P&L lives on annotated SETTLED children whose OPEN reappearance base isn't itself annotated,
+        # so also drop bases whose fingerprint carries any annotation — otherwise the base survives
+        # and re-books its loop child's P&L. Append-only: rows stay in flat_bets, only excluded here.
+        excluded = annotated_ids(con)
+        annotated_fps = {row["fingerprint"] for row in con.execute(
+            "SELECT DISTINCT fingerprint FROM flat_bets WHERE id IN (SELECT bet_id FROM annotations)")}
         bases = list(con.execute(
             "SELECT * FROM flat_bets WHERE status = 'OPEN' AND kind != 'CLOSE' ORDER BY id"
         ))
+        bases = [row for row in bases
+                 if int(row["id"]) not in excluded and row["fingerprint"] not in annotated_fps]
         if report_date is not None:
             bases = [row for row in bases if _local_date(row["placed_at"]) == report_date]
         if not bases:
             return []
         ids = [int(row["id"]) for row in bases]
         placeholders = ",".join("?" for _ in ids)
-        related_rows = list(
-            con.execute(
+        related_rows = [
+            row for row in con.execute(
                 f"SELECT * FROM flat_bets WHERE reappearance_of IN ({placeholders}) ORDER BY id",
                 ids,
             )
-        )
+            if int(row["id"]) not in excluded
+        ]
     related: dict[int, list[object]] = defaultdict(list)
     for row in related_rows:
         related[int(row["reappearance_of"])].append(row)
@@ -469,7 +602,19 @@ def _csv_record(record: dict[str, object]) -> dict[str, str | int | None]:
     }
 
 
-def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulative_records: list[dict[str, object]]) -> str:
+def _left_on_table_rows(rows: list[dict]) -> list[list[str]]:
+    """Part 1: bucket the deliberately-not-booked EV candidates by reason (edge-implausible,
+    outcome-unnormalized, fuzzy-no-exact-alias) with a count and summed suppressed edge."""
+    buckets: dict[str, list[Decimal]] = defaultdict(list)
+    for row in rows:
+        edge = Decimal(str(row["edge"])) if row.get("edge") not in (None, "") else Decimal("0")
+        buckets[row["reason"]].append(edge)
+    return [[reason, str(len(edges)), str(sum(edges, Decimal("0")))]
+            for reason, edges in sorted(buckets.items())]
+
+
+def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulative_records: list[dict[str, object]],
+                    left_on_table: list[dict] | None = None, data_quality: dict[str, object] | None = None) -> str:
     headline = _headline_records(records)
     cumulative_headline = _headline_records(cumulative_records)
     lines = [
@@ -479,6 +624,7 @@ def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulat
         "",
         _headline_line(headline),
         "",
+        *_data_quality_lines(data_quality),
         "## Class x Fill x Trust",
         "",
         *_table(
@@ -520,14 +666,32 @@ def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulat
         "",
         *_table(["Class", "Flags", "Summed Flagged Edge", "Settled", "Optimistic P&L", "Confirmed P&L"], _flagged_vs_realized_rows(records)),
         "",
+        # Spec amendment (nonsports_ai_matcher): Haiku-matched bets in their own section,
+        # never the headline. The flagged-vs-realized table is the Haiku error-rate monitor.
+        "## AI-Matched (Haiku) — excluded from headline",
+        "",
+        *_table(
+            ["Class", "Fill", "Trust", "Bets", "Staked", "Settled P&L", "Pending", "Win Rate", "ROI"],
+            _class_fill_rows([r for r in records if _is_ai_matched(r)]),
+        ),
+        "",
+        "### AI-Matched Flagged vs Realized (Haiku error-rate monitor)",
+        "",
+        *_table(
+            ["Class", "Flags", "Summed Flagged Edge", "Settled", "Optimistic P&L", "Confirmed P&L"],
+            _flagged_vs_realized_rows([r for r in records if _is_ai_matched(r)]),
+        ),
+        "",
         "## Cumulative Headline",
         "",
         _headline_line(cumulative_headline),
         "",
         "## Left On The Table",
         "",
-        "Not persisted yet. The watch loop prints filtered flags, but there is no append-only table for recomputing this section.",
+        "EV candidates recorded but deliberately NOT booked (Part 1 correctness gates), by reason.",
         "",
+        *(_table(["Reason", "Count", "Summed Suppressed Edge"], _left_on_table_rows(left_on_table or []))
+          if left_on_table else ["_None today._", ""]),
         "---",
         "Scope: this ledger measures whether flagged prices were real and simultaneous.",
         "It does not measure capture - execution latency and partial fills are simulated",
@@ -544,7 +708,15 @@ def _headline_records(records: list[dict[str, object]]) -> list[dict[str, object
         and int(record["base"]["live"]) == 0
         and record["base"]["category"] == "sports"
         and record["base"]["quality_flag"] is None
+        and not _is_ai_matched(record)  # spec amendment: AI-matched never in the headline
     ]
+
+
+def _is_ai_matched(record: dict[str, object]) -> bool:
+    try:
+        return int(record["base"]["ai_matched"] or 0) == 1
+    except (KeyError, IndexError):  # pre-migration rows
+        return False
 
 
 def _headline_line(records: list[dict[str, object]]) -> str:

@@ -32,8 +32,10 @@ def test_btc_records_review_when_strike_and_window_align(tmp_path) -> None:
     assert n_legs == 4 and found >= 1
     with store.connect() as con:
         rows = list(con.execute("SELECT * FROM flat_bets WHERE kind='ARB_BTC'"))
-    assert rows and all(r["status"] == "REVIEW" for r in rows)   # oracles differ -> never OK
-    assert all(int(r["trusted"]) == 0 for r in rows)
+    assert rows
+    # Cross-venue oracles differ -> REVIEW, trusted=0. (B1 single-venue YES+NO locks are OK.)
+    cross = [r for r in rows if len({json.loads(r["legs_json"])[0]["venue"], json.loads(r["legs_json"])[1]["venue"]}) == 2]
+    assert cross and all(r["status"] == "REVIEW" and int(r["trusted"]) == 0 for r in cross)
 
 
 def test_btc_no_pair_when_strikes_differ(tmp_path) -> None:

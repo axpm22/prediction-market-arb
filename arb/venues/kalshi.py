@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -12,10 +12,9 @@ from zoneinfo import ZoneInfo
 import requests
 
 from arb.config import AppConfig
-from arb.matching import event_key, load_aliases, normalize_name
+from arb.matching import event_key, load_aliases, mma_start_anchor, normalize_name
 from arb.models import Quote
-from arb.pricing import all_in_fee_cost
-from arb.venues.slippage import effective_buffer
+from arb.venues.slippage import leg_fee_cost
 
 BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"
 SERIES_CACHE = Path("data/kalshi_series.json")
@@ -56,12 +55,19 @@ class KalshiAdapter:
         markets: list[dict[str, Any]] = []
         for ticker in [*series.get("winner", []), *series.get("totals", [])]:
             markets.extend(self._fetch_series_markets(ticker))
-        orderbooks = {
-            market["ticker"]: self._get(f"/markets/{market['ticker']}/orderbook")
-            for market in markets
-            if not _is_empty_book(market)
-        }
-        return parse_kalshi_payload({"markets": markets, "orderbooks": orderbooks}, sport,
+        # K11: orderbook reads are sequential (rate-limited) so a late book is minutes newer
+        # than an early one. Stamp each book's own fetch time; the quote is priced FROM the
+        # book and carries that time, not one parse-time stamp for the whole sweep.
+        orderbooks: dict[str, Any] = {}
+        orderbook_times: dict[str, str] = {}
+        for market in markets:
+            if _is_empty_book(market):
+                continue
+            ticker = str(market["ticker"])
+            orderbooks[ticker] = self._get(f"/markets/{ticker}/orderbook")
+            orderbook_times[ticker] = datetime.now(timezone.utc).isoformat()
+        return parse_kalshi_payload({"markets": markets, "orderbooks": orderbooks,
+                                     "orderbook_fetched_at": orderbook_times}, sport,
                                     self.config.kalshi_fee_rate, self.config.taker_price_buffer,
                                     slippage_model=self.config.taker_slippage_model,
                                     slippage_ref_stake=self.config.slippage_ref_stake_usd)
@@ -106,17 +112,26 @@ def parse_kalshi_payload(
         payload = {"markets": payload}
     markets = payload.get("markets", [])
     orderbooks = payload.get("orderbooks", {})
-    fetched_at = datetime.now(timezone.utc)
+    orderbook_times = payload.get("orderbook_fetched_at", {})
+    parse_time = datetime.now(timezone.utc)
     aliases = load_aliases()
+    # MMA fights are two per-fighter binaries; resolve the fighter pair once so the event_key
+    # uses clean names instead of the mangled "Will X win the A vs B ..." title (see helper).
+    mma_pairs = _mma_fighter_pairs(markets) if sport == "mma" else {}
     quotes: list[Quote] = []
     for market in markets:
         if _is_empty_book(market):
             continue
+        ticker = str(market["ticker"])
         teams = _teams_from_title(str(market.get("title", "")))
+        if sport == "mma":
+            fighters = mma_pairs.get(str(market.get("event_ticker", "")))
+            if fighters and len(fighters) >= 2:
+                teams = (fighters[0], fighters[1])
         if teams is None:
             continue
         home, away = teams
-        start = _start_from_ticker(str(market["ticker"]))
+        start = _mma_start_from_ticker(ticker) if sport == "mma" else _start_from_ticker(ticker)
         if start is None:
             # D1 (ARB_LADDER_AND_FRICTIONS_SPEC §4): NEVER fall back to close_time — it is days
             # after the game, so it corrupts the event_key date, every time guard, and the
@@ -129,13 +144,17 @@ def parse_kalshi_payload(
         else:
             start_note = ()
             key = event_key(sport, home, away, start, aliases)
-        book = orderbooks.get(str(market["ticker"]), {})
+        book = orderbooks.get(ticker, {})
+        # K11: the quote's own clock is the orderbook read (per market), not the parse time —
+        # the /markets snapshot can be minutes older than its own ladder.
+        ob_time = orderbook_times.get(ticker)
+        fetched_at = datetime.fromisoformat(ob_time) if ob_time else parse_time
         subtitle = str(market.get("yes_sub_title", ""))
         over = OVER_SUBTITLE.match(subtitle)
         common = dict(
             event_key=key,
             venue="kalshi",
-            book=str(market["ticker"]),
+            book=ticker,
             live=False,
             fetched_at=fetched_at,
             start_utc=start,
@@ -145,41 +164,29 @@ def parse_kalshi_payload(
         )
         if over:
             line = Decimal(over.group(1))
-            for label, side in [("OVER", "yes"), ("UNDER", "no")]:
-                price = Decimal(str(market[f"{side}_ask_dollars"]))
-                if price <= 0 or price >= 1:
-                    continue
-                ladder = _ladder_at_ask(book, side)
-                buffer = effective_buffer(ladder, slippage_model, slippage_ref_stake, taker_buffer)
-                quotes.append(
-                    Quote(
-                        market_type="TOTAL",
-                        line=line,
-                        outcome_label=label,
-                        raw_price=price,
-                        cost=price,
-                        fee_cost=all_in_fee_cost(price, fee_rate, buffer, basis="quadratic"),
-                        depth_usd=_depth_at_ask(book, side, price),
-                        ladder=ladder,
-                        **common,
-                    )
-                )
+            sides = [("OVER", "yes"), ("UNDER", "no")]
         else:
-            price = Decimal(str(market["yes_ask_dollars"]))
+            sides = [(normalize_name(subtitle or home, sport, aliases), "yes")]
+        for label, side in sides:
+            ladder = _ladder_at_ask(book, side)
+            # K11: price from the orderbook read itself (1 − best opposing bid, the same
+            # identity the verifier uses) so price and ladder are one moment; the snapshot
+            # ask is only the fallback when no orderbook was captured (fixtures).
+            price = ladder[0][0] if ladder else Decimal(str(market[f"{side}_ask_dollars"]))
             if price <= 0 or price >= 1:
                 continue
-            ladder = _ladder_at_ask(book, "yes")
-            buffer = effective_buffer(ladder, slippage_model, slippage_ref_stake, taker_buffer)
             quotes.append(
                 Quote(
-                    market_type="WINNER",
-                    line=None,
-                    outcome_label=normalize_name(subtitle or home, sport, aliases),
+                    market_type="TOTAL" if over else "WINNER",
+                    line=line if over else None,
+                    outcome_label=label,
                     raw_price=price,
                     cost=price,
-                    fee_cost=all_in_fee_cost(price, fee_rate, buffer, basis="quadratic"),
-                    depth_usd=_depth_at_ask(book, "yes", price),
+                    fee_cost=leg_fee_cost("kalshi", price, fee_rate, ladder,
+                                          slippage_model, slippage_ref_stake, taker_buffer),
+                    depth_usd=_depth_at_ask(book, side, price),
                     ladder=ladder,
+                    best_bid=_best_bid(book, side),
                     **common,
                 )
             )
@@ -209,6 +216,42 @@ def _start_from_ticker(ticker: str) -> datetime | None:
     return local.astimezone(timezone.utc)
 
 
+MMA_TICKER_DATE = re.compile(r"^(\d{2})([A-Z]{3})(\d{2})")
+
+
+def _mma_start_from_ticker(ticker: str) -> datetime | None:
+    """UFC tickers (KXUFCFIGHT-26JUL11SAIPIM-SAI) carry a fight *date* but no HHMM, so the
+    team-sport time parse fails. Anchor to ET-midnight of that date (matching.mma_start_anchor)
+    so the leg is timed (not dropped) and keys on the same date Polymarket does."""
+    parts = ticker.split("-")
+    if len(parts) < 2:
+        return None
+    match = MMA_TICKER_DATE.match(parts[1])
+    if not match:
+        return None
+    yy, mon, dd = match.groups()
+    month = MONTHS.get(mon)
+    if month is None:
+        return None
+    return mma_start_anchor(date(2000 + int(yy), month, int(dd)))
+
+
+def _mma_fighter_pairs(markets: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Kalshi models each MMA fight as two per-fighter 'Will X win?' binaries sharing an
+    event_ticker; the clean fighter name is in yes_sub_title (the title is a full sentence).
+    Collect both fighters per event so the event_key uses the pair, not the mangled title."""
+    pairs: dict[str, list[str]] = {}
+    for market in markets:
+        event = str(market.get("event_ticker", ""))
+        name = str(market.get("yes_sub_title", "")).strip()
+        if not event or not name:
+            continue
+        names = pairs.setdefault(event, [])
+        if name not in names:
+            names.append(name)
+    return pairs
+
+
 def _teams_from_title(title: str) -> tuple[str, str] | None:
     match = TITLE_SPLIT.match(title.strip())
     if not match:
@@ -232,6 +275,15 @@ def _ladder_at_ask(orderbook: dict[str, Any], side: str) -> tuple[tuple[Decimal,
         levels.append((cost, (size * cost).quantize(Decimal("0.01"))))
     levels.sort(key=lambda level: level[0])  # best (lowest) cost first
     return tuple(levels) or None
+
+
+def _best_bid(orderbook: dict[str, Any], side: str) -> Decimal | None:
+    """K12: best resting bid on the SAME side (yes bid for a yes quote), so a true
+    (bid+ask)/2 mid is computable downstream. None when the book has no same-side bids."""
+    book = orderbook.get("orderbook_fp") or orderbook.get("orderbook") or {}
+    same_side = book.get("yes_dollars" if side == "yes" else "no_dollars") or []
+    bids = [Decimal(str(level[0])) for level in same_side if Decimal(str(level[0])) > 0]
+    return max(bids) if bids else None
 
 
 def _depth_at_ask(orderbook: dict[str, Any], side: str, ask: Decimal) -> Decimal | None:

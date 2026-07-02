@@ -50,19 +50,60 @@ micro:
   min_depth_usd: 5
   max_stake_usd: 25
   e_min: 0.08
+  # M6 (MicroEVBitcoin.md): tie the micro edge floor to depth — thinner = riskier = needs more
+  # cushion. e_min (0.08) is the floor at the TOP of the band (depth >= min_executable_usd);
+  # e_min_thin is required at the bottom (depth <= min_depth_usd), linearly between.
+  e_min_thin: 0.15
+  # M1: venues that don't report book depth reliably (SX; sometimes Polymarket). Their
+  # unknown-depth quotes are routed to the micro lane (conservative, depth-capped stake) instead
+  # of the normal lane, where they would be priced as if executable at full size.
+  assume_thin_venues: [sx]
+  # M4: cap micro EXPOSURE so the lane can't book many correlated thin-book bets on one opinion.
+  # Sum of micro stakes per event_key and per venue may not exceed these ceilings (USD).
+  max_event_exposure_usd: 50
+  max_venue_exposure_usd: 100
 max_days_to_settlement: 14
 nonsports_max_days: 7
 sports: [baseball_mlb, basketball_nba, soccer, tennis, mma]
-# Sports the consensus scan sends to The Odds API. Only in-season keys valid there belong here.
-# NBA is off-season (0 consensus rows); club soccer/tennis/mma need per-league key discovery and
-# would exceed budget — but the World Cup is a SINGLE verified key (soccer_fifa_world_cup) with the
-# same cost profile as MLB. 2 keys x 2 credits x 3 scans/day = 12/day, ~360/mo (< 500).
-consensus_sports: [baseball_mlb, soccer_fifa_world_cup]
+# golf_slate_tennis_fix Part 1.0: venues whose start_utc for a sport is a NOMINAL slot, not the
+# real start (Polymarket Gamma gameStartTime for tennis is follow-on court scheduling, hours
+# late). Event start = earliest reliable venue; if the only start source for an event is an
+# unreliable one, the event is start-unknown -> non-actionable (E5), never pregame-EV.
+unreliable_start_venues:
+  polymarket: [tennis]
+# A sport is ACTIVE iff a free venue lists a fixture starting within this window (the
+# venues' listings are the season calendar — no hardcoded dates). Dormant sports are
+# skipped by detection and by Odds API scans (zero credits) but quotes still persist.
+activity_lookahead_hours: 48
+# Sports the consensus scan sends to The Odds API. Only in-season keys valid there belong here
+# (all keys below verified active via the free /v4/sports/ endpoint, 2026-07-02). The
+# activity gate skips dormant keys at zero credits, so tournament keys (Wimbledon ends
+# Jul 12, World Cup Jul 19) and event-sparse MMA cost credits only on days with fixtures.
+# Peak scan = mlb 2 + wc 2 + tennis 1+1 (h2h-only) ≈ 6 credits x 4 scans/day ≈ 24/day,
+# front-loaded into the tournament window and dropping to ~8/day (MLB) after Jul 19.
+# Budget is deliberately spent while Wimbledon/WC run; the <50-credit abort guard is the
+# backstop if settlement pushes the month over.
+# MMA re-check (FIX_POLYMARKET_UFC_TAG, 2026-07-02): now that Polymarket lists fights (ufc tag)
+# and the activity gate flips MMA ACTIVE around a card, mma is h2h-only = 1 credit/scan x 4
+# scans ≈ 4 credits per fight-day; ~4-5 UFC event-days/mo ⇒ ~16-20 credits/mo — within the
+# earlier assumption, no over-run. Fires only on card days (activity-gated).
+consensus_sports: [baseball_mlb, soccer_fifa_world_cup, tennis_atp_wimbledon,
+                   tennis_wta_wimbledon, mma_mixed_martial_arts]
 # Odds-API sport key -> canonical event_key prefix. The prefix MUST match the venues' prefix so
 # consensus rows join venue quotes (venues key World Cup matches as `soccer`, the Odds API exposes
 # `soccer_fifa_world_cup`). Identity for keys not listed (baseball_mlb already equals its prefix).
 odds_api_sport_aliases:
   soccer_fifa_world_cup: soccer
+  tennis_atp_wimbledon: tennis
+  tennis_wta_wimbledon: tennis
+  mma_mixed_martial_arts: mma
+# Markets fetched per Odds-API key (1 credit per market per region). Venues quote tennis
+# and MMA WINNER-only, so totals there can never join a venue price — h2h only.
+odds_api_markets:
+  default: h2h,totals
+  tennis_atp_wimbledon: h2h
+  tennis_wta_wimbledon: h2h
+  mma_mixed_martial_arts: h2h
 scan_breaks: true
 break_windows:
   basketball_nba: [48, 15]
@@ -90,6 +131,22 @@ nonsports:
   candidate_threshold: 85
   kalshi_categories: ["Politics", "Economics", "Climate and Weather"]
   polymarket_tags: [politics, economy, weather]
+
+# Spec amendment (prompts/nonsports_ai_matcher.md): Haiku decides non-sports equivalence
+# from both venues' resolution rules, inline in the nonsports watch loop. AI-matched bets
+# are always REVIEW, tagged ai_matched, and report outside the headline. Off => manual-only.
+ai_matcher:
+  enabled: true             # turned on 2026-07-02 with user's API key
+  model: claude-haiku-4-5
+  min_confidence: 0.85
+  max_new_pairs_per_day: 100   # cost guard, counted in nonsports_verdicts (shared budget:
+                               # strike pairs consume it faster; the cache makes day 2 cheap)
+  max_rules_chars: 8000        # truncate each side; truncation noted in the request
+  # STRIKE_AWARE paper lane (owner-approved 2026-07-02): AI-matched flags are BOOKED in the
+  # flat-stake paper tracker (segregated slice, never the headline, never trusted) so we
+  # accumulate real P&L evidence on the matcher. Paper only — no order placement (rule 1).
+  paper_fill: true
+  paper_stake_usd: 1           # flat $1 per position (matches the tracker's ARB flat stake)
 
 # Flash verification (python -m arbnext verify): re-quote a fresh ARB's legs seconds
 # after the flag instead of waiting for the next full sweep. Appends VERIFIED/VANISHED
@@ -158,6 +215,14 @@ ev:
   e_min: 0.05            # §3.2 edge floor in probability points (4–6pt); tune vs CLV
   kelly_fraction: 0.25   # §7.2 quarter-Kelly projection (p estimated, not known)
   edge_suspect_above: 0.25   # Phase 1: EV edge above this = stale/thin-book, quarantined
+  # golf_slate_tennis_fix Part 1: a computed EV edge above this is a data error (stale/nominal
+  # start, mis-joined consensus), not an opportunity — record the quote, book no bet, count it in
+  # the daily report's "left on table" section under reason `edge-implausible` (SPEC §12 trap).
+  max_edge: 0.15
+  # Surname/player-matched sports: only book EV when the outcome resolves through an EXPLICIT
+  # alias entry for that sport (a per-player opt-in). Fuzzy/unregistered matches still record a
+  # DIVERGENCE but never an EV bet — this is what kills the tennis fake edges.
+  require_exact_match: [tennis, mma, golf]
   enforce_depth_floor: true  # require depth >= min_executable_usd to be 'clean'
   reject_one_sided_books: true
   # EV#7: pregame info decays smoothly, not as a step. Subtract this many probability points
@@ -176,11 +241,15 @@ ev:
   # SE. This is the assumed cross-book correlation rho in [0,1); n_eff = n/(1+(n-1)*rho) widens
   # the SE used by the dispersion gate / Kelly haircut. 0 = legacy independent-book SE.
   dispersion_book_correlation: 0.0
-  # B7: a thin-consensus p_hat is not point-truth. Shrink it toward `shrink_prior` with the
-  # cross-book SE as the sampling sd and `shrink_prior_strength` as the prior sd (normal-normal).
-  # strength 0 = off (no shrinkage); 0.05-0.15 is a mild, sensible range once turned on.
+  # B7/K7: a thin-consensus p_hat is not point-truth. Shrink it toward `shrink_prior` via ONE of:
+  #   shrink_prior_sd          — prior sd in probability units (normal-normal with the cross-book
+  #                              SE as sampling sd); 0.05-0.15 is a mild, sensible range.
+  #   shrink_prior_pseudocount — pseudo-count of prior 'books' (count shrinkage).
+  # Both 0 = off. Setting both (or the retired shrink_prior_strength) is a config error — the
+  # old single knob meant a sd in one regime and a count in the other, ~100x apart.
   shrink_prior: 0.5
-  shrink_prior_strength: 0.0
+  shrink_prior_sd: 0.0
+  shrink_prior_pseudocount: 0.0
   # B11: integer totals can PUSH (stake returned). When true, the edge on an integer-line total
   # is scaled by (1 - push_prob) from a Poisson run-total model instead of only being flagged.
   push_pricing: false
@@ -192,12 +261,22 @@ ev:
   # rho 0 and cap 0 = off (independent per-bet Kelly, unchanged).
   correlation_rho: 0.0
   correlation_group_cap_fraction: 0.0
-scan_times: ["10:00", "15:00", "19:00"]
+# 06:15 covers Wimbledon's morning session (play runs ~06:00-16:30 ET; without it the
+# whole morning has >8h-stale consensus and no EV flags can form). Costs credits only
+# while a morning sport is active — the activity gate skips the scan's dormant keys.
+scan_times: ["06:15", "10:00", "15:00", "19:00"]
 daily_report_time: "23:59"
 settle_time: "09:30"
 settle_days_from: 3    # scores lookback window (Odds API max is 3); 3 credits/sport/settle
 settle_health_overdue_max: 0
 settle_grace_hours: 6
+# A fingerprint that already reached SETTLED is only re-muted ("terminal-fingerprint-skipped")
+# once its event has genuinely ended — i.e. the event start is in the past by at least this many
+# minutes. A SETTLED row for a still-future event is premature/own-settlement, so a re-sighting
+# must re-open via the normal reappearance path (this restores the clean-flag flow that the
+# unbounded mute collapsed). EXITED no longer mutes at all — it reappears as a new bet.
+tracker:
+  terminal_mute_grace_mins: 180
 # MLB Stats API is the unlimited, no-window settlement source used by `settle-backfill`
 # (free, keyless, all history). It rescues bets the 3-day Odds API window misses.
 mlbstats_enabled: true

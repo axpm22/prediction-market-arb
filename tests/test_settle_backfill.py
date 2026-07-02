@@ -57,8 +57,8 @@ def test_backfill_settles_from_mlbstats_fixture(tmp_path) -> None:
     ])
     assert settle_backfill_mlb(store, FIX) == 4
     results = {(r["result"], r["pnl_optimistic"]) for r in _settled(store)}
-    assert ("WON", "0.93") in results     # win at effective 0.5175 -> (1-c)/c = 0.93
-    assert ("LOST", "-1.00") in results
+    assert ("WON", "0.932367") in results     # win at effective 0.5175 -> (1-c)/c = 0.93
+    assert ("LOST", "-1.000000") in results
     won = [r for r in _settled(store) if r["result"] == "WON"]
     assert len(won) == 2                  # KC moneyline + UNDER
 

@@ -21,7 +21,13 @@ class Event:
     sport: str
     home: str
     away: str
-    start_utc: datetime
+    # K9/D1: never invent a start. None = start unknown (non-actionable downstream); the old
+    # `or datetime.now()` fallback stamped fabricated times into the ledger.
+    start_utc: datetime | None
+    # Spec amendment (nonsports_ai_matcher): event equivalence decided by Haiku, not a human.
+    # Flows into opportunity notes and flat_bets.ai_matched; such bets are always REVIEW and
+    # report in their own section, never the headline.
+    ai_matched: bool = False
 
 
 @dataclass(frozen=True)
@@ -52,6 +58,9 @@ class Quote:
     # the consensus-age basis instead of our fetch wall-clock. None when the venue can't report
     # it (then callers fall back to fetched_at).
     source_updated_at: datetime | None = None
+    # K12: best bid on the SAME side (per $1 payout), so a true (bid+ask)/2 mid is computable
+    # later (real mid-based CLV, maker-side analysis). None when the venue can't report it.
+    best_bid: Decimal | None = None
 
     @property
     def effective_cost(self) -> Decimal:
@@ -87,6 +96,12 @@ class Opportunity:
     # Phase 3 fractional-Kelly projection (never the headline stake).
     kelly_f_star: Decimal | None = None
     kelly_stake: Decimal | None = None
+    # K4: skew-haircut-adjusted edge (ARB): edge_points minus skew·velocity. What sizing and
+    # ranking should trust; stored as a real column, not a note.
+    adj_edge: Decimal | None = None
+    # K14: the model's RAW probability estimate at flag time (EV), BEFORE push/decay haircuts.
+    # Calibration must judge this, not a p̂ reconstructed from the post-haircut edge.
+    p_hat: Decimal | None = None
 
     def __post_init__(self) -> None:
         if self.fingerprint:

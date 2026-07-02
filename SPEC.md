@@ -14,7 +14,7 @@ Opportunity classes:
 
 **Sports:** MLB, NBA, soccer, tennis, MMA. No NFL.
 
-**Non-sports events** (politics, econ, crypto): included, but as a fully **separate category** — own report section, own ledger rows (`category = nonsports`), and only events closing within `nonsports_max_days` (default 7). Matching for non-sports is **manual-only**: the scanner writes fuzzy-matched candidates to `logs/nonsports_candidates.log`; a human promotes them into `data/nonsports_map.yaml`. Never auto-match non-sports (settlement wording risk is the whole danger).
+**Non-sports events** (politics, econ, crypto): included, but as a fully **separate category** — own report section, own ledger rows (`category = nonsports`), and only events closing within `nonsports_max_days` (default 7). Matching for non-sports is manual-first: the scanner writes fuzzy-matched candidates to `logs/nonsports_candidates.log`; a human promotes them into `data/nonsports_map.yaml`. **Amendment (prompts/nonsports_ai_matcher.md + STRIKE_AWARE_NONSPORTS_MATCHER_PROMPT.md):** with `ai_matcher.enabled`, Haiku compares both venues' resolution rules and may match a pair automatically. Single-market series use the one-shot path; multi-market weather/macro series go through a deterministic strike matcher (exact comparator/threshold/unit or range alignment) so only strike-aligned pairs reach Haiku. Such events are tagged `ai_matched`, always REVIEW, **displayed AND paper-tracked in a segregated lane** (`ai_matcher.paper_fill`, flat $1) that is never in the headline and never trusted — the tracker measures Haiku's error rate. An AI pair whose venues settle inconsistently is flagged `settlement_mismatch`, banned via a negative verdict, and never re-bet. Human map entries always win and remain the only path to the real-money/trusted lane. SX pairs are never AI-matched (no rules text).
 
 **Timing:** pregame always. Additionally, if `scan_breaks: true`, re-scan events during scheduled pauses (NBA/soccer halftime windows estimated from start time; configurable offsets). Quotes captured in-break get `live=true` and are reported separately — never mixed into headline tracker numbers.
 
@@ -52,7 +52,8 @@ ArbitrageProject/
 - Fee: `ceil_to_cent(fee_rate × contracts × P × (1−P))`, `kalshi.fee_rate` default 0.07 — confirm against the published fee schedule in Phase 3.
 
 ### 3.2 Polymarket (primary)
-- Gamma discovery: `GET https://gamma-api.polymarket.com/events?tag_slug={mlb|nba|soccer|tennis|mma}&closed=false&limit=100`. Markets carry `question, outcomes, outcomePrices, clobTokenIds, endDate, liquidity, gameStartTime`.
+- Gamma discovery: `GET https://gamma-api.polymarket.com/events?tag_slug={mlb|nba|soccer|tennis|ufc}&closed=false&limit=100`. Markets carry `question, outcomes, outcomePrices, clobTokenIds, endDate, liquidity, gameStartTime`.
+  - The `mma` sport keys on Gamma `tag_slug=ufc` (NOT `mma`): the `mma` tag went futures-only (season/champion markets, no `gameStartTime`) ~mid-2026, while the actual fight cards live under `ufc` — verified against live Gamma 2026-07-02. The canonical sport string stays `mma` everywhere else (event_key prefix, `quotes.sport`, config, Odds API alias). UFC titles carry a `"(Weight, Card)"` suffix that is stripped before name parsing; in-scope market types are `moneyline`→WINNER and `totals` (round totals)→TOTAL, while `ufc_method_of_victory` / `ufc_go_the_distance` are ignored (out of v1 scope).
 - Executable prices from CLOB only: `GET https://clob.polymarket.com/book?token_id={id}` (Gamma `outcomePrices` are stale mids — never use for detection).
 - `polymarket.fee_rate` default 0.0 (config key kept).
 
@@ -79,7 +80,7 @@ Everything in **cost per $1 payout** (= implied probability), `Decimal` only.
 1. Normalize names (lowercase, strip punctuation/city qualifiers) → `data/aliases.json` (seed all MLB/NBA teams + short forms; tennis/MMA use surname + event date). Alias per sport — "Athletics"/"Rangers" collide globally.
 2. Same sport + same unordered pair + start within ±6 h → same `event_key`. Totals additionally require **exact line equality**.
 3. Exact alias match → auto. `rapidfuzz.token_set_ratio ≥ 92` → match but `REVIEW`/`fuzzy-match`. Unmatched → `logs/unmatched.log`, never forced.
-4. Non-sports: only via `data/nonsports_map.yaml` (manual). Candidates suggested to log by title similarity ≥ 85.
+4. Non-sports: via `data/nonsports_map.yaml` (manual, always wins) or — amendment, when `ai_matcher.enabled` — a cached Haiku verdict on both venues' resolution rules (§1). Candidates by title similarity ≥ 85 in both paths.
 5. Cross-venue legs ⇒ `REVIEW` unless venue-pair+sport in `trusted_pairs`.
 
 ## 6. Storage (SQLite, WAL)

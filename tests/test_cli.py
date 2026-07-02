@@ -106,8 +106,10 @@ def test_micro_ev_requires_stricter_edge_and_caps_stake_to_depth() -> None:
     config = load_config()
     quote = kalshi_quote("0.50", depth="10")
     fresh = datetime.now(timezone.utc)
+    # M6: at depth $10 (thin end) the edge floor is ~0.14 pts, well above the 0.08 top-of-band
+    # floor — a modest 0.06-pt edge is rejected and only a large edge clears.
     low_edge = {(EVENT_KEY, "kansas city royals"): (Decimal("0.58"), fresh)}
-    high_edge = {(EVENT_KEY, "kansas city royals"): (Decimal("0.61"), fresh)}
+    high_edge = {(EVENT_KEY, "kansas city royals"): (Decimal("0.70"), fresh)}
 
     assert detect_micro_ev_from_consensus([quote], low_edge, config) == []
     [opp] = detect_micro_ev_from_consensus([quote], high_edge, config)
@@ -173,7 +175,10 @@ def test_segment_gate_blocks_proven_bad_segment(tmp_path) -> None:
 def test_started_events_are_marked_live_and_split_out() -> None:
     now = datetime.now(timezone.utc)
     upcoming = kalshi_quote("0.50", start_days_out=1)
-    started = kalshi_quote("0.0017", start_days_out=-1)
+    # split_pregame routes on the EVENT-level start, so `started` must be a DISTINCT event (its own
+    # event_key) — two contradictory starts on the SAME event now correctly route all-live.
+    started = replace(kalshi_quote("0.0017", start_days_out=-1),
+                      event_key="baseball_mlb:2026-06-09:chicago cubs:st louis cardinals")
     pregame, in_play = split_pregame([upcoming, started], now)
     assert pregame == [upcoming]
     assert len(in_play) == 1
@@ -222,3 +227,81 @@ def test_recorded_fixture_consensus_includes_common_game() -> None:
     consensus = compute_consensus(quotes, load_config().min_books_for_consensus)
     p_hat = consensus[(EVENT_KEY, "kansas city royals")]
     assert Decimal("0") < p_hat < Decimal("1")
+
+
+def laddered_quote(cost: str, depth: str, ladder):
+    price = Decimal(cost)
+    return Quote(
+        event_key=EVENT_KEY, venue="kalshi", book="KXLADDER", market_type="WINNER", line=None,
+        outcome_label="kansas city royals", raw_price=price, cost=price,
+        fee_cost=kalshi_fee_cost(price, Decimal("0.07")), depth_usd=Decimal(depth),
+        ladder=tuple((Decimal(c), Decimal(d)) for c, d in ladder), live=False,
+        fetched_at=datetime.now(timezone.utc),
+        start_utc=datetime.now(timezone.utc) + timedelta(days=1),
+        home="kansas city royals", away="texas rangers",
+    )
+
+
+def test_micro_ev_walks_ladder_and_drops_edge_that_does_not_survive_fill() -> None:
+    # M2/M3 (MicroEVBitcoin.md): the micro stake is priced by walking the ladder, not at the
+    # top tick, and the edge must survive that fill or it is dropped as a depth artifact.
+    config = load_config()
+    cons = {(EVENT_KEY, "kansas city royals"): (Decimal("0.63"), datetime.now(timezone.utc))}
+    # Deep top level: the $25 micro stake fills at 0.50 → walked edge == top edge → survives.
+    deep = laddered_quote("0.50", "40", [("0.50", "40")])
+    [opp] = detect_micro_ev_from_consensus([deep], cons, config)
+    assert opp.quality_flag == "micro"
+    assert any(n.startswith("micro-fill-cost:") for n in opp.notes)
+    assert any(n.startswith("micro-walked-edge-pts:") for n in opp.notes)
+    # Thin $5 top, then a much worse 0.62 level: $25 walks up, the edge evaporates → dropped.
+    thin = laddered_quote("0.50", "25", [("0.50", "5"), ("0.62", "50")])
+    assert detect_micro_ev_from_consensus([thin], cons, config) == []
+
+
+def test_micro_e_min_is_tied_to_depth() -> None:
+    # M6: the SAME edge clears the floor on a near-top-of-band book but is rejected on a thinner
+    # one — thinner = riskier = needs more cushion. ~0.10-pt edge here.
+    config = load_config()
+    cons = {(EVENT_KEY, "kansas city royals"): (Decimal("0.62"), datetime.now(timezone.utc))}
+    near_top = kalshi_quote("0.50", depth="48")   # floor ~0.085 pts → 0.10-pt edge clears
+    thin = kalshi_quote("0.50", depth="7")         # floor ~0.147 pts → same edge rejected
+    [opp] = detect_micro_ev_from_consensus([near_top], cons, config)
+    assert opp.quality_flag == "micro"
+    assert any(n.startswith("micro-e-min-pts:") for n in opp.notes)
+    assert detect_micro_ev_from_consensus([thin], cons, config) == []
+
+
+def test_m1_unknown_depth_thin_venue_routes_to_micro() -> None:
+    # M1: SX (can't report depth) unknown-depth quote → micro lane; other venues stay normal.
+    config = load_config()
+    sx_unknown = replace(kalshi_quote("0.50"), venue="sx", depth_usd=None)
+    kalshi_unknown = replace(kalshi_quote("0.50"), depth_usd=None)
+    normal, micro, _too_thin = split_depth_lanes([sx_unknown, kalshi_unknown], config)
+    assert sx_unknown in micro and sx_unknown not in normal
+    assert kalshi_unknown in normal and kalshi_unknown not in micro
+
+
+def _micro_opp(edge_pts, stake, outcome, event, venue):
+    from arb.models import Event, Opportunity
+    q = replace(kalshi_quote("0.50"), venue=venue, outcome_label=outcome, event_key=event)
+    ev = Event(event_key=event, category="sports", sport="baseball_mlb", home="h", away="a",
+               start_utc=datetime.now(timezone.utc) + timedelta(days=1))
+    return Opportunity(kind="EV", category="sports", event=ev, legs=[q], edge=Decimal("0.10"),
+                       edge_points=Decimal(edge_pts), stakes={outcome: Decimal(stake)},
+                       status="OK", quality_flag="micro")
+
+
+def test_m4_caps_micro_exposure_per_event() -> None:
+    from arb.cli import _cap_micro_exposure
+    config = load_config()  # event cap $50, $25 stakes → only 2 of 3 fit on one event.
+    opps = [_micro_opp("0.10", "25.00", o, "E1", "sx") for o in ("a", "b", "c")]
+    kept = _cap_micro_exposure(opps, config)
+    assert len(kept) == 2
+
+
+def test_m4_caps_micro_exposure_per_venue() -> None:
+    from arb.cli import _cap_micro_exposure
+    config = load_config()  # venue cap $100, $25 stakes across 5 events → 4 fit, 5th dropped.
+    opps = [_micro_opp("0.10", "25.00", "a", f"E{i}", "sx") for i in range(5)]
+    kept = _cap_micro_exposure(opps, config)
+    assert len(kept) == 4

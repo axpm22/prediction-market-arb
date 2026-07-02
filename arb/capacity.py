@@ -51,7 +51,10 @@ def _capacity_contracts(ladder: Ladder) -> Decimal:
     return sum((depth / cost for cost, depth in ladder if cost > 0 and depth > 0), Decimal("0"))
 
 
-def arb_capacity(ladders: list[Ladder]) -> ArbCapacity:
+def arb_capacity(ladders: list[Ladder], haircut_per_contract: Decimal = Decimal("0")) -> ArbCapacity:
+    """`haircut_per_contract` (K4): a per-$1-payout cost added on top of the ladders — the
+    C1 skew·velocity simultaneity haircut — so sizing consumes the ADJUSTED edge, not the
+    raw one. 0 = legacy behavior."""
     zero = Decimal("0.00")
     ladders = [l for l in ladders if l]
     if len(ladders) < 2:
@@ -73,7 +76,7 @@ def arb_capacity(ladders: list[Ladder]) -> ArbCapacity:
     grid = sorted(points)
 
     def profit(n: Decimal) -> Decimal:
-        return n - sum((_fill(l, n) for l in ladders), Decimal("0"))
+        return n * (Decimal("1") - haircut_per_contract) - sum((_fill(l, n) for l in ladders), Decimal("0"))
 
     evals = [(n, profit(n)) for n in grid]
     best_n, best_p = max(evals, key=lambda x: x[1])
@@ -145,18 +148,20 @@ def _quote_ladder(quote, fillable_fraction: Decimal = Decimal("1")) -> Ladder:
     return []
 
 
-def max_economic_arb_size_quotes(legs, fillable_fraction: Decimal = Decimal("1")) -> ArbCapacity:
+def max_economic_arb_size_quotes(legs, fillable_fraction: Decimal = Decimal("1"),
+                                 haircut_per_contract: Decimal = Decimal("0")) -> ArbCapacity:
     """Capacity for live Quote legs (used in detection)."""
-    return arb_capacity([_quote_ladder(q, fillable_fraction) for q in legs])
+    return arb_capacity([_quote_ladder(q, fillable_fraction) for q in legs], haircut_per_contract)
 
 
 def ladder_scaled_stake_quotes(legs, bankroll: Decimal, max_stake_pct: Decimal,
                                safety_frac: Decimal = Decimal("0.5"),
-                               fillable_fraction: Decimal = Decimal("1")) -> Decimal:
+                               fillable_fraction: Decimal = Decimal("1"),
+                               haircut_per_contract: Decimal = Decimal("0")) -> Decimal:
     """Depth/edge-scaled total budget for live Quote legs: a `safety_frac` of the profit-max
     ladder size (which jointly encodes edge = margin below $1 and depth = how far you can walk
     each book before the lock crosses), capped by the bankroll per-bet limit. 0 = no ladder."""
-    cap = max_economic_arb_size_quotes(legs, fillable_fraction)
+    cap = max_economic_arb_size_quotes(legs, fillable_fraction, haircut_per_contract)
     if not cap.feasible or cap.profitmax_stake_usd <= 0:
         return Decimal("0")
     return money(min(cap.profitmax_stake_usd * safety_frac, bankroll * max_stake_pct))

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .matching import event_key, load_aliases, normalize_name
-from .pricing import money
+from .pricing import q6
 from .store import Store
 from .venues.mlbstats import MlbStatsAdapter
 from .venues.oddsapi import OddsApiAdapter
@@ -561,7 +561,10 @@ def _flat_pnl(effective_cost: str | None, result: str) -> Decimal | None:
 
 
 def _sized_pnl(effective_cost: str | None, result: str, stake_usd: str | Decimal | None) -> Decimal | None:
-    """Stake-sized P&L at effective cost c; $1 stake is the flat-bet special case."""
+    """Stake-sized P&L at effective cost c; $1 stake is the flat-bet special case.
+
+    K10: stored at q6, NOT cents — money() booked every $1-stake bet with |P&L| < $0.005
+    as exactly $0.00 (±0.5% of stake per row), erasing the 0-1% band. Cents are display."""
     if effective_cost is None or stake_usd in (None, ""):
         return None
     stake = Decimal(str(stake_usd))
@@ -570,8 +573,8 @@ def _sized_pnl(effective_cost: str | None, result: str, stake_usd: str | Decimal
     if result == "VOID":
         return Decimal("0.00")
     if result == "LOST":
-        return money(-stake)
+        return q6(-stake)
     cost = Decimal(effective_cost)
     if cost <= 0:
         return None
-    return money(stake * (Decimal("1") - cost) / cost)
+    return q6(stake * (Decimal("1") - cost) / cost)

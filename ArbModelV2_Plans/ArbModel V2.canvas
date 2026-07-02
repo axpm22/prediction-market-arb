@@ -1,0 +1,58 @@
+{
+  "nodes": [
+    { "id": "grp-docs", "type": "group", "label": "Read in order", "x": -160, "y": -640, "width": 1360, "height": 200 },
+    { "id": "moc",  "type": "file", "file": "ArbModelV2_Plans/_MOC - ArbModel V2.md", "x": -140, "y": -600, "width": 300, "height": 140 },
+    { "id": "n01",  "type": "file", "file": "ArbModelV2_Plans/01 - Current Model - How It Works.md", "x": 200, "y": -600, "width": 300, "height": 140 },
+    { "id": "n02",  "type": "file", "file": "ArbModelV2_Plans/02 - Weaknesses and Lessons.md", "x": 540, "y": -600, "width": 300, "height": 140 },
+    { "id": "n03",  "type": "file", "file": "ArbModelV2_Plans/03 - V2 Build Instructions.md", "x": 880, "y": -600, "width": 300, "height": 140 },
+
+    { "id": "idea", "type": "text", "x": 200, "y": -380, "width": 640, "height": 110, "color": "1",
+      "text": "## The one idea\nV1's math was honest, but the **money-booking paths ignored detection's safeguards**. V2 = **one eligibility predicate enforced at every stage**." },
+
+    { "id": "grp-roles", "type": "group", "label": "Model roles", "x": -420, "y": -180, "width": 320, "height": 780 },
+    { "id": "fable",  "type": "text", "x": -400, "y": -140, "width": 280, "height": 150, "color": "5",
+      "text": "### 🧠 Fable 5 — PLAN\nMethodology & math: de-vig / calibration, `p̂` uncertainty, pre-registration, friction formulas." },
+    { "id": "opus",   "type": "text", "x": -400, "y": 40, "width": 280, "height": 150, "color": "6",
+      "text": "### 🧠 Opus 4.8 — PLAN\nArchitecture & spec: eligibility predicate, `position_key`, config + DB schema, capacity honesty." },
+    { "id": "coder",  "type": "text", "x": -400, "y": 220, "width": 280, "height": 150, "color": "4",
+      "text": "### ⌨️ Cheaper coder — CODE\nImplements from a frozen spec + failing tests. **May not edit a test vector.**" },
+    { "id": "verify", "type": "text", "x": -400, "y": 400, "width": 280, "height": 150, "color": "1",
+      "text": "### 🔍 Opus 4.8 / Fable 5 — VERIFY\nDiff audit vs weaknesses list. Phase-6 money-path proof: a REVIEW arb can never reach clean P&L." },
+
+    { "id": "found", "type": "text", "x": 40, "y": -140, "width": 340, "height": 150, "color": "2",
+      "text": "### Foundational (before Phase 1)\n🧠 PLAN only — F1 SPEC_V2 · F2 eligibility · F3 position_key · F4 de-vig/calibration · F5 friction · F6 capacity honesty · F7 pre-registration." },
+
+    { "id": "p1", "type": "text", "x": 440, "y": -140, "width": 300, "height": 90, "color": "3", "text": "**Phase 1 — Skeleton & config**\n🧠 schema/signatures → ⌨️ build → 🔍" },
+    { "id": "p2", "type": "text", "x": 440, "y": -30,  "width": 300, "height": 90, "color": "3", "text": "**Phase 2 — Math core**\n🧠 freeze vectors → ⌨️ implement → 🔍 (Decimal, edge_points)" },
+    { "id": "p3", "type": "text", "x": 440, "y": 80,   "width": 300, "height": 90, "color": "3", "text": "**Phase 3 — Venue adapters**\nfixtures-first; normalized depth; SX inversion test → 🔍" },
+    { "id": "p4", "type": "text", "x": 440, "y": 190,  "width": 300, "height": 90, "color": "3", "text": "**Phase 4 — Matching**\ndoubleheader clustering; suspect rows written → 🔍" },
+    { "id": "p5", "type": "text", "x": 440, "y": 300,  "width": 300, "height": 90, "color": "3", "text": "**Phase 5 — Detection**\neligibility at detection; linear neg-risk fee → 🔍 same predicate reused" },
+    { "id": "p6", "type": "text", "x": 440, "y": 410,  "width": 300, "height": 110, "color": "1", "text": "**Phase 6 — Ledger / settle / reconcile** ⚠️\nshared eligibility (A1), timing guard (A3), multi-venue reconcile (A2). **Verify hardest here.**" },
+    { "id": "p7", "type": "text", "x": 440, "y": 540,  "width": 300, "height": 90, "color": "3", "text": "**Phase 7 — EV path**\ncalibrated p̂, edge/SE gate, CLV vs no-vig mid. EV stays disabled." },
+    { "id": "p8", "type": "text", "x": 440, "y": 650,  "width": 300, "height": 90, "color": "3", "text": "**Phase 8 — Capacity / exposure / theses**\ncapacity = UNKNOWN until real ladders." },
+
+    { "id": "gate", "type": "text", "x": 820, "y": 410, "width": 340, "height": 130, "color": "1",
+      "text": "## 🚩 Project acceptance gate\nOne strong-model VERIFY proves: the **same eligibility predicate** gates detection, fill, settle, reconcile, capacity, exposure — with a test that a REVIEW arb never reaches headline P&L." }
+  ],
+  "edges": [
+    { "id": "e-moc-01", "fromNode": "moc", "toNode": "n01", "fromSide": "right", "toSide": "left" },
+    { "id": "e-01-02",  "fromNode": "n01", "toNode": "n02", "fromSide": "right", "toSide": "left" },
+    { "id": "e-02-03",  "fromNode": "n02", "toNode": "n03", "fromSide": "right", "toSide": "left" },
+
+    { "id": "e-fable-found", "fromNode": "fable", "toNode": "found", "fromSide": "right", "toSide": "left", "label": "plans" },
+    { "id": "e-opus-found",  "fromNode": "opus",  "toNode": "found", "fromSide": "right", "toSide": "left", "label": "plans" },
+    { "id": "e-coder-p1",    "fromNode": "coder", "toNode": "p1",    "fromSide": "right", "toSide": "left", "label": "codes" },
+    { "id": "e-verify-p6",   "fromNode": "verify","toNode": "p6",    "fromSide": "right", "toSide": "left", "label": "audits", "color": "1" },
+
+    { "id": "e-found-p1", "fromNode": "found", "toNode": "p1", "fromSide": "right", "toSide": "left" },
+    { "id": "e-p1-p2", "fromNode": "p1", "toNode": "p2", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e-p2-p3", "fromNode": "p2", "toNode": "p3", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e-p3-p4", "fromNode": "p3", "toNode": "p4", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e-p4-p5", "fromNode": "p4", "toNode": "p5", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e-p5-p6", "fromNode": "p5", "toNode": "p6", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e-p6-p7", "fromNode": "p6", "toNode": "p7", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e-p7-p8", "fromNode": "p7", "toNode": "p8", "fromSide": "bottom", "toSide": "top" },
+
+    { "id": "e-p6-gate", "fromNode": "p6", "toNode": "gate", "fromSide": "right", "toSide": "left", "color": "1" }
+  ]
+}

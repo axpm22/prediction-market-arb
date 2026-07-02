@@ -44,7 +44,10 @@ class OddsApiAdapter:
             params={
                 "apiKey": self.config.odds_api_key,
                 "regions": self.config.odds_api_region,
-                "markets": MARKETS,
+                # Per-key markets: venues quote tennis WINNER-only, so a totals fetch
+                # there can never join a venue price and only burns a credit.
+                "markets": self.config.odds_api_markets.get(
+                    sport, self.config.odds_api_markets.get("default", MARKETS)),
                 "oddsFormat": "decimal",
             },
             timeout=30,

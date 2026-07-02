@@ -154,7 +154,7 @@ def test_parlay_settles_won_when_all_legs_win(tmp_path) -> None:
         row = con.execute("SELECT * FROM flat_bets WHERE kind='PARLAY' AND status='SETTLED'").fetchone()
     assert row["result"] == "WON"
     # $1 at ask 0.12, both legs won -> profit (1-0.12)/0.12.
-    assert Decimal(row["pnl_optimistic"]) == Decimal("7.33")
+    assert Decimal(row["pnl_optimistic"]) == Decimal("7.333333")
 
 
 def test_parlay_settles_lost_on_one_losing_leg(tmp_path) -> None:
@@ -170,4 +170,4 @@ def test_parlay_settles_lost_on_one_losing_leg(tmp_path) -> None:
     with store.connect() as con:
         row = con.execute("SELECT * FROM flat_bets WHERE kind='PARLAY' AND status='SETTLED'").fetchone()
     assert row["result"] == "LOST"
-    assert Decimal(row["pnl_optimistic"]) == Decimal("-1.00")
+    assert Decimal(row["pnl_optimistic"]) == Decimal("-1.000000")

@@ -473,34 +473,29 @@ def edge_points(consensus_probability: Decimal, effective_cost: Decimal) -> Deci
 
 
 def shrink_probability(p_hat: Decimal, n_books: int, dispersion: Decimal = Decimal("0"),
-                       prior: Decimal = Decimal("0.5"), prior_strength: float = 0.0) -> Decimal:
-    """B7: shrink a thin-consensus p_hat toward a prior. A median of 3 books is treated by the
-    rest of the pipeline as exactly true; with few (or widely-disagreeing) books it should be
-    pulled toward the prior. Two regimes, both no-ops at the defaults so behavior is unchanged
-    unless turned on:
+                       prior: Decimal = Decimal("0.5"), prior_sd: float = 0.0,
+                       prior_pseudocount: float = 0.0) -> Decimal:
+    """B7: shrink a thin-consensus p_hat toward a prior. K7: the two regimes take two EXPLICIT
+    knobs — the old single `prior_strength` meant a prior sd (prob units) in one regime and a
+    pseudo-count of books in the other, ~100x apart, selected per-outcome at runtime.
 
-      * dispersion > 0  -> normal-normal posterior mean. The per-book SE (`dispersion`) is the
-        sampling sd of p_hat; `prior_strength` is the prior sd (tau). Posterior mean =
-        (p/se^2 + prior/tau^2)/(1/se^2 + 1/tau^2): a tight consensus barely moves, a noisy one
-        is pulled toward the prior. tau=0 disables (returns p_hat).
-      * dispersion == 0 -> count shrinkage: w = prior_strength/(prior_strength + n_books);
-        p' = p + w*(prior - p). prior_strength is the pseudo-count of prior 'books'.
+      * prior_sd > 0 and dispersion > 0 -> normal-normal posterior mean. The per-book SE
+        (`dispersion`) is the sampling sd of p_hat; `prior_sd` is tau. Posterior mean =
+        (p/se^2 + prior/tau^2)/(1/se^2 + 1/tau^2).
+      * prior_pseudocount > 0 -> count shrinkage: w = k/(k + n_books); p' = p + w*(prior - p).
 
-    prior_strength <= 0 returns p_hat unchanged (default)."""
-    k = float(prior_strength)
-    if k <= 0:
-        return p_hat
+    Both zero (default) returns p_hat unchanged; config load errors if both are set."""
     p = float(p_hat)
     pr = float(prior)
     se = float(dispersion)
-    if se > 0:
-        tau2 = k * k  # interpret prior_strength as the prior sd in probability units
-        if tau2 <= 0:
-            return p_hat
+    if prior_sd > 0 and se > 0:
+        tau2 = prior_sd * prior_sd
         post = (p / (se * se) + pr / tau2) / (1.0 / (se * se) + 1.0 / tau2)
         return q6(Decimal(str(post)))
-    w = k / (k + max(0, int(n_books)))
-    return q6(Decimal(str(p + w * (pr - p))))
+    if prior_pseudocount > 0:
+        w = prior_pseudocount / (prior_pseudocount + max(0, int(n_books)))
+        return q6(Decimal(str(p + w * (pr - p))))
+    return p_hat
 
 
 def push_probability_poisson(line: Decimal, lam: float | None = None) -> Decimal:

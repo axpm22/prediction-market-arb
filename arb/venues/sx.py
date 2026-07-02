@@ -11,8 +11,8 @@ import requests
 from arb.config import AppConfig
 from arb.matching import event_key, load_aliases, normalize_name
 from arb.models import Quote
-from arb.pricing import all_in_fee_cost, q6
-from arb.venues.slippage import effective_buffer
+from arb.pricing import q6
+from arb.venues.slippage import leg_fee_cost
 
 BASE_URL = "https://api.sx.bet"
 PCT_SCALE = Decimal("100000000000000000000")
@@ -130,7 +130,6 @@ def parse_sx_payload(
                 continue
             cost, depth = best
             ladder = _taker_ladder(side_orders, maker_side)
-            buffer = effective_buffer(ladder, slippage_model, slippage_ref_stake, taker_buffer)
             raw_label = str(market.get(f"outcome{'One' if index == 1 else 'Two'}Name") or (home if index == 1 else away))
             if market_type == "TOTAL":
                 label = "OVER" if raw_label.upper().startswith("OVER") else "UNDER"
@@ -146,7 +145,8 @@ def parse_sx_payload(
                     outcome_label=label,
                     raw_price=cost,
                     cost=cost,
-                    fee_cost=all_in_fee_cost(cost, fee_rate, buffer, basis="linear") + q6(win_rate * (Decimal("1") - cost)),
+                    fee_cost=leg_fee_cost("sx", cost, fee_rate, ladder, slippage_model,
+                                          slippage_ref_stake, taker_buffer, win_fee_rate=win_rate),
                     depth_usd=depth,
                     ladder=ladder,
                     live=False,
@@ -163,10 +163,16 @@ def parse_sx_payload(
 
 def requote_sx_leg(market_hash: str, ref: str | None, fee_rate: Decimal | None,
                    taker_buffer: Decimal = Decimal("0"),
-                   session: requests.Session | None = None) -> Decimal | None:
+                   session: requests.Session | None = None,
+                   win_fee_rate: Decimal | None = None,
+                   slippage_model: str = "flat",
+                   slippage_ref_stake: Decimal = Decimal("50")) -> Decimal | None:
     """Re-price one SX leg now: fetch live orders for its market, pick the best taker
     order on the leg's side, return effective cost (taker cost + fee). None if the book
-    is empty or the leg lacks the side hint. This is what makes SX verifiable."""
+    is empty or the leg lacks the side hint. This is what makes SX verifiable.
+
+    K2: the fee/win-fee/slippage terms come from the SAME leg_fee_cost the entry adapter
+    uses, so verification never grades against a cheaper standard than entry."""
     if ref not in {"1", "2"}:
         return None
     maker_side = ref == "2"  # outcome two's taker reads maker-betting-outcome-one orders
@@ -179,8 +185,9 @@ def requote_sx_leg(market_hash: str, ref: str | None, fee_rate: Decimal | None,
     if best is None:
         return None
     cost, _depth = best
-    rate = fee_rate if fee_rate is not None else Decimal("0")
-    return q6(cost + all_in_fee_cost(cost, rate, taker_buffer, basis="linear"))
+    ladder = _taker_ladder(orders, maker_side)
+    return q6(cost + leg_fee_cost("sx", cost, fee_rate, ladder, slippage_model,
+                                  slippage_ref_stake, taker_buffer, win_fee_rate=win_fee_rate))
 
 
 def resolve_sx_market(market: dict[str, Any], ref: str | None) -> str | None:

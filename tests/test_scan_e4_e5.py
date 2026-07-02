@@ -61,6 +61,16 @@ def _config(tmp_path):
     )
 
 
+def _seed_activity(store, now):
+    """Persist one near-future venue quote per consensus sport so the SKIP_DEAD_SPORTS
+    gate sees both as active (run_scan derives activity from stored venue quotes)."""
+    date = (now + timedelta(days=1)).date().isoformat()
+    seeds = [replace(kalshi_quote("0.50", start_days_out=1),
+                     event_key=f"{sport}:{date}:home team:away team")
+             for sport in ("baseball_mlb", "basketball_nba")]
+    store.save_poll_quotes(store.start_poll("watch"), seeds)
+
+
 def _fake_adapter(quotes, abort_on):
     class _Fake:
         name = "oddsapi"
@@ -84,6 +94,7 @@ def test_aborted_scan_does_not_overwrite_prior_consensus(tmp_path, monkeypatch) 
     key, outcome = quotes[0].event_key, quotes[0].outcome_label
     # A complete prior consensus for this event.
     store.save_consensus({(key, outcome): Decimal("0.50")}, now)
+    _seed_activity(store, now)
 
     # MLB returns a full book (would compute ~0.436 for KC); NBA aborts -> partial poll.
     monkeypatch.setattr(cli, "OddsApiAdapter", _fake_adapter(quotes, abort_on="basketball_nba"))
@@ -104,6 +115,7 @@ def test_clean_scan_does_update_consensus(tmp_path, monkeypatch) -> None:
     quotes = _mlb_quotes(now)
     key, outcome = quotes[0].event_key, quotes[0].outcome_label
     store.save_consensus({(key, outcome): Decimal("0.50")}, now)
+    _seed_activity(store, now)
 
     # No sport aborts -> a clean poll.
     monkeypatch.setattr(cli, "OddsApiAdapter", _fake_adapter(quotes, abort_on="__none__"))

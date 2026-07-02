@@ -1,0 +1,576 @@
+{
+ "markets": [
+  {
+   "can_close_early": true,
+   "close_time": "2026-07-26T01:40:00Z",
+   "created_time": "2026-06-29T17:41:08.969955Z",
+   "custom_strike": {
+    "ufc_competitor": "7ea5dadb-8ef8-49f5-a8ea-024b6d917ce6"
+   },
+   "early_close_condition": "This market will close and expire after a champion is declared.",
+   "event_ticker": "KXUFCFIGHT-26JUL11SAIPIM",
+   "expected_expiration_time": "2026-07-12T06:40:00Z",
+   "expiration_time": "2026-07-26T01:40:00Z",
+   "expiration_value": "",
+   "fractional_trading_enabled": true,
+   "last_price_dollars": "0.5600",
+   "latest_expiration_time": "2026-07-26T01:40:00Z",
+   "liquidity_dollars": "0.0000",
+   "market_type": "binary",
+   "no_ask_dollars": "0.4500",
+   "no_bid_dollars": "0.4400",
+   "no_sub_title": "Benoit Saint-Denis",
+   "notional_value_dollars": "1.0000",
+   "occurrence_datetime": "2026-07-12T06:40:00Z",
+   "open_interest_fp": "19824.67",
+   "open_time": "2026-06-29T17:51:00Z",
+   "previous_price_dollars": "0.5600",
+   "previous_yes_ask_dollars": "0.5600",
+   "previous_yes_bid_dollars": "0.5500",
+   "price_level_structure": "linear_cent",
+   "price_ranges": [
+    {
+     "end": "1.0000",
+     "start": "0.0000",
+     "step": "0.0100"
+    }
+   ],
+   "response_price_units": "usd_cent",
+   "result": "",
+   "rules_primary": "If Benoit Saint-Denis wins the Saint-Denis vs Pimblett professional MMA fight originally scheduled for Jul 11, 2026, then the market resolves to Yes.",
+   "rules_secondary": "The following market refers to the Saint-Denis vs Pimblett professional MMA fight originally scheduled for Jul 11, 2026. If this fight is postponed or delayed, the market will remain open and close after the rescheduled fight has finished (within two weeks). If the fight is declared a tie or no contest, the market will resolve to 50/50 for both fighters. If the fight is cancelled or rescheduled to over two weeks away, the market will resolve to a fair price in accordance with the rules.\n\nThis market and these products have not been endorsed by Zuffa LLC, d/b/a Ultimate Fighting Championship, UFC. Any references to the “UFC,” or any other associated marks are descriptive only, and do not indicate an endorsement of this product or any affiliation between Zuffa and Kalshi.",
+   "settlement_timer_seconds": 298,
+   "status": "active",
+   "strike_type": "structured",
+   "ticker": "KXUFCFIGHT-26JUL11SAIPIM-SAI",
+   "title": "Will Benoit Saint-Denis win the Saint-Denis vs Pimblett professional MMA fight scheduled for Jul 11, 2026?",
+   "updated_time": "2026-06-29T17:51:00.787076Z",
+   "volume_24h_fp": "4457.04",
+   "volume_fp": "20018.69",
+   "yes_ask_dollars": "0.5600",
+   "yes_ask_size_fp": "16926.09",
+   "yes_bid_dollars": "0.5500",
+   "yes_bid_size_fp": "5258.54",
+   "yes_sub_title": "Benoit Saint-Denis"
+  },
+  {
+   "can_close_early": true,
+   "close_time": "2026-07-26T01:40:00Z",
+   "created_time": "2026-06-29T17:41:08.969955Z",
+   "custom_strike": {
+    "ufc_competitor": "9d8cc6d1-5a47-415e-8930-94d5cfcccc0a"
+   },
+   "early_close_condition": "This market will close and expire after a champion is declared.",
+   "event_ticker": "KXUFCFIGHT-26JUL11SAIPIM",
+   "expected_expiration_time": "2026-07-12T06:40:00Z",
+   "expiration_time": "2026-07-26T01:40:00Z",
+   "expiration_value": "",
+   "fractional_trading_enabled": true,
+   "last_price_dollars": "0.4600",
+   "latest_expiration_time": "2026-07-26T01:40:00Z",
+   "liquidity_dollars": "0.0000",
+   "market_type": "binary",
+   "no_ask_dollars": "0.5500",
+   "no_bid_dollars": "0.5400",
+   "no_sub_title": "Paddy Pimblett",
+   "notional_value_dollars": "1.0000",
+   "occurrence_datetime": "2026-07-12T06:40:00Z",
+   "open_interest_fp": "76742.93",
+   "open_time": "2026-06-29T17:51:00Z",
+   "previous_price_dollars": "0.4600",
+   "previous_yes_ask_dollars": "0.4600",
+   "previous_yes_bid_dollars": "0.4400",
+   "price_level_structure": "linear_cent",
+   "price_ranges": [
+    {
+     "end": "1.0000",
+     "start": "0.0000",
+     "step": "0.0100"
+    }
+   ],
+   "response_price_units": "usd_cent",
+   "result": "",
+   "rules_primary": "If Paddy Pimblett wins the Saint-Denis vs Pimblett professional MMA fight originally scheduled for Jul 11, 2026, then the market resolves to Yes.",
+   "rules_secondary": "The following market refers to the Saint-Denis vs Pimblett professional MMA fight originally scheduled for Jul 11, 2026. If this fight is postponed or delayed, the market will remain open and close after the rescheduled fight has finished (within two weeks). If the fight is declared a tie or no contest, the market will resolve to 50/50 for both fighters. If the fight is cancelled or rescheduled to over two weeks away, the market will resolve to a fair price in accordance with the rules.\n\nThis market and these products have not been endorsed by Zuffa LLC, d/b/a Ultimate Fighting Championship, UFC. Any references to the “UFC,” or any other associated marks are descriptive only, and do not indicate an endorsement of this product or any affiliation between Zuffa and Kalshi.",
+   "settlement_timer_seconds": 298,
+   "status": "active",
+   "strike_type": "structured",
+   "ticker": "KXUFCFIGHT-26JUL11SAIPIM-PIM",
+   "title": "Will Paddy Pimblett win the Saint-Denis vs Pimblett professional MMA fight scheduled for Jul 11, 2026?",
+   "updated_time": "2026-06-29T17:51:00.787076Z",
+   "volume_24h_fp": "29589.66",
+   "volume_fp": "81551.12",
+   "yes_ask_dollars": "0.4600",
+   "yes_ask_size_fp": "1356.83",
+   "yes_bid_dollars": "0.4500",
+   "yes_bid_size_fp": "382.36",
+   "yes_sub_title": "Paddy Pimblett"
+  }
+ ],
+ "orderbooks": {
+  "KXUFCFIGHT-26JUL11SAIPIM-SAI": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "13691.07"
+     ],
+     [
+      "0.0200",
+      "6977.00"
+     ],
+     [
+      "0.0300",
+      "6291.00"
+     ],
+     [
+      "0.0500",
+      "507.00"
+     ],
+     [
+      "0.0600",
+      "5214.65"
+     ],
+     [
+      "0.0800",
+      "347.00"
+     ],
+     [
+      "0.1100",
+      "34.64"
+     ],
+     [
+      "0.1200",
+      "0.34"
+     ],
+     [
+      "0.1400",
+      "1421.00"
+     ],
+     [
+      "0.1500",
+      "1291.00"
+     ],
+     [
+      "0.1600",
+      "3684.00"
+     ],
+     [
+      "0.1700",
+      "1615.00"
+     ],
+     [
+      "0.1800",
+      "60.63"
+     ],
+     [
+      "0.2000",
+      "2008.00"
+     ],
+     [
+      "0.2100",
+      "2120.00"
+     ],
+     [
+      "0.2200",
+      "2088.01"
+     ],
+     [
+      "0.2400",
+      "17.32"
+     ],
+     [
+      "0.2500",
+      "34.71"
+     ],
+     [
+      "0.2600",
+      "746.00"
+     ],
+     [
+      "0.2700",
+      "8.66"
+     ],
+     [
+      "0.3800",
+      "863.00"
+     ],
+     [
+      "0.3900",
+      "2388.53"
+     ],
+     [
+      "0.4000",
+      "2959.00"
+     ],
+     [
+      "0.4100",
+      "97.14"
+     ],
+     [
+      "0.4200",
+      "16549.92"
+     ],
+     [
+      "0.4300",
+      "12855.05"
+     ],
+     [
+      "0.4400",
+      "16926.09"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "16570.00"
+     ],
+     [
+      "0.0200",
+      "9570.00"
+     ],
+     [
+      "0.0300",
+      "5470.00"
+     ],
+     [
+      "0.0400",
+      "144.00"
+     ],
+     [
+      "0.0500",
+      "407.01"
+     ],
+     [
+      "0.0600",
+      "201.00"
+     ],
+     [
+      "0.0700",
+      "403.00"
+     ],
+     [
+      "0.0800",
+      "267.01"
+     ],
+     [
+      "0.1000",
+      "659.00"
+     ],
+     [
+      "0.1100",
+      "1424.00"
+     ],
+     [
+      "0.1200",
+      "271.00"
+     ],
+     [
+      "0.1300",
+      "1134.00"
+     ],
+     [
+      "0.1400",
+      "295.00"
+     ],
+     [
+      "0.1500",
+      "1.44"
+     ],
+     [
+      "0.2100",
+      "150.00"
+     ],
+     [
+      "0.2300",
+      "37.00"
+     ],
+     [
+      "0.2500",
+      "2093.00"
+     ],
+     [
+      "0.2600",
+      "176.44"
+     ],
+     [
+      "0.2800",
+      "135.00"
+     ],
+     [
+      "0.3000",
+      "46.00"
+     ],
+     [
+      "0.3100",
+      "302.88"
+     ],
+     [
+      "0.5000",
+      "5.00"
+     ],
+     [
+      "0.5300",
+      "3999.60"
+     ],
+     [
+      "0.5400",
+      "2218.13"
+     ],
+     [
+      "0.5500",
+      "5258.54"
+     ]
+    ]
+   }
+  },
+  "KXUFCFIGHT-26JUL11SAIPIM-PIM": {
+   "orderbook_fp": {
+    "no_dollars": [
+     [
+      "0.0100",
+      "19400.98"
+     ],
+     [
+      "0.0200",
+      "7727.94"
+     ],
+     [
+      "0.0300",
+      "6181.00"
+     ],
+     [
+      "0.0500",
+      "507.00"
+     ],
+     [
+      "0.0600",
+      "10.69"
+     ],
+     [
+      "0.0700",
+      "31.42"
+     ],
+     [
+      "0.0800",
+      "3424.87"
+     ],
+     [
+      "0.0900",
+      "1789.00"
+     ],
+     [
+      "0.1000",
+      "1368.69"
+     ],
+     [
+      "0.1100",
+      "53.53"
+     ],
+     [
+      "0.1200",
+      "1528.00"
+     ],
+     [
+      "0.1300",
+      "4.27"
+     ],
+     [
+      "0.1400",
+      "21.86"
+     ],
+     [
+      "0.1600",
+      "14.56"
+     ],
+     [
+      "0.1700",
+      "233.04"
+     ],
+     [
+      "0.1800",
+      "285.18"
+     ],
+     [
+      "0.1900",
+      "53.98"
+     ],
+     [
+      "0.2000",
+      "41.46"
+     ],
+     [
+      "0.2300",
+      "9.15"
+     ],
+     [
+      "0.2400",
+      "127.93"
+     ],
+     [
+      "0.2500",
+      "2804.48"
+     ],
+     [
+      "0.2600",
+      "163.71"
+     ],
+     [
+      "0.2700",
+      "1574.00"
+     ],
+     [
+      "0.2800",
+      "461.99"
+     ],
+     [
+      "0.2900",
+      "866.86"
+     ],
+     [
+      "0.3100",
+      "395.00"
+     ],
+     [
+      "0.3800",
+      "1118.00"
+     ],
+     [
+      "0.3900",
+      "149.70"
+     ],
+     [
+      "0.4000",
+      "300.00"
+     ],
+     [
+      "0.5000",
+      "6.00"
+     ],
+     [
+      "0.5100",
+      "17141.18"
+     ],
+     [
+      "0.5200",
+      "9256.89"
+     ],
+     [
+      "0.5300",
+      "3621.82"
+     ],
+     [
+      "0.5400",
+      "1356.83"
+     ]
+    ],
+    "yes_dollars": [
+     [
+      "0.0100",
+      "17710.00"
+     ],
+     [
+      "0.0200",
+      "9170.00"
+     ],
+     [
+      "0.0300",
+      "7070.00"
+     ],
+     [
+      "0.0400",
+      "920.99"
+     ],
+     [
+      "0.0600",
+      "854.99"
+     ],
+     [
+      "0.0700",
+      "621.00"
+     ],
+     [
+      "0.0800",
+      "239.00"
+     ],
+     [
+      "0.1000",
+      "750.00"
+     ],
+     [
+      "0.1100",
+      "940.00"
+     ],
+     [
+      "0.1200",
+      "588.00"
+     ],
+     [
+      "0.1300",
+      "1876.00"
+     ],
+     [
+      "0.1600",
+      "210.00"
+     ],
+     [
+      "0.1800",
+      "299.00"
+     ],
+     [
+      "0.2000",
+      "2008.00"
+     ],
+     [
+      "0.2100",
+      "365.06"
+     ],
+     [
+      "0.2200",
+      "653.99"
+     ],
+     [
+      "0.2300",
+      "646.00"
+     ],
+     [
+      "0.2400",
+      "8.06"
+     ],
+     [
+      "0.3700",
+      "20.00"
+     ],
+     [
+      "0.3800",
+      "152.00"
+     ],
+     [
+      "0.3900",
+      "169.12"
+     ],
+     [
+      "0.4000",
+      "258.00"
+     ],
+     [
+      "0.4200",
+      "34.69"
+     ],
+     [
+      "0.4300",
+      "851.72"
+     ],
+     [
+      "0.4400",
+      "10824.87"
+     ],
+     [
+      "0.4500",
+      "382.36"
+     ]
+    ]
+   }
+  }
+ }
+}

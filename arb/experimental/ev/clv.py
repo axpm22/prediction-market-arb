@@ -34,8 +34,9 @@ def _ev_flags(store: Store) -> list[dict]:
                 # N1: quarantined flags (quality_flag NOT NULL — uneconomic, below-min-profit,
                 # low edge/SE, etc.) must NOT enter the edge-proof sample; they would bias the
                 # gate that decides whether EV ever goes live. Only clean flags count.
+                # PURGE_LOOP_PNL: annotated loop rows never enter the CLV edge-proof sample.
                 "SELECT * FROM flat_bets WHERE kind = 'EV' AND status IN ('OPEN','REVIEW') "
-                "AND quality_flag IS NULL ORDER BY id"
+                "AND quality_flag IS NULL AND id NOT IN (SELECT bet_id FROM annotations) ORDER BY id"
             )
         )
     flags = []
@@ -50,6 +51,10 @@ def _ev_flags(store: Store) -> list[dict]:
             "venue": leg["venue"],
             "book": leg["book"],
             "outcome": leg["outcome_label"],
+            # K12: the flag's OWN market — hardcoding WINNER/None silently dropped every
+            # TOTAL flag (39% of clean EV flags) from the go/no-go gate.
+            "market_type": leg.get("market_type") or "WINNER",
+            "line": leg.get("line"),
             "entry_ask": Decimal(str(leg["cost"])) + Decimal(str(leg["fee_cost"])),
             "placed_at": row["placed_at"],
         })
@@ -127,9 +132,14 @@ def _bootstrap_ci(values: list[float], resamples: int = 10000) -> tuple[float, f
 
 def _two_sided_devig_mid(con, event_key: str, venue: str, market_type, line, target: str,
                          at_or_before: str | None) -> Decimal | None:
-    """EV#9: de-vig the two-sided book on this venue (each outcome's last raw price at/before
+    """EV#9: de-vig the two-sided book on this venue (each outcome's last price at/before
     `at_or_before`, or the close if None) and return the no-vig mid for `target`. Fees are
-    NOT included — they belong in P&L, not the CLV signal."""
+    NOT included — they belong in P&L, not the CLV signal.
+
+    K12: use a TRUE per-outcome mid — (best_bid + ask)/2 — when the quote recorded a bid.
+    Renormalizing asks alone carries the spread, and spreads compress into the close, so
+    ask-only "drift" conflates line movement with spread compression. Ask-only remains the
+    fallback for legacy rows (bids weren't persisted before the best_bid column)."""
     line_clause = "line IS ?" if line in (None, "") else "line = ?"
     outcomes = [r[0] for r in con.execute(
         f"""SELECT DISTINCT outcome FROM quotes
@@ -146,7 +156,7 @@ def _two_sided_devig_mid(con, event_key: str, venue: str, market_type, line, tar
             time_clause = "AND fetched_at <= ?"
             params.append(at_or_before)
         row = con.execute(
-            f"""SELECT raw_price FROM quotes
+            f"""SELECT raw_price, best_bid FROM quotes
                  WHERE event_key=? AND venue=? AND market_type=? AND {line_clause} AND outcome=?
                        AND live=0 {time_clause}
                  ORDER BY fetched_at DESC LIMIT 1""",
@@ -156,9 +166,12 @@ def _two_sided_devig_mid(con, event_key: str, venue: str, market_type, line, tar
             return None
         price = Decimal(str(row["raw_price"]))
         if price <= 1:  # venue books store $1-unit cost as raw_price; need decimal odds to devig
+            bid = row["best_bid"]
+            if bid not in (None, ""):
+                price = (price + Decimal(str(bid))) / 2  # true (bid+ask)/2 mid
             raw[outcome] = price
     if len(raw) == len(outcomes):
-        # raw_price is already the $1-unit cost for venues; de-vig = renormalize the pair.
+        # per-outcome mids in the $1 unit; de-vig = renormalize the pair.
         total = sum(raw.values(), Decimal("0"))
         return q6(raw[target] / total) if total > 0 else None
     return None
@@ -171,8 +184,9 @@ def grade_clv_novig(store: Store, resamples: int = 10000) -> dict:
     graded: list[float] = []
     with store.connect() as con:
         for f in flags:
-            close_mid = _two_sided_devig_mid(con, f["event_key"], f["venue"], "WINNER", None, f["outcome"], None)
-            entry_mid = _two_sided_devig_mid(con, f["event_key"], f["venue"], "WINNER", None, f["outcome"], f["placed_at"])
+            # K12: the mid lookup keys on the flag's own market — TOTAL flags graded too.
+            close_mid = _two_sided_devig_mid(con, f["event_key"], f["venue"], f["market_type"], f["line"], f["outcome"], None)
+            entry_mid = _two_sided_devig_mid(con, f["event_key"], f["venue"], f["market_type"], f["line"], f["outcome"], f["placed_at"])
             if close_mid is None or entry_mid is None:
                 continue
             graded.append(float(close_mid - entry_mid))  # >0 = venue fair value moved toward us

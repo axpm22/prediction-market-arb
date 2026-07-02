@@ -94,12 +94,58 @@ CREATE TABLE IF NOT EXISTS suspect_matches(
     created_at TEXT NOT NULL,
     classification TEXT
 );
+-- golf_slate_tennis_fix Part 1: EV candidates deliberately NOT booked (edge-implausible,
+-- outcome-unnormalized, fuzzy-no-exact-alias). Append-only; the daily report groups by reason
+-- so nothing is a silent discard (rule 9: report recomputed from the raw log).
+CREATE TABLE IF NOT EXISTS left_on_table(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    poll_id INTEGER,
+    reason TEXT NOT NULL,
+    sport TEXT NOT NULL,
+    event_key TEXT NOT NULL,
+    venue TEXT,
+    outcome TEXT,
+    edge TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_left_on_table_created ON left_on_table(created_at);
+-- Immutable bet annotations (bug:<issue>, settler-error, ...). Bets are never edited; context
+-- accumulates beside them and annotated rows drop out of every clean/honest-variant report cell.
+-- Created on-demand by arb.experimental.annotations too; declared here so the NOT-IN filters
+-- every reader uses are safe on a fresh DB (auxiliary table only, no bet-data migration).
+CREATE TABLE IF NOT EXISTS annotations(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bet_id INTEGER NOT NULL,
+    tag TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(bet_id) REFERENCES flat_bets(id)
+);
 CREATE TABLE IF NOT EXISTS consensus(
     event_key TEXT NOT NULL,
     outcome TEXT NOT NULL,
     p_hat TEXT NOT NULL,
     computed_at TEXT NOT NULL,
     PRIMARY KEY(event_key, outcome)
+);
+CREATE TABLE IF NOT EXISTS nonsports_verdicts(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    checked_at TEXT NOT NULL,
+    pair_key TEXT NOT NULL UNIQUE,
+    venue_a TEXT NOT NULL,
+    market_a TEXT NOT NULL,
+    venue_b TEXT NOT NULL,
+    market_b TEXT NOT NULL,
+    equivalent INTEGER,            -- 1/0; NULL = gave up (garbage output or 3 API failures)
+    confidence TEXT NOT NULL DEFAULT '0',
+    differences_json TEXT,
+    entity TEXT,
+    metric TEXT,
+    deadline TEXT,
+    source_a TEXT,
+    source_b TEXT,
+    model TEXT,
+    raw_response TEXT
 );
 CREATE TABLE IF NOT EXISTS positions(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,6 +211,19 @@ CREATE TABLE IF NOT EXISTS forecasts(
     logloss_market REAL,
     clv REAL
 );
+-- B3 (MicroEVBitcoin.md): per-window record of both venues' BTC settlement print + realized
+-- result, so cross-venue oracle agreement (CF Benchmarks BRTI vs Polymarket UMA) becomes an
+-- empirical question. Append-only; the path from REVIEW -> a whitelistable trusted pair.
+CREATE TABLE IF NOT EXISTS btc_oracle_prints(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at TEXT NOT NULL,
+    asset TEXT NOT NULL,                 -- BTC@strike@YYYYMMDDHHMM
+    window_end_utc TEXT NOT NULL,
+    kalshi_print TEXT,                   -- BRTI settlement price (string Decimal)
+    poly_print TEXT,                     -- UMA settlement price
+    kalshi_result INTEGER,               -- 1/0 binary YES outcome per Kalshi
+    poly_result INTEGER                  -- 1/0 binary YES outcome per Polymarket
+);
 CREATE INDEX IF NOT EXISTS idx_quotes_close_lookup
 ON quotes(event_key, venue, book, outcome, live, fetched_at);
 -- flat_bets is scanned heavily by the dashboard, tracker, sweeps, and settlement.
@@ -192,6 +251,9 @@ MIGRATION_COLUMNS = {
         "line": "TEXT",
         "depth_usd": "TEXT",
         "live": "INTEGER NOT NULL DEFAULT 0",
+        # K12: best same-side bid so a true (bid+ask)/2 mid exists (real mid-based CLV,
+        # maker-side analysis). NULL = venue didn't report one.
+        "best_bid": "TEXT",
     },
     "opportunities": {
         "poll_id": "INTEGER",
@@ -217,5 +279,27 @@ MIGRATION_COLUMNS = {
         # Validation playbook: frozen forward-test cohort labels.
         "validation_rule": "TEXT",
         "validation_tag": "TEXT",
+        # K4/K5: machine-readable facts as real columns, not note prose.
+        # adj_edge = skew-haircut-adjusted ARB edge (what sizing/ranking trust).
+        "adj_edge": "TEXT",
+        # K14: the raw model probability estimate at flag time (EV), pre push/decay haircut.
+        "p_hat": "TEXT",
+        # K5: flash-verify re-quote facts (the R1 confirm source).
+        "requote_sum": "TEXT",
+        "requote_lag_secs": "REAL",
+        # Spec amendment (nonsports_ai_matcher): 1 = event equivalence decided by Haiku.
+        # These bets report in their own section and never enter the headline number.
+        "ai_matched": "INTEGER NOT NULL DEFAULT 0",
+        # STRIKE_AWARE: a paper-settled AI-matched pair whose two venues disagreed on the
+        # outcome — the fake-arb case; the row's P&L shows the damage and the pair is banned.
+        "settlement_mismatch": "INTEGER NOT NULL DEFAULT 0",
+    },
+    # STRIKE_AWARE: strike-level facts Haiku extracted, stored for audit beside the verdict.
+    "nonsports_verdicts": {
+        "comparator_a": "TEXT", "comparator_b": "TEXT",
+        "threshold_a": "TEXT", "threshold_b": "TEXT",
+        "unit_a": "TEXT", "unit_b": "TEXT",
+        "data_source_a": "TEXT", "data_source_b": "TEXT",
+        "rounding_a": "TEXT", "rounding_b": "TEXT",
     },
 }

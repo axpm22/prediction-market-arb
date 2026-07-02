@@ -20,16 +20,22 @@ CANONICAL_KINDS = ("ARB", "EV", "DIVERGENCE", "CLOSE", "NEGRISK", "LIVE_BASEBALL
 
 
 def build_dashboard_data(store: Store, config) -> dict:
+    from .annotations import annotated_ids
     with store.connect() as con:
-        settled = list(
-            con.execute(
-                """SELECT placed_at, pnl_optimistic, pnl_confirmed,
+        # PURGE_LOOP_PNL: annotated rows (bug:settled-rebook-loop) are excluded from EVERY cell of
+        # the honest-variant matrix — equity/kelly curves, drawdowns, per_type, edge buckets all
+        # derive from `settled`, so filtering it here purges loop P&L from all of them at once.
+        excluded = annotated_ids(con)
+        settled = [
+            row for row in con.execute(
+                """SELECT id, placed_at, pnl_optimistic, pnl_confirmed,
                           pnl_kelly_optimistic, pnl_kelly_confirmed,
                           kind, quality_flag, edge, stake_usd, result
                      FROM flat_bets WHERE status='SETTLED' AND result IN ('WON','LOST','VOID','RESOLVED')
                     ORDER BY placed_at"""
             )
-        )
+            if int(row["id"]) not in excluded
+        ]
         grade_rows = list(
             con.execute("SELECT status, COUNT(*) n FROM flat_bets WHERE kind='ARB' GROUP BY status")
         )
@@ -242,9 +248,11 @@ def _bucket_name(edge: Decimal) -> str:
 
 def _copy_trade_clv(store: Store, config) -> dict:
     try:
-        from arb.experimental.ev.clv import grade_clv
+        # K13: no-vig is the default verdict instrument (N1); the fee-loaded metric is
+        # documented "BIASED — comparison only" and must not be the number people look at.
+        from arb.experimental.ev.clv import clv_result
 
-        result = grade_clv(store, config.min_executable_usd)
+        result = clv_result(store, fee_loaded=False, min_depth=config.min_executable_usd)
         return {"available": True, **result}
     except Exception as exc:  # noqa: BLE001 - dashboard must remain read-only and best-effort.
         return {"available": False, "error": str(exc)}

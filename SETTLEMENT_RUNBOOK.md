@@ -166,3 +166,42 @@ every-cycle backfill, isolated failures) is already in place.
 **Two sources, settle every cycle, and watch the OVERDUE count.** If OVERDUE is 0, every
 finished game is settled. If it climbs, settlement isn't running — restart the daemon and
 run `settle-backfill`.
+
+## 10. Cross-venue MMA (Kalshi vs Polymarket) — winner-market settlement parity
+
+Added for FIX_POLYMARKET_UFC_TAG (Polymarket MMA now discovers under `tag_slug=ufc`). Question:
+can `kalshi+polymarket / mma / winner` be auto-filled (CLAUDE.md rule 6 whitelist), or must it
+stay REVIEW-only? Compared each venue's **own published market rules** for the same fight
+(Saint-Denis vs Pimblett, UFC 329, 2026-07-11), read live 2026-07-02:
+
+- **Kalshi** `rules_secondary` (per-market, from the trade API): *"If the fight is declared a tie
+  or no contest, the market will resolve to 50/50 for both fighters. If this fight is postponed or
+  delayed, the market will remain open and close after the rescheduled fight has finished (within
+  two weeks). If the fight is cancelled or rescheduled to over two weeks away, the market will
+  resolve to a fair price in accordance with the rules."* (source: `GET
+  api.elections.kalshi.com/trade-api/v2/markets/KXUFCFIGHT-26JUL11SAIPIM-PIM`, field `rules_secondary`).
+- **Polymarket** market `description` (Gamma): *"If the fight is declared a draw or technical draw,
+  ruled a No Contest, not scored, canceled, or postponed beyond July 25, 2026, this market will
+  resolve '50-50.' The resolution source ... will be official information from the UFC."* (source:
+  `GET gamma-api.polymarket.com/events?tag_slug=ufc` event 642119; `resolutionSource`
+  https://www.ufc.com/events).
+
+| Outcome case | Kalshi | Polymarket | Equivalent? |
+|---|---|---|---|
+| Winner officially declared (incl. KO/TKO, doctor stoppage that yields a winner) | Yes/No = 1/0 | winner = 1/0 | ✅ |
+| Draw / technical draw | 50/50 | 50-50 | ✅ |
+| No Contest / not scored | 50/50 | 50-50 | ✅ |
+| Postponed within ~2 weeks (≤ Jul 25) | stays open, settles on rescheduled result | resolves on result if not beyond Jul 25 | ✅ (aligned ~2-week horizon) |
+| **Cancelled bout** | **"a fair price in accordance with the rules"** (discretionary, not necessarily 50/50) | **"50-50"** (clean void) | ❌ |
+| **Fighter replacement / bout scratched** (matchup no longer occurs) | same "fair price" path | "50-50" | ❌ |
+| Rescheduled > 2 weeks (beyond Jul 25) | "fair price" | "50-50" | ❌ |
+
+**Verdict: NOT equivalent — MMA winner stays REVIEW-only; no cross-venue whitelist entry added.**
+The winner/draw/NC/doctor-stoppage cases all match, but on a **cancellation, fighter replacement,
+or long postponement** Kalshi settles to a discretionary "fair price" while Polymarket voids at a
+clean 50/50. An auto-filled paper arb that assumed both legs void identically would be mispriced
+in exactly those events, which is the cross-venue settlement trap rule 6 exists to prevent. Per
+the FIX task's own condition ("if any outcome case settles differently, the pair stays
+REVIEW-only"), no `config.yaml` cross-venue whitelist line is added. Round **totals** stay
+REVIEW-only regardless (early-stoppage round-total settlement is a separate known mismatch risk).
+Re-evaluate only if both venues converge their cancellation rule to a clean void.

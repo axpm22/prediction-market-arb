@@ -1,0 +1,312 @@
+[
+ {
+  "id": "496873",
+  "title": "UFC 329: Max Holloway vs. Conor McGregor (Welterweight, Main Card)",
+  "liquidity": 370785.2299,
+  "endDate": "2026-07-12T03:59:59.999Z",
+  "markets": [
+   {
+    "id": "2289164",
+    "question": "UFC 329: Max Holloway vs. Conor McGregor (Welterweight, Main Card)",
+    "outcomes": "[\"Max Holloway\", \"Conor McGregor\"]",
+    "outcomePrices": "[\"0.665\", \"0.335\"]",
+    "clobTokenIds": "[\"71338886078132794561606040245522732654223397726318877516126885558857760131397\", \"12937069564920440485423856944961863118985999089649348190709599100219960110712\"]",
+    "gameStartTime": "2026-07-11 22:00:00+00",
+    "sportsMarketType": "moneyline",
+    "line": null,
+    "liquidity": "296228.8484",
+    "clobAskPrices": [
+     "0.67",
+     "0.34"
+    ],
+    "clobAskDepths": [
+     "124517.235400",
+     "36364.958400"
+    ],
+    "clobBestBids": [
+     "0.66",
+     "0.33"
+    ]
+   },
+   {
+    "id": "2289177",
+    "question": "Fight to Go the Distance?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.31\", \"0.69\"]",
+    "clobTokenIds": "[\"32173747885003828901330954866878812267540144282697061354027658066238436908581\", \"2823648751993862819728997252630596686678304540452868250023982113357148865939\"]",
+    "gameStartTime": "2026-07-11 22:00:00+00",
+    "sportsMarketType": "ufc_go_the_distance",
+    "line": null,
+    "liquidity": "11897.0277"
+   },
+   {
+    "id": "2289185",
+    "question": "Will the fight be won by KO or TKO?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.62\", \"0.38\"]",
+    "clobTokenIds": "[\"4681492175927391731031528813605667105092554456020339236296727498805338084680\", \"56303911815623925098732488226629584315231268478208169978409019934113651210780\"]",
+    "gameStartTime": "2026-07-11 22:00:00+00",
+    "sportsMarketType": "ufc_method_of_victory",
+    "line": null,
+    "liquidity": "3580.1715"
+   },
+   {
+    "id": "2289186",
+    "question": "Will Max Holloway win by KO or TKO?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.53\", \"0.47\"]",
+    "clobTokenIds": "[\"61390857648401699546327005037497263555042580564446019860732343084859348701201\", \"65800099391200527836820750242871596075096834881537462085330703718870414325038\"]",
+    "gameStartTime": "2026-07-11 22:00:00+00",
+    "sportsMarketType": "ufc_method_of_victory",
+    "line": null,
+    "liquidity": "7189.9489"
+   },
+   {
+    "id": "2289199",
+    "question": "Will Conor McGregor win by KO or TKO?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.29\", \"0.71\"]",
+    "clobTokenIds": "[\"85626071936897828295829416230660712105092775118669682703430283942854784994684\", \"88712647922429903516317731059142244945380120410351939521706377985261933384147\"]",
+    "gameStartTime": "2026-07-11 22:00:00+00",
+    "sportsMarketType": "ufc_method_of_victory",
+    "line": null,
+    "liquidity": "21970.0626"
+   },
+   {
+    "id": "2289215",
+    "question": "Will the fight be won by submission?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.16\", \"0.84\"]",
+    "clobTokenIds": "[\"64257659547887290318349179185276282184696061323069660233265529259928339181611\", \"59463506338034046257269359002527902219268006185738263240133545967431625343540\"]",
+    "gameStartTime": "2026-07-11 22:00:00+00",
+    "sportsMarketType": "ufc_method_of_victory",
+    "line": null,
+    "liquidity": "5437.2134"
+   },
+   {
+    "id": "2289224",
+    "question": "O/U 0.5 Rounds",
+    "outcomes": "[\"Over\", \"Under\"]",
+    "outcomePrices": "[\"0.695\", \"0.305\"]",
+    "clobTokenIds": "[\"100679088682570638617742760938225432380537018184933194107436903138409635893758\", \"60676153015462749395061862566409741692247951856567922275742026368750741571211\"]",
+    "gameStartTime": "2026-07-11 22:00:00+00",
+    "sportsMarketType": "totals",
+    "line": 0.5,
+    "liquidity": "8890.6864",
+    "clobAskPrices": [
+     "0.89",
+     "0.5"
+    ],
+    "clobAskDepths": [
+     "6.327900",
+     "4929.000000"
+    ],
+    "clobBestBids": [
+     "0.5",
+     "0.11"
+    ]
+   },
+   {
+    "id": "2289229",
+    "question": "O/U 1.5 Rounds",
+    "outcomes": "[\"Over\", \"Under\"]",
+    "outcomePrices": "[\"0.61\", \"0.39\"]",
+    "clobTokenIds": "[\"24676665154828391198687111285271724363710677741381785027643905569952309157798\", \"91982833680891222556386510104578679179608743383797503994623285693140766991314\"]",
+    "gameStartTime": "2026-07-11 22:00:00+00",
+    "sportsMarketType": "totals",
+    "line": 1.5,
+    "liquidity": "1918.0649",
+    "clobAskPrices": [
+     "0.89",
+     "0.67"
+    ],
+    "clobAskDepths": [
+     "13.350000",
+     "10.050000"
+    ],
+    "clobBestBids": [
+     "0.33",
+     "0.11"
+    ]
+   },
+   {
+    "id": "2289234",
+    "question": "O/U 2.5 Rounds",
+    "outcomes": "[\"Over\", \"Under\"]",
+    "outcomePrices": "[\"0.49\", \"0.51\"]",
+    "clobTokenIds": "[\"50720885025645673395755902521959854716359985769481784896218082161508975360550\", \"27148910807238098824387844177538395545324896090664395394966387851309977724953\"]",
+    "gameStartTime": "2026-07-11 22:00:00+00",
+    "sportsMarketType": "totals",
+    "line": 2.5,
+    "liquidity": "6959.2417",
+    "clobAskPrices": [
+     "0.5",
+     "0.52"
+    ],
+    "clobAskDepths": [
+     "7.500000",
+     "2.600000"
+    ],
+    "clobBestBids": [
+     "0.48",
+     "0.5"
+    ]
+   }
+  ]
+ },
+ {
+  "id": "642119",
+  "title": "UFC 329: Paddy Pimblett vs. Benoît Saint Denis (Lightweight, Main Card)",
+  "liquidity": 40280.13355,
+  "endDate": "2026-07-12T03:59:59.999Z",
+  "markets": [
+   {
+    "id": "2712859",
+    "question": "UFC 329: Paddy Pimblett vs. Benoît Saint Denis (Lightweight, Main Card)",
+    "outcomes": "[\"Paddy Pimblett\", \"Benoît Saint Denis\"]",
+    "outcomePrices": "[\"0.435\", \"0.565\"]",
+    "clobTokenIds": "[\"20884324184865911631310536704425311566048592566985957688819961173659419874255\", \"69034228100564124334804861493290471739266335585198887658189299621210232651710\"]",
+    "gameStartTime": "2026-07-11 21:00:00+00",
+    "sportsMarketType": "moneyline",
+    "line": null,
+    "liquidity": "36572.8145",
+    "clobAskPrices": [
+     "0.44",
+     "0.57"
+    ],
+    "clobAskDepths": [
+     "1039.394400",
+     "7440.990900"
+    ],
+    "clobBestBids": [
+     "0.43",
+     "0.56"
+    ]
+   },
+   {
+    "id": "2712861",
+    "question": "Fight to Go the Distance?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.57\", \"0.43\"]",
+    "clobTokenIds": "[\"59804590356073493260601379207732554763838727523826776961595425649560657273631\", \"103104127587210866257160703794600432723456862594596135463961070698458567495834\"]",
+    "gameStartTime": "2026-07-11 21:00:00+00",
+    "sportsMarketType": "ufc_go_the_distance",
+    "line": null,
+    "liquidity": "3042.6271"
+   },
+   {
+    "id": "2712864",
+    "question": "Will the fight be won by KO or TKO?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.495\", \"0.505\"]",
+    "clobTokenIds": "[\"81783016777740195222544623551227748291038243979827247054650379711725729064020\", \"11240282954611545635982545083452735443982101418198880959675458279671947574269\"]",
+    "gameStartTime": "2026-07-11 21:00:00+00",
+    "sportsMarketType": "ufc_method_of_victory",
+    "line": null,
+    "liquidity": "55.2297"
+   },
+   {
+    "id": "2712868",
+    "question": "Will Paddy Pimblett win by KO or TKO?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.495\", \"0.505\"]",
+    "clobTokenIds": "[\"69168537781990092266231156438116830535886422674238293165939225491679221325858\", \"75723423487693378501115643441709579544109658929379139225491865621103588646350\"]",
+    "gameStartTime": "2026-07-11 21:00:00+00",
+    "sportsMarketType": "ufc_method_of_victory",
+    "line": null,
+    "liquidity": "55.2298"
+   },
+   {
+    "id": "2712870",
+    "question": "Will Benoît Saint Denis win by KO or TKO?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.485\", \"0.515\"]",
+    "clobTokenIds": "[\"39245360843257011673393994175709444059825808961818344711590664941981269636804\", \"86555800052834884745032900482940462066794175233559462893221244761234735394059\"]",
+    "gameStartTime": "2026-07-11 21:00:00+00",
+    "sportsMarketType": "ufc_method_of_victory",
+    "line": null,
+    "liquidity": "60.7898"
+   },
+   {
+    "id": "2712871",
+    "question": "Will the fight be won by submission?",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.495\", \"0.505\"]",
+    "clobTokenIds": "[\"50590768408666488932019531251909408729835898360521382597839349928985684226820\", \"2960442892966698108790846225459655743474021054622843884108758233350304214415\"]",
+    "gameStartTime": "2026-07-11 21:00:00+00",
+    "sportsMarketType": "ufc_method_of_victory",
+    "line": null,
+    "liquidity": "378.9982"
+   },
+   {
+    "id": "2712874",
+    "question": "O/U 0.5 Rounds",
+    "outcomes": "[\"Over\", \"Under\"]",
+    "outcomePrices": "[\"0.5\", \"0.5\"]",
+    "clobTokenIds": "[\"31377337668731926372253012861789826248692832047520763499286707527088143007632\", \"74722960897451073833276343753059748560347606698875056337146515642412746309592\"]",
+    "gameStartTime": "2026-07-11 21:00:00+00",
+    "sportsMarketType": "totals",
+    "line": 0.5,
+    "liquidity": "48.19995",
+    "clobAskPrices": [
+     "0.958",
+     "0.959"
+    ],
+    "clobAskDepths": [
+     "7.002980",
+     "11.460050"
+    ],
+    "clobBestBids": [
+     "0.041",
+     "0.042"
+    ]
+   },
+   {
+    "id": "2712876",
+    "question": "O/U 1.5 Rounds",
+    "outcomes": "[\"Over\", \"Under\"]",
+    "outcomePrices": "[\"0.555\", \"0.445\"]",
+    "clobTokenIds": "[\"41562296556964214951006024181313709072432757504420466025434944762586116066855\", \"108052170125540943334605266537111688047891968704065323816521785762888529280508\"]",
+    "gameStartTime": "2026-07-11 21:00:00+00",
+    "sportsMarketType": "totals",
+    "line": 1.5,
+    "liquidity": "25.6897",
+    "clobAskPrices": [
+     "0.86",
+     "0.97"
+    ],
+    "clobAskDepths": [
+     "5.839400",
+     "22.183900"
+    ],
+    "clobBestBids": [
+     "0.03",
+     "0.14"
+    ]
+   },
+   {
+    "id": "2712877",
+    "question": "O/U 2.5 Rounds",
+    "outcomes": "[\"Over\", \"Under\"]",
+    "outcomePrices": "[\"0.485\", \"0.515\"]",
+    "clobTokenIds": "[\"51937130550132119152617548708545701297947902143373420702539397382206341067660\", \"61123080775914226971063977289008167886719952707624767052372837844422518051077\"]",
+    "gameStartTime": "2026-07-11 21:00:00+00",
+    "sportsMarketType": "totals",
+    "line": 2.5,
+    "liquidity": "16.0092",
+    "clobAskPrices": [
+     "0.95",
+     "0.98"
+    ],
+    "clobAskDepths": [
+     "9.813500",
+     "44.531200"
+    ],
+    "clobBestBids": [
+     "0.02",
+     "0.05"
+    ]
+   }
+  ]
+ }
+]

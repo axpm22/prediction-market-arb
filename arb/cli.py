@@ -11,11 +11,13 @@ from pathlib import Path
 
 import requests
 
+from .activity import active_sports
 from .arbitrage import build_event, detect_divergences, detect_true_arbs, split_match_suspects, status_for_legs
 from .config import load_config
+from .matching import event_start_map, load_aliases
 from .models import Opportunity, Quote
 from .paper import fill_opportunity
-from .pricing import consensus_all, consensus_dispersion, consensus_outcome_key, consensus_outcome_times, consensus_probabilities, edge_points, expected_value, is_economic, money, q6
+from .pricing import consensus_all, consensus_dispersion, consensus_outcome_key, consensus_outcome_times, consensus_probabilities, depth_scaled_buffer, edge_points, expected_value, is_economic, money, q6, walk_ladder
 from .quality import classify_quality
 from .sizing import kelly_f_star, kelly_stake
 from .report import print_opportunities, print_positions, print_report
@@ -83,6 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
     forecast_settle.add_argument("--closing-price")
     sub.add_parser("forecast-report", help="score settled forecasts against market probabilities")
     sub.add_parser("daemon", help="watch loop + scheduled scans + settlement + daily report writer")
+    annotate = sub.add_parser("annotate", help="void bad flat_bets rows via append-only annotations (stop_inplay_betting_fix)")
+    annotate.add_argument("--reason", required=True, help="annotation reason, e.g. inplay-mislabeled")
+    annotate.add_argument("--where", required=True, help="SQL predicate on flat_bets selecting rows to void")
+    annotate.add_argument("--notes", help="optional free-text note stored on each annotation")
+    annotate.add_argument("--yes", action="store_true", help="write the annotations (default: dry-run preview)")
     return parser
 
 
@@ -101,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "positions":
         print_positions(store)
         return 0
+    if args.command == "annotate":
+        return run_annotate(args, store)
     if args.command == "reconcile":
         from .reconcile import default_resolvers, reconcile_settlements
 
@@ -121,7 +130,9 @@ def main(argv: list[str] | None = None) -> int:
 
         per_venue_cap = config.bankroll_usd * config.max_stake_pct
         print(format_exposure(compute_exposure(store, config.bankroll_usd, per_venue_cap,
-                                               per_venue_caps=config.per_venue_caps)))
+                                               per_venue_caps=config.per_venue_caps,
+                                               sport_duration_hours=config.sport_duration_hours,
+                                               venue_settlement_lag_hours=config.venue_settlement_lag_hours)))
         return 0
     if args.command == "scores":
         from .scoring import persist_scores, score_segments
@@ -252,11 +263,57 @@ def stop_requested(process_name: str) -> bool:
     return Path("data/stop-all").exists() or Path(f"data/stop-{process_name}").exists()
 
 
+DAEMON_META_PATH = Path("data/daemon.meta")
+
+
+def _git_state() -> tuple[str | None, bool | None]:
+    """(HEAD sha, dirty-tree?) or (None, None) when git is unavailable."""
+    import subprocess
+
+    try:
+        head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5).stdout.strip()
+        dirty = bool(subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, timeout=5).stdout.strip())
+        return (head or None), dirty
+    except Exception:  # noqa: BLE001 - a missing git must not break the scanner.
+        return None, None
+
+
+def write_daemon_meta(name: str) -> tuple[str | None, bool | None]:
+    """Record the code identity a long-running process STARTED on (stop_inplay_betting_fix step 4):
+    the fix that sat in the tree while the OLD daemon kept betting is the incident this makes visible."""
+    import json
+    import os
+
+    head, dirty = _git_state()
+    DAEMON_META_PATH.parent.mkdir(parents=True, exist_ok=True)
+    DAEMON_META_PATH.write_text(json.dumps({
+        "name": name, "pid": os.getpid(), "started_at": datetime.now(timezone.utc).isoformat(),
+        "git_head": head, "dirty": dirty,
+    }))
+    return head, dirty
+
+
+def code_change_warning(start_state: tuple[str | None, bool | None]) -> str | None:
+    """Loud message if HEAD or the dirty flag drifted from the process's start state — code changed
+    under the running daemon, which does NOT reload it. Returns None when unchanged or git absent."""
+    head, dirty = _git_state()
+    if head is None or (head, dirty) == start_state:
+        return None
+    return (f"code changed under running daemon (was {start_state[0]} dirty={start_state[1]}, "
+            f"now {head} dirty={dirty}) — restart to pick it up")
+
+
 def run_watch(args: argparse.Namespace, config, store: Store) -> int:
+    start_state = write_daemon_meta("watch") if not args.once else (None, None)
+    warned: set[tuple] = set()
     while True:
         code = run_watch_once(args, config, store)
         if args.once:
             return code
+        warning = code_change_warning(start_state)
+        if warning and warning not in warned:
+            print(f"WARNING: {warning}")
+            warned.add(warning)
         if stop_requested("daemon"):
             print("daemon: stop flag found, exiting cleanly.")
             return 0
@@ -271,16 +328,33 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
         SxAdapter(config, fixture_dir),
     ]
     sports = args.sport or config.sports
-    quotes = fetch_all_venues(adapters, sports)
+    quotes, failed_venues = fetch_all_venues(adapters, sports)
+    if failed_venues:
+        print(f"venue fetch failed/empty: {sorted(failed_venues)} — their fingerprints are "
+              f"exempt from absent-closing this poll (K3).")
     _warn_if_no_cross_venue_overlap(quotes)
 
-    pregame, in_play = split_pregame(quotes, datetime.now(timezone.utc))
+    now = datetime.now(timezone.utc)
+    # SKIP_DEAD_SPORTS: venue listings are the season calendar. Dormant sports (no fixture
+    # within the lookahead) are excluded from detection but their quotes still persist.
+    # ponytail: venues are still fetched every poll (they're free and reactivation is then
+    # instant); add the dormant-recheck cadence only if poll sweep time ever matters.
+    active = active_sports(quotes, now, config.activity_lookahead_hours)
+    dormant = {sport for sport in sports if sport not in active}
+    for name in sorted(dormant):
+        print(f"skip-dormant-sport: {name} (no venue fixtures within "
+              f"{config.activity_lookahead_hours}h)")
+
+    pregame, in_play = split_pregame(quotes, now, config.unreliable_start_venues)
     if in_play:
         print(f"{len(in_play)} in-play quotes persisted with live=1 and excluded from detection (pregame only).")
     # Depth floor BEFORE detection: a derived 1-cent ask backed by $3 of resting size is
     # not a main-lane price. A separate EV-only micro lane can measure small real edges,
     # but thin ARB/divergence stays excluded because partial fills create leg risk.
     detectable, micro_detectable, too_thin = split_depth_lanes(pregame, config)
+    if dormant:
+        detectable = [q for q in detectable if q.sport not in dormant]
+        micro_detectable = [q for q in micro_detectable if q.sport not in dormant]
     thin_count = len(micro_detectable) + len(too_thin)
     if thin_count:
         if micro_detectable:
@@ -320,6 +394,7 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
     )
     # SPEC §1: the +EV class exists only when consensus_enabled. watch never calls
     # The Odds API; EV uses consensus stored by the scan cadence.
+    ev_suppressed: list[dict] = []  # Part 1: EV candidates deliberately not booked (by reason)
     if config.consensus_enabled:
         calibrator = None
         if config.flb.get("apply_calibration"):  # EV#5: p_hat_calibrated from settled raw quotes
@@ -338,8 +413,13 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
                 pregame_max_age_hours=config.consensus_pregame_max_age_hours,
                 calibrator=calibrator,
                 dispersion=store.load_consensus_dispersion(),
+                left_on_table=ev_suppressed,
             )
         )
+        if ev_suppressed:
+            from collections import Counter
+            buckets = Counter(row["reason"] for row in ev_suppressed)
+            print("EV left on table (not booked): " + ", ".join(f"{r}={n}" for r, n in buckets.items()))
         opportunities.extend(
             detect_micro_ev_from_consensus(micro_detectable, store.load_consensus(), config)
         )
@@ -362,7 +442,11 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
     store.save_poll_quotes(poll_id, [*pregame, *in_play])
     store.save_poll_opportunities(poll_id, kept)
     store.save_suspect_matches(poll_id, suspects)
-    record_tracker_poll(store, poll_id, kept, load_validation_rule(config))
+    store.save_left_on_table(poll_id, ev_suppressed)
+    record_tracker_poll(store, poll_id, kept, load_validation_rule(config),
+                        terminal_mute_grace_mins=config.tracker_terminal_mute_grace_mins,
+                        failed_venues=failed_venues, dormant_sports=dormant,
+                        event_starts=event_start_map(quotes, config.unreliable_start_venues))
     if config.auto_fill:
         for opportunity in kept:
             fill_opportunity(store, poll_id, opportunity, config.bankroll_usd, config.max_stake_pct)
@@ -412,7 +496,8 @@ def _run_parlay_scan(store: Store, config, args: argparse.Namespace) -> int:
     # only_kinds scopes the lifetime bookkeeping to PARLAY so this separate cadence never
     # closes the watch stream's active ARB/EV fingerprints.
     record_tracker_poll(store, poll_id, opportunities, load_validation_rule(config),
-                        only_kinds=("PARLAY",))
+                        only_kinds=("PARLAY",),
+                        terminal_mute_grace_mins=config.tracker_terminal_mute_grace_mins)
     print(f"Recorded {len(opportunities)} parlay signal(s) into the ledger (kind=PARLAY, REVIEW).")
     return 0
 
@@ -424,6 +509,18 @@ def run_scan(args: argparse.Namespace, config, store: Store) -> int:
     fixture_dir = Path("tests/fixtures") if args.fixtures else None
     adapter = OddsApiAdapter(config, fixture_dir)
     sports = args.sport or config.consensus_sports
+    if fixture_dir is None:
+        # SKIP_DEAD_SPORTS credit saver: a dormant sport must never trigger an Odds API
+        # call. Activity comes from the venue quotes watch already persists every poll
+        # (fixture runs skip the gate — no live listings to derive activity from).
+        venue_active = store.sports_with_upcoming(
+            datetime.now(timezone.utc), config.activity_lookahead_hours)
+        dormant = [sport for sport in sports
+                   if config.odds_api_sport_aliases.get(sport, sport) not in venue_active]
+        for name in dormant:
+            print(f"skip-dormant-sport: {name} (no venue fixtures within "
+                  f"{config.activity_lookahead_hours}h)")
+        sports = [sport for sport in sports if sport not in dormant]
     quotes: list[Quote] = []
     aborted = False
     for sport in sports:
@@ -445,7 +542,7 @@ def run_scan(args: argparse.Namespace, config, store: Store) -> int:
         print(f"{sport} {adapter.name}: {len(venue_quotes)} quotes")
 
     computed_at = datetime.now(timezone.utc)
-    pregame, in_play = split_pregame(quotes, computed_at)
+    pregame, in_play = split_pregame(quotes, computed_at, config.unreliable_start_venues)
     quotes = [*pregame, *in_play]
     # In-play sportsbook odds must never become "pregame consensus".
     # D19: one shared de-vig pass yields both consensus and dispersion (was two passes).
@@ -503,13 +600,18 @@ def _warn_if_no_cross_venue_overlap(quotes: list[Quote], min_quotes_to_alert: in
               f"— matching/aliases likely broken; no cross-venue arb can be found this cycle.")
 
 
-def fetch_all_venues(adapters: list, sports: list[str]) -> list[Quote]:
+def fetch_all_venues(adapters: list, sports: list[str]) -> tuple[list[Quote], set[str]]:
     """Fetch venues CONCURRENTLY (independent rate limits → sweep time = slowest venue,
     and cross-venue leg skew shrinks). Within one venue stay serial: each venue's
-    throttle is a shared budget that parallel workers would only split or forfeit."""
+    throttle is a shared budget that parallel workers would only split or forfeit.
 
-    def venue_fetch(adapter) -> list[Quote]:
+    Returns (quotes, failed_venues). K3: a venue that errored or returned ZERO quotes did
+    not answer — the tracker must not absent-close fingerprints whose legs touch it
+    ("venue outage" is not "gone from the book")."""
+
+    def venue_fetch(adapter) -> tuple[list[Quote], bool]:
         collected: list[Quote] = []
+        errored = False
         for sport in sports:
             try:
                 venue_quotes = adapter.fetch_quotes(sport)
@@ -519,26 +621,39 @@ def fetch_all_venues(adapters: list, sports: list[str]) -> list[Quote]:
                 # One venue/sport failing must not kill the loop; the cycle continues
                 # with whatever quotes the other venues produced.
                 print(f"{adapter.name} ({sport}): {exc}")
+                errored = True
                 continue
             collected.extend(venue_quotes)
             print(f"{sport} {adapter.name}: {len(venue_quotes)} quotes")
-        return collected
+        return collected, errored
 
     with ThreadPoolExecutor(max_workers=len(adapters)) as pool:
         results = list(pool.map(venue_fetch, adapters))
-    return [quote for venue_quotes in results for quote in venue_quotes]
+    failed = {adapter.name for adapter, (venue_quotes, errored) in zip(adapters, results)
+              if errored or not venue_quotes}
+    return [quote for venue_quotes, _ in results for quote in venue_quotes], failed
 
 
-def split_pregame(quotes: list[Quote], now: datetime) -> tuple[list[Quote], list[Quote]]:
+def split_pregame(quotes: list[Quote], now: datetime,
+                  unreliable_start_venues: dict[str, list[str]] | None = None) -> tuple[list[Quote], list[Quote]]:
     """SPEC §1: pregame always. Started events are persisted live=1, never detected on.
 
     In-play books (and in-play sportsbook odds) priced against pregame consensus are the
     fastest source of absurd fake edges; break-window re-scans come later and stay live=1.
+
+    Part 1.0: routes on the EVENT-level start (earliest reliable venue), not each quote's own
+    start — so a nominal/late Polymarket tennis slot can't keep an already-live event in the
+    pregame lane when Kalshi/SX already show it started.
     """
+    starts = event_start_map(quotes, unreliable_start_venues)
     pregame: list[Quote] = []
     in_play: list[Quote] = []
     for quote in quotes:
-        if quote.start_utc is not None and quote.start_utc > now:
+        event_start = starts.get(quote.event_key)
+        # Pregame requires BOTH: the event's earliest reliable start is still future (so no venue
+        # already shows it live — the tennis fix), AND this quote's own start is known (E5: a
+        # null-start quote can never be verified against a time guard, so it stays non-actionable).
+        if event_start is not None and event_start > now and quote.start_utc is not None:
             pregame.append(quote)
         else:
             # E5: `start_utc is None` means the start is unknown — no time guard can protect it,
@@ -559,8 +674,14 @@ def split_depth_lanes(quotes: list[Quote], config) -> tuple[list[Quote], list[Qu
     normal: list[Quote] = []
     micro: list[Quote] = []
     too_thin: list[Quote] = []
+    assume_thin = config.micro_assume_thin_venues
     for quote in quotes:
-        if quote.depth_usd is None or quote.depth_usd >= config.min_executable_usd:
+        if quote.depth_usd is None:
+            # M1: a venue that can't report depth (SX; sometimes Polymarket) is genuinely thin —
+            # route its unknown-depth quotes to micro (conservative, depth-capped stake) instead
+            # of the normal lane, where they'd be priced as if executable at full size.
+            (micro if config.micro_enabled and quote.venue in assume_thin else normal).append(quote)
+        elif quote.depth_usd >= config.min_executable_usd:
             normal.append(quote)
         elif config.micro_enabled and quote.depth_usd >= config.micro_min_depth_usd:
             micro.append(quote)
@@ -654,6 +775,25 @@ def compute_line_times(quotes: list[Quote], min_books: int,
     return out
 
 
+def _left_on_table(sink: list[dict] | None, reason: str, quote: Quote,
+                   outcome: str, edge: Decimal | None) -> None:
+    """golf_slate_tennis_fix Part 1: record an EV candidate that was deliberately NOT booked so
+    it is never a silent discard — appended to the poll's left-on-table sink (surfaced in the
+    daily report by reason) and logged to logs/unmatched.log."""
+    if sink is not None:
+        sink.append({"reason": reason, "sport": quote.sport, "event_key": quote.event_key,
+                     "venue": quote.venue, "outcome": outcome or quote.outcome_label,
+                     "edge": edge})
+    try:
+        Path("logs").mkdir(exist_ok=True)
+        with open("logs/unmatched.log", "a") as handle:
+            handle.write(f"{datetime.now(timezone.utc).isoformat()}\t{reason}\t{quote.sport}\t"
+                         f"{quote.event_key}\t{quote.venue}\t{outcome or quote.outcome_label!r}\t"
+                         f"edge={edge}\n")
+    except OSError:  # logging must never break a scan cycle
+        pass
+
+
 def detect_ev_from_consensus(
     quotes: list[Quote],
     consensus: dict[tuple[str, str], tuple[Decimal, datetime]],
@@ -665,9 +805,20 @@ def detect_ev_from_consensus(
     pregame_max_age_hours: int | None = None,
     calibrator: tuple[list[float], list[float]] | None = None,
     dispersion: dict[tuple[str, str], Decimal] | None = None,
+    left_on_table: list[dict] | None = None,
+    enforce_max_edge: bool = True,
 ) -> list[Opportunity]:
     now = datetime.now(timezone.utc)
     stale_cutoff = now - timedelta(hours=max_age_hours)
+    # golf_slate_tennis_fix Part 1: EV correctness gates. Suppressed candidates are logged and
+    # pushed to the `left_on_table` sink (append-only, surfaced in the daily report by reason).
+    require_exact = set(getattr(config, "ev_require_exact_match", []) or [])
+    # The edge ceiling gates the NORMAL executable lane only: the micro lane deliberately trades
+    # larger edges on thin, depth-capped books (its e_min_thin floor is ~the ceiling), so applying
+    # it there would erase the whole lane. Micro keeps its own floors + edge_suspect_above.
+    max_edge = (getattr(config, "ev_max_edge", None) if config is not None else None) if enforce_max_edge else None
+    aliases = load_aliases()
+    known_labels = {sport: set(m.keys()) | set(m.values()) for sport, m in aliases.items()}
     # #3 Pregame lines move well inside the 8h tag window, so a watch flag against an
     # hours-old consensus is "venue vs stale line", not "venue vs sharp line". Use a tighter
     # staleness window for pregame (in-play quotes keep the looser one).
@@ -680,9 +831,21 @@ def detect_ev_from_consensus(
     for quote in quotes:
         if quote.venue == "oddsapi":
             continue
+        # Part 1.1: an outcome that never normalized to a known label can't be joined to consensus
+        # safely — persist the quote (done elsewhere) but never make it an EV bet.
+        if not (quote.outcome_label or "").strip():
+            _left_on_table(left_on_table, "outcome-unnormalized", quote, "", None)
+            continue
         outcome = consensus_outcome_key(quote.market_type, quote.line, quote.outcome_label)
         entry = consensus.get((quote.event_key, outcome))
         if entry is None:
+            continue
+        # Part 1.2: surname/player-matched sports (tennis/mma/golf) only book EV when the outcome
+        # resolves through an EXPLICIT alias entry — a fuzzy/unregistered WINNER label may still be
+        # a DIVERGENCE (separate path) but never an EV bet. Totals (OVER/UNDER) are always exact.
+        if quote.market_type == "WINNER" and quote.sport in require_exact \
+                and quote.outcome_label not in known_labels.get(quote.sport, set()):
+            _left_on_table(left_on_table, "fuzzy-no-exact-alias", quote, outcome, None)
             continue
         p_hat, computed_at = entry
         # EV#4: a zero/negative effective cost (malformed or fee-credited quote) makes the EV
@@ -706,14 +869,17 @@ def detect_ev_from_consensus(
             calib_slope = q6(Decimal(str(abs(hi - lo) / (2 * h))))
             calibrated = adj != p_hat
             p_hat = adj
-        # B7: shrink a thin-consensus p_hat toward the prior using the cross-book SE as the
-        # sampling sd. Off unless shrink_prior_strength > 0; identity otherwise.
+        # B7/K7: shrink a thin-consensus p_hat toward the prior. Two explicit knobs (prior sd
+        # vs pseudo-count); config load guarantees at most one is set. Both 0 = identity.
         shrunk = False
-        if config is not None and getattr(config, "ev_shrink_prior_strength", Decimal("0")) > 0:
+        shrink_sd = getattr(config, "ev_shrink_prior_sd", Decimal("0")) if config is not None else Decimal("0")
+        shrink_pseudo = getattr(config, "ev_shrink_prior_pseudocount", Decimal("0")) if config is not None else Decimal("0")
+        if shrink_sd > 0 or shrink_pseudo > 0:
             from .pricing import shrink_probability
             raw_disp = (dispersion or {}).get((quote.event_key, outcome), Decimal("0"))
             p_shrunk = shrink_probability(p_hat, 0, raw_disp, config.ev_shrink_prior,
-                                          float(config.ev_shrink_prior_strength))
+                                          prior_sd=float(shrink_sd),
+                                          prior_pseudocount=float(shrink_pseudo))
             shrunk = p_shrunk != p_hat
             p_hat = p_shrunk
         ev = expected_value(p_hat, quote.effective_cost)
@@ -722,6 +888,11 @@ def detect_ev_from_consensus(
             continue
         status, notes = status_for_legs([quote], trusted_pairs)
         edge = edge_points(p_hat, quote.effective_cost)
+        # Part 1.3: an EV edge above the ceiling is a data error (stale/nominal start, mis-joined
+        # consensus), not an opportunity (SPEC §12 trap). Record it (left-on-table) but book no bet.
+        if max_edge is not None and edge > max_edge:
+            _left_on_table(left_on_table, "edge-implausible", quote, outcome, edge)
+            continue
         # B11: integer totals can PUSH (stake returned) — scale the edge by (1-push_prob) instead
         # of pricing it as a clean binary. Off unless push_pricing is on; non-integer lines no-op.
         if config is not None and getattr(config, "ev_push_pricing", False) \
@@ -792,6 +963,8 @@ def detect_ev_from_consensus(
             legs=[quote],
             edge=eff_ev,
             edge_points=eff_edge,  # #9 p-c (decay-adjusted), comparable across kinds
+            p_hat=p_hat,  # K14: the RAW model estimate — calibration judges this, not a
+                          # p̂ reconstructed from the push/decay-haircut edge
             stakes={quote.outcome_label: Decimal("1.00")},
             status=status,  # type: ignore[arg-type]
             notes=notes,
@@ -833,24 +1006,99 @@ def detect_micro_ev_from_consensus(
         e_min=config.micro_e_min,
         config=config,
         record_below_e_min=False,
+        enforce_max_edge=False,  # micro floors overlap the ceiling; micro has its own controls
     )
-    return [_mark_micro_ev(opp, config) for opp in raw]
+    # M2: require the micro edge to survive the WALKED fill cost — drop the artifacts.
+    marked = [m for opp in raw if (m := _mark_micro_ev(opp, config)) is not None]
+    return _cap_micro_exposure(marked, config)
 
 
-def _mark_micro_ev(opp: Opportunity, config) -> Opportunity:
+def _cap_micro_exposure(opps: list[Opportunity], config) -> list[Opportunity]:
+    """M4 — bound the micro lane's exposure. Many micro quotes are correlated thin books on the
+    same game, so without a cap the lane could book ten $25 bets on one opinion. Keep the
+    highest-edge micro bets first, then drop any that would push a single event_key or venue past
+    its configured ceiling (the dropped ones are simply not recorded as micro bets)."""
+    event_cap = config.micro_max_event_exposure_usd
+    venue_cap = config.micro_max_venue_exposure_usd
+    event_used: dict[str, Decimal] = defaultdict(Decimal)
+    venue_used: dict[str, Decimal] = defaultdict(Decimal)
+    kept: list[Opportunity] = []
+    for opp in sorted(opps, key=lambda o: o.edge_points or Decimal("0"), reverse=True):
+        leg = opp.legs[0]
+        stake = opp.stakes.get(leg.outcome_label, Decimal("0"))
+        if event_used[leg.event_key] + stake > event_cap or venue_used[leg.venue] + stake > venue_cap:
+            continue
+        event_used[leg.event_key] += stake
+        venue_used[leg.venue] += stake
+        kept.append(opp)
+    return kept
+
+
+def _micro_e_min_for_depth(depth: Decimal | None, config) -> Decimal:
+    """M6 — depth-tied micro edge floor. e_min at the TOP of the band (depth >= min_executable),
+    e_min_thin at the bottom (depth <= micro_min_depth), linear between. Unknown depth → the
+    conservative thin floor."""
+    top, thin = config.micro_e_min, config.micro_e_min_thin
+    lo, hi = config.micro_min_depth_usd, config.min_executable_usd
+    if depth is None:
+        return thin
+    if depth >= hi:
+        return top
+    if depth <= lo or hi <= lo:
+        return thin
+    frac = (Decimal(str(depth)) - lo) / (hi - lo)   # 0 at lo, 1 at hi
+    return q6(thin - (thin - top) * frac)
+
+
+def _mark_micro_ev(opp: Opportunity, config) -> Opportunity | None:
     quote = opp.legs[0]
     bankroll_cap = config.bankroll_usd * config.max_stake_pct
     depth_cap = quote.depth_usd if quote.depth_usd is not None else config.micro_max_stake_usd
     stake = money(min(depth_cap, config.micro_max_stake_usd, bankroll_cap))
+    # All micro floors are in PROBABILITY POINTS (p - c), matching the e_min gate in
+    # detect_ev_from_consensus; opp.edge is the EV ratio kept only for display.
+    top_eff = quote.effective_cost
+    edge_pts = opp.edge_points if opp.edge_points is not None else q6(top_eff * opp.edge)
+    p_hat = q6(top_eff + edge_pts)
+    edge_ratio = opp.edge
+    extra_notes: tuple[str, ...] = ()
+    # M2/M3: a $5–$50 book cannot fill a $25 stake at the top tick. Walk the captured ladder for
+    # the intended micro stake to get the volume-weighted fill cost, add a depth-scaled micro
+    # buffer (slippage that grows with stake/depth, floored at the latency buffer), and recompute
+    # the edge at THAT cost. A micro "edge" priced at the $1-of-depth top tick is usually a mirage.
+    ladder = list(quote.ladder) if quote.ladder else []
+    if ladder and stake > 0:
+        base_buffer = config.taker_price_buffer
+        vwap, _filled = walk_ladder(ladder, stake)
+        micro_buffer = depth_scaled_buffer(ladder, stake, base_buffer)
+        fee_only = max(Decimal("0"), quote.fee_cost - base_buffer)  # fee minus the baked flat buffer
+        micro_fill_cost = q6(vwap + fee_only + micro_buffer)
+        edge_pts = q6(p_hat - micro_fill_cost)
+        if micro_fill_cost > 0:
+            edge_ratio = q6(edge_pts / micro_fill_cost)
+        extra_notes = (
+            f"micro-fill-cost:{micro_fill_cost}",
+            f"micro-walked-edge-pts:{edge_pts}",
+            f"micro-buffer:{micro_buffer}",
+        )
+    # M6: tie the edge floor to depth — thinner = riskier = needs more cushion. e_min(points) is
+    # the floor at the top of the band; e_min_thin at $5. The (walked) edge must clear it or drop.
+    floor = _micro_e_min_for_depth(quote.depth_usd, config)
+    if edge_pts < floor:
+        return None
+    extra_notes = (*extra_notes, f"micro-e-min-pts:{floor}")
     notes = (
         *opp.notes,
         "micro-depth-sized",
         "micro-ev-only",
         f"micro-depth-usd:{q6(depth_cap)}",
         f"micro-stake-usd:{stake}",
+        *extra_notes,
     )
     return replace(
         opp,
+        edge=edge_ratio,
+        edge_points=edge_pts,
         stakes={quote.outcome_label: stake},
         notes=notes,
         quality_flag="micro",
@@ -988,6 +1236,39 @@ def apply_opportunity_filters(opportunities: list[Opportunity], config) -> tuple
     return kept, left
 
 
+def run_annotate(args: argparse.Namespace, store: Store) -> int:
+    """Void bad flat_bets rows without editing them, via the existing append-only `annotations`
+    table (which every honest-variant report reader already excludes). Previews the matched set;
+    writes only with --yes. Idempotent: rows already annotated are skipped (stop_inplay_betting_fix)."""
+    from .experimental.annotations import annotate, annotated_bet_ids
+
+    try:
+        rows = store.select_bets_where(args.where)
+    except Exception as exc:  # noqa: BLE001 - a bad predicate must report, not crash.
+        print(f"annotate: invalid --where predicate: {exc}")
+        return 1
+    print(f"annotate --reason {args.reason} matched {len(rows)} flat_bets row(s):")
+    for row in rows:
+        print(f"  id={row['id']} {row['sport']}/{row['kind']} {row['status']} "
+              f"placed={row['placed_at']} edge={row['edge']}")
+    if not rows:
+        return 0
+    if not args.yes:
+        print(f"(dry run — pass --yes to write {len(rows)} annotation(s))")
+        return 0
+    already = annotated_bet_ids(store)
+    reason = args.notes or f"voided via `arb annotate --reason {args.reason}`"
+    written = 0
+    for row in rows:
+        if int(row["id"]) in already:
+            continue
+        annotate(store, int(row["id"]), tag=args.reason, reason=reason)
+        written += 1
+    print(f"Voided {written} new bet(s) (reason={args.reason}); {len(rows) - written} already "
+          f"annotated. They now report only under 'voided — data error', excluded from all P&L.")
+    return 0
+
+
 def run_settle_job(config, store: Store) -> None:
     # Each source is isolated so one failing never blocks the other (the old failure mode:
     # a silent settle error let bets age past the Odds API window and orphan forever).
@@ -1022,6 +1303,8 @@ def run_daemon(config, store: Store) -> int:
         schedule.every().day.at(scan_time).do(run_scan, args=scan_args, config=config, store=store)
     schedule.every().day.at(config.settle_time).do(run_settle_job, config=config, store=store)
     schedule.every().day.at(config.daily_report_time).do(write_daily_report, store=store)
+    start_state = write_daemon_meta("daemon")
+    warned: set[tuple] = set()
     print(
         f"Daemon: watch every {config.watch_interval_secs}s, scans at {', '.join(config.scan_times)}, "
         f"settle at {config.settle_time}, daily report at {config.daily_report_time} ({config.timezone})."
@@ -1029,6 +1312,10 @@ def run_daemon(config, store: Store) -> int:
     while True:
         # The daemon must outlive any single failed cycle (network blips, venue outages).
         try:
+            warning = code_change_warning(start_state)
+            if warning and warning not in warned:
+                print(f"WARNING: {warning}")
+                warned.add(warning)
             schedule.run_pending()
             run_watch_once(watch_args, config, store)
             # MLB Stats settlement is free and window-less, so settle finals every cycle —

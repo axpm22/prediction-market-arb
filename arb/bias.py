@@ -48,9 +48,11 @@ def _settled_binaries(store: Store) -> list[tuple[float, bool]]:
     out: list[tuple[float, bool]] = []
     with store.connect() as con:
         rows = con.execute(
+            # PURGE_LOOP_PNL: annotated loop rows never enter the favorite-longshot fit.
             """SELECT optimistic_cost, legs_json, result FROM flat_bets
                 WHERE status='SETTLED' AND result IN ('WON','LOST')
-                  AND quality_flag IS NULL"""
+                  AND quality_flag IS NULL
+                  AND id NOT IN (SELECT bet_id FROM annotations)"""
         )
         for r in rows:
             c = _pre_fee_cost(r["legs_json"], r["optimistic_cost"])

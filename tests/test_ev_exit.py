@@ -193,10 +193,13 @@ def test_ev_exit_closes_bet_for_settlement_and_allows_reentry(tmp_path) -> None:
     _place(store, opp)
     with store.connect() as con:
         rows = list(con.execute("SELECT id, status, reappearance_of, quality_flag, notes FROM flat_bets ORDER BY id"))
-    assert [row["status"] for row in rows] == ["OPEN", "EXITED", "CLOSED"]
+    # After an ev-exit the position is EXITED; re-sighting a still-future event RE-OPENS as a new
+    # bet (terminal-fingerprint mute applies to SETTLED only, never EXITED — fixes the regression
+    # that silenced every exited fingerprint for the rest of its real pregame window).
+    assert [row["status"] for row in rows] == ["OPEN", "EXITED", "OPEN"]
     assert rows[2]["reappearance_of"] == rows[1]["id"]
-    assert rows[2]["quality_flag"] == "terminal-fingerprint-skipped"
-    assert "skip-terminal-fingerprint:EXITED" in rows[2]["notes"]
+    assert rows[2]["quality_flag"] is None
+    assert "terminal-fingerprint-skipped" not in (rows[2]["notes"] or "")
 
 
 def test_ev_exit_requires_enough_exit_depth(tmp_path) -> None:

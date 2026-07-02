@@ -82,7 +82,8 @@ def reconcile_settlements(store: Store, leg_resolver) -> dict[str, int]:
     row. `leg_resolver` is a single callable OR a {venue: callable} mapping (audit A2). A bet
     is "unresolved" only when *its own* leg's venue resolver returns None — no longer skipped
     just because one venue lacks a resolver. Returns {checked, agree, corrected, skipped}."""
-    counts = {"checked": 0, "agree": 0, "corrected": 0, "skipped": 0}
+    counts = {"checked": 0, "agree": 0, "corrected": 0, "skipped": 0, "mismatch": 0}
+    bans: list[tuple[str, str]] = []
     with store.connect() as con:
         bets = list(con.execute(
             """
@@ -113,11 +114,39 @@ def reconcile_settlements(store: Store, leg_resolver) -> dict[str, int]:
             recon = reconcile_arb(leg_results, provisional)
             status = "RECONCILED" if recon.agrees else "CORRECTED"
             counts["agree" if recon.agrees else "corrected"] += 1
-            _append_recon_row(con, bet, recon, status)
+            # STRIKE_AWARE: an AI-matched pair whose venues resolved inconsistently is the
+            # fake-arb the rules feared. Flag the row and queue a ban so it is never re-bet;
+            # the mismatch counter is the single most important output of the AI lane.
+            is_ai = bool(_col(bet, "ai_matched"))
+            mismatch = is_ai and not recon.agrees and recon.detail.startswith("MISMATCH")
+            if mismatch:
+                counts["mismatch"] += 1
+                pair = _pair_key_from_notes(str(_col(bet, "notes") or ""))
+                if pair:
+                    bans.append((pair, recon.detail))
+            _append_recon_row(con, bet, recon, status, ai_matched=is_ai, settlement_mismatch=mismatch)
         # Audit A2: any settled arb still without a venue cross-check carries an unverified
         # provisional lock — surface the count so the headline can label it provisional.
         counts["provisional"] = provisional_arb_count(con)
+    # Bans use their own connection AFTER the reconcile transaction closes (no nesting).
+    now = datetime.now(timezone.utc)
+    for pair, detail in bans:
+        from .nonsports_ai import ban_pair
+        ban_pair(store, pair, f"settlement mismatch: {detail}", now)
+    counts["banned"] = len(bans)
     return counts
+
+
+def _col(row, name: str):
+    return row[name] if name in row.keys() else None
+
+
+def _pair_key_from_notes(notes: str) -> str | None:
+    for token in notes.split(","):
+        token = token.strip()
+        if token.startswith("pair="):
+            return token[len("pair="):]
+    return None
 
 
 def provisional_arb_count(con: sqlite3.Connection) -> int:
@@ -146,14 +175,17 @@ def default_resolvers() -> dict:
     return {"kalshi": kalshi_leg_result, "polymarket": polymarket_leg_result, "sx": sx_leg_result}
 
 
-def _append_recon_row(con: sqlite3.Connection, bet: sqlite3.Row, recon: Reconciliation, status: str) -> None:
-    note = f"venue-reconcile: {recon.detail} | realized={recon.realized_pnl} provisional={bet['pnl_optimistic']}"
+def _append_recon_row(con: sqlite3.Connection, bet: sqlite3.Row, recon: Reconciliation, status: str,
+                      ai_matched: bool = False, settlement_mismatch: bool = False) -> None:
+    detail = recon.detail + (" [settlement_mismatch]" if settlement_mismatch else "")
+    note = f"venue-reconcile: {detail} | realized={recon.realized_pnl} provisional={bet['pnl_optimistic']}"
     con.execute(
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind,
                               trusted, live, edge, stake_usd, legs_json, optimistic_cost,
-                              pnl_optimistic, status, placed_at, settled_at, result, notes)
-        VALUES (?, ?, ?, ?, ?, 'ARB', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              pnl_optimistic, status, placed_at, settled_at, result, notes,
+                              ai_matched, settlement_mismatch)
+        VALUES (?, ?, ?, ?, ?, 'ARB', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             bet["fingerprint"], bet["id"], bet["opened_poll_id"], bet["category"], bet["sport"],
@@ -161,5 +193,6 @@ def _append_recon_row(con: sqlite3.Connection, bet: sqlite3.Row, recon: Reconcil
             bet["optimistic_cost"], str(recon.realized_pnl), status,
             bet["placed_at"], datetime.now(timezone.utc).isoformat(),
             "AGREE" if recon.agrees else "SETTLER-ERROR", note,
+            int(ai_matched), int(settlement_mismatch),
         ),
     )

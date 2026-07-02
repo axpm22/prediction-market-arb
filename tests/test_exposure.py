@@ -27,10 +27,12 @@ def test_total_and_per_venue_exposure(tmp_path) -> None:
 
     exp = compute_exposure(store, bankroll=Decimal("1000"), per_venue_cap=Decimal("40"))
     assert exp.total_committed == Decimal("55")        # 30 + 25
-    assert exp.by_venue["kalshi"] == Decimal("55")     # both active bets touch kalshi
-    assert exp.by_venue["polymarket"] == Decimal("25")
+    # K6: each venue is charged its own LEG's stake — the $25 arb splits 12.50/12.50 by
+    # equal leg costs; the old code booked the full $25 against BOTH venues (~2x reality).
+    assert exp.by_venue["kalshi"] == Decimal("42.50")  # 30 + 12.50
+    assert exp.by_venue["polymarket"] == Decimal("12.50")
     assert not exp.over_bankroll
-    assert exp.over_venue == ["kalshi"]                # 55 > 40 cap
+    assert exp.over_venue == ["kalshi"]                # 42.50 > 40 cap
 
 
 def test_over_bankroll_flag(tmp_path) -> None:

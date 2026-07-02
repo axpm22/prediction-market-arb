@@ -535,16 +535,16 @@ def _negrisk_executable(row) -> bool:
     return has_legs and row["pnl_optimistic"] is not None and _negrisk_capturable(row["notes"]) > 0
 
 
-def _cached_clv(store: Store) -> dict[str, Any]:
+def _cached_clv(store: Store, config) -> dict[str, Any]:
     now = time.monotonic()
     if now - float(_CLV_CACHE["at"]) < CLV_CACHE_TTL_SECS:
         return _CLV_CACHE["value"]
     try:
-        from decimal import Decimal
+        # K13: the cockpit shows the DEFAULT no-vig gate metric, not the fee-loaded one
+        # documented "BIASED — comparison only"; depth floor from config, not a literal.
+        from arb.experimental.ev.clv import clv_result
 
-        from arb.experimental.ev.clv import grade_clv
-
-        value = grade_clv(store, Decimal("50"))
+        value = clv_result(store, fee_loaded=False, min_depth=config.min_executable_usd)
     except Exception:  # noqa: BLE001
         value = {"n": 0}
     _CLV_CACHE.update({"at": now, "value": value})
@@ -1010,7 +1010,7 @@ def build_state(store: Store, config) -> dict[str, Any]:
         for score in score_segments(store, config.scoring)
     ]
 
-    clv = _cached_clv(store)
+    clv = _cached_clv(store, config)
 
     # Control plane — per-version P&L head-to-head where the ledger attributes it (lanes map to
     # a kind; pure model versions have no historical per-row tag, so their P&L stays null).
@@ -1050,7 +1050,10 @@ def build_state(store: Store, config) -> dict[str, Any]:
     # Capital exposure + a single alerts list so problems surface at the top, not buried.
     from arb.exposure import compute_exposure
     per_venue_cap = config.bankroll_usd * config.max_stake_pct
-    exp = compute_exposure(store, config.bankroll_usd, per_venue_cap)
+    exp = compute_exposure(store, config.bankroll_usd, per_venue_cap,
+                           per_venue_caps=config.per_venue_caps,
+                           sport_duration_hours=config.sport_duration_hours,
+                           venue_settlement_lag_hours=config.venue_settlement_lag_hours)
     last_poll_age = _age_seconds(last_poll_finished or last_poll_started)
     alerts: list[dict[str, str]] = []
     for p in processes:

@@ -39,7 +39,11 @@ def test_kalshi_recorded_fixture_prices_and_orderbook_depth() -> None:
     adapter = KalshiAdapter(load_config(), FIXTURES)
     quotes = adapter.fetch_quotes("baseball_mlb")
     winners = {q.outcome_label: q for q in quotes if q.market_type == "WINNER"}
-    assert winners["texas rangers"].cost == Decimal("0.6200")
-    assert winners["kansas city royals"].cost == Decimal("0.4100")
+    # K11: the quote is priced FROM the orderbook (1 - best opposing bid), not the /markets
+    # snapshot — this very fixture has the two 9 points apart (snapshot 0.62 vs book 0.53),
+    # a recorded instance of the intra-quote staleness the fix removes.
+    assert winners["texas rangers"].cost == Decimal("0.5300")
+    assert winners["kansas city royals"].cost == Decimal("0.4800")
+    assert winners["texas rangers"].best_bid == Decimal("0.5200")
     # Live markets show liquidity_dollars 0 with deep books; depth must come from the orderbook.
     assert all(q.depth_usd is not None and q.depth_usd > 0 for q in winners.values())

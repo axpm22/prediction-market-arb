@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Iterator
@@ -178,8 +178,8 @@ class Store:
                 """
                 INSERT OR IGNORE INTO quotes(poll_id, scan_id, fetched_at, event_key, category, sport, venue, book,
                                    market_type, line, outcome, raw_price, cost, fee_cost, depth_usd,
-                                   max_size_usd, live)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   max_size_usd, live, best_bid)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -200,6 +200,7 @@ class Store:
                         _decimal_text(quote.depth_usd),
                         _decimal_text(quote.depth_usd),
                         int(quote.live),
+                        _decimal_text(quote.best_bid),
                     )
                     for quote in quotes
                 ],
@@ -223,6 +224,39 @@ class Store:
                     for opp in suspects
                 ],
             )
+
+    def save_left_on_table(self, poll_id: int, rows: list[dict]) -> None:
+        """Part 1: append the EV candidates a poll deliberately did NOT book (by reason), so the
+        daily report can bucket them and nothing is a silent discard."""
+        if not rows:
+            return
+        with self.connect() as con:
+            con.executemany(
+                """
+                INSERT INTO left_on_table(poll_id, reason, sport, event_key, venue, outcome, edge, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (poll_id, row["reason"], row["sport"], row["event_key"], row.get("venue"),
+                     row.get("outcome"), None if row.get("edge") is None else str(row["edge"]),
+                     _dt_text(datetime.now(timezone.utc)))
+                    for row in rows
+                ],
+            )
+
+    def load_left_on_table(self, report_date=None) -> list[dict]:
+        """Suppressed EV candidates for `report_date` (all if None). Used by the daily report's
+        left-on-table section."""
+        with self.connect() as con:
+            if report_date is None:
+                cursor = con.execute("SELECT reason, sport, event_key, venue, outcome, edge FROM left_on_table")
+            else:
+                cursor = con.execute(
+                    "SELECT reason, sport, event_key, venue, outcome, edge FROM left_on_table "
+                    "WHERE substr(created_at, 1, 10) = ?",
+                    (report_date.isoformat(),),
+                )
+            return [dict(row) for row in cursor]
 
     def save_poll_opportunities(self, poll_id: int, opportunities: list[Opportunity]) -> None:
         with self.connect() as con:
@@ -268,6 +302,31 @@ class Store:
     def list_positions(self) -> list[sqlite3.Row]:
         with self.connect() as con:
             return list(con.execute("SELECT * FROM positions ORDER BY id DESC"))
+
+    def select_bets_where(self, where: str) -> list[sqlite3.Row]:
+        """Rows matching a raw WHERE clause on flat_bets — the `arb annotate` admin preview.
+        ponytail: raw SQL predicate, trusted operator-only local tool (no network surface)."""
+        with self.connect() as con:
+            return list(con.execute(
+                f"SELECT id, sport, kind, status, placed_at, edge, notes FROM flat_bets "
+                f"WHERE {where} ORDER BY id"))
+
+    def sports_with_upcoming(self, now: datetime, lookahead_hours: int) -> set[str]:
+        """Sports where a free venue recently listed a fixture dated within the lookahead
+        window (event_key embeds the event date: `sport:YYYY-MM-DD:...`). The freshness
+        bound reuses the same window: a listing not re-observed within it is presumed
+        delisted. Lets `scan` gate Odds API spend on venue-derived activity without a
+        venue fetch of its own — watch persists every quote each poll (rule #7)."""
+        horizon = now + timedelta(hours=lookahead_hours)
+        since = now - timedelta(hours=lookahead_hours)
+        with self.connect() as con:
+            rows = con.execute(
+                """SELECT DISTINCT sport FROM quotes
+                   WHERE venue != 'oddsapi' AND fetched_at >= ?
+                     AND substr(event_key, instr(event_key, ':') + 1, 10) BETWEEN ? AND ?""",
+                (_dt_text(since), now.date().isoformat(), horizon.date().isoformat()),
+            ).fetchall()
+        return {str(row["sport"]) for row in rows}
 
 
 def quote_to_json(quote: Quote) -> dict[str, str | None]:

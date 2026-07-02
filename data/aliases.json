@@ -188,6 +188,7 @@
     "wizards": "washington wizards"
   },
   "soccer": {
+    "cabo verde": "cape verde",
     "tie": "draw"
   },
   "soccer_worldcup": {
@@ -210,5 +211,11 @@
     "us": "united states",
     "usa": "united states",
     "usmnt": "united states"
+  },
+  "mma": {
+    "benoît saint denis": "benoit saintdenis",
+    "king green": "bobby green",
+    "wang cong": "cong wang",
+    "zachary reese": "zach reese"
   }
 }

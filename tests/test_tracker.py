@@ -103,8 +103,8 @@ def test_tracker_arb_optimistic_and_confirmed_append_only(tmp_path) -> None:
     view = tracker_bet_view(store)
     assert len(view) == 1
     bet = next(iter(view.values()))
-    assert bet["optimistic"] == Decimal("0.04")
-    assert bet["confirmed"] == Decimal("0.03")
+    assert bet["optimistic"] == Decimal("0.041667")  # K10: stored at q6, not cents
+    assert bet["confirmed"] == Decimal("0.030928")
 
 
 def test_daily_report_summarizes_base_bets_not_append_rows(tmp_path) -> None:
@@ -174,27 +174,86 @@ def test_tracker_rejects_started_pregame_opportunity(tmp_path) -> None:
     assert "skip-started-event" in row["notes"]
 
 
-def test_tracker_does_not_reopen_settled_fingerprint(tmp_path) -> None:
+# Event start in ev_opp is 2026-06-20 23:05; NOW (20:00) is BEFORE it. OVER is well after the
+# event start + the default 180-min mute grace, so the event has genuinely ended by then.
+OVER = datetime(2026, 6, 21, 3, 0, tzinfo=timezone.utc)
+
+
+def _insert_terminal(con, base, status, result="WON"):
+    con.execute(
+        """INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind,
+               trusted, live, edge, stake_usd, legs_json, status, placed_at, settled_at, result, notes)
+           VALUES (?, ?, ?, 'sports', 'baseball_mlb', 'EV', 1, 0, '0.01', '1.00', ?, ?, ?, ?, ?, 'test')""",
+        (base["fingerprint"], base["id"], base["opened_poll_id"], base["legs_json"], status,
+         base["placed_at"], NOW.isoformat(), result),
+    )
+
+
+def _open_then_close(store, opp):
+    """Track an opp so it OPENs, then let it go absent so a CLOSED lifecycle row exists."""
+    record_tracker_poll(store, store.start_poll("watch"), [opp], now=NOW)
+    record_tracker_poll(store, store.start_poll("watch"), [], now=NOW)  # absent → CLOSED
+    with store.connect() as con:
+        return con.execute("SELECT * FROM flat_bets WHERE status='OPEN'").fetchone()
+
+
+def test_settled_future_event_reopens_as_new_bet(tmp_path) -> None:
+    # THE BUG: a SETTLED row for a still-future event is premature/own-settlement, so a later
+    # re-sighting must re-open via the reappearance path — NOT be terminal-fingerprint-skipped.
+    store = Store(tmp_path / "arb.sqlite")
+    opp = ev_opp("0.50")
+    base = _open_then_close(store, opp)
+    with store.connect() as con:
+        _insert_terminal(con, base, "SETTLED")
+    record_tracker_poll(store, store.start_poll("watch"), [opp], now=NOW)
+    with store.connect() as con:
+        last = con.execute("SELECT * FROM flat_bets ORDER BY id DESC LIMIT 1").fetchone()
+    assert last["status"] == "OPEN" and last["reappearance_of"] is not None
+    assert last["quality_flag"] is None
+    assert "terminal-fingerprint-skipped" not in (last["notes"] or "")
+
+
+def test_exited_fingerprint_reopens_and_never_mutes(tmp_path) -> None:
+    # EXITED (an ev-exit take-profit/stop mid-life) must reappear as a new bet, never be muted.
     store = Store(tmp_path / "arb.sqlite")
     opp = ev_opp("0.50")
     record_tracker_poll(store, store.start_poll("watch"), [opp], now=NOW)
     with store.connect() as con:
         base = con.execute("SELECT * FROM flat_bets WHERE status='OPEN'").fetchone()
-        con.execute(
-            """INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind,
-                   trusted, live, edge, stake_usd, legs_json, status, placed_at, settled_at, result, notes)
-               VALUES (?, ?, ?, 'sports', 'baseball_mlb', 'EV', 1, 0, '0.01', '1.00', ?,
-                       'SETTLED', ?, ?, 'WON', 'test-settled')""",
-            (base["fingerprint"], base["id"], base["opened_poll_id"], base["legs_json"], base["placed_at"], NOW.isoformat()),
-        )
-
+        _insert_terminal(con, base, "EXITED", result="SOLD")
     record_tracker_poll(store, store.start_poll("watch"), [opp], now=NOW)
-
     with store.connect() as con:
-        rows = list(con.execute("SELECT status, quality_flag, notes FROM flat_bets ORDER BY id"))
-    assert [row["status"] for row in rows] == ["OPEN", "SETTLED", "CLOSED"]
-    assert rows[-1]["quality_flag"] == "terminal-fingerprint-skipped"
-    assert "skip-terminal-fingerprint:SETTLED" in rows[-1]["notes"]
+        last = con.execute("SELECT * FROM flat_bets ORDER BY id DESC LIMIT 1").fetchone()
+    assert last["status"] == "OPEN" and last["reappearance_of"] is not None
+    assert "terminal-fingerprint-skipped" not in (last["notes"] or "")
+
+
+def test_settled_fingerprint_still_muted_once_event_is_over(tmp_path) -> None:
+    # Valid case preserved: once the event has genuinely ended, a SETTLED fingerprint's
+    # re-sighting IS skipped (no resurrecting a finished market).
+    store = Store(tmp_path / "arb.sqlite")
+    opp = ev_opp("0.50")
+    record_tracker_poll(store, store.start_poll("watch"), [opp], now=NOW)
+    with store.connect() as con:
+        base = con.execute("SELECT * FROM flat_bets WHERE status='OPEN'").fetchone()
+        _insert_terminal(con, base, "SETTLED")
+    record_tracker_poll(store, store.start_poll("watch"), [opp], now=OVER)
+    with store.connect() as con:
+        last = con.execute("SELECT status, quality_flag, notes FROM flat_bets ORDER BY id DESC LIMIT 1").fetchone()
+    assert last["status"] == "CLOSED" and last["quality_flag"] == "terminal-fingerprint-skipped"
+    assert "skip-terminal-fingerprint:SETTLED" in last["notes"]
+
+
+def test_active_position_is_not_double_opened(tmp_path) -> None:
+    # Weakness #4 preserved: a currently-active OPEN position re-sighted is not opened twice.
+    store = Store(tmp_path / "arb.sqlite")
+    opp = ev_opp("0.50")
+    record_tracker_poll(store, store.start_poll("watch"), [opp], now=NOW)
+    record_tracker_poll(store, store.start_poll("watch"), [opp], now=NOW)  # re-sighted, still active
+    with store.connect() as con:
+        opens = con.execute("SELECT COUNT(*) n FROM flat_bets WHERE status='OPEN' AND fingerprint=?",
+                            (opp.fingerprint,)).fetchone()["n"]
+    assert opens == 1  # the re-sighting confirmed/linked, it did not create a second OPEN
 
 
 def test_tracker_blocks_duplicate_position_same_poll(tmp_path) -> None:

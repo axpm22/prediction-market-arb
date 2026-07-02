@@ -39,5 +39,12 @@ def annotate(store: Store, bet_id: int, tag: str, reason: str) -> int:
 
 def annotated_bet_ids(store: Store) -> set[int]:
     with store.connect() as con:
-        con.executescript(SCHEMA)
-        return {int(row["bet_id"]) for row in con.execute("SELECT DISTINCT bet_id FROM annotations")}
+        return annotated_ids(con)
+
+
+def annotated_ids(con) -> set[int]:
+    """Bet ids carrying ANY annotation (all tags) — the exclusion set every honest-variant /
+    clean report reader consults so annotated rows (e.g. bug:settled-rebook-loop) never enter a
+    P&L cell. Ensures the annotations table exists first, so readers are safe on a fresh DB."""
+    con.executescript(SCHEMA)
+    return {int(row["bet_id"]) for row in con.execute("SELECT DISTINCT bet_id FROM annotations")}

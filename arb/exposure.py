@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from .store import Store
@@ -33,7 +33,9 @@ class Exposure:
 
 def compute_exposure(store: Store, bankroll: Decimal, per_venue_cap: Decimal,
                      per_venue_caps: dict[str, Decimal] | None = None,
-                     now: datetime | None = None) -> Exposure:
+                     now: datetime | None = None,
+                     sport_duration_hours: dict | None = None,
+                     venue_settlement_lag_hours: dict | None = None) -> Exposure:
     now = now or datetime.now(timezone.utc)
     per_venue_caps = per_venue_caps or {}
     by_venue: dict[str, Decimal] = {}
@@ -54,30 +56,62 @@ def compute_exposure(store: Store, bankroll: Decimal, per_venue_cap: Decimal,
             legs = json.loads(row["legs_json"] or "[]")
         except (TypeError, json.JSONDecodeError):
             legs = []
-        venues = {str(leg.get("venue")) for leg in legs if leg.get("venue")} or {"unknown"}
-        # Each venue leg ties up that venue's own capital for the bet's stake.
-        for venue in venues:
-            by_venue[venue] = by_venue.get(venue, Decimal("0")) + stake
-        duration_weighted += stake * _days_to_settlement(legs, now)
+        # K6: each venue is charged its own LEG's stake, not the whole bet's. An arb split
+        # $0.52/$0.48 across two venues used to book $1.00 against BOTH caps (~2x reality).
+        # Leg share = leg effective cost / total cost (how equalized_arb_stakes splits).
+        for venue, share in _venue_stakes(legs, stake).items():
+            by_venue[venue] = by_venue.get(venue, Decimal("0")) + share
+        duration_weighted += stake * _days_to_settlement(legs, now, sport_duration_hours,
+                                                         venue_settlement_lag_hours)
     caps = {v: per_venue_caps.get(v, per_venue_cap) for v in by_venue}
     over_venue = sorted(v for v, amt in by_venue.items() if amt > caps[v])
     return Exposure(total, bankroll, by_venue, total > bankroll, over_venue,
                     duration_weighted_usd_days=Decimal(str(round(duration_weighted, 2))), caps=caps)
 
 
-def _days_to_settlement(legs: list[dict], now: datetime) -> Decimal:
-    starts = []
+def _venue_stakes(legs: list[dict], stake: Decimal) -> dict[str, Decimal]:
+    """K6: apportion a bet's stake to venues by each leg's cost share (the same proportion
+    equalized_arb_stakes staked them at). Single-venue bets get the full stake."""
+    costs: dict[str, Decimal] = {}
+    for leg in legs:
+        venue = str(leg.get("venue") or "unknown")
+        try:
+            cost = Decimal(str(leg.get("cost") or "0")) + Decimal(str(leg.get("fee_cost") or "0"))
+        except Exception:  # noqa: BLE001 — malformed leg -> charge nothing extra for it
+            cost = Decimal("0")
+        costs[venue] = costs.get(venue, Decimal("0")) + max(cost, Decimal("0"))
+    if len(costs) <= 1:
+        return {venue: stake for venue in (costs or {"unknown": None})}
+    total_cost = sum(costs.values(), Decimal("0"))
+    if total_cost <= 0:
+        return {venue: stake for venue in costs}  # unknown split -> conservative full charge
+    return {venue: (stake * cost / total_cost).quantize(Decimal("0.01")) for venue, cost in costs.items()}
+
+
+def _days_to_settlement(legs: list[dict], now: datetime,
+                        sport_duration_hours: dict | None = None,
+                        venue_settlement_lag_hours: dict | None = None) -> Decimal:
+    """K6/C4: days capital is locked — max over legs of (start + game duration + that venue's
+    payout lag), matching detection's capital charge. Falls back to bare start when the
+    duration/lag tables aren't supplied."""
+    finals = []
     for leg in legs:
         raw = leg.get("start_utc")
         if not raw:
             continue
         try:
-            starts.append(datetime.fromisoformat(str(raw).replace("Z", "+00:00")).astimezone(timezone.utc))
+            start = datetime.fromisoformat(str(raw).replace("Z", "+00:00")).astimezone(timezone.utc)
         except ValueError:
             continue
-    if not starts:
+        if sport_duration_hours is not None and venue_settlement_lag_hours is not None:
+            sport = str(leg.get("event_key") or "").split(":", 1)[0]
+            dur = sport_duration_hours.get(sport, Decimal("4"))
+            lag = venue_settlement_lag_hours.get(str(leg.get("venue")), Decimal("24"))
+            start = start + timedelta(hours=float(dur) + float(lag))
+        finals.append(start)
+    if not finals:
         return Decimal("0")
-    days = (max(starts) - now).total_seconds() / 86400.0
+    days = (max(finals) - now).total_seconds() / 86400.0
     return Decimal(str(max(0.0, days)))
 
 

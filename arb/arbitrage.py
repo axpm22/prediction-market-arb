@@ -84,14 +84,15 @@ def status_for_legs(legs: list[Quote], trusted_pairs: set[str]) -> tuple[str, tu
 
 def build_event(event_key: str, quotes: list[Quote]) -> Event:
     first = quotes[0]
-    start = first.start_utc or datetime.now(timezone.utc)
+    # K9/D1: NEVER invent a start. A start-unknown event stays None (non-actionable
+    # downstream); stamping "now" persisted a fabricated time that lied to later analysis.
     return Event(
         event_key=event_key,
         category="sports",
         sport=first.sport,
         home=first.home or "",
         away=first.away or "",
-        start_utc=start,
+        start_utc=first.start_utc,
     )
 
 
@@ -153,9 +154,18 @@ def detect_true_arbs(
         if match_suspect_prob_diff is not None and same_outcome_spread(event_quotes) > match_suspect_prob_diff:
             continue
         roi = q6(Decimal("1") / total_cost - Decimal("1"))
+        # K4: the C1 simultaneity haircut is computed BEFORE sizing so sizing consumes the
+        # ADJUSTED edge (skew·velocity per $1 payout), not the raw margin.
+        skew_haircut = Decimal("0")
+        adj_edge: Decimal | None = None
+        if line_velocity is not None:
+            skew = leg_skew_secs(best_legs)
+            velocity = line_velocity.get(event_quotes[0].sport, line_velocity.get("default", Decimal("0.001")))
+            skew_haircut = q6(Decimal(str(skew)) * Decimal(str(velocity)))
+            adj_edge = q6(q6(Decimal("1") - total_cost) - skew_haircut)
         # Microstructure capacity from the depth ladders: break-even size (where the lock goes
         # negative), profit-max size, and whether edge or depth is the binding limit.
-        cap = max_economic_arb_size_quotes(best_legs)
+        cap = max_economic_arb_size_quotes(best_legs, haircut_per_contract=skew_haircut)
         arb_budget = budget
         if size_by_ladder and cap.feasible and cap.profitmax_stake_usd > 0:
             # Stake a safety fraction of the profit-max ladder size — the size that jointly
@@ -164,7 +174,8 @@ def detect_true_arbs(
             # (fillable_fraction) discounts displayed depth for sizing; the stored book is left
             # honest. Both knobs live in config (no magic numbers, hard rule #4).
             sized = ladder_scaled_stake_quotes(
-                best_legs, bankroll, max_stake_pct, size_safety_frac, fillable_fraction
+                best_legs, bankroll, max_stake_pct, size_safety_frac, fillable_fraction,
+                haircut_per_contract=skew_haircut,
             )
             if sized > 0:
                 arb_budget = sized
@@ -182,15 +193,11 @@ def detect_true_arbs(
         if max_leg_skew_secs is not None and leg_skew_secs(best_legs) > max_leg_skew_secs:
             status = "REVIEW"
             notes = tuple([*notes, f"time-skew:{int(leg_skew_secs(best_legs))}s"])
-        # C1 simultaneity haircut (continuous): legs fetched seconds apart were not live together,
-        # so decay the edge by skew·velocity and bar the arb if it was never simultaneous or the
-        # adjusted margin is gone. adj_edge (not raw edge) is what sizing/ranking should trust.
+        # C1 simultaneity gates (haircut/adj_edge computed above, before sizing — K4): bar the
+        # arb if it was never simultaneous or the adjusted margin is gone.
         if line_velocity is not None:
             skew = leg_skew_secs(best_legs)
-            velocity = line_velocity.get(event_quotes[0].sport, line_velocity.get("default", Decimal("0.001")))
-            haircut = q6(Decimal(str(skew)) * Decimal(str(velocity)))
-            adj_edge = q6(q6(Decimal("1") - total_cost) - haircut)
-            notes = tuple([*notes, f"skew={int(skew)}s,haircut={haircut},adj_edge={adj_edge}"])
+            notes = tuple([*notes, f"skew={int(skew)}s,haircut={skew_haircut},adj_edge={adj_edge}"])
             if max_actionable_skew_secs is not None and skew > max_actionable_skew_secs:
                 status = "REVIEW"
                 notes = tuple([*notes, "skew-nonsimultaneous"])
@@ -231,6 +238,7 @@ def detect_true_arbs(
                 legs=best_legs,
                 edge=roi,
                 edge_points=q6(Decimal("1") - total_cost),  # margin below $1, comparable
+                adj_edge=adj_edge,  # K4: skew-adjusted edge as data, not note prose
                 stakes=stakes,
                 status=status,  # type: ignore[arg-type]
                 notes=notes,
@@ -290,6 +298,12 @@ def detect_divergences(
             continue
         grouped[(quote.event_key, quote.market_type, quote.line, quote.outcome_label)].append(quote)
 
+    # K8: one event_key -> quotes index instead of rescanning every quote per divergence
+    # (was O(groups x total quotes) per poll).
+    quotes_by_event: dict[str, list[Quote]] = defaultdict(list)
+    for quote in quotes:
+        quotes_by_event[quote.event_key].append(quote)
+
     opportunities: list[Opportunity] = []
     for (event_key, _market_type, _line, _outcome), outcome_quotes in grouped.items():
         venues = {quote.venue for quote in outcome_quotes}
@@ -312,7 +326,7 @@ def detect_divergences(
         if max_start_drift_mins is not None and start_drift_secs([cheapest, priciest]) > max_start_drift_mins * 60:
             status = "REVIEW"
             notes = tuple([*notes, "match-suspect-start-drift"])
-        event_quotes = [quote for quote in quotes if quote.event_key == event_key]
+        event_quotes = quotes_by_event.get(event_key, [])
         opportunities.append(
             Opportunity(
                 kind="DIVERGENCE",

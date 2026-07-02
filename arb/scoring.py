@@ -46,10 +46,11 @@ def _settled_clean_bets(store: Store) -> list[dict]:
             con.execute(
                 """
                 SELECT sport, kind, result, pnl_optimistic, pnl_confirmed, stake_usd,
-                       placed_at, settled_at, edge_points, optimistic_cost
+                       placed_at, settled_at, edge_points, optimistic_cost, p_hat
                   FROM flat_bets
                  WHERE status = 'SETTLED' AND result IN ('WON','LOST','VOID','RESOLVED')
                    AND (quality_flag IS NULL)
+                   AND id NOT IN (SELECT bet_id FROM annotations)  -- PURGE_LOOP_PNL: no loop rows in scores
                  ORDER BY id
                 """
             )
@@ -59,9 +60,11 @@ def _settled_clean_bets(store: Store) -> list[dict]:
 
 def segment_calibration(bets_by_segment: dict[str, list[dict]], bins: int = 10,
                         min_n: int | None = None) -> dict[str, float]:
-    """EV#10: per-segment ECE from settled EV bets' (p_hat, won). p_hat = optimistic_cost +
-    edge_points (edge_points = p_hat - effective_cost). A segment can clear the ROI gate on
-    variance while its p_hat is badly calibrated; this measures that directly.
+    """EV#10: per-segment ECE from settled EV bets' (p_hat, won). K14: use the STORED raw
+    p_hat column when present — reconstructing p̂ as optimistic_cost + edge_points folds the
+    push/decay haircuts into a number that was never the model's probability estimate (on an
+    integer MLB total the Poisson push haircut alone is ~13% of the edge). The reconstruction
+    stays only as the fallback for pre-column rows.
 
     B10: ECE over ~1 sample/bin is pure noise, so a segment with only `bins` rows must not be
     blocked on it. `min_n` is the minimum calibratable sample before ECE is reported at all;
@@ -73,9 +76,14 @@ def segment_calibration(bets_by_segment: dict[str, list[dict]], bins: int = 10,
     for seg, bets in bets_by_segment.items():
         rows = []
         for b in bets:
-            if b.get("edge_points") in (None, "") or b.get("optimistic_cost") in (None, "") or b["result"] not in ("WON", "LOST"):
+            if b["result"] not in ("WON", "LOST"):
                 continue
-            p_hat = float(b["optimistic_cost"]) + float(b["edge_points"])
+            if b.get("p_hat") not in (None, ""):
+                p_hat = float(b["p_hat"])  # K14: the real estimate, pre-haircut
+            elif b.get("edge_points") not in (None, "") and b.get("optimistic_cost") not in (None, ""):
+                p_hat = float(b["optimistic_cost"]) + float(b["edge_points"])  # legacy rows
+            else:
+                continue
             if 0.0 < p_hat < 1.0:
                 rows.append({"p_you": p_hat, "outcome": 1 if b["result"] == "WON" else 0})
         if len(rows) >= floor:
@@ -145,12 +153,24 @@ def score_segments(store: Store, scoring_cfg: dict) -> list[SegmentScore]:
             scores.append(SegmentScore(seg, n, round(win_rate, 4), round(roi, 4), 0.0,
                                        INSUFFICIENT, round(confirmation_rate, 4)))
             continue
-        raw = 100.0 * (
-            w_roi * _sigmoid_norm(roi)
-            + w_trend * _sigmoid_norm(trend)
-            + w_n * (min(n, n_cap) / n_cap)
-            + w_wr * win_rate
-        )
+        # K15: a kind without WON/LOST semantics (ARB settles RESOLVED) has win_rate
+        # identically 0 — dropping w_wr and renormalizing keeps it from forfeiting 15% of
+        # its score for a reason unrelated to performance.
+        has_wl = any(b["result"] in ("WON", "LOST") for b in bets)
+        if has_wl:
+            raw = 100.0 * (
+                w_roi * _sigmoid_norm(roi)
+                + w_trend * _sigmoid_norm(trend)
+                + w_n * (min(n, n_cap) / n_cap)
+                + w_wr * win_rate
+            )
+        else:
+            denom = (w_roi + w_trend + w_n) or 1.0
+            raw = 100.0 * (
+                w_roi * _sigmoid_norm(roi)
+                + w_trend * _sigmoid_norm(trend)
+                + w_n * (min(n, n_cap) / n_cap)
+            ) / denom
         score = round(raw, 1)
         tier = _tier_for(score, tiers, block_below)
         # EV#10: a poorly-calibrated segment is blocked regardless of ROI (variance can pass
