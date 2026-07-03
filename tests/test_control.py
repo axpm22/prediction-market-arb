@@ -19,11 +19,11 @@ def cfg(tmp_path):
 
 
 def test_overlay_deep_merges_and_load_config_reflects_it(cfg):
-    assert load_config(cfg).devig_method == "proportional"  # canonical baseline
+    assert load_config(cfg).devig_method == "power"  # canonical baseline (Phase A: proportional→power)
     res = control.set_control("devig_method", "shin", base=cfg)
     assert res["ok"] and res["value"] == "shin"
     # canonical file untouched; overlay carries the change; load_config merges it.
-    assert "proportional" in cfg.read_text() and "devig_method: shin" not in cfg.read_text()
+    assert "devig_method: power" in cfg.read_text() and "devig_method: shin" not in cfg.read_text()
     assert overlay_path(cfg).exists()
     assert effective_raw(cfg)["devig_method"] == "shin"
     assert load_config(cfg).devig_method == "shin"

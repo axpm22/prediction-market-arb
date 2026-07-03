@@ -71,6 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("dashboard", help="regenerate reports/dashboard.json from the ledger (Phase 6)")
     regrade = sub.add_parser("regrade", help="score consensus vs venue mids on settled events + EV-subset (Phase A)")
     regrade.add_argument("--sport", default="baseball_mlb")
+    regrade.add_argument("--db", default=None,
+                         help="analyze an archive DB read-only (e.g. data/archive-pre-v2/arb.sqlite) instead of live")
     sub.add_parser("status", help="every loop: alive/dead, beats, code version, last poll (Phase D)")
     sub.add_parser("supervisor", help="own + restart all enabled loops; single-run (Phase D)")
     sub.add_parser("check-invariants", help="ledger integrity scan (5 checks); CRITICAL, never blocks (02)")
@@ -188,10 +190,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "regrade":
         from .experimental.analysis.regrade import ev_subset_test, format_regrade, score_sources
         from .experimental.analysis.devig_brier import format_methods, score_methods
-        sources = score_sources(store, args.sport)
-        print(format_regrade(sources, ev_subset_test(store)))
+        # --db opens an archive read-only (Phase A analysis lives in the archive, not the fresh DB).
+        target = Store(Path(args.db), read_only=True) if args.db else store
+        if args.db:
+            print(f"regrade: analyzing {args.db} (read-only); scores via MLB Stats (free/keyless oracle).")
+        sources = score_sources(target, args.sport)
+        print(format_regrade(sources, ev_subset_test(target)))
         print("\nDe-vig method regrade (pick devig_method by whichever wins):")
-        print(format_methods(score_methods(store, config.min_books_for_consensus)))
+        print(format_methods(score_methods(target, config.min_books_for_consensus)))
         return 0
     if args.command == "dashboard":
         from .experimental.dashboard import write_dashboard
@@ -350,6 +356,14 @@ def run_watch(args: argparse.Namespace, config, store: Store) -> int:
         time.sleep(config.watch_interval_secs)
 
 
+def bookable_opportunities(kept: list, ev_enabled: bool) -> list:
+    """Phase A freeze: when ev_enabled is false, consensus EV flags (kind 'EV' — pregame + micro)
+    are recorded as opportunities but never booked as paper bets, because the archive regrade showed
+    the consensus is a worse forecaster than venue mids (the flag selects consensus error, not edge).
+    LIVE_BASEBALL_EV and every other kind are untouched. One gate, in one place."""
+    return kept if ev_enabled else [o for o in kept if o.kind != "EV"]
+
+
 def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
     fixture_dir = Path("tests/fixtures") if args.fixtures else None
     adapters = [
@@ -470,10 +484,17 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
 
     poll_id = store.start_poll("watch")
     store.save_poll_quotes(poll_id, [*pregame, *in_play])
-    store.save_poll_opportunities(poll_id, kept)
+    store.save_poll_opportunities(poll_id, kept)  # opportunities still recorded (study data)
     store.save_suspect_matches(poll_id, suspects)
     store.save_left_on_table(poll_id, ev_suppressed)
-    record_tracker_poll(store, poll_id, kept, load_validation_rule(config),
+    # Phase A verdict (2026-07-02): consensus is a worse forecaster than venue mids, so EV flags
+    # are anti-edge. Freeze EV BET creation (kind EV = pregame + micro, both consensus-based) while
+    # still recording the opportunities above for the venue-leads-books study. LIVE_BASEBALL_EV
+    # (in-play, own lane) is unaffected.
+    bookable = bookable_opportunities(kept, config.ev_enabled)
+    if not config.ev_enabled and len(bookable) != len(kept):
+        print(f"ev_enabled=false: {len(kept) - len(bookable)} EV flag(s) recorded but NOT booked (Phase A freeze).")
+    record_tracker_poll(store, poll_id, bookable, load_validation_rule(config),
                         terminal_mute_grace_mins=config.tracker_terminal_mute_grace_mins,
                         failed_venues=failed_venues, dormant_sports=dormant,
                         event_starts=event_start_map(quotes, config.unreliable_start_venues))

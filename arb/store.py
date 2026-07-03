@@ -21,13 +21,27 @@ def _dt_text(value: datetime) -> str:
 
 
 class Store:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, read_only: bool = False) -> None:
         self.path = path
+        self.read_only = read_only
+        # Read-only mode (archive/oracle DBs): never create dirs, migrate, or set WAL — the file
+        # is opened `mode=ro` so any accidental write raises. Used by `arb regrade --db <archive>`.
+        if read_only:
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.init_db()
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
+        if self.read_only:
+            con = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True, timeout=30)
+            con.row_factory = sqlite3.Row
+            try:
+                con.execute("PRAGMA busy_timeout=30000")
+                yield con  # no commit — the connection cannot write
+            finally:
+                con.close()
+            return
         con = sqlite3.connect(self.path, timeout=30)
         con.row_factory = sqlite3.Row
         try:

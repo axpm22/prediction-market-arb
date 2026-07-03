@@ -30,7 +30,9 @@ min_books_for_consensus_totals: 2
 # De-vig method for sportsbook consensus: proportional (crude, favorite-biased), power, or
 # shin. Proportional is the historical default; power/shin correct favorite-longshot bias.
 # Pick empirically by which minimizes Brier/log-loss on settled outcomes (devig-regrade).
-devig_method: proportional
+# 2026-07-02 (prompt 04 Phase A regrade, archive n=30): power wins Brier 0.22041 vs proportional
+# 0.22217 vs shin 0.22099 — matches the PREREGISTRATION_V2 freeze. Flipped proportional→power.
+devig_method: power
 # Drop a book whose de-vigged prob for any outcome is more than this many points from the
 # cross-book median (a stale/mis-scaled book). Blank = off (preserves frozen test vectors).
 consensus_outlier_points:
@@ -113,6 +115,13 @@ watch_interval_secs: 60
 # (EV_SPEC §5). Betting is still NOT enabled — every EV flag is forced REVIEW via
 # event-match-review and never advanced to a bet until the CLV gate + whitelist pass.
 consensus_enabled: true
+# Phase A verdict (2026-07-02, prompt 04): the de-vigged consensus is a WORSE forecaster than
+# venue mids on the archive (Brier: consensus 0.2379 vs polymarket 0.2209 / kalshi 0.2230; ECE
+# 0.30 vs ~0.07-0.11) and the EV-subset venue side won only 420/877 (0.479). Per the pre-committed
+# Phase A rule (venue mids beat consensus → EV lane sign is inverted), EV BET creation is frozen.
+# Consensus is still computed/recorded so the divergence can be studied as a venue-leads-books
+# indicator. Re-enable only if a re-run flips the verdict. LIVE_BASEBALL_EV is a separate lane.
+ev_enabled: false
 
 # Closing-line EV recorder (python -m arbnext closing) — separate process, main daemon
 # untouched. One consensus snapshot per event, taken in the final minutes before start;

@@ -179,10 +179,31 @@ def write_daily_report(store: Store, report_date: date | None = None, output_dir
         writer.writeheader()
         for record in records:
             writer.writerow(_csv_record(record))
+    # Phase A premise monitor line — never let a scoring hiccup (or missing scores oracle) break
+    # the report; the line is simply omitted if it can't be computed.
+    premise = None
+    try:
+        from .experimental.analysis.regrade import rolling_brier
+        premise = rolling_brier(store)
+    except Exception:  # noqa: BLE001
+        premise = None
     md_path.write_text(_daily_markdown(report_date, records, cumulative_records,
                                        store.load_left_on_table(report_date),
-                                       _data_quality(store, report_date)))
+                                       _data_quality(store, report_date), premise=premise))
     return csv_path, md_path
+
+
+def _premise_monitor_lines(premise: dict | None) -> list[str]:
+    """Phase A premise monitor: one rolling line comparing consensus vs best-venue-mid Brier so the
+    EV lane's core assumption (consensus = truth) stays continuously visible. Omitted when there is
+    no settled consensus data yet. Pure formatter — the numbers come from regrade.rolling_brier."""
+    if not premise or premise.get("consensus_brier") is None or premise.get("venue_brier") is None:
+        return []
+    cb, vb, n = premise["consensus_brier"], premise["venue_brier"], int(premise.get("n_consensus") or 0)
+    verdict = "consensus sharper" if cb < vb else "venue mids sharper — EV premise inverted (Phase A)"
+    return ["## Premise Monitor (Phase A)", "",
+            f"- rolling consensus vs venue-mid Brier (n={n}): consensus {cb} vs venue {vb} — {verdict}",
+            ""]
 
 
 def _data_quality_lines(data_quality: dict[str, object] | None) -> list[str]:
@@ -663,7 +684,8 @@ def _left_on_table_rows(rows: list[dict]) -> list[list[str]]:
 
 
 def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulative_records: list[dict[str, object]],
-                    left_on_table: list[dict] | None = None, data_quality: dict[str, object] | None = None) -> str:
+                    left_on_table: list[dict] | None = None, data_quality: dict[str, object] | None = None,
+                    premise: dict | None = None) -> str:
     headline = _headline_records(records)
     cumulative_headline = _headline_records(cumulative_records)
     lines = [
@@ -673,6 +695,7 @@ def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulat
         "",
         _headline_line(headline),
         "",
+        *_premise_monitor_lines(premise),
         *_data_quality_lines(data_quality),
         "## Class x Fill x Trust",
         "",
