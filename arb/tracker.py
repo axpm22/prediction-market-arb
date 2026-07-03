@@ -61,9 +61,21 @@ def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportun
     with store.connect() as con:
         active = _active_rows(con, only_kinds)
         active_positions = _active_position_keys(con, only_kinds)
+        # Absent-close must only ever close fingerprints owned by THIS poll's cadence (the
+        # poll-kind that opened the active row). Watch, focus, ev-exit, etc. interleave polls;
+        # a fingerprint's absence from a different cadence's opportunity list proves nothing
+        # (watch never emits focus's CLOSE/DIVERGENCE bets), and closing it churns the ledger
+        # into duplicate close/reopen chains. only_kinds (bet-kind) can't separate them because
+        # watch and focus BOTH emit DIVERGENCE — ownership is the poll cadence, not the bet kind.
+        this_kind = _poll_kind(con, poll_id)
+        owner_kind = _poll_kinds(con, {int(r["opened_poll_id"]) for r in active.values()})
         seen_positions: set[str] = set()
         for fingerprint, row in active.items():
-            if (fingerprint not in current
+            owned_by_this_cadence = (
+                this_kind is None or owner_kind.get(int(row["opened_poll_id"])) == this_kind
+            )
+            if (owned_by_this_cadence
+                    and fingerprint not in current
                     and not _touches_failed_venue(row, failed_venues)
                     and row["sport"] not in (dormant_sports or ())):
                 _insert_close_row(con, poll_id, fingerprint, int(row["id"]), "absent-one-poll")
@@ -218,6 +230,22 @@ def tracker_bet_view(store: Store) -> dict[str, dict[str, Decimal | None]]:
         if row["status"] == "CONFIRMED" and view[row["fingerprint"]]["confirmed"] is None and row["pnl_confirmed"]:
             view[row["fingerprint"]]["confirmed"] = Decimal(row["pnl_confirmed"])
     return dict(view)
+
+
+def _poll_kind(con, poll_id: int) -> str | None:
+    row = con.execute("SELECT kind FROM polls WHERE id = ?", (poll_id,)).fetchone()
+    return None if row is None else row["kind"]
+
+
+def _poll_kinds(con, poll_ids: set[int]) -> dict[int, str]:
+    """Map each poll id to its cadence (kind) in one query — O(1) per absent-close pass."""
+    if not poll_ids:
+        return {}
+    placeholders = ",".join("?" * len(poll_ids))
+    rows = con.execute(
+        f"SELECT id, kind FROM polls WHERE id IN ({placeholders})", tuple(poll_ids)
+    ).fetchall()
+    return {int(r["id"]): r["kind"] for r in rows}
 
 
 def _active_rows(con, only_kinds: tuple[str, ...] | None = None) -> dict[str, object]:
