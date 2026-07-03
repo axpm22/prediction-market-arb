@@ -87,3 +87,83 @@ def median(values: list[Decimal]) -> Decimal | None:
     s = sorted(values)
     mid = len(s) // 2
     return s[mid] if len(s) % 2 else (s[mid - 1] + s[mid]) / 2
+
+
+def _mean(values: list[Decimal]) -> Decimal | None:
+    return (sum(values, Decimal("0")) / len(values)).quantize(Decimal("0.000001")) if values else None
+
+
+def _leg_markouts_for_bets(store) -> list[dict]:
+    """For every EV/ARB bet leg (annotated rows excluded), the same-outcome mid at each horizon
+    from the persisted quotes. Read-only; safe on a `mode=ro` archive. mid is None when no quote
+    lands in the horizon's tolerance window (the gap is recorded, never fetched specially)."""
+    import json
+    from arb.experimental.annotations import annotated_ids
+    with store.connect() as con:
+        excluded = annotated_ids(con)
+        bets = [dict(r) for r in con.execute(
+            "SELECT id, placed_at, legs_json FROM flat_bets "
+            "WHERE kind IN ('EV','ARB') AND placed_at IS NOT NULL")]
+    out: list[dict] = []
+    for bet in bets:
+        if int(bet["id"]) in excluded or not bet["placed_at"]:
+            continue
+        entry = _parse(bet["placed_at"])
+        for leg in json.loads(bet["legs_json"] or "[]"):
+            ek, venue = leg.get("event_key"), leg.get("venue")
+            outcome = leg.get("outcome_label") or leg.get("outcome")
+            entry_cost = leg.get("cost")
+            if not (ek and venue and outcome and entry_cost not in (None, "")):
+                continue
+            entry_dec = Decimal(str(entry_cost))
+            for h in HORIZONS:
+                m = markout_at(store, str(ek), str(venue), str(outcome), entry, h)
+                out.append({"bet_id": int(bet["id"]), "venue": str(venue), "horizon": h,
+                            "entry": entry_dec, "mid": None if m is None else m["mid"],
+                            "ask": None if m is None else m["ask"], "bid": None if m is None else m["bid"]})
+    return out
+
+
+def persist_markouts(store) -> int:
+    """Persist hook: UPSERT each bet leg's markout samples into `markouts` (operational table —
+    UPDATE allowed). Uses only quotes the loops already fetched (no new HTTP). A horizon with no
+    quote in-window is stored NULL. Idempotent. Never call on a read-only DB (use markout_summary).
+    Returns rows written."""
+    samples = _leg_markouts_for_bets(store)  # read phase (own connections)
+    with store.connect() as con:             # write phase
+        for s in samples:
+            con.execute(
+                """INSERT INTO markouts(bet_id, horizon_secs, mid, ask, bid, recorded_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(bet_id, horizon_secs) DO UPDATE
+                     SET mid=excluded.mid, ask=excluded.ask, bid=excluded.bid,
+                         recorded_at=excluded.recorded_at""",
+                (s["bet_id"], s["horizon"],
+                 None if s["mid"] is None else str(s["mid"]),
+                 None if s["ask"] is None else str(s["ask"]),
+                 None if s["bid"] is None else str(s["bid"]),
+                 datetime.now(timezone.utc).isoformat()))
+    return len(samples)
+
+
+def markout_summary(store) -> dict[int, dict]:
+    """Per-horizon markout stats across all bet legs (read-only; works on the archive). markout =
+    mid(H) − entry, signed; persistently negative = adverse selection. {horizon: {n, median, mean}}."""
+    samples = _leg_markouts_for_bets(store)
+    by_h: dict[int, list[Decimal]] = {h: [] for h in HORIZONS}
+    for s in samples:
+        if s["mid"] is not None:
+            by_h[s["horizon"]].append(markout_cents(s["entry"], s["mid"]))
+    return {h: {"n": len(v), "median": median(v), "mean": _mean(v)} for h, v in by_h.items()}
+
+
+def format_markout_summary(summary: dict[int, dict]) -> str:
+    label = {30: "+30s", 120: "+2m", 600: "+10m", 1800: "+30m"}
+    lines = ["Markout (mid at horizon − entry; negative = adverse selection):",
+             f"  {'horizon':>8}{'n':>7}{'median':>12}{'mean':>12}"]
+    for h in HORIZONS:
+        st = summary.get(h, {})
+        med = "—" if st.get("median") is None else f"{st['median']:+f}"
+        mean = "—" if st.get("mean") is None else f"{st['mean']:+f}"
+        lines.append(f"  {label[h]:>8}{st.get('n', 0):>7}{med:>12}{mean:>12}")
+    return "\n".join(lines)
