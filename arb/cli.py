@@ -959,6 +959,10 @@ def detect_ev_from_consensus(
         is_stale = computed_at < pregame_cutoff
         if is_stale:
             notes = (*notes, "stale-consensus")
+        # Phase F: stamp the consensus age (secs) on every EV row, so the edge-bucket report can
+        # add an age dimension and consensus_max_age_hours stops being a guess.
+        consensus_age_secs = int(max(0.0, (now - computed_at).total_seconds()))
+        notes = (*notes, f"consensus_age_secs:{consensus_age_secs}")
         if quote.depth_usd is not None:
             notes = (*notes, f"capturable:{q6(quote.depth_usd * eff_edge)}")
         # EV#3: consensus uncertainty. The cross-book dispersion is an SE proxy. Gate on
