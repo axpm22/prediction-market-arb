@@ -21,6 +21,8 @@ reports/dashboard.json
 data/test_baseline.txt
 data/stop-*
 data/*.meta
+# Machine-written lived-settlement observations (rebuildable from the ledger via `arb reconcile`)
+data/settlement_matrix_observed.yaml
 
 # Read-only V1 archive DB (3GB+) — oracle data, never in history
 data/archive-pre-v2/

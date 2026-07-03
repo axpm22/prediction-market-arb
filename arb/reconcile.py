@@ -84,6 +84,7 @@ def reconcile_settlements(store: Store, leg_resolver) -> dict[str, int]:
     just because one venue lacks a resolver. Returns {checked, agree, corrected, skipped}."""
     counts = {"checked": 0, "agree": 0, "corrected": 0, "skipped": 0, "mismatch": 0}
     bans: list[tuple[str, str]] = []
+    observed: list[tuple[str, list, int, str]] = []  # Phase B: (sport, leg venues, bet_id, detail)
     with store.connect() as con:
         bets = list(con.execute(
             """
@@ -114,16 +115,20 @@ def reconcile_settlements(store: Store, leg_resolver) -> dict[str, int]:
             recon = reconcile_arb(leg_results, provisional)
             status = "RECONCILED" if recon.agrees else "CORRECTED"
             counts["agree" if recon.agrees else "corrected"] += 1
-            # STRIKE_AWARE: an AI-matched pair whose venues resolved inconsistently is the
-            # fake-arb the rules feared. Flag the row and queue a ban so it is never re-bet;
-            # the mismatch counter is the single most important output of the AI lane.
+            # Phase B retro-check: ANY cross-venue settled bet whose venues resolved inconsistently
+            # is a lived settlement mismatch — the named #1 fake-arb source, now observed. Flag it,
+            # record observed reality so the sport's matrix section reverts the pair to REVIEW, and
+            # (for AI-matched pairs) queue a ban. STRIKE_AWARE: the AI-lane mismatch counter.
             is_ai = bool(_col(bet, "ai_matched"))
-            mismatch = is_ai and not recon.agrees and recon.detail.startswith("MISMATCH")
+            is_cross_venue = len({str(l.get("venue")) for l in legs if l.get("venue") != "oddsapi"}) > 1
+            mismatch = is_cross_venue and not recon.agrees and recon.detail.startswith("MISMATCH")
             if mismatch:
                 counts["mismatch"] += 1
-                pair = _pair_key_from_notes(str(_col(bet, "notes") or ""))
-                if pair:
-                    bans.append((pair, recon.detail))
+                observed.append((str(bet["sport"]), [str(l.get("venue")) for l in legs], int(bet["id"]), recon.detail))
+                if is_ai:
+                    pair = _pair_key_from_notes(str(_col(bet, "notes") or ""))
+                    if pair:
+                        bans.append((pair, recon.detail))
             _append_recon_row(con, bet, recon, status, ai_matched=is_ai, settlement_mismatch=mismatch)
         # Audit A2: any settled arb still without a venue cross-check carries an unverified
         # provisional lock — surface the count so the headline can label it provisional.
@@ -134,6 +139,19 @@ def reconcile_settlements(store: Store, leg_resolver) -> dict[str, int]:
         from .nonsports_ai import ban_pair
         ban_pair(store, pair, f"settlement mismatch: {detail}", now)
     counts["banned"] = len(bans)
+    # Phase B: write each observed cross-venue mismatch into the settlement-matrix observed-log so
+    # the sport's section is no longer green — the pair reverts to REVIEW until a human amends the
+    # cited base cell explaining the settlement difference (lived settlements are ground truth).
+    if observed:
+        from .settlement_matrix import record_observed_settlement
+        for sport, venues, bet_id, detail in observed:
+            scenario = f"observed_mismatch_bet_{bet_id}"
+            for venue in venues:
+                if venue and venue != "oddsapi":
+                    record_observed_settlement(
+                        sport, scenario, venue,
+                        f"CONDITIONAL: observed cross-venue mismatch ({detail}) — needs cited amendment")
+    counts["observed_recorded"] = len(observed)
     return counts
 
 
