@@ -69,6 +69,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("scores", help="per-segment edge scores from settled clean bets (Phase 2)")
     sub.add_parser("backtest-flb", help="favorite-longshot calibration over settled clean bets (S2)")
     sub.add_parser("dashboard", help="regenerate reports/dashboard.json from the ledger (Phase 6)")
+    regrade = sub.add_parser("regrade", help="score consensus vs venue mids on settled events + EV-subset (Phase A)")
+    regrade.add_argument("--sport", default="baseball_mlb")
+    sub.add_parser("status", help="every loop: alive/dead, beats, code version, last poll (Phase D)")
+    sub.add_parser("supervisor", help="own + restart all enabled loops; single-run (Phase D)")
     forecast_log = sub.add_parser("forecast-log", help="append a forecast probability triple (Phase 8)")
     forecast_log.add_argument("--vertical", required=True)
     forecast_log.add_argument("--category", required=True)
@@ -166,6 +170,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{'BAND':>14} {'N':>6} {'MEAN_COST':>10} {'REALIZED':>9} {'EDGE':>8}  SIGNAL")
         for s in stats:
             print(f"  [{s.lo:.2f},{s.hi:.2f}) {s.n:>6} {s.mean_cost:>10.1%} {s.realized_win_rate:>9.1%} {s.edge:>+8.1%}  {s.signal}")
+        return 0
+    if args.command == "status":
+        from .heartbeat import format_status, git_head, read_heartbeats
+        print("Loop status (Phase D):")
+        print(format_status(read_heartbeats(store), current_head=git_head()))
+        return 0
+    if args.command == "supervisor":
+        from .heartbeat import run_supervisor
+        return run_supervisor(config, store)
+    if args.command == "regrade":
+        from .experimental.analysis.regrade import ev_subset_test, format_regrade, score_sources
+        from .experimental.analysis.devig_brier import format_methods, score_methods
+        sources = score_sources(store, args.sport)
+        print(format_regrade(sources, ev_subset_test(store)))
+        print("\nDe-vig method regrade (pick devig_method by whichever wins):")
+        print(format_methods(score_methods(store, config.min_books_for_consensus)))
         return 0
     if args.command == "dashboard":
         from .experimental.dashboard import write_dashboard
@@ -451,6 +471,9 @@ def run_watch_once(args: argparse.Namespace, config, store: Store) -> int:
         for opportunity in kept:
             fill_opportunity(store, poll_id, opportunity, config.bankroll_usd, config.max_stake_pct)
     store.finish_poll(poll_id, None, len(quotes), len(kept))
+    # Phase D: beat so `arb status` / the supervisor can see this loop is alive and current.
+    from .heartbeat import beat
+    beat(store, "watch", polls_done=poll_id, interval_secs=config.watch_interval_secs)
     print(f"Persisted watch poll {poll_id}: {len(quotes)} quotes, {len(kept)} opportunities.")
     return 0
 
