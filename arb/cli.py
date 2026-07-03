@@ -77,6 +77,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("supervisor", help="own + restart all enabled loops; single-run (Phase D)")
     sub.add_parser("check-invariants", help="ledger integrity scan (5 checks); CRITICAL, never blocks (02)")
     sub.add_parser("settlement-matrix", help="print the effective settlement matrix + which sports are green (Phase B)")
+    markout = sub.add_parser("markout", help="persist + report per-horizon markouts (Phase C); --db for read-only dry-run")
+    markout.add_argument("--db", default=None, help="analyze an archive DB read-only (no persist)")
     forecast_log = sub.add_parser("forecast-log", help="append a forecast probability triple (Phase 8)")
     forecast_log.add_argument("--vertical", required=True)
     forecast_log.add_argument("--category", required=True)
@@ -207,6 +209,16 @@ def main(argv: list[str] | None = None) -> int:
         print(format_regrade(sources, ev_subset_test(target)))
         print("\nDe-vig method regrade (pick devig_method by whichever wins):")
         print(format_methods(score_methods(target, config.min_books_for_consensus)))
+        return 0
+    if args.command == "markout":
+        from .experimental.analysis.markout import format_markout_summary, markout_summary, persist_markouts
+        # --db: read-only archive dry-run (no persist). Live: persist first, then report.
+        target = Store(Path(args.db), read_only=True) if args.db else store
+        if args.db:
+            print(f"markout: analyzing {args.db} (read-only dry-run; no persist).")
+        else:
+            print(f"markout: persisted {persist_markouts(target)} leg-horizon samples.")
+        print(format_markout_summary(markout_summary(target)))
         return 0
     if args.command == "dashboard":
         from .experimental.dashboard import write_dashboard
@@ -1363,6 +1375,14 @@ def run_settle_job(config, store: Store) -> None:
             store, config.settle_tripwire_secs, config.tracker_max_reappearances)))
     except Exception as exc:  # noqa: BLE001
         print(f"settle: check-invariants failed (settle still stands): {exc}")
+    # 07 Phase C: persist markout samples from the quotes the loops already fetched (no new HTTP).
+    try:
+        from .experimental.analysis.markout import persist_markouts
+        n = persist_markouts(store)
+        if n:
+            print(f"Phase C: persisted {n} markout leg-horizon samples.")
+    except Exception as exc:  # noqa: BLE001
+        print(f"settle: markout persist failed (settle still stands): {exc}")
 
 
 def run_daemon(config, store: Store) -> int:
