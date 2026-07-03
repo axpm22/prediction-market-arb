@@ -126,6 +126,7 @@ Halfway checkpoints (`halfway_n`) are for monitoring only and never promote a st
 | 2026-07-01 | Initial freeze. `devig_method: power` chosen empirically on V1 MLB settled data (Brier 0.2231 / logloss 0.6323, n=191; margin within noise → re-run on V2 sample per SPEC_V2 §15 Phase 2). | Pre-registration before V2 data collection. |
 | 2026-07-02 | **Phase A regrade verdict → EV bet creation FROZEN** (`ev_enabled: false`); `devig_method` restored `proportional`→`power` (shipped config had drifted off the freeze). | Prompt 04 ran `arb regrade --db data/archive-pre-v2/arb.sqlite` (read-only). See §7. |
 | 2026-07-02 | **Fee cost vectors re-frozen.** Polymarket linear→**quadratic** per category (`fee = feeRate·p·(1−p)`); SX singles 0 / winning-parlay 5%; Kalshi 0.07 re-verified. | Prompt 05. Published schedules (Polymarket 2026-03-30, SX, Kalshi Jun-2026). See §8. |
+| 2026-07-03 | **Baseline cutover (Option A) + supervised restart.** Live `data/arb.sqlite` archived to `data/arb-incident-baseline-20260703.sqlite` (507 flat_bets / 616,889 quotes, read-only); fresh empty `data/arb.sqlite` initialized; system restarted under the Phase D supervisor and `data/stop-all` removed. | Prompt 03, after 01–08 landed on `main` (515 tests green). **Rule: pre-cutover data (this baseline + `data/archive-pre-v2/`) is analysis-only and is NEVER blended into post-cutover P&L.** The measurement clock restarts here. |
 
 ---
 
