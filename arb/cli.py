@@ -76,6 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="every loop: alive/dead, beats, code version, last poll (Phase D)")
     sub.add_parser("supervisor", help="own + restart all enabled loops; single-run (Phase D)")
     sub.add_parser("check-invariants", help="ledger integrity scan (5 checks); CRITICAL, never blocks (02)")
+    sub.add_parser("settlement-matrix", help="print the effective settlement matrix + which sports are green (Phase B)")
     forecast_log = sub.add_parser("forecast-log", help="append a forecast probability triple (Phase 8)")
     forecast_log.add_argument("--vertical", required=True)
     forecast_log.add_argument("--category", required=True)
@@ -103,6 +104,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     config = load_config()
+    # Phase B startup guard: warn loudly if any trusted_pairs entry points at a non-green matrix
+    # section (silent otherwise — trusted_pairs ships empty).
+    from .settlement_matrix import warn_ungreen_trusted_pairs
+    warn_ungreen_trusted_pairs(config.trusted_pairs)
     store = Store(config.database_path)
     if args.command == "report":
         if args.daily:
@@ -182,6 +187,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "supervisor":
         from .heartbeat import run_supervisor
         return run_supervisor(config, store)
+    if args.command == "settlement-matrix":
+        from .settlement_matrix import format_matrix
+        print(format_matrix())
+        return 0
     if args.command == "check-invariants":
         from .invariants import check_invariants, format_invariants
         violations = check_invariants(store, config.settle_tripwire_secs, config.tracker_max_reappearances)
