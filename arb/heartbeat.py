@@ -89,6 +89,14 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+def supervisor_stop_requested() -> bool:
+    """The supervisor honors the same shutdown flags as the daemon: data/stop-all or
+    data/stop-supervisor. Its watch children are one-shot (they exit each cycle), so the
+    stop check lives HERE — it stops relaunching and terminates the current child. Without
+    this, stop-all could not stop a supervised system (the documented safety control)."""
+    return Path("data/stop-all").exists() or Path("data/stop-supervisor").exists()
+
+
 def acquire_lock(process: str, pid: int | None = None, lock_dir: Path = LOCK_DIR) -> bool:
     """Per-process single-run lock. Returns False if a LIVE copy already holds it. Stale locks
     (dead pid) are reclaimed."""
@@ -149,11 +157,21 @@ def run_supervisor(config, store: Store) -> int:
         children[name] = subprocess.Popen([sys.executable, "-m", "arb", *cmd.split()])
         print(f"supervisor: launched {name} (pid {children[name].pid})")
 
+    if supervisor_stop_requested():
+        print("supervisor: data/stop-all present — refusing to start (remove it to run).")
+        release_lock("supervisor")
+        return 1
     for name in processes:
         launch(name)
     try:
         while True:
             time.sleep(30)
+            if supervisor_stop_requested():
+                print("supervisor: stop-all requested — terminating loops and exiting.")
+                for child in children.values():
+                    child.poll() is None and child.terminate()
+                release_lock("supervisor")
+                return 0
             if git_head() != start_head:
                 print(f"supervisor: WARNING working tree changed ({start_head} -> {git_head()}); "
                       "loops still run OLD code until you restart them.")
