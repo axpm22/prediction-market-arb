@@ -457,6 +457,8 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
     rule_id, validation_tag, validation_notes = classify_validation(current_opp, status, validation_rule)
     ledger_notes = _merge_notes(notes, (*current_opp.notes, *validation_notes))
     stake_usd = _opportunity_stake(current_opp)
+    consensus_age_secs = _consensus_age_from_notes(current_opp.notes)
+    leg_skew_secs = _leg_skew_secs(current_opp.legs)
     con.execute(
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
@@ -464,8 +466,9 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
                               optimistic_cost, confirmed_cost,
                               pnl_optimistic, pnl_confirmed, status, placed_at, notes,
                               quality_flag, kelly_f_star, kelly_stake_usd,
-                              validation_rule, validation_tag, ai_matched)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              validation_rule, validation_tag, ai_matched,
+                              consensus_age_secs, leg_skew_secs)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             current_opp.fingerprint,
@@ -495,8 +498,31 @@ def _insert_tracker_row(con, poll_id: int, current_opp: Opportunity, status: str
             rule_id,
             validation_tag,
             int(current_opp.event.ai_matched),
+            consensus_age_secs,
+            leg_skew_secs,
         ),
     )
+
+
+def _consensus_age_from_notes(notes) -> int | None:
+    """Phase F: pull the consensus_age_secs:N note (stamped by detect_ev_from_consensus) into the
+    real column. None for non-EV bets that never carried one."""
+    for note in notes or ():
+        if str(note).startswith("consensus_age_secs:"):
+            try:
+                return int(str(note).split(":", 1)[1])
+            except ValueError:
+                return None
+    return None
+
+
+def _leg_skew_secs(legs) -> float | None:
+    """Phase F: measured fetch-time skew across a multi-leg record (max−min fetched_at, seconds).
+    None for single-leg bets (no cross-leg timing risk); the honest ghost/flash-verify signal."""
+    times = [leg.fetched_at for leg in legs if getattr(leg, "fetched_at", None) is not None]
+    if len(times) < 2:
+        return None
+    return round((max(times) - min(times)).total_seconds(), 1)
 
 
 def _insert_rejected_row(con, poll_id: int, current_opp: Opportunity, reappearance_of: int | None,

@@ -351,6 +351,11 @@ MIGRATION_COLUMNS = {
         # K5: flash-verify re-quote facts (the R1 confirm source).
         "requote_sum": "TEXT",
         "requote_lag_secs": "REAL",
+        # Phase F (08): time facts as real columns, not note prose. consensus_age_secs = age of the
+        # de-vigged consensus at bet creation (Phase A edge-decay-with-age input); leg_skew_secs =
+        # max−min leg fetch time on multi-leg records (flash-verify prioritization / ghost risk).
+        "consensus_age_secs": "INTEGER",
+        "leg_skew_secs": "REAL",
         # Spec amendment (nonsports_ai_matcher): 1 = event equivalence decided by Haiku.
         # These bets report in their own section and never enter the headline number.
         "ai_matched": "INTEGER NOT NULL DEFAULT 0",
