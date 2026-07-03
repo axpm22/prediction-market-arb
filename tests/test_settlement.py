@@ -112,6 +112,21 @@ def test_settlement_is_idempotent_and_append_only(tmp_path) -> None:
     assert statuses == ["OPEN", "SETTLED"]
 
 
+def test_settlement_skips_bet_whose_game_has_not_started(tmp_path) -> None:
+    # Mechanism B regression: a pregame bet whose scheduled start is still in the FUTURE must not
+    # settle. Its event_key still names the 2026-06-09 KC-TEX final (so it matches the scores
+    # fixture by date+pair and WOULD grade WON without a guard), but the game hasn't started — any
+    # such match is a wrong-game/doubleheader hit. Grading it here is what settled live-afternoon EV
+    # bets and let the tracker reopen them into 30x duplicate WON rows.
+    store = Store(tmp_path / "arb.sqlite")
+    future = datetime.now(timezone.utc) + timedelta(days=2)
+    place_bets(store, [ev_opp("kansas city royals", "0.50", start=future)])
+    assert settle_sports(store, load_config(), Path("tests/fixtures")) == 0
+    with store.connect() as con:
+        statuses = [r["status"] for r in con.execute("SELECT status FROM flat_bets ORDER BY id")]
+    assert statuses == ["OPEN"]  # stays open until the game actually finishes
+
+
 def test_settlement_invalidates_pregame_bet_placed_after_start(tmp_path) -> None:
     store = Store(tmp_path / "arb.sqlite")
     place_bets(store, [ev_opp("kansas city royals", "0.50")])

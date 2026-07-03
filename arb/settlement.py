@@ -34,9 +34,16 @@ def settle_sports(store: Store, config, fixture_dir: Path | None = None) -> int:
             continue
         results.update(score_results(events, sport))
     settled = 0
+    now_utc = datetime.now(timezone.utc)
     with store.connect() as con:
         for bet in bets:
             leg = json.loads(bet["legs_json"])[0]
+            # Never settle a game that hasn't started (leg_start in the future) — the matched
+            # final is necessarily a different game (doubleheader/mislabeled slot). Grading it
+            # WON here settled pregame EV bets and let the tracker reopen them into 30x dup rows.
+            leg_start = _leg_start_utc(leg)
+            if leg_start is not None and leg_start > now_utc:
+                continue
             scores = results.get(str(leg["event_key"]))
             if scores is None:
                 continue
@@ -233,6 +240,7 @@ def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
                 time_pair_index.setdefault((utc_date, pair), []).append((start, scores))
 
     settled = 0
+    now_utc = datetime.now(timezone.utc)
     with store.connect() as con:
         for bet in bets:
             leg = json.loads(bet["legs_json"])[0]
@@ -242,6 +250,13 @@ def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
             start_bucket = int(parts[4]) if len(parts) >= 5 and parts[4].isdigit() else -1
             pair = frozenset({parts[2], parts[3]})
             leg_start = _leg_start_utc(leg)
+            # Never settle a game that hasn't started. If leg_start is still in the future, the
+            # game has no final yet — any (date, team-pair, ±2h) match is the wrong game (an
+            # earlier doubleheader leg or a mislabeled slot). Grading it WON here is exactly what
+            # settled pregame EV bets mid-afternoon and reopened them every watch poll into 30x
+            # duplicate WON rows. A real settle fires once the game has actually finished.
+            if leg_start is not None and leg_start > now_utc:
+                continue
             bucket = _scores_for_start_time(time_pair_index, pair, leg_start)
             if bucket:
                 pass
