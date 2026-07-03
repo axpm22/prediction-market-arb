@@ -94,9 +94,30 @@ def pair_key(venue_a: str, id_a: str, venue_b: str, id_b: str) -> str:
     return "|".join(sorted([f"{venue_a}:{id_a}", f"{venue_b}:{id_b}"]))
 
 
+def rules_sha(text: str | None) -> str:
+    """Phase E: the verdict is about the rules texts, so hash them (normalized whitespace) —
+    a venue edit to rules_primary/description changes this and expires the cache."""
+    import hashlib
+    normalized = " ".join(str(text or "").split())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def cached_verdict(store: Store, key: str):
+    # Append-only table can hold several rows per pair (re-verdicts, bans) — the LATEST wins.
     with store.connect() as con:
-        return con.execute("SELECT * FROM nonsports_verdicts WHERE pair_key = ?", (key,)).fetchone()
+        return con.execute(
+            "SELECT * FROM nonsports_verdicts WHERE pair_key = ? ORDER BY id DESC LIMIT 1",
+            (key,)).fetchone()
+
+
+def verdict_is_current(row, rules_a: str | None, rules_b: str | None) -> bool:
+    """Phase E: a cached verdict is only valid if it was made against the CURRENT rules texts.
+    Order-insensitive (pair_key sorts the sides). Missing stored hashes (pre-Phase-E rows) are
+    treated as stale so they get re-verdicted once."""
+    stored = {row["rules_hash_a"], row["rules_hash_b"]} if "rules_hash_a" in row.keys() else {None}
+    if None in stored:
+        return False
+    return stored == {rules_sha(rules_a), rules_sha(rules_b)}
 
 
 def calls_today(store: Store, now: datetime) -> int:
@@ -113,12 +134,14 @@ def save_verdict(store: Store, key: str, a: dict[str, str], b: dict[str, str],
     extracted_a = verdict.get("a") or {}
     with store.connect() as con:
         con.execute(
-            """INSERT INTO nonsports_verdicts(checked_at, pair_key, venue_a, market_a, venue_b,
+            # pair_key is UNIQUE (operational cache, one row per pair): a re-verdict — including a
+            # Phase E rules-change expiry — REPLACES the stale row rather than colliding.
+            """INSERT OR REPLACE INTO nonsports_verdicts(checked_at, pair_key, venue_a, market_a, venue_b,
                    market_b, equivalent, confidence, differences_json, entity, metric, deadline,
                    source_a, source_b, model, raw_response,
                    comparator_a, comparator_b, threshold_a, threshold_b, unit_a, unit_b,
-                   data_source_a, data_source_b, rounding_a, rounding_b)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   data_source_a, data_source_b, rounding_a, rounding_b, rules_hash_a, rules_hash_b)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 now.isoformat(), key, a["venue"], a["id"], b["venue"], b["id"],
                 None if verdict.get("equivalent") is None else int(bool(verdict["equivalent"])),
@@ -132,6 +155,7 @@ def save_verdict(store: Store, key: str, a: dict[str, str], b: dict[str, str],
                 verdict.get("unit_a"), verdict.get("unit_b"),
                 verdict.get("data_source_a"), verdict.get("data_source_b"),
                 verdict.get("rounding_a"), verdict.get("rounding_b"),
+                rules_sha(a.get("rules")), rules_sha(b.get("rules")),
             ),
         )
 
@@ -167,8 +191,16 @@ def resolve_verdict(store: Store, cfg: dict[str, Any], a: dict[str, str], b: dic
     the daily budget allows. Returns None when undecided (over budget / API error pending)."""
     key = pair_key(a["venue"], a["id"], b["venue"], b["id"])
     row = cached_verdict(store, key)
-    if row is not None:
+    if row is not None and verdict_is_current(row, a.get("rules"), b.get("rules")):
         return row
+    if row is not None:
+        # Phase E: rules text changed since the cached verdict. Fail-safe: a previously-EQUIVALENT
+        # pair drops to unmatched immediately and its open paper bets are annotated
+        # `rules-changed-midflight` (the purest settlement-risk specimen). A re-verdict is queued
+        # below (budget permitting); negative verdicts re-check too — a clarified rule can create
+        # equivalence (free inventory).
+        if row["equivalent"] == 1:
+            annotate_rules_changed(store, key, now)
     if calls_today(store, now) >= int(cfg["max_new_pairs_per_day"]):
         print(f"ai-matcher: daily pair budget reached; skipping {key}")
         return None
@@ -185,6 +217,28 @@ def resolve_verdict(store: Store, cfg: dict[str, Any], a: dict[str, str], b: dic
         verdict = {"equivalent": None, "confidence": 0, "raw": f"gave up after {MAX_API_ATTEMPTS} API errors: {exc}"}
     save_verdict(store, key, a, b, verdict, str(cfg["model"]), now)
     return cached_verdict(store, key)
+
+
+def annotate_rules_changed(store: Store, key: str, now: datetime) -> int:
+    """Phase E fail-safe: annotate every OPEN nonsports paper bet on this pair
+    `rules-changed-midflight` when the pair's rules text changed under it. Append-only; Phase C
+    markout analysis excludes these and settlement watches them specially. Returns rows annotated."""
+    from arb.experimental.annotations import annotate
+    ids = {part.split(":", 1)[1] for part in key.split("|") if ":" in part}
+    annotated = 0
+    with store.connect() as con:
+        rows = list(con.execute(
+            "SELECT id, legs_json FROM flat_bets WHERE status='OPEN' AND category='nonsports'"))
+    for row in rows:
+        legs = json.loads(row["legs_json"] or "[]")
+        if any(str(leg.get("book")) in ids or str(leg.get("ref")) in ids for leg in legs):
+            try:
+                annotate(store, int(row["id"]), "rules-changed-midflight",
+                         f"rules text changed for AI pair {key} at {now.isoformat()}")
+                annotated += 1
+            except ValueError:
+                pass
+    return annotated
 
 
 def ban_pair(store: Store, key: str, reason: str, now: datetime, model: str = "settlement-mismatch") -> None:
