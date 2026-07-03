@@ -67,21 +67,53 @@ are `max_state_age_secs: 5` and `$50` depth achievable, and what values does the
 support? Update the config placeholders with measured values (and delete the PLACEHOLDER
 comments) only after this report exists.
 
-**Phase 0 acceptance:** probe run on ≥2 real games (free feeds; ≤ the Odds API daily budget),
-report shown with the verdict, config updated from measurements. `pytest` green with fixture
-tests for the probe's parsing (recorded MLB Stats live fixture; venue fixtures).
+**Probe duration (review amendment, 2026-07-02):** the first probe run (n=6 samples) is too
+thin to set gate constants. Phase 0 is not done until it has covered **at least one full game
+start-to-final (~20+ polls minimum), preferably two**, so the lag distribution separates the
+two things the small sample conflated:
+
+- **True feed latency**: `our_fetch_time − feed_embedded_time` measured ONLY on polls where a
+  NEW play/pitch appeared since the previous poll — this is the real publish lag.
+- **Idle age**: a 40–80 s-old state during which no play occurred is not stale — it is still
+  the correct current state. Do not let idle gaps inflate the lag estimate.
+
+The probe must therefore record, per poll, whether the play/pitch sequence advanced
+(`atBatIndex`/`playEvents` progression), and report the two distributions separately.
+
+**Gate redefinition (same amendment):** the freshness gate for Phase 1 is NOT an absolute
+`max_state_age_secs`. It is: **state is usable iff (a) no new play has plausibly occurred
+since our fetch — i.e. `fetch_age < median inter-play gap` safety margin — AND (b) the
+true-latency term (per above) is within its measured p90.** Replace the single
+`max_state_age_secs: 5` placeholder with two config keys derived from the probe:
+`max_true_latency_secs` (from the new-play-only distribution) and
+`max_unconfirmed_window_secs` (from the inter-play gap distribution). The old absolute-age
+key is deleted, not kept alongside.
+
+**Phase 0 acceptance:** probe covering ≥1 full game start-to-final (≥20 polls; 2 games
+preferred) on free feeds, ≤ the Odds API daily budget; report shows the true-latency and
+idle-age distributions SEPARATELY plus the inter-play gap distribution; verdict line states
+the two derived gate values; config updated from measurements. `pytest` green with fixture
+tests for the probe's parsing (recorded MLB Stats live fixture; venue fixtures), including
+one asserting a no-new-play poll is excluded from the true-latency distribution.
 
 ## Phase 1 — candidate recorder (only after Phase 0's verdict is viable)
 
-If Phase 0 says freshness/depth targets are unachievable, STOP and report — do not build
-Phase 1 with numbers the data refuted. Otherwise:
+**Go/no-go clarification (review amendment, 2026-07-02):** "numbers the data refuted" means
+the *freshness and depth gates*, not consensus availability. Phase 0 has already established
+that live consensus via the Odds API is effectively unavailable on the credit budget — that
+does NOT block Phase 1. It reframes it: Phase 1's primary product is the **diagnostic mix**
+(rejection histogram + NO-CONSENSUS rate), i.e. measuring how often the lane could even run,
+at what freshness, on what depth. That is a legitimate, humbler Phase 1 — most snapshots are
+expected to record `fair_value=None`. Only if Phase 0's *gate* numbers (true latency,
+inter-play window, depth) are unachievable does Phase 1 stop. Build accordingly:
 
 New runner `python -m arb.experimental live-baseball-watch`:
 
 1. Game selection: live MLB games from the schedule; skip games in a terminal state.
 2. Each cycle, per game: fetch game state (MLB Stats) and venue quotes; build `LiveSnapshot`s
-   with all ages from OUR fetch clock and `effective_state_age = state fetch age + measured
-   publish lag (Phase 0 median)`.
+   with all ages from OUR fetch clock. Freshness per the redefined gate: track whether a new
+   play could have occurred since the state fetch (`fetch_age` vs `max_unconfirmed_window_secs`)
+   and apply `max_true_latency_secs` for the feed-lag term — not a single absolute age.
 3. Fair value: median de-vigged live sportsbook probability across ≥3 live books on the SAME
    market — but given the credit budget, expect this to be rarely available; when it isn't,
    record the snapshot with `fair_value=None` as a NO-CONSENSUS diagnostic (still valuable:

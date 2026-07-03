@@ -14,12 +14,24 @@ data/*.sqlite-shm
 data/.fuse_hidden*
 
 # Local runtime artifacts
-logs/*.log
+logs/
 reports/daily/*.csv
 reports/daily/*.md
 reports/dashboard.json
 data/test_baseline.txt
 data/stop-*
+data/*.meta
+
+# Read-only V1 archive DB (3GB+) — oracle data, never in history
+data/archive-pre-v2/
+
+# Local config overrides (may hold machine-specific values)
+config.local.yaml
+config.local.yaml.bak
+
+# macOS
+.DS_Store
+**/.DS_Store
 
 # Kept intentionally (small seed/config files, NOT ignored):
 #   .env.example, data/aliases.json, data/*_series.json, data/nonsports_map.yaml
@@ -27,3 +39,6 @@ data/stop-*
 # Claude Code local settings (may record commands/keys)
 .claude/
 **/.claude/
+
+# Obsidian vault workspace/cache (repo doubles as a vault)
+.obsidian/
