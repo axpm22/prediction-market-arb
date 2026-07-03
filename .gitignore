@@ -44,3 +44,6 @@ config.local.yaml.bak
 
 # Obsidian vault workspace/cache (repo doubles as a vault)
 .obsidian/
+
+# Phase D supervisor per-process lock dir (runtime)
+.locks/
