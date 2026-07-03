@@ -70,6 +70,15 @@ def status_for_legs(legs: list[Quote], trusted_pairs: set[str]) -> tuple[str, tu
     sport_pair = f"{pair}:{legs[0].sport}" if legs else pair
     whitelisted = sport_pair in trusted_pairs or pair in trusted_pairs
     cross_venue = len({leg.venue for leg in legs}) > 1
+    # Phase B: a trusted_pairs entry only takes effect when its sport's settlement matrix section
+    # is GREEN for the venues involved. A hole or venue disagreement demotes it back to REVIEW,
+    # naming the first blocking scenario (settle-mismatch:<sport>-<scenario>).
+    if whitelisted and cross_venue and legs:
+        from .settlement_matrix import section_issues
+        issues = section_issues(legs[0].sport, {leg.venue for leg in legs})
+        if issues:
+            whitelisted = False
+            notes.append(f"settle-mismatch:{legs[0].sport}-{issues[0]}")
     # SPEC §3.3: SX void rules differ from Kalshi/Polymarket binaries, so adapters tag those
     # legs settlement-rule-review; they stay REVIEW even single-venue until whitelisted.
     flagged_leg = any("settlement-rule-review" in leg.notes for leg in legs)

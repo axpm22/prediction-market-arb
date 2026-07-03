@@ -7,12 +7,26 @@ everything else (e.g. `polymarket+sx`) stays REVIEW and is excluded from headlin
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import pytest
+
 from arb.arbitrage import detect_true_arbs, status_for_legs, venue_pair_key
 from arb.models import Quote
+from arb import settlement_matrix
 
 NOW = datetime(2026, 6, 20, 18, 0, tzinfo=timezone.utc)
 START = datetime(2026, 6, 20, 23, 5, tzinfo=timezone.utc)
 WHITELIST = {"kalshi+polymarket:baseball_mlb"}
+# Phase B: whitelisting only takes effect on a GREEN matrix section. These gate tests are about
+# the whitelist mechanism, so give baseball_mlb a green section; a separate test covers the
+# not-green demotion. Reset the override after each test.
+GREEN_MLB = {"baseball_mlb": {"final": {"kalshi": "SETTLES", "polymarket": "SETTLES", "sx": "SETTLES"}}}
+
+
+@pytest.fixture(autouse=True)
+def _green_matrix():
+    settlement_matrix.use_matrix(GREEN_MLB)
+    yield
+    settlement_matrix.use_matrix(None)
 
 
 def leg(event_key, outcome, cost, venue, *, notes=()):
@@ -56,5 +70,13 @@ def test_detection_routes_only_the_whitelisted_pair_to_ok():
         trusted_pairs=WHITELIST, stale_warn=Decimal("1"), doubleheader_cluster_tol_secs=7200,
     )
     by_pair = {venue_pair_key(o.legs): o.status for o in arbs}
-    assert by_pair["kalshi+polymarket"] == "OK"     # whitelisted → bookable into the clean lane
+    assert by_pair["kalshi+polymarket"] == "OK"     # whitelisted + green matrix → clean lane
     assert by_pair["polymarket+sx"] == "REVIEW"      # not whitelisted → research only
+
+
+def test_phase_b_whitelist_demoted_when_matrix_not_green():
+    # Same whitelisted pair, but a matrix hole/disagreement forces REVIEW with a scenario note.
+    settlement_matrix.use_matrix({"baseball_mlb": {"suspended_game": {"kalshi": "UNKNOWN", "polymarket": "SETTLES"}}})
+    status, notes = status_for_legs(_kp(), WHITELIST)
+    assert status == "REVIEW"
+    assert any(n.startswith("settle-mismatch:baseball_mlb-") for n in notes)
