@@ -1,0 +1,104 @@
+# MODEL_FOUNDATIONS Phase B — cross-venue settlement equivalence, as data not vibes.
+#
+# sport -> scenario -> venue -> verdict, where verdict is one of:
+#   SETTLES              — pays out on the game result (normal binary)
+#   VOIDS                — refunds / 50-50 in this scenario
+#   CONDITIONAL: <rule>  — depends on a stated condition (still counts as a filled cell)
+#   UNKNOWN              — not yet checked against the venue's published rulebook
+#
+# Enforcement (settlement_matrix.section_green): a cross-venue pair is eligible for `trusted`
+# ONLY if, for its sport, every scenario has no UNKNOWN and no venue disagreement across the
+# venues involved. Any UNKNOWN or disagreement => permanent REVIEW with a scenario-named note.
+# Every non-UNKNOWN cell should cite the rulebook section it came from (cite: ...).
+# `arb reconcile` flips cells to observed reality when a settled cross-venue bet contradicts them.
+
+baseball_mlb:
+  extra_innings:
+    kalshi: SETTLES        # cite: KXMLBGAME rules — final score after extra innings
+    polymarket: SETTLES    # cite: Gamma MLB description — official final result
+    sx: SETTLES
+  suspended_game:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  postponement:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  doubleheader_game2:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  mercy_shortened:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+
+tennis:
+  retirement_mid_match:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  retirement_before_start:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  walkover:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  suspended_resumed:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+
+soccer:
+  extra_time_scope:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  penalties_scope:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  abandoned_match:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  venue_change:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+
+mma:
+  # Filled 2026-07-02 from each venue's published market rules (see SETTLEMENT_RUNBOOK.md §10).
+  no_contest:
+    kalshi: VOIDS          # cite: KXUFCFIGHT rules_secondary — tie/no contest -> 50/50
+    polymarket: VOIDS      # cite: Gamma UFC description — No Contest -> 50-50
+  draw:
+    kalshi: VOIDS          # cite: KXUFCFIGHT rules_secondary
+    polymarket: VOIDS      # cite: Gamma UFC description — draw/technical draw -> 50-50
+  cancelled_bout:
+    kalshi: 'CONDITIONAL: fair price in accordance with the rules'  # cite: KXUFCFIGHT rules_secondary
+    polymarket: VOIDS      # cite: Gamma UFC description — canceled -> 50-50  (DISAGREEMENT => REVIEW)
+  weight_miss_rebook:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+
+golf:
+  playoff:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  wd_before_start:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  wd_after_start:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
+  fifty_four_hole_reduction:
+    kalshi: UNKNOWN
+    polymarket: UNKNOWN
+    sx: UNKNOWN
