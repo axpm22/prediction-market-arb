@@ -41,6 +41,7 @@ def format_cadence(stats: dict) -> str:
     drift = ""
     if stats["planned_secs"] and stats["p50_secs"]:
         drift = f" ({stats['p50_secs'] / stats['planned_secs']:.1f}x planned)"
-    return (f"cadence[{stats['kind']}]: planned {stats['planned_secs']}s, "
+    planned = f"{stats['planned_secs']}s" if stats["planned_secs"] else "n/a"
+    return (f"cadence[{stats['kind']}]: planned {planned}, "
             f"actual p50 {stats['p50_secs']}s{drift} / p95 {stats['p95_secs']}s "
             f"over {stats['n_gaps']} gaps")
