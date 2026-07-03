@@ -56,6 +56,14 @@ ArbitrageProject/
   - The `mma` sport keys on Gamma `tag_slug=ufc` (NOT `mma`): the `mma` tag went futures-only (season/champion markets, no `gameStartTime`) ~mid-2026, while the actual fight cards live under `ufc` — verified against live Gamma 2026-07-02. The canonical sport string stays `mma` everywhere else (event_key prefix, `quotes.sport`, config, Odds API alias). UFC titles carry a `"(Weight, Card)"` suffix that is stripped before name parsing; in-scope market types are `moneyline`→WINNER and `totals` (round totals)→TOTAL, while `ufc_method_of_victory` / `ufc_go_the_distance` are ignored (out of v1 scope).
 - Executable prices from CLOB only: `GET https://clob.polymarket.com/book?token_id={id}` (Gamma `outcomePrices` are stale mids — never use for detection).
 - `polymarket.fee_rate` default 0.0 (config key kept).
+- **Amendment 2026-07-02 (prompt 05):** Polymarket's taker fee is **quadratic per category**,
+  `fee = C·feeRate·p·(1−p)` (docs.polymarket.com/trading/fees, effective 2026-03-30) — feeRate
+  sports 0.03 / crypto 0.07 / finance·politics·tech·mentions 0.04 / econ·culture·weather·other 0.05
+  / geopolitics 0; makers 0. This **supersedes** any earlier "linear Polymarket fee" rule (the
+  linear model was correct for the pre-2026-03-30 schedule; it double-charged mid-price legs).
+  Priced on the single `FEE_BASIS["polymarket"] = "quadratic"` (`arb/venues/slippage.py`), used by
+  every adapter, the flash verifier, and negrisk. Per-category rates in `config.yaml`; stored
+  historical quotes keep their as-observed `fee_cost` (versioned change).
 
 ### 3.3 SX Bet (primary)
 - Base `https://api.sx.bet`, no key. Docs: https://api.docs.sx.bet

@@ -125,6 +125,7 @@ Halfway checkpoints (`halfway_n`) are for monitoring only and never promote a st
 |---|---|---|
 | 2026-07-01 | Initial freeze. `devig_method: power` chosen empirically on V1 MLB settled data (Brier 0.2231 / logloss 0.6323, n=191; margin within noise → re-run on V2 sample per SPEC_V2 §15 Phase 2). | Pre-registration before V2 data collection. |
 | 2026-07-02 | **Phase A regrade verdict → EV bet creation FROZEN** (`ev_enabled: false`); `devig_method` restored `proportional`→`power` (shipped config had drifted off the freeze). | Prompt 04 ran `arb regrade --db data/archive-pre-v2/arb.sqlite` (read-only). See §7. |
+| 2026-07-02 | **Fee cost vectors re-frozen.** Polymarket linear→**quadratic** per category (`fee = feeRate·p·(1−p)`); SX singles 0 / winning-parlay 5%; Kalshi 0.07 re-verified. | Prompt 05. Published schedules (Polymarket 2026-03-30, SX, Kalshi Jun-2026). See §8. |
 
 ---
 
@@ -155,3 +156,35 @@ unaffected); `devig_method: power`; daily report gains a rolling consensus-vs-ve
 premise-monitor line. **Trigger to re-open:** a re-run where consensus beats venue mids on Brier
 **and** EV-subset win rate > 0.5 (CI excludes 0.5). Pre-cutover archive data is analysis-only and
 is never blended into post-cutover P&L.
+
+---
+
+## 8. Fee-model corrections (2026-07-02, prompt 05)
+
+**Versioned change — stored quotes keep their as-observed `fee_cost`; only newly fetched quotes
+use the new model.** All fees route through the single `FEE_BASIS`/`leg_fee_cost` implementation
+(K1/K2) — including negrisk, which previously carried a second inline linear fee.
+
+- **Polymarket: linear → quadratic, per category.** Published schedule
+  (docs.polymarket.com/trading/fees, read 2026-07-02, effective 2026-03-30):
+  `fee = C·feeRate·p·(1−p)`, feeRate = sports 0.03, crypto 0.07, finance/politics/tech/mentions
+  0.04, econ/culture/weather/other 0.05, geopolitics 0; makers 0. The old linear model
+  double-charged mid-price legs (1.5¢ vs the true 0.75¢ at p=0.5). *Note:* the nonsports lane
+  currently prices Polymarket legs at the econ/weather default (0.05) pending per-entry category
+  tagging; the per-category keys exist for when that lands.
+- **SX:** singles 0% (taker+maker) confirmed (help.sx.bet/…/sx-bet-fees, learn.sx.bet/trading/fees,
+  read 2026-07-02); the 5% winning-**parlay** fee is modeled in the parlay lane
+  (`parlay.sx_win_fee_rate: 0.05`, `parlay_sx_win_fee`), dormant until that lane activates.
+- **Kalshi:** general taker `ceil(0.07·C·P·(1−P))` re-verified against the June-2026 schedule
+  (effective 2026-06-29) via the help center; index-market 0.035 exception is out of our scanned
+  scope; `confirmed_on` bumped 2026-07-02. (Authoritative PDF was rate-limited this pass — general
+  rate corroborated via help center, not read line-by-line.)
+
+**Decision rule outcome (offline archive re-read):** the 4 archived NEGRISK baskets stored only
+`basket_sum` (linear), so an exact per-leg re-price wasn't possible; the analytic bound (quadratic
+≈ half the mid-price fee) shifts each near-unity basket (Σ 1.005–1.011) down by at most
+~0.005–0.010, so **none crosses below 1 by more than `negrisk.min_edge` (0.005) → honest null:
+fees were not the binding constraint on the archived baskets.** No class flipped null→positive, so
+no fresh forward test is triggered here (the general negrisk exhaustive sweep remains prompt 12).
+Forward negrisk scans now price on the corrected quadratic curve and will flag more baskets than
+the linear model did.

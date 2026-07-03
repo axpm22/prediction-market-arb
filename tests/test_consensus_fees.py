@@ -47,11 +47,13 @@ def test_market_below_min_books_excluded() -> None:
 
 # ---- #5 per-venue fee basis ----
 
-def test_kalshi_quadratic_vs_polymarket_linear_differ() -> None:
+def test_quadratic_and_linear_bases_differ() -> None:
+    # Both fee-model functions exist and differ; all_in routes by basis. As of 2026-07-02 BOTH
+    # Kalshi and Polymarket use the quadratic curve (Polymarket's published fee is rate·p·(1−p)
+    # per the 2026-03-30 schedule); 'linear' remains for SX and as the superseded Polymarket model.
     p, rate = Decimal("0.50"), Decimal("0.03")
-    assert kalshi_fee_cost(p, rate) == Decimal("0.007500")    # 0.03*0.5*0.5
-    assert linear_fee_cost(p, rate) == Decimal("0.015000")    # 0.03*0.5
-    # all_in routes by basis; the bug was Polymarket getting the quadratic curve.
+    assert kalshi_fee_cost(p, rate) == Decimal("0.007500")    # 0.03*0.5*0.5 (Kalshi + Polymarket)
+    assert linear_fee_cost(p, rate) == Decimal("0.015000")    # 0.03*0.5 (SX; old Polymarket model)
     assert all_in_fee_cost(p, rate, basis="quadratic") == Decimal("0.007500")
     assert all_in_fee_cost(p, rate, basis="linear") == Decimal("0.015000")
 

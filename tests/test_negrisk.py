@@ -48,22 +48,28 @@ def test_no_arb_when_basket_sums_to_one() -> None:
     assert find_negrisk_arb(event([Decimal("0.34"), Decimal("0.33"), Decimal("0.34")]), **ARGS) is None
 
 
-def test_c0_linear_fee_break_even_basket_is_not_an_arb() -> None:
-    """C0: with a non-zero Polymarket taker fee, a basket that is break-even under the LINEAR
-    fee model must NOT flag. The old Kalshi-quadratic fee (rate·p·(1−p)) under-charged, pushing
-    Σasks+fees below 1 and manufacturing a fake convert arb in the safest class."""
+def test_c0_polymarket_quadratic_fee_supersedes_linear() -> None:
+    """C0 (updated 2026-07-02, prompt 05): Polymarket's PUBLISHED taker fee is QUADRATIC
+    (rate·p·(1−p); docs.polymarket.com/trading/fees, effective 2026-03-30). NegRisk now prices
+    both sides on that curve via the single FEE_BASIS. The pre-2026 'linear' C0 rule was a
+    conservative over-charge to dodge the Kalshi-curve under-charge bug; it is superseded by the
+    confirmed schedule. Two consequences, both correct under the true fee:"""
     fee = Decimal("0.02")
-    asks = [Decimal("0.490196"), Decimal("0.490196")]  # Σ·(1+fee) = 1.000000 exactly (linear)
     args = dict(fee_rate=fee, min_edge=Decimal("0.005"), require_exhaustive=True, max_outcomes=30)
 
-    # Linear (correct): effective ask = 0.5 each → Σ = 1.000000 → not < 1 → no arb.
-    assert find_negrisk_arb(event(asks), **args) is None
+    # (a) A basket break-even under the true QUADRATIC fee must NOT flag: Σ(a + fee·a·(1−a)) ≥ 1.
+    even = [Decimal("0.497000"), Decimal("0.497000")]  # quad fee ≈ 0.005 each → Σ ≈ 1.004 ≥ 1
+    quad_sum = sum((a + (fee * a * (Decimal("1") - a)) for a in even), Decimal("0"))
+    assert quad_sum >= Decimal("1")
+    assert find_negrisk_arb(event(even), **args) is None
 
-    # Sanity: the OLD quadratic curve would have under-charged and flagged this break-even basket.
-    quad_sum = sum((a + (fee * a * (Decimal("1") - a)) for a in asks), Decimal("0"))
-    assert quad_sum < Decimal("1")   # < 1 -> the pre-C0 code would have manufactured a fake arb
+    # (b) A basket that was only "break-even" under the over-conservative LINEAR fee IS a real
+    # small edge under the true quadratic fee, and now correctly flags (the edge linear hid).
+    linear_break_even = [Decimal("0.490196"), Decimal("0.490196")]  # Σ·(1+fee)=1 under linear
+    flagged = find_negrisk_arb(event(linear_break_even), **args)
+    assert flagged is not None and flagged.kind == "convert"
 
-    # And a genuinely cheap basket still flags under linear fees.
+    # And a genuinely cheap basket still flags.
     cheap = find_negrisk_arb(event([Decimal("0.45"), Decimal("0.45")]), **args)
     assert cheap is not None and cheap.kind == "convert"
 
@@ -113,8 +119,9 @@ def test_sweep_persists_executable_legs_and_quality_flag(tmp_path) -> None:
 
     legs = json.loads(row["legs_json"])
     assert len(legs) == 3
-    # C0: linear Polymarket fees (rate·price) — was 0.966800/"0.03" under the wrong quadratic curve.
-    assert row["optimistic_cost"] == "0.981000"
-    assert row["pnl_optimistic"] == "0.02"
+    # 2026-07-02 (prompt 05): Polymarket fee is QUADRATIC (rate·p·(1−p)) per the published schedule,
+    # so the basket costs 0.966800 (was 0.981000 under the superseded linear over-charge).
+    assert row["optimistic_cost"] == "0.966800"
+    assert row["pnl_optimistic"] == "0.03"  # higher edge under the lower (correct) quadratic fee
     assert row["quality_flag"] == "thin-leg"
     assert "thin-leg" in row["notes"]

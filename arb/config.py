@@ -139,6 +139,9 @@ class AppConfig:
     polymarket_fee_rate: Decimal
     polymarket_sports_fee_rate: Decimal
     polymarket_crypto_fee_rate: Decimal
+    polymarket_politics_fee_rate: Decimal
+    polymarket_econ_weather_fee_rate: Decimal
+    polymarket_geopolitics_fee_rate: Decimal
     sx_fee_rate: Decimal | None
     sx_win_fee_rate: Decimal
     taker_price_buffer: Decimal
@@ -161,6 +164,7 @@ class AppConfig:
     parlay_enabled: bool
     parlay_divergence_threshold: Decimal
     parlay_min_liquidity_usd: Decimal
+    parlay_sx_win_fee_rate: Decimal
     sizing_kelly_fraction: Decimal
     sizing_max_fraction: Decimal
     scoring: dict
@@ -355,6 +359,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         polymarket_fee_rate=_decimal(polymarket["fee_rate"]),
         polymarket_sports_fee_rate=_decimal(polymarket.get("sports_fee_rate", polymarket["fee_rate"])),
         polymarket_crypto_fee_rate=_decimal(polymarket.get("crypto_fee_rate", polymarket["fee_rate"])),
+        polymarket_politics_fee_rate=_decimal(polymarket.get("politics_fee_rate", polymarket["fee_rate"])),
+        polymarket_econ_weather_fee_rate=_decimal(polymarket.get("econ_weather_fee_rate", polymarket["fee_rate"])),
+        polymarket_geopolitics_fee_rate=_decimal(polymarket.get("geopolitics_fee_rate", "0")),
         sx_fee_rate=None if sx_fee is None else _decimal(sx_fee),
         sx_win_fee_rate=_decimal(sx.get("win_fee_rate", "0")),
         taker_price_buffer=_decimal(raw.get("execution", {}).get("taker_price_buffer", "0")),
@@ -377,6 +384,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         parlay_enabled=bool(parlay["enabled"]),
         parlay_divergence_threshold=_decimal(parlay["divergence_threshold"]),
         parlay_min_liquidity_usd=_decimal(parlay.get("min_liquidity_usd", raw.get("min_liquidity_usd", "500"))),
+        parlay_sx_win_fee_rate=_decimal(parlay.get("sx_win_fee_rate", "0.05")),  # SX: 5% on winning parlays only
         sizing_kelly_fraction=_decimal(sizing.get("kelly_fraction", "0.25")),
         sizing_max_fraction=_decimal(sizing.get("max_kelly_fraction_of_bankroll", "0.05")),
         scoring=dict(raw.get("scoring", {})),

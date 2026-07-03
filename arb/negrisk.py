@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from .pricing import all_in_fee_cost, q6
+from .venues.slippage import FEE_BASIS
 
 CENT = Decimal("0.000001")
 
@@ -65,11 +66,13 @@ def find_negrisk_arb(
         bid = _dec(m.get("yes_best_bid"))
         if ask is None or bid is None:
             return None  # an incomplete set cannot be a real basket arb
-        # C0: these are Polymarket markets, so fees follow the LINEAR model (rate·price), not
-        # the Kalshi quadratic rate·p·(1−p). The quadratic curve under-charges (1−p < 1), which
-        # shrinks Σasks+fees below 1 and manufactures fake convert arbs in the safest class.
-        ask_fee = all_in_fee_cost(ask, fee_rate, taker_buffer, basis="linear")
-        bid_fee = all_in_fee_cost(bid, fee_rate, taker_buffer, basis="linear")
+        # C0 (updated 2026-07-02, prompt 05): these are Polymarket markets, priced on the SINGLE
+        # FEE_BASIS source of truth. Polymarket's published fee is now QUADRATIC (rate·p·(1−p);
+        # docs.polymarket.com/trading/fees, effective 2026-03-30), so both sides use that curve —
+        # no second fee implementation. The old inline linear over-charge is superseded.
+        basis = FEE_BASIS.get("polymarket", "quadratic")
+        ask_fee = all_in_fee_cost(ask, fee_rate, taker_buffer, basis=basis)
+        bid_fee = all_in_fee_cost(bid, fee_rate, taker_buffer, basis=basis)
         ask_depth = _dec(m.get("yes_ask_depth")) or Decimal("0")
         bid_depth = _dec(m.get("yes_bid_depth")) or Decimal("0")
         asks.append(q6(ask + ask_fee))
