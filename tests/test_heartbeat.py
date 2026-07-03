@@ -40,3 +40,17 @@ def test_single_run_lock(tmp_path):
     # a stale lock (dead holder) is reclaimed
     (lock_dir / "focus.pid").write_text("2000000000")
     assert acquire_lock("focus", pid=os.getpid(), lock_dir=lock_dir) is True
+
+
+def test_supervisor_stop_requested_honors_flags(tmp_path, monkeypatch) -> None:
+    # 03: the supervisor must honor stop-all / stop-supervisor (the documented safety control) —
+    # its one-shot watch children can't check it themselves.
+    from arb.heartbeat import supervisor_stop_requested
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    assert supervisor_stop_requested() is False
+    (tmp_path / "data" / "stop-all").write_text("stop")
+    assert supervisor_stop_requested() is True
+    (tmp_path / "data" / "stop-all").unlink()
+    (tmp_path / "data" / "stop-supervisor").write_text("stop")
+    assert supervisor_stop_requested() is True
