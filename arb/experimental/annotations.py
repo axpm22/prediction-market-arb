@@ -6,6 +6,7 @@ nothing in this ledger is ever excluded silently.
 """
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timezone
 
 from arb.store import Store
@@ -45,6 +46,14 @@ def annotated_bet_ids(store: Store) -> set[int]:
 def annotated_ids(con) -> set[int]:
     """Bet ids carrying ANY annotation (all tags) — the exclusion set every honest-variant /
     clean report reader consults so annotated rows (e.g. bug:settled-rebook-loop) never enter a
-    P&L cell. Ensures the annotations table exists first, so readers are safe on a fresh DB."""
-    con.executescript(SCHEMA)
-    return {int(row["bet_id"]) for row in con.execute("SELECT DISTINCT bet_id FROM annotations")}
+    P&L cell. Ensures the annotations table exists first, so readers are safe on a fresh DB.
+    Read-only-safe: on a `mode=ro` connection (archive analysis) the CREATE is skipped and a
+    missing table reads as no annotations."""
+    try:
+        con.executescript(SCHEMA)
+    except sqlite3.OperationalError:
+        pass  # read-only DB — table already exists (query works) or doesn't (→ empty set below)
+    try:
+        return {int(row["bet_id"]) for row in con.execute("SELECT DISTINCT bet_id FROM annotations")}
+    except sqlite3.OperationalError:
+        return set()

@@ -124,3 +124,34 @@ Halfway checkpoints (`halfway_n`) are for monitoring only and never promote a st
 | Date | Change | Reason |
 |---|---|---|
 | 2026-07-01 | Initial freeze. `devig_method: power` chosen empirically on V1 MLB settled data (Brier 0.2231 / logloss 0.6323, n=191; margin within noise → re-run on V2 sample per SPEC_V2 §15 Phase 2). | Pre-registration before V2 data collection. |
+| 2026-07-02 | **Phase A regrade verdict → EV bet creation FROZEN** (`ev_enabled: false`); `devig_method` restored `proportional`→`power` (shipped config had drifted off the freeze). | Prompt 04 ran `arb regrade --db data/archive-pre-v2/arb.sqlite` (read-only). See §7. |
+
+---
+
+## 7. Phase A regrade — EV-lane verdict (2026-07-02, prompt 04)
+
+Read-only run over `data/archive-pre-v2/arb.sqlite` (Jun 10–Jul 2), scores via the MLB Stats API
+(free/keyless historical oracle — not an Odds API credit call), annotated rows excluded.
+
+**Forecaster Brier (lower = sharper), MLB WINNER settled:**
+
+| Source | n | Brier | log-loss | ECE |
+|---|---|---|---|---|
+| polymarket_mid | 38 | 0.2209 | 0.6249 | 0.0679 |
+| kalshi_mid | 40 | 0.2230 | 0.6293 | 0.1095 |
+| **consensus (p̂)** | 68 | **0.2379** | 0.6684 | **0.2997** |
+
+**EV-subset test:** venue side won **420/877 (0.479, 95% CI 0.446–0.512)** — leans anti-edge.
+
+**De-vig bake-off** (MLB settled consensus, n=30): power Brier **0.22041** < shin 0.22099 <
+proportional 0.22217 → **power wins** (confirms the 2026-07-01 freeze).
+
+**Fired rule (foundations Phase A, bullet 2, verbatim):** *"Venue mids beat consensus → the EV
+lane's sign is wrong — freeze EV bet creation, keep recording EV quotes for data, repurpose the
+signal as a venue-leads-books indicator."* Both venue mids beat consensus on Brier and consensus
+calibration is far worse (ECE 0.30). **Action taken:** `ev_enabled: false` (freezes bet creation
+for kind EV = pregame + micro; consensus still computed/recorded for study; `LIVE_BASEBALL_EV`
+unaffected); `devig_method: power`; daily report gains a rolling consensus-vs-venue-mid Brier
+premise-monitor line. **Trigger to re-open:** a re-run where consensus beats venue mids on Brier
+**and** EV-subset win rate > 0.5 (CI excludes 0.5). Pre-cutover archive data is analysis-only and
+is never blended into post-cutover P&L.

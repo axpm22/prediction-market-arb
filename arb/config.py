@@ -104,6 +104,7 @@ class AppConfig:
     break_windows: dict[str, list[int]]
     watch_interval_secs: int
     consensus_enabled: bool
+    ev_enabled: bool                          # Phase A: freeze EV BET creation (consensus still recorded)
     consensus_max_age_hours: int
     consensus_pregame_max_age_hours: int
     ev_e_min: Decimal
@@ -310,6 +311,7 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         break_windows=dict(raw["break_windows"]),
         watch_interval_secs=int(raw["watch_interval_secs"]),
         consensus_enabled=bool(raw["consensus_enabled"]),
+        ev_enabled=bool(raw.get("ev_enabled", True)),  # default on; Phase A verdict flips it off
         consensus_max_age_hours=int(raw["consensus_max_age_hours"]),
         consensus_pregame_max_age_hours=int(raw.get("consensus_pregame_max_age_hours", 3)),
         ev_e_min=_decimal(ev.get("e_min", "0.05")),
