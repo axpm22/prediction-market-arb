@@ -270,6 +270,12 @@ settle_time: "09:30"
 settle_days_from: 3    # scores lookback window (Odds API max is 3); 3 credits/sport/settle
 settle_health_overdue_max: 0
 settle_grace_hours: 6
+# Instant-settle tripwire (02-settle-tripwire): a bet whose settled_at - placed_at is under this
+# many seconds had a knowable outcome at placement — never a forecast. The row still writes
+# (append-only), but is auto-annotated `settle-tripwire`, excluded from every P&L cell, and its
+# fingerprint is blacklisted from re-booking. Default = watch_interval_secs (one poll interval);
+# blank falls back to watch_interval_secs.
+settle_tripwire_secs: 60
 # A fingerprint that already reached SETTLED is only re-muted ("terminal-fingerprint-skipped")
 # once its event has genuinely ended — i.e. the event start is in the past by at least this many
 # minutes. A SETTLED row for a still-future event is premature/own-settlement, so a re-sighting
@@ -277,6 +283,9 @@ settle_grace_hours: 6
 # unbounded mute collapsed). EXITED no longer mutes at all — it reappears as a new bet.
 tracker:
   terminal_mute_grace_mins: 180
+  # check-invariants #4: more than this many rows for one fingerprint inside any 24h window is a
+  # reappearance chain (the 2026-07-02 loop hit ~30). Observability only — logs, never blocks.
+  max_reappearances: 10
 # MLB Stats API is the unlimited, no-window settlement source used by `settle-backfill`
 # (free, keyless, all history). It rescues bets the 3-day Odds API window misses.
 mlbstats_enabled: true

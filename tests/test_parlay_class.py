@@ -142,7 +142,7 @@ def test_parlay_pregame_only(tmp_path) -> None:
 # ---- AND settlement -------------------------------------------------------------------
 
 def _ns_config():
-    return SimpleNamespace(settle_days_from=3)
+    return SimpleNamespace(settle_days_from=3, settle_tripwire_secs=60)
 
 
 def test_parlay_settles_won_when_all_legs_win(tmp_path) -> None:

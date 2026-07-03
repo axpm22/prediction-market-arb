@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import sqlite3
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -92,7 +93,13 @@ def record_tracker_poll(store: Store, poll_id: int, opportunities: list[Opportun
             # open/reappearance path.
             if row is None:
                 terminal = _latest_hard_terminal(con, opp.fingerprint)
-                if terminal is not None and _event_over(opp, now, terminal_mute_grace_mins):
+                # A settle-tripwired fingerprint is blacklisted immediately (no event-over grace):
+                # its outcome was already knowable at the tripwired settle, so any re-sighting is
+                # the same knowable-outcome rebook the tripwire exists to stop (02-settle-tripwire).
+                if terminal is not None and (
+                    _fingerprint_tripwired(con, opp.fingerprint)
+                    or _event_over(opp, now, terminal_mute_grace_mins)
+                ):
                     rejection = (
                         f"skip-terminal-fingerprint:{terminal['status']}",
                         "terminal-fingerprint-skipped",
@@ -276,6 +283,20 @@ def _touches_failed_venue(row: Any, failed_venues: set[str]) -> bool:
     except (TypeError, json.JSONDecodeError):
         return False
     return any(str(leg.get("venue")) in failed_venues for leg in legs)
+
+
+def _fingerprint_tripwired(con, fingerprint: str) -> bool:
+    """True if any row for this fingerprint carries a `settle-tripwire` annotation — the instant-
+    settle blacklist (02-settle-tripwire). Safe on a fresh DB (no annotations table yet)."""
+    try:
+        row = con.execute(
+            """SELECT 1 FROM annotations a JOIN flat_bets b ON a.bet_id = b.id
+                WHERE b.fingerprint = ? AND a.tag = 'settle-tripwire' LIMIT 1""",
+            (fingerprint,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return False  # annotations table absent → nothing blacklisted yet
+    return row is not None
 
 
 def _latest_hard_terminal(con, fingerprint: str):

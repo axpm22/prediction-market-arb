@@ -95,6 +95,8 @@ class AppConfig:
     settle_health_overdue_max: int
     settle_grace_hours: int
     tracker_terminal_mute_grace_mins: int
+    tracker_max_reappearances: int
+    settle_tripwire_secs: int
     sports: list[str]
     consensus_sports: list[str]
     activity_lookahead_hours: int
@@ -298,6 +300,9 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         settle_health_overdue_max=int(raw.get("settle_health_overdue_max", 0)),
         settle_grace_hours=int(raw.get("settle_grace_hours", 6)),
         tracker_terminal_mute_grace_mins=int((raw.get("tracker") or {}).get("terminal_mute_grace_mins", 180)),
+        tracker_max_reappearances=int((raw.get("tracker") or {}).get("max_reappearances", 10)),
+        # Default = one watch poll interval: a settle inside one poll had a knowable outcome.
+        settle_tripwire_secs=int(raw.get("settle_tripwire_secs") or raw["watch_interval_secs"]),
         sports=list(raw["sports"]),
         consensus_sports=list(raw["consensus_sports"]),
         activity_lookahead_hours=int(raw.get("activity_lookahead_hours", 48)),

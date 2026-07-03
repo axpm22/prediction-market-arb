@@ -73,6 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     regrade.add_argument("--sport", default="baseball_mlb")
     sub.add_parser("status", help="every loop: alive/dead, beats, code version, last poll (Phase D)")
     sub.add_parser("supervisor", help="own + restart all enabled loops; single-run (Phase D)")
+    sub.add_parser("check-invariants", help="ledger integrity scan (5 checks); CRITICAL, never blocks (02)")
     forecast_log = sub.add_parser("forecast-log", help="append a forecast probability triple (Phase 8)")
     forecast_log.add_argument("--vertical", required=True)
     forecast_log.add_argument("--category", required=True)
@@ -179,6 +180,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "supervisor":
         from .heartbeat import run_supervisor
         return run_supervisor(config, store)
+    if args.command == "check-invariants":
+        from .invariants import check_invariants, format_invariants
+        violations = check_invariants(store, config.settle_tripwire_secs, config.tracker_max_reappearances)
+        print(format_invariants(violations))
+        return 0
     if args.command == "regrade":
         from .experimental.analysis.regrade import ev_subset_test, format_regrade, score_sources
         from .experimental.analysis.devig_brier import format_methods, score_methods
@@ -254,12 +260,16 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Reconciled settled ARBs vs venue-actual resolution: {counts}")
             except Exception as exc:  # noqa: BLE001
                 print(f"settle: reconciliation failed (settle still stands): {exc}")
+        # 02: invariant scan at the end of the settle cycle. CRITICAL log, never blocks.
+        from .invariants import check_invariants, format_invariants
+        print(format_invariants(check_invariants(
+            store, config.settle_tripwire_secs, config.tracker_max_reappearances)))
         return 0
     if args.command == "parlay-scan":
         return _run_parlay_scan(store, config, args)
     if args.command == "settle-backfill":
         fixture_dir = Path("tests/fixtures") if args.fixtures else None
-        settled = settle_backfill_mlb(store, fixture_dir)
+        settled = settle_backfill_mlb(store, fixture_dir, config.settle_tripwire_secs)
         print(f"Backfilled {settled} MLB flat bets via the MLB Stats API.")
         return 0
     if args.command == "settle-health":
@@ -1305,7 +1315,7 @@ def run_settle_job(config, store: Store) -> None:
     except Exception as exc:  # noqa: BLE001
         print(f"settle: Odds API settlement failed: {exc}")
     try:
-        backfilled = settle_backfill_mlb(store)
+        backfilled = settle_backfill_mlb(store, tripwire_secs=config.settle_tripwire_secs)
         print(f"Daily settlement (MLB Stats backfill): {backfilled} flat bets resolved.")
     except Exception as exc:  # noqa: BLE001
         print(f"settle: MLB Stats backfill failed: {exc}")
@@ -1316,6 +1326,13 @@ def run_settle_job(config, store: Store) -> None:
         print(f"Daily reconciliation (venue-actual vs lock): {counts}")
     except Exception as exc:  # noqa: BLE001
         print(f"settle: reconciliation failed: {exc}")
+    # 02: run the invariant scan at the end of every settle cycle. CRITICAL log, never blocks.
+    try:
+        from .invariants import check_invariants, format_invariants
+        print(format_invariants(check_invariants(
+            store, config.settle_tripwire_secs, config.tracker_max_reappearances)))
+    except Exception as exc:  # noqa: BLE001
+        print(f"settle: check-invariants failed (settle still stands): {exc}")
 
 
 def run_daemon(config, store: Store) -> int:
@@ -1348,7 +1365,7 @@ def run_daemon(config, store: Store) -> int:
             # MLB Stats settlement is free and window-less, so settle finals every cycle —
             # this is what stops bets aging out and orphaning between daily settle runs.
             try:
-                n = settle_backfill_mlb(store)
+                n = settle_backfill_mlb(store, tripwire_secs=config.settle_tripwire_secs)
                 if n:
                     print(f"daemon: settled {n} MLB bets via MLB Stats backfill.")
             except Exception as exc:  # noqa: BLE001
