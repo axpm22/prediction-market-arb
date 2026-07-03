@@ -13,6 +13,52 @@ from .store import Store
 from .venues.mlbstats import MlbStatsAdapter
 from .venues.oddsapi import OddsApiAdapter
 
+SETTLE_TRIPWIRE_TAG = "settle-tripwire"
+# Inlined so core settlement never imports the experimental annotations module (loop_audit does
+# the same). Identical to arb.experimental.annotations.SCHEMA.
+_ANNOTATIONS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS annotations(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bet_id INTEGER NOT NULL,
+    tag TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(bet_id) REFERENCES flat_bets(id)
+);
+"""
+
+
+def _apply_settle_tripwire(con, new_id, placed_at_raw, settled_at, tripwire_secs) -> bool:
+    """Instant-settle tripwire (FIX_SETTLED_REBOOK_LOOP #3): if a just-settled row's
+    settled_at - placed_at is under one poll interval, its outcome was knowable at placement —
+    never a forecast, regardless of win/loss. The settle still stands (append-only); this
+    annotates `settle-tripwire` on the SAME transaction (so the row is never visible as
+    settled-without-annotation), which excludes it from every P&L cell and blacklists its
+    fingerprint from re-booking (tracker consults the tag). Insurance, not a filter — it fires
+    whichever upstream guard let a stale book / backfilled score / clock skew through. Returns
+    True if it fired; never blocks settlement."""
+    if tripwire_secs is None:
+        return False
+    placed = _parse_utc(placed_at_raw)
+    if placed is None:
+        return False
+    delta = (settled_at - placed).total_seconds()
+    if delta >= float(tripwire_secs):
+        return False
+    # con.execute (NOT executescript, which implicitly COMMITs first) so the settled row and this
+    # annotation land in the SAME transaction — the row is never visible as settled-without-tripwire.
+    con.execute(_ANNOTATIONS_SCHEMA)
+    con.execute(
+        "INSERT INTO annotations(bet_id, tag, reason, created_at) VALUES (?, ?, ?, ?)",
+        (int(new_id), SETTLE_TRIPWIRE_TAG,
+         f"settled {delta:.1f}s after placement (< {tripwire_secs}s poll interval); outcome "
+         f"knowable at placement — excluded from P&L and fingerprint blacklisted from re-booking",
+         settled_at.isoformat()),
+    )
+    print(f"CRITICAL settle-tripwire: bet {new_id} settled {delta:.1f}s after placement "
+          f"(< {tripwire_secs}s) — annotated, excluded, fingerprint blacklisted")
+    return True
+
 
 def settle_sports(store: Store, config, fixture_dir: Path | None = None) -> int:
     """Resolve open flat bets against final scores; append SETTLED rows, never edit.
@@ -48,13 +94,13 @@ def settle_sports(store: Store, config, fixture_dir: Path | None = None) -> int:
             if scores is None:
                 continue
             if bet["kind"] == "ARB":
-                _append_arb_resolved_row(con, bet)
+                _append_arb_resolved_row(con, bet, config.settle_tripwire_secs)
                 settled += 1
                 continue
             result = _leg_result(leg, scores)
             if result is None:
                 continue
-            _append_settled_row(con, bet, result, "score-settled")
+            _append_settled_row(con, bet, result, "score-settled", config.settle_tripwire_secs)
             settled += 1
     # Parlays settle in their own lane on the same scores pass (SPEC §11).
     settled += settle_parlays(store, config, fixture_dir)
@@ -102,7 +148,7 @@ def settle_parlays(store: Store, config, fixture_dir: Path | None = None) -> int
             if len(leg_results) != len(components):
                 continue  # at least one leg unresolved — leave OPEN for a later pass
             result = _parlay_result(leg_results)
-            _append_parlay_settled_row(con, bet, result, "parlay-score-settled")
+            _append_parlay_settled_row(con, bet, result, "parlay-score-settled", config.settle_tripwire_secs)
             settled += 1
     return settled
 
@@ -134,7 +180,8 @@ def _sport_from_event_key(leg: dict[str, Any]) -> str:
     return str(leg.get("event_key") or "").split(":", 1)[0]
 
 
-def _append_parlay_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, note: str) -> None:
+def _append_parlay_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, note: str,
+                               tripwire_secs: int | None = None) -> None:
     # Pregame-only guard (mirrors EV/ARB): a parlay placed at/after the earliest leg start is a
     # post-hoc artifact, not a pregame bet — record INVALID_IN_PLAY with no P&L.
     placed_at = _parse_utc(bet["placed_at"])
@@ -144,7 +191,8 @@ def _append_parlay_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result
         _append_invalid_row(con, bet, "INVALID_IN_PLAY", "invalid-in-play", f"{note}; invalid-in-play")
         return
     pnl = _sized_pnl(bet["optimistic_cost"], result, bet["stake_usd"])
-    con.execute(
+    settled_at = datetime.now(timezone.utc)
+    cur = con.execute(
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
                               live, edge, stake_usd, legs_json, optimistic_cost, confirmed_cost,
@@ -156,11 +204,12 @@ def _append_parlay_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result
             bet["fingerprint"], bet["id"], bet["opened_poll_id"], bet["category"], bet["sport"],
             bet["trusted"], bet["live"], bet["edge"], bet["stake_usd"], bet["legs_json"],
             bet["optimistic_cost"], None if pnl is None else str(pnl),
-            bet["placed_at"], datetime.now(timezone.utc).isoformat(), result, note,
+            bet["placed_at"], settled_at.isoformat(), result, note,
             bet["quality_flag"], bet["kelly_f_star"], bet["kelly_stake_usd"],
             bet["validation_rule"], bet["validation_tag"],
         ),
     )
+    _apply_settle_tripwire(con, cur.lastrowid, bet["placed_at"], settled_at, tripwire_secs)
 
 
 def _open_parlay_bets(store: Store) -> list[sqlite3.Row]:
@@ -178,7 +227,8 @@ def _open_parlay_bets(store: Store) -> list[sqlite3.Row]:
         )
 
 
-def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
+def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None,
+                        tripwire_secs: int | None = None) -> int:
     """Resolve open MLB EV/ARB bets against the MLB Stats API (no lookback window).
 
     Rescues the backlog the Odds API's 3-day window orphaned. Matches each open bet to a
@@ -280,7 +330,7 @@ def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
             if bet["kind"] == "ARB":
                 if len(bucket) != 1:  # keep cross-venue event identity strict for arbs
                     continue
-                _append_arb_resolved_row(con, bet)
+                _append_arb_resolved_row(con, bet, tripwire_secs)
                 settled += 1
                 continue
             if len(bucket) == 1:
@@ -291,7 +341,7 @@ def settle_backfill_mlb(store: Store, fixture_dir: Path | None = None) -> int:
                 note = "mlbstats-settled; doubleheader-consistent-result"
             if result is None:
                 continue
-            _append_settled_row(con, bet, result, note)
+            _append_settled_row(con, bet, result, note, tripwire_secs)
             settled += 1
     return settled
 
@@ -311,7 +361,8 @@ def _open_arb_bets(store: Store) -> list[sqlite3.Row]:
         )
 
 
-def _append_arb_resolved_row(con: sqlite3.Connection, bet: sqlite3.Row) -> None:
+def _append_arb_resolved_row(con: sqlite3.Connection, bet: sqlite3.Row,
+                             tripwire_secs: int | None = None) -> None:
     # Audit A3 — timing guard. A cross-venue lock is only real if both legs were quoted
     # before the event was live. If this row was placed at/after the event start, the
     # "arb" is a post-hoc time artifact (a quote captured after the result was effectively
@@ -333,7 +384,8 @@ def _append_arb_resolved_row(con: sqlite3.Connection, bet: sqlite3.Row) -> None:
     # Realized = provisional unless the venues resolved differently; scores alone cannot
     # see that, so the row is marked pending venue-resolution cross-check (corrections
     # append under the same bet id when that lands).
-    con.execute(
+    settled_at = datetime.now(timezone.utc)
+    cur = con.execute(
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
                               live, edge, stake_usd, legs_json, optimistic_cost, pnl_optimistic, pnl_confirmed,
@@ -347,12 +399,13 @@ def _append_arb_resolved_row(con: sqlite3.Connection, bet: sqlite3.Row) -> None:
             bet["fingerprint"], bet["id"], bet["opened_poll_id"], bet["category"], bet["sport"],
             bet["trusted"], bet["live"], bet["edge"], bet["stake_usd"], bet["legs_json"],
             bet["optimistic_cost"], bet["pnl_optimistic"], bet["pnl_confirmed"],
-            bet["placed_at"], datetime.now(timezone.utc).isoformat(),
+            bet["placed_at"], settled_at.isoformat(),
             "score-settled; realized=provisional; venue-resolution-cross-check-pending",
             quality_flag, bet["kelly_f_star"], bet["kelly_stake_usd"],
             bet["validation_rule"], bet["validation_tag"],
         ),
     )
+    _apply_settle_tripwire(con, cur.lastrowid, bet["placed_at"], settled_at, tripwire_secs)
 
 
 def settle_manual(store: Store, target_event_key: str, winning_outcome: str) -> int:
@@ -461,7 +514,8 @@ def _open_ev_bets(store: Store) -> list[sqlite3.Row]:
         )
 
 
-def _append_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, note: str) -> None:
+def _append_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, note: str,
+                        tripwire_secs: int | None = None) -> None:
     leg = json.loads(bet["legs_json"])[0]
     placed_at = _parse_utc(bet["placed_at"])
     leg_start = _leg_start_utc(leg)
@@ -481,7 +535,8 @@ def _append_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, 
     pnl_kelly_confirmed = _sized_pnl(confirmed["confirmed_cost"], result, bet["kelly_stake_usd"]) if confirmed else None
     validation_rule = confirmed["validation_rule"] if confirmed and confirmed["validation_rule"] is not None else bet["validation_rule"]
     validation_tag = confirmed["validation_tag"] if confirmed and confirmed["validation_tag"] is not None else bet["validation_tag"]
-    con.execute(
+    settled_at = datetime.now(timezone.utc)
+    cur = con.execute(
         """
         INSERT INTO flat_bets(fingerprint, reappearance_of, opened_poll_id, category, sport, kind, trusted,
                               live, edge, stake_usd, legs_json, optimistic_cost, confirmed_cost,
@@ -511,7 +566,7 @@ def _append_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, 
             None if pnl_kelly_confirmed is None else str(pnl_kelly_confirmed),
             # P&L attributes to the day the bet was placed (SPEC §9); report restates that day.
             bet["placed_at"],
-            datetime.now(timezone.utc).isoformat(),
+            settled_at.isoformat(),
             result,
             note,
             bet["quality_flag"],
@@ -521,6 +576,9 @@ def _append_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, 
             validation_tag,
         ),
     )
+    # LIVE_BASEBALL_EV legitimately places and settles inside the game — exempt (as loop_audit does).
+    if bet["kind"] != "LIVE_BASEBALL_EV":
+        _apply_settle_tripwire(con, cur.lastrowid, bet["placed_at"], settled_at, tripwire_secs)
 
 
 def _append_invalid_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, quality_flag: str, note: str) -> None:
