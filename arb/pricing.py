@@ -432,7 +432,9 @@ def consensus_outcome_times(quotes: list[Quote], min_books: int,
 
 
 def kalshi_fee_cost(price: Decimal, fee_rate: Decimal) -> Decimal:
-    """Kalshi's risk-based fee: rate·p·(1−p), peaks at p=0.5. Specific to Kalshi."""
+    """Risk-based quadratic fee: rate·p·(1−p), peaks at p=0.5. Kalshi's curve — and, since the
+    2026-03-30 schedule, Polymarket's too (fee = C·feeRate·p·(1−p), per-category feeRate). Both
+    map to FEE_MODELS['quadratic']."""
     return q6(fee_rate * price * (Decimal("1") - price))
 
 
@@ -452,7 +454,7 @@ def all_in_fee_cost(price: Decimal, fee_rate: Decimal, taker_buffer: Decimal = D
     """Per-contract friction for decisioning: venue taker fee (on its correct basis) plus a
     price buffer. `taker_buffer` is additive in contract-price units (0.005 = half a cent
     per $1 payout) guarding slippage/queue/stale-read frictions. `basis` selects the fee
-    curve: 'quadratic' for Kalshi, 'linear' for Polymarket/SX."""
+    curve: 'quadratic' (p(1−p)) for Kalshi and Polymarket, 'linear' for SX."""
     model = FEE_MODELS.get(basis, linear_fee_cost)
     return q6(model(price, fee_rate) + taker_buffer)
 

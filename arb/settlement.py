@@ -148,9 +148,21 @@ def settle_parlays(store: Store, config, fixture_dir: Path | None = None) -> int
             if len(leg_results) != len(components):
                 continue  # at least one leg unresolved — leave OPEN for a later pass
             result = _parlay_result(leg_results)
-            _append_parlay_settled_row(con, bet, result, "parlay-score-settled", config.settle_tripwire_secs)
+            _append_parlay_settled_row(con, bet, result, "parlay-score-settled", config.settle_tripwire_secs,
+                                       sx_win_fee_rate=getattr(config, "parlay_sx_win_fee_rate", Decimal("0")))
             settled += 1
     return settled
+
+
+def parlay_sx_win_fee(pnl: Decimal | None, legs: list, sx_win_fee_rate) -> Decimal | None:
+    """SX charges its 5% fee ONLY on winning parlays (learn.sx.bet/trading/fees, read 2026-07-02) —
+    singles are 0%. If a parlay won and any component leg is on SX, net the fee off the winnings
+    (applied to the profit, never the stake). No-op for losses, voids, or non-SX parlays."""
+    if pnl is None or pnl <= 0 or not sx_win_fee_rate:
+        return pnl
+    if any(str(leg.get("venue")) == "sx" for leg in legs):
+        return q6(pnl * (Decimal("1") - Decimal(str(sx_win_fee_rate))))
+    return pnl
 
 
 def _parlay_result(leg_results: list[str]) -> str:
@@ -181,7 +193,8 @@ def _sport_from_event_key(leg: dict[str, Any]) -> str:
 
 
 def _append_parlay_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result: str, note: str,
-                               tripwire_secs: int | None = None) -> None:
+                               tripwire_secs: int | None = None,
+                               sx_win_fee_rate: Decimal = Decimal("0")) -> None:
     # Pregame-only guard (mirrors EV/ARB): a parlay placed at/after the earliest leg start is a
     # post-hoc artifact, not a pregame bet — record INVALID_IN_PLAY with no P&L.
     placed_at = _parse_utc(bet["placed_at"])
@@ -191,6 +204,7 @@ def _append_parlay_settled_row(con: sqlite3.Connection, bet: sqlite3.Row, result
         _append_invalid_row(con, bet, "INVALID_IN_PLAY", "invalid-in-play", f"{note}; invalid-in-play")
         return
     pnl = _sized_pnl(bet["optimistic_cost"], result, bet["stake_usd"])
+    pnl = parlay_sx_win_fee(pnl, _parlay_component_legs(bet), sx_win_fee_rate)  # SX 5% on winning parlays
     settled_at = datetime.now(timezone.utc)
     cur = con.execute(
         """

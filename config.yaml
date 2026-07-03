@@ -311,24 +311,38 @@ fuzzy_match_threshold: 92
 # Older than fee_stale_days → load-time warning + stale-fee badge; never a halt.
 fee_stale_days: 30
 kalshi:
-  fee_rate: 0.07
-  source_url: "https://kalshi.com/docs (fee schedule; ceil(0.07*C*P*(1-P)))"
-  confirmed_on: 2026-06-10
+  fee_rate: 0.07   # general taker: ceil(0.07*C*P*(1-P)) — unchanged
+  # Re-verified 2026-07-02 against the "Fee Schedule for June 2026" (effective 2026-06-29) via the
+  # help center (help.kalshi.com/en/articles/13823805-fees) + fee-schedule listing. General event
+  # markets stay 0.07 risk-based; the only per-market exception is index markets (S&P/Nasdaq) at
+  # 0.035, which are OUT of the series we scan (sports/politics), so 0.07 holds for our scope.
+  # NOTE: the authoritative PDF (kalshi.com/docs/kalshi-fee-schedule.pdf) was rate-limited (429)
+  # this pass — general rate corroborated via help center, not read line-by-line from the PDF.
+  source_url: "https://kalshi.com/docs/kalshi-fee-schedule.pdf"
+  confirmed_on: 2026-07-02
 polymarket:
-  fee_rate: 0.05         # conservative default for unknown non-geopolitical categories
-  crypto_fee_rate: 0.07  # documented Crypto taker fee
-  sports_fee_rate: 0.03  # documented Sports taker fee; makers are 0
+  # 2026-07-02 (prompt 05): fee = C·feeRate·p·(1−p), QUADRATIC per category (basis flipped from
+  # linear in arb/venues/slippage.py). Rates are the published per-category taker feeRates;
+  # makers never pay. docs.polymarket.com/trading/fees, read 2026-07-02, effective 2026-03-30.
+  fee_rate: 0.05             # econ/culture/weather/other + conservative default for unknowns
+  crypto_fee_rate: 0.07      # Crypto taker feeRate
+  sports_fee_rate: 0.03      # Sports taker feeRate; makers are 0
+  politics_fee_rate: 0.04    # finance/politics/tech/mentions taker feeRate
+  econ_weather_fee_rate: 0.05  # economics/culture/weather/other taker feeRate
+  geopolitics_fee_rate: 0.0  # geopolitics: no fee
   source_url: "https://docs.polymarket.com/trading/fees"
-  confirmed_on: 2026-06-22
+  confirmed_on: 2026-07-02
 sx:
   fee_rate: 0.0   # taker 0%, maker 0%, parlays 5% (fees only on winning bets)
   # D3: SX charges its fee only on WINNING bets. An arb always has exactly one winning leg, so a
   # winning SX leg incurs this fee even when the taker/maker rate is 0. Charged conservatively as
-  # win_fee_rate * (1 - cost) on every SX leg. Keep 0.0 until SX's live single-bet winning-fee
-  # schedule is re-verified (the adapter already refuses live runs while fee_rate is null).
+  # win_fee_rate * (1 - cost) on every SX leg. SINGLES are 0% (taker + maker); the 5% fee applies
+  # ONLY to winning PARLAYS — modeled separately in the parlay lane (parlay.sx_win_fee_rate), so a
+  # single SX leg's win fee stays 0. help.sx.bet/en/articles/2798017-sx-bet-fees +
+  # learn.sx.bet/trading/fees, read 2026-07-02.
   win_fee_rate: 0.0
-  source_url: "https://docs.sx.bet/user-guides/trading/fees"
-  confirmed_on: 2026-06-10
+  source_url: "https://help.sx.bet/en/articles/2798017-sx-bet-fees"
+  confirmed_on: 2026-07-02
 execution:
   # Additive per-contract taker buffer in $1-payout units. 0.005 = half a cent.
   # This makes top-of-book edges survive slippage/latency/queue risk before display.
@@ -371,7 +385,9 @@ odds_api: { region: us, warn_below_credits: 100, abort_below_credits: 50 }
 # its own ledger lane (kind=PARLAY) and settles as the AND of its legs. enabled gates the
 # parlay-scan command. min_liquidity_usd is enforced strictly (observed zero-liquidity Kalshi
 # MVE books). divergence_threshold gates the cross-game independence signal only.
-parlay: { enabled: false, divergence_threshold: 0.05, min_liquidity_usd: 500 }
+# sx_win_fee_rate: SX charges 5% ONLY on winning parlays (learn.sx.bet/trading/fees, read
+# 2026-07-02). Consumed by the parlay lane's P&L; the lane is dormant (enabled: false).
+parlay: { enabled: false, divergence_threshold: 0.05, min_liquidity_usd: 500, sx_win_fee_rate: 0.05 }
 # Phase 3 parallel Kelly sizing (projection only; flat-$1 stays the headline).
 sizing:
   kelly_fraction: 0.25                  # quarter-Kelly

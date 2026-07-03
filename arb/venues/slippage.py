@@ -13,7 +13,11 @@ from arb.pricing import all_in_fee_cost, depth_scaled_buffer, q6
 # K1/K2 root cause: each venue's fee curve, in ONE place. The verifier re-priced Kalshi on
 # the linear curve while entry pricing used the quadratic one; keeping the basis here means
 # there is no second implementation of "what does this leg cost".
-FEE_BASIS = {"kalshi": "quadratic", "polymarket": "linear", "sx": "linear"}
+# 2026-07-02 (prompt 05): Polymarket flipped linear→quadratic. The published schedule
+# (docs.polymarket.com/trading/fees, read 2026-07-02; effective 2026-03-30) is
+# fee = C·feeRate·p·(1−p) — the SAME p(1−p) curve as Kalshi, with per-category feeRate. The old
+# linear basis double-charged Polymarket legs at mid prices (1.5¢ vs the true 0.75¢ at p=0.5).
+FEE_BASIS = {"kalshi": "quadratic", "polymarket": "quadratic", "sx": "linear"}
 
 
 def effective_buffer(ladder: tuple[tuple[Decimal, Decimal], ...] | None, model: str,
