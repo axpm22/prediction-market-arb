@@ -187,9 +187,20 @@ def write_daily_report(store: Store, report_date: date | None = None, output_dir
         premise = rolling_brier(store)
     except Exception:  # noqa: BLE001
         premise = None
+    # Phase F cadence honesty — planned vs measured poll interval per loop, from the polls table.
+    # The p95 printed here is the loop's REAL spec; "we scan every N s" claims cite it, not config.
+    cadence = None
+    try:
+        from .config import load_config
+        from .experimental.analysis.cadence import cadence_stats
+        planned = {"watch": load_config().watch_interval_secs}
+        cadence = [cadence_stats(store, kind, planned.get(kind)) for kind in ("watch", "focus", "ev-exit")]
+        cadence = [c for c in cadence if c["n_gaps"] > 0]
+    except Exception:  # noqa: BLE001
+        cadence = None
     md_path.write_text(_daily_markdown(report_date, records, cumulative_records,
                                        store.load_left_on_table(report_date),
-                                       _data_quality(store, report_date), premise=premise))
+                                       _data_quality(store, report_date), premise=premise, cadence=cadence))
     return csv_path, md_path
 
 
@@ -683,9 +694,18 @@ def _left_on_table_rows(rows: list[dict]) -> list[list[str]]:
             for reason, edges in sorted(buckets.items())]
 
 
+def _cadence_lines(cadence: list[dict] | None) -> list[str]:
+    """Phase F: planned vs measured poll interval per loop. The p95 is the loop's REAL spec."""
+    if not cadence:
+        return []
+    from .experimental.analysis.cadence import format_cadence
+    return ["## Cadence (Phase F — measured is the real spec, not config)", "",
+            *(f"- {format_cadence(c)}" for c in cadence), ""]
+
+
 def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulative_records: list[dict[str, object]],
                     left_on_table: list[dict] | None = None, data_quality: dict[str, object] | None = None,
-                    premise: dict | None = None) -> str:
+                    premise: dict | None = None, cadence: list[dict] | None = None) -> str:
     headline = _headline_records(records)
     cumulative_headline = _headline_records(cumulative_records)
     lines = [
@@ -696,6 +716,7 @@ def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulat
         _headline_line(headline),
         "",
         *_premise_monitor_lines(premise),
+        *_cadence_lines(cadence),
         *_data_quality_lines(data_quality),
         "## Class x Fill x Trust",
         "",
