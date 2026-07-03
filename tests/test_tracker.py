@@ -269,3 +269,25 @@ def test_tracker_blocks_duplicate_position_same_poll(tmp_path) -> None:
     assert [row["status"] for row in rows] == ["OPEN", "CLOSED"]
     assert rows[-1]["quality_flag"] == "duplicate-position-skipped"
     assert "skip-duplicate-position" in rows[-1]["notes"]
+
+
+def test_absent_close_only_touches_owning_cadence(tmp_path) -> None:
+    # Interleaving regression: cadences (watch/focus/ev-exit) poll on their own schedules. A
+    # fingerprint opened by ONE cadence must not be absent-closed by ANOTHER cadence's poll that
+    # never emits it — that cross-cadence close/reopen churn is what duplicated the ledger. Only
+    # the owning cadence's own absent poll closes it.
+    store = Store(tmp_path / "arb.sqlite")
+    opp = ev_opp("0.50")
+    record_tracker_poll(store, store.start_poll("focus"), [opp], now=NOW)  # owned by focus
+    record_tracker_poll(store, store.start_poll("watch"), [], now=NOW)     # watch poll: opp absent
+    with store.connect() as con:
+        statuses = [r["status"] for r in con.execute(
+            "SELECT status FROM flat_bets WHERE fingerprint=? ORDER BY id", (opp.fingerprint,))]
+    assert statuses == ["OPEN"], "a watch poll must not close a focus-owned fingerprint"
+
+    record_tracker_poll(store, store.start_poll("focus"), [], now=NOW)     # focus poll: opp absent
+    with store.connect() as con:
+        last = con.execute(
+            "SELECT status FROM flat_bets WHERE fingerprint=? ORDER BY id DESC LIMIT 1",
+            (opp.fingerprint,)).fetchone()
+    assert last["status"] == "CLOSED", "the owning cadence's own absent poll still closes it"
