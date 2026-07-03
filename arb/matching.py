@@ -64,6 +64,15 @@ def mma_start_anchor(et_date: date) -> datetime:
     return anchor.astimezone(timezone.utc)
 
 
+def start_grade(venue: str, sport: str, unreliable_start_venues: dict[str, list[str]] | None = None) -> str:
+    """Phase F start-time truth hierarchy (generalizes the tennis fix): grade a (venue, sport)
+    start source. `nominal` = the venue posts a placeholder slot (excluded from event_start_map,
+    so a nominal-only event is non-actionable, the E5 lane); `verified` = trusted. A free keyless
+    schedule API (e.g. MLB Stats) would rank above all venue times — wired where that adapter feeds
+    start_utc; here every non-nominal venue is `verified`."""
+    return "nominal" if sport in (unreliable_start_venues or {}).get(venue, ()) else "verified"
+
+
 def event_start_map(quotes, unreliable_start_venues: dict[str, list[str]] | None = None) -> dict[str, datetime]:
     """golf_slate_tennis_fix Part 1.0: per-event start = the EARLIEST start any RELIABLE venue
     claims for the event. Kalshi/SX starts are verified-reliable, so the earliest claim wins — a
