@@ -536,8 +536,15 @@ whale_tracker:
   skip_categories: [btc_15m, eth_15m]
   copy_fill: next_executable
 
-# MODEL_FOUNDATIONS Phase D — supervisor owns these loops (threads/subprocesses) and restarts any
-# that stops beating for 3x its interval; a second copy of any loop refuses to double-run.
+# MODEL_FOUNDATIONS Phase D — supervisor owns these loops (subprocesses) and restarts each when it
+# EXITS; a second copy refuses to double-run. One-shot children (watch --once) beat only at cycle
+# end, so heartbeat staleness must NOT trigger a restart (it killed healthy in-progress cycles).
 supervisor:
   processes: { watch: true }
   commands: { watch: "watch --once" }
+  # Force-restart a still-alive child only if it hangs past this many seconds (never a healthy
+  # multi-minute live cycle). Restart-on-exit is the normal path.
+  max_child_runtime_secs: 600
+# Alarm (arb status / daily report) when the newest persisted quote is older than this — a silent
+# data outage (host asleep, DNS down, supervisor kill-loop) must be visible, not invisible.
+data_stale_alarm_secs: 900

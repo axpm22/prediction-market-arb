@@ -4,18 +4,15 @@
 #        ./status.sh 414      (only count bets after baseline id 414, e.g. a test window)
 cd "$(dirname "$0")"
 BASE="${1:-0}"
-PY=.venv/bin/python
+PY=.venv/bin/python; [ -x "$PY" ] || PY=python3   # fall back when run outside the venv host
 
 echo "================ ARBITRAGE MODEL STATUS  ($(date -u +%H:%M:%SZ)) ================"
 
-# Health: exactly one of each process, no duplicates (duplicates = double-counted bets)
-echo "--- processes (each should appear once) ---"
-for p in "arb daemon" "arb.experimental focus" "arb.experimental verify" "arb.experimental hot" "arb.experimental political"; do
-  n=$(ps -Ao command | grep -- "$p" | grep -v grep | grep -v caffeinate | wc -l | tr -d ' ')
-  flag=""; [ "$n" -gt 1 ] && flag="  <-- DUPLICATE, double-counting!"
-  [ "$n" -eq 0 ] && flag="  <-- not running"
-  printf "  %-18s x%s%s\n" "$p" "$n" "$flag"
-done
+# Health: Phase D heartbeats (arb/heartbeat.py) — ALIVE/STALE/DEAD per supervised loop.
+# Replaces the pre-supervisor ps-grep (process names like "arb daemon" no longer exist;
+# watch runs as short-lived `watch --once` relaunches, invisible to ps).
+echo "--- processes (heartbeats) ---"
+$PY -m arb status 2>&1 | sed 's/^/  /'
 
 sqlite3 data/arb.sqlite "
 SELECT '';
