@@ -1305,11 +1305,26 @@ class Handler(BaseHTTPRequestHandler):
             _send_json(self, {"ok": False, "error": str(exc)}, 500)
 
 
+class _QuietServer(ThreadingHTTPServer):
+    """A browser dropping the connection mid-response raises ConnectionResetError/BrokenPipeError
+    inside the handler thread; the default handle_error dumps a full traceback to logs/web.log.
+    Traceback-greps are this repo's outage-forensics tool, so client-disconnect noise there has
+    real cost — swallow those two with one short line, keep every other error loud."""
+
+    def handle_error(self, request, client_address):
+        import sys
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionResetError, BrokenPipeError)):
+            print(f"web: client {client_address[0]} disconnected mid-response ({type(exc).__name__})")
+            return
+        super().handle_error(request, client_address)
+
+
 def serve(port: int = 8787) -> None:
     config = load_config()
     Handler.store = Store(config.database_path)
     Handler.config = config
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    httpd = _QuietServer(("127.0.0.1", port), Handler)
     print(f"Dashboard: http://localhost:{port}  (read-only; Ctrl-C to stop)")
     try:
         httpd.serve_forever()
