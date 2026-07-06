@@ -212,7 +212,7 @@ def run_supervisor(config, store: Store) -> int:
     # (it would kill a healthy in-progress cycle before it persists, an infinite kill-restart loop
     # that collected zero quotes 2026-07-04..06). Restart only on actual EXIT; force-restart a still-
     # alive child only if it exceeds a generous max runtime (genuinely hung).
-    max_runtime = getattr(config, "supervisor_max_child_runtime_secs", 600)
+    max_runtime = config.supervisor_max_child_runtime_secs
     if supervisor_stop_requested():
         print("supervisor: data/stop-all present — refusing to start (remove it to run).")
         release_lock("supervisor")
