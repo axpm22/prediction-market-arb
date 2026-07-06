@@ -18,7 +18,7 @@ Read `docs/SPEC.md` fully before writing any code. It is the single source of tr
 
 ## Workflow
 
-- Python 3.11+, dependencies pinned in `requirements.txt`. Use `requests`, `rich`, `rapidfuzz`, `schedule`, `python-dotenv`, `pyyaml`, `pytest`. Stdlib `sqlite3` (no ORM).
+- Python 3.11+, dependencies pinned in `requirements.txt`. Use `requests`, `rich`, `rapidfuzz`, `schedule`, `python-dotenv`, `pyyaml`, `pytest`, `anthropic` (AI matcher only — rule 11; never for market data). Stdlib `sqlite3` (no ORM).
 - After each phase: run `pytest`, then run the phase's acceptance command from docs/SPEC.md §9 and show the output.
 - Keep modules under ~300 lines; split if larger.
 - `ODDS_API_KEY` comes from `.env` (git-ignored). Create `.env.example`.
