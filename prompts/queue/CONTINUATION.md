@@ -38,8 +38,10 @@ Read order for whoever picks this up: `CLAUDE.md` → `MASTER_PLAN.md` §2/§4 �
 
 **Operating the live system:**
 - **STOP:** `touch data/stop-all` — the supervisor exits within one loop tick (~30s). NOT `pkill`.
-- **START:** `nohup env PYTHONUNBUFFERED=1 .venv/bin/python -m arb supervisor >> logs/supervisor.log 2>&1 &`
-  (remove `data/stop-all` first).
+- **START (with sleep protection):**
+  `nohup env PYTHONUNBUFFERED=1 caffeinate -i .venv/bin/python -m arb supervisor >> logs/supervisor.log 2>&1 &`
+  (remove `data/stop-all` first). `caffeinate -i` prevents idle sleep — without it the host slept
+  2026-07-04..05 and collected nothing.
 - **Restart after merging code** (loops run old code until restarted): stop, then start. The
   supervisor warns once when the working tree HEAD changes.
 - Health: `python -m arb status`, `python -m arb check-invariants`, `python -m arb report`.
@@ -198,3 +200,46 @@ careful serial pass: read `SPEC_V2.md` §3/§4, build one predicate that reprodu
 assignment exactly, migrate all 15 "clean" sites in one go, and prove the before/after report diff is
 empty. Hold the Stage-3 review until ~a week of clean data is in. Stop the live system with
 `touch data/stop-all`.
+
+---
+
+## 7. Verification addendum (2026-07-06 audit pass)
+
+Two claims above needed correction when re-verified against the live repo:
+
+1. **The clean-data clock is NOT running.** Heartbeats are current, but **zero quotes have
+   persisted since 2026-07-03T21:57Z** — polls/day: Jul 3 = 14 polls / 7,246 quotes; Jul 4 = 20 / 0;
+   Jul 5 = 22 / 0; Jul 6 = 4 / 0. `logs/supervisor.log` shows `NameResolutionError` on every venue
+   host and 1–2 h poll gaps: the host machine has been offline/asleep. (K3 held — no close storms.)
+   Consequences: (a) only Jul 3 counts as a data day, so the Stage-3 review date slips until a real
+   week accumulates; (b) restart with sleep protection — the §1 START line lacks the `caffeinate -i`
+   the old README command had (or use a launchd KeepAlive plist); (c) the "Phase-D polish" item in §4
+   is not cosmetic: `arb status` and the daily-report header must alarm on zero-quote days — this
+   outage produced no alarm anywhere.
+2. **The 09 site list is wider than "15".** Grepping the SQL forms too
+   (`trusted *== *1|trusted=1|quality_flag IS NULL`) finds **23 matches in 13 files** — the 9 files
+   in §3 plus `arb/experimental/analysis/arb_capacity.py`, `arb/experimental/analysis/loop_audit.py`,
+   `arb/experimental/ev/clv.py`, `arb/experimental/political/sweep.py`. The executor of 09 must treat
+   the grep (re-run fresh), not the list above, as ground truth for T-ELIG-5; offline auditors
+   (loop_audit) may justifiably keep a local filter, but that exception must be argued in the commit
+   message, not assumed.
+
+---
+
+## 8. Incident fix landed (2026-07-06)
+
+Addendum finding #1 is **resolved**. Root cause was worse than "host asleep": the supervisor's
+liveness check killed **healthy in-progress `watch --once` children** before they could persist
+(a full live cycle outlasts the heartbeat-staleness window), an infinite kill-restart loop that
+persisted zero quotes even while online. Fixes (this commit):
+- **Supervisor:** restart a child only when it **exits**; force-restart a still-alive child only if
+  it hangs past `supervisor.max_child_runtime_secs` (600). Heartbeat staleness no longer restarts.
+- **Sleep protection:** START now runs under `caffeinate -i` (§1).
+- **Alarm:** `heartbeat.data_stale_alarm` — `arb status` and the daily-report header now shout
+  `⚠ DATA ALARM` when the newest quote is older than `data_stale_alarm_secs` (900). A silent outage
+  is no longer invisible.
+- **`arb status`:** the DEAD-between-cycles false alarm is fixed (`format_status` STALE-vs-DEAD via
+  `supervisor_alive`); `status.sh` is a one-shot health+ledger glance.
+Also fixed a pre-existing time-dependent test (`ai_matched_entries` now takes an injectable `now`).
+After merging, **restart the supervisor** (with `caffeinate -i`) and confirm `arb status` shows
+`data: fresh`.

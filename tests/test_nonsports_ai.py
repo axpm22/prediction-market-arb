@@ -117,6 +117,7 @@ def test_two_poll_pipeline_matches_and_caches(tmp_path, monkeypatch) -> None:
         kalshi_titles=[("KXCPI", "CPI above 3% in June?")],
         polymarket_events=[_pm_event()],
         client_factory=lambda cfg: canned(good_verdict(0.93), calls),
+        now=NOW,  # deterministic close-by window (else fails once real time passes the fixture date)
     )
     entries = ai_matched_entries(store, AI_CFG, **kwargs)
     assert len(calls) == 1 and len(entries) == 1

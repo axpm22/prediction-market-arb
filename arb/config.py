@@ -132,6 +132,8 @@ class AppConfig:
     unreliable_start_venues: dict[str, list[str]]  # venue -> sports whose start_utc from it is nominal
     supervisor_processes: dict[str, bool]      # Phase D: which loops the supervisor owns
     supervisor_commands: dict[str, str]        # Phase D: process name -> `arb <cmd>` to launch
+    supervisor_max_child_runtime_secs: int     # Phase D: kill+restart a child only if hung past this
+    data_stale_alarm_secs: int                 # alarm when newest quote is older than this
     auto_fill: bool
     trusted_pairs: set[str]
     fuzzy_match_threshold: int
@@ -352,6 +354,8 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         unreliable_start_venues={str(k): list(v) for k, v in (raw.get("unreliable_start_venues", {}) or {}).items()},
         supervisor_processes={str(k): bool(v) for k, v in (raw.get("supervisor", {}).get("processes", {}) or {}).items()},
         supervisor_commands={str(k): str(v) for k, v in (raw.get("supervisor", {}).get("commands", {}) or {}).items()},
+        supervisor_max_child_runtime_secs=int((raw.get("supervisor", {}) or {}).get("max_child_runtime_secs", 600)),
+        data_stale_alarm_secs=int(raw.get("data_stale_alarm_secs", 900)),
         auto_fill=bool(raw["auto_fill"]),
         trusted_pairs=set(raw["trusted_pairs"]),
         fuzzy_match_threshold=int(raw["fuzzy_match_threshold"]),

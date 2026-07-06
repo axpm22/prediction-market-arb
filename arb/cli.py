@@ -182,9 +182,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  [{s.lo:.2f},{s.hi:.2f}) {s.n:>6} {s.mean_cost:>10.1%} {s.realized_win_rate:>9.1%} {s.edge:>+8.1%}  {s.signal}")
         return 0
     if args.command == "status":
-        from .heartbeat import format_status, git_head, read_heartbeats
+        from .heartbeat import data_stale_alarm, format_status, git_head, read_heartbeats
         print("Loop status (Phase D):")
         print(format_status(read_heartbeats(store), current_head=git_head()))
+        alarm = data_stale_alarm(store, config.data_stale_alarm_secs)
+        print(alarm if alarm else "data: fresh (quotes flowing).")
         return 0
     if args.command == "supervisor":
         from .heartbeat import run_supervisor

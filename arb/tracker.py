@@ -198,9 +198,18 @@ def write_daily_report(store: Store, report_date: date | None = None, output_dir
         cadence = [c for c in cadence if c["n_gaps"] > 0]
     except Exception:  # noqa: BLE001
         cadence = None
+    # Data-freshness alarm in the header — a silent collection outage must never be invisible.
+    stale = None
+    try:
+        from .config import load_config
+        from .heartbeat import data_stale_alarm
+        stale = data_stale_alarm(store, load_config().data_stale_alarm_secs)
+    except Exception:  # noqa: BLE001
+        stale = None
     md_path.write_text(_daily_markdown(report_date, records, cumulative_records,
                                        store.load_left_on_table(report_date),
-                                       _data_quality(store, report_date), premise=premise, cadence=cadence))
+                                       _data_quality(store, report_date), premise=premise, cadence=cadence,
+                                       stale=stale))
     return csv_path, md_path
 
 
@@ -731,12 +740,14 @@ def _cadence_lines(cadence: list[dict] | None) -> list[str]:
 
 def _daily_markdown(report_date: date, records: list[dict[str, object]], cumulative_records: list[dict[str, object]],
                     left_on_table: list[dict] | None = None, data_quality: dict[str, object] | None = None,
-                    premise: dict | None = None, cadence: list[dict] | None = None) -> str:
+                    premise: dict | None = None, cadence: list[dict] | None = None,
+                    stale: str | None = None) -> str:
     headline = _headline_records(records)
     cumulative_headline = _headline_records(cumulative_records)
     lines = [
         f"# Daily Tracker Report {report_date.isoformat()}",
         "",
+        *( [f"> {stale}", ""] if stale else [] ),
         "## Headline",
         "",
         _headline_line(headline),

@@ -59,6 +59,36 @@ def beat(store: Store, process: str, *, pid: int | None = None, polls_done: int 
         )
 
 
+def newest_quote_age_secs(store, now: datetime | None = None) -> float | None:
+    """Seconds since the most recent persisted quote — the true 'is data flowing?' signal. None
+    if no quotes yet. Alarms on this catch silent outages (host asleep, DNS down, supervisor
+    kill-loop) that heartbeats alone miss: a loop can 'beat' while persisting zero quotes."""
+    now = now or datetime.now(timezone.utc)
+    with store.connect() as con:
+        try:
+            row = con.execute("SELECT MAX(fetched_at) AS m FROM quotes").fetchone()
+        except Exception:  # noqa: BLE001
+            return None
+    if not row or not row["m"]:
+        return None
+    last = datetime.fromisoformat(str(row["m"]).replace("Z", "+00:00"))
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return (now - last).total_seconds()
+
+
+def data_stale_alarm(store, alarm_secs: int, now: datetime | None = None) -> str | None:
+    """A loud one-liner when data collection has stalled (or None when fresh). Used by `arb status`
+    and the daily report so a silent outage is never invisible."""
+    age = newest_quote_age_secs(store, now)
+    if age is None:
+        return "⚠ DATA ALARM: no quotes persisted yet."
+    if age > alarm_secs:
+        return (f"⚠ DATA ALARM: newest quote is {int(age)}s old (> {alarm_secs}s) — "
+                "data collection STALLED (check the supervisor / host sleep / connectivity).")
+    return None
+
+
 def read_heartbeats(store: Store) -> list[dict]:
     with store.connect() as con:
         con.executescript("CREATE TABLE IF NOT EXISTS heartbeats(process TEXT PRIMARY KEY, pid INTEGER NOT NULL, "
@@ -118,16 +148,31 @@ def release_lock(process: str, lock_dir: Path = LOCK_DIR) -> None:
     (lock_dir / f"{process}.pid").unlink(missing_ok=True)
 
 
+def supervisor_alive(lock_dir: Path = LOCK_DIR) -> bool:
+    """True iff the supervisor's pid lock is held by a live process."""
+    try:
+        holder = int((lock_dir / "supervisor.pid").read_text().strip())
+    except (OSError, ValueError):
+        return False
+    return pid_alive(holder)
+
+
 def format_status(heartbeats: list[dict], now: datetime | None = None,
-                  current_head: str | None = None) -> str:
+                  current_head: str | None = None, supervisor_up: bool | None = None) -> str:
+    """Under the supervisor, watch runs as one-shot `watch --once` relaunches: its recorded child
+    pid is EXPECTED to be dead between cycles, so pid-liveness alone must never mean DEAD.
+    A fresh beat OR a live pid = ALIVE; stale beat with the supervisor lock held = STALE (it will
+    relaunch); DEAD only when the beat is stale and no live supervisor holds the lock."""
     now = now or datetime.now(timezone.utc)
-    lines = [f"  {'process':<14}{'state':<8}{'pid':>7}{'code':<12}{'polls':>7}  last beat            interval"]
+    if supervisor_up is None:
+        supervisor_up = supervisor_alive()
+    lines = [f"  {'process':<14}{'state':<8}{'pid':>7} {'code':<10}{'polls':>7}  last beat            interval"]
     for hb in heartbeats:
-        alive = pid_alive(hb["pid"]) and not is_stale(hb, now)
-        state = "ALIVE" if alive else ("STALE" if pid_alive(hb["pid"]) else "DEAD")
+        fresh, running = not is_stale(hb, now), pid_alive(hb["pid"])
+        state = "ALIVE" if (fresh or running) else ("STALE" if supervisor_up else "DEAD")
         code = str(hb.get("git_head") or "?") + ("*" if hb.get("dirty") else "")
         drift = "  <-- code changed" if current_head and hb.get("git_head") and hb["git_head"] != current_head else ""
-        lines.append(f"  {hb['process']:<14}{state:<8}{hb['pid']:>7}{code:<12}"
+        lines.append(f"  {hb['process']:<14}{state:<8}{hb['pid']:>7} {code:<10}"
                      f"{hb['polls_done']:>7}  {str(hb['last_beat_at'])[:19]}  {hb.get('interval_secs') or '?'}{drift}")
     if not heartbeats:
         lines.append("  (no heartbeats recorded — no loop has run yet)")
@@ -135,10 +180,12 @@ def format_status(heartbeats: list[dict], now: datetime | None = None,
 
 
 def run_supervisor(config, store: Store) -> int:
-    """Start every enabled loop from config `processes` as a subprocess and restart any that stops
-    beating for 3× its interval. Minimal by design: launches `python -m arb <cmd>`, monitors the
-    heartbeats table, logs restarts. A working-tree change under a running loop warns once (no
-    auto-restart — a rebuild is a human decision because tests may not have run)."""
+    """Start every enabled loop from config `processes` as a subprocess and restart each when it
+    EXITS (one-shot `watch --once` cadence); a still-alive child is force-restarted only if it hangs
+    past `supervisor.max_child_runtime_secs`. Heartbeat staleness NEVER triggers a restart — a
+    healthy live cycle can outlast the staleness window, and killing it mid-fetch was an infinite
+    kill-restart loop that collected zero quotes 2026-07-04..06. A working-tree change under a
+    running loop warns once (no auto-restart — a rebuild is a human decision)."""
     import sys
     import time
 
@@ -152,11 +199,20 @@ def run_supervisor(config, store: Store) -> int:
     start_head = git_head()
     children: dict[str, subprocess.Popen] = {}
 
+    launched_at: dict[str, float] = {}
+
     def launch(name: str) -> None:
         cmd = config.supervisor_commands.get(name, name)
         children[name] = subprocess.Popen([sys.executable, "-m", "arb", *cmd.split()])
+        launched_at[name] = time.monotonic()
         print(f"supervisor: launched {name} (pid {children[name].pid})")
 
+    # A one-shot child (watch --once) beats only at the END of its cycle, and a full live cycle can
+    # exceed the heartbeat-staleness window — so heartbeat staleness must NOT trigger a restart
+    # (it would kill a healthy in-progress cycle before it persists, an infinite kill-restart loop
+    # that collected zero quotes 2026-07-04..06). Restart only on actual EXIT; force-restart a still-
+    # alive child only if it exceeds a generous max runtime (genuinely hung).
+    max_runtime = getattr(config, "supervisor_max_child_runtime_secs", 600)
     if supervisor_stop_requested():
         print("supervisor: data/stop-all present — refusing to start (remove it to run).")
         release_lock("supervisor")
@@ -176,13 +232,15 @@ def run_supervisor(config, store: Store) -> int:
                 print(f"supervisor: WARNING working tree changed ({start_head} -> {git_head()}); "
                       "loops still run OLD code until you restart them.")
                 start_head = git_head()
-            beats = {hb["process"]: hb for hb in read_heartbeats(store)}
             for name, child in list(children.items()):
-                hb = beats.get(name)
-                dead = child.poll() is not None or (hb is not None and is_stale(hb))
-                if dead:
-                    print(f"supervisor: {name} stopped beating/exited — restarting.")
-                    child.poll() is None and child.terminate()
+                exited = child.poll() is not None
+                hung = (not exited) and (time.monotonic() - launched_at.get(name, 0.0)) > max_runtime
+                if exited:
+                    print(f"supervisor: {name} exited — restarting.")
+                    launch(name)
+                elif hung:
+                    print(f"supervisor: {name} exceeded {max_runtime}s (hung) — killing + restarting.")
+                    child.terminate()
                     launch(name)
     except KeyboardInterrupt:
         for child in children.values():

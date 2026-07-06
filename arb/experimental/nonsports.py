@@ -210,7 +210,7 @@ def ai_matched_entries(store: Store, ai_cfg: dict[str, Any], ncfg: dict[str, Any
                        max_days: int | None = None,
                        kalshi_titles: list[tuple[str, str]] | None = None,
                        polymarket_events: list[dict[str, Any]] | None = None,
-                       client_factory=None) -> list[dict[str, Any]]:
+                       client_factory=None, now: datetime | None = None) -> list[dict[str, Any]]:
     """Map-style entries for AI-matched pairs. Fuzzy candidates at the discovery level
     (kalshi series x polymarket event) split by structure: a single open market on each
     venue keeps the one-shot path (political); multi-market series (weather/macro) go
@@ -218,7 +218,7 @@ def ai_matched_entries(store: Store, ai_cfg: dict[str, Any], ncfg: dict[str, Any
     reach Haiku. Human map entries always win; verdicts cache at market level."""
     from arb.nonsports_ai import MatcherUnavailable, make_client
 
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
     client_factory = client_factory or make_client
     kalshi_titles = kalshi_titles if kalshi_titles is not None else fetch_kalshi_series_titles(list(ncfg["kalshi_categories"]))
     polymarket_events = polymarket_events if polymarket_events is not None else fetch_polymarket_events(list(ncfg["polymarket_tags"]))
@@ -254,8 +254,8 @@ def ai_matched_entries(store: Store, ai_cfg: dict[str, Any], ncfg: dict[str, Any
             # Billing/auth: stop asking this poll, keep whatever already matched.
             print(f"ai-matcher: unavailable, deferring new pairs: {exc}")
             break
-    # Same near-future window as the human map.
-    return load_map_entries(entries, max_days)
+    # Same near-future window as the human map (deterministic on the injected `now`).
+    return load_map_entries(entries, max_days, today=now.date())
 
 
 def _single_market_entry(store, ai_cfg, market, series_ticker, k_title, pm_id, pm_title,
@@ -333,9 +333,11 @@ def _ai_entry(market, pm_id, tokens, row, key, series_ticker) -> dict[str, Any]:
     }
 
 
-def load_map_entries(entries: list[dict[str, Any]], max_days: int | None) -> list[dict[str, Any]]:
-    """Apply load_map's enabled/close_by window to in-memory entries (AI-matched ones)."""
-    today = datetime.now(timezone.utc).date()
+def load_map_entries(entries: list[dict[str, Any]], max_days: int | None,
+                     today: date | None = None) -> list[dict[str, Any]]:
+    """Apply load_map's enabled/close_by window to in-memory entries (AI-matched ones).
+    `today` is injectable so the window is deterministic in tests (real now by default)."""
+    today = today or datetime.now(timezone.utc).date()
     kept = []
     for entry in entries:
         try:
