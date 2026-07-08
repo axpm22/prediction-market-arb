@@ -55,15 +55,25 @@ def _strip_ufc_suffix(name: str) -> str:
     return name.split(" (")[0].strip()
 
 
+def _teams_from_title(title: str) -> tuple[str, str]:
+    parts = title.replace(" vs. ", " vs ").split(" vs ")
+    return (parts[0].strip(), parts[1].strip()) if len(parts) == 2 else ("", "")
+
+
 def quotes_from_event(cfg, event: dict, books: dict[str, dict], sport: str) -> list[Quote]:
     quotes: list[Quote] = []
     now = datetime.now(timezone.utc)
+    ev_away, ev_home = _teams_from_title(event.get("title", ""))
     for m in event.get("markets", []):
         mtype = IN_SCOPE_TYPES.get(m.get("sportsMarketType") or "")
         if mtype is None or not m.get("clobTokenIds"):
             continue  # method-of-victory / go-the-distance etc. out of scope
         outcomes = json.loads(m["outcomes"])
         tokens = json.loads(m["clobTokenIds"])
+        if mtype == "WINNER" and len(outcomes) == 2:
+            away, home = outcomes[0], outcomes[1]
+        else:
+            away, home = ev_away, ev_home
         start = _parse_start(m.get("gameStartTime"))
         line = str(Decimal(str(m["line"]))) if m.get("line") is not None else None
         vol = Decimal(str(m.get("volume24hr") or 0))
@@ -85,7 +95,7 @@ def quotes_from_event(cfg, event: dict, books: dict[str, dict], sport: str) -> l
                 ladder_json=json.dumps([[a["price"], a["size"]] for a in asks]),
                 live=False, fetched_at=now, category="sports", sport=sport,
                 bid=Decimal(bids[0]["price"]) if bids else None, volume_24h=vol,
-                home="", away="", start_utc=start,
+                home=home, away=away, start_utc=start,
                 start_grade="nominal" if start else "absent",
                 venue_market_id=f"{m.get('conditionId', m.get('id'))}:{token}"))
     return quotes

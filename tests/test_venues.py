@@ -113,6 +113,7 @@ def test_polymarket_prices_from_clob_never_gamma():
     assert q.fee_cost == Decimal("0.03") * Decimal("0.42") * Decimal("0.58")
     assert q.ladder_json                       # full book captured (bug B4)
     assert q.volume_24h == Decimal("133.02")
+    assert {q.away, q.home} == {"Colorado Rockies", "San Francisco Giants"}
     # tokens with no book -> no quote (unknown depth is None, never infinite)
     assert all(x.venue_market_id.split(":")[1] in books for x in quotes)
 
