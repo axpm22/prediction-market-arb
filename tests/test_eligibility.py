@@ -93,4 +93,11 @@ def test_ai_matched_always_review():
 
 
 def test_nonsports_segregated():
-    assert classify(obj(category="nonsports"), CFG)[2] == "review"
+    # non-sports: only single-venue locked kinds may be clean (own report section,
+    # never headline — the headline filter is trusted+sports+pregame+clean)
+    assert classify(obj(category="nonsports", kind="EV"), CFG)[2] == "review"
+    assert classify(obj(category="nonsports", kind="XSPREAD",
+                        venue_pair="kalshi:polymarket"), CFG)[2] == "review"
+    ok, _, lane = classify(obj(category="nonsports", kind="NEGRISK",
+                               venue_pair="polymarket:self", start_grade="absent"), CFG)
+    assert (ok, lane) == (True, "clean")

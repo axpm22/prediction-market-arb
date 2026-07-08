@@ -64,6 +64,8 @@ class Quote:
     start_utc: datetime | None = None
     start_grade: str = "nominal"     # verified > nominal > absent (§11.3)
     venue_market_id: str = ""        # ticker / conditionId+token / marketHash
+    venue_side: str = ""             # side AT THE VENUE — complement_map never touches
+                                     # this; reconcile maps venue results through it
 
     @property
     def effective_cost(self) -> Decimal:

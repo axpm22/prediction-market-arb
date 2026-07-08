@@ -89,7 +89,7 @@ def quotes_from_event(cfg, event: dict, books: dict[str, dict], sport: str) -> l
             label = outcome.upper() if mtype == "TOTAL" else _strip_ufc_suffix(outcome)
             quotes.append(Quote(
                 event_key="", venue="polymarket", book="polymarket", market_type=mtype,
-                line=line, outcome_label=label, side="YES", raw_price=ask, cost=ask,
+                line=line, outcome_label=label, side="YES", venue_side="YES", raw_price=ask, cost=ask,
                 fee_cost=leg_fee_cost(cfg, "polymarket", "sports", ask),
                 depth_usd=Decimal(asks[0]["size"]) * ask,
                 ladder_json=json.dumps([[a["price"], a["size"]] for a in asks]),

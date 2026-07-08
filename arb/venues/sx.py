@@ -62,7 +62,7 @@ def quotes_from_orders(cfg, market: dict, orders: list[dict], sport: str) -> lis
             label = outcome_name
         quotes.append(Quote(
             event_key="", venue="sx", book="sx", market_type=mtype, line=line,
-            outcome_label=label, side="YES", raw_price=cost, cost=cost,
+            outcome_label=label, side="YES", venue_side="YES", raw_price=cost, cost=cost,
             fee_cost=Decimal(0),  # singles 0% (§6.5); parlay 5% lives in its lane
             depth_usd=depth,
             ladder_json=str([[str(c), str(d)] for c, d in levels]),

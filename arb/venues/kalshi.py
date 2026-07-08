@@ -91,7 +91,7 @@ def parse_markets(cfg, markets: list[dict], sport: str, market_type: str) -> lis
             size = m.get(size_key)
             depth = Decimal(size) * ask if size is not None else None
             quotes.append(Quote(
-                side=side, raw_price=ask, cost=ask,
+                side=side, venue_side=side, raw_price=ask, cost=ask,
                 fee_cost=leg_fee_cost(cfg, "kalshi", "sports", ask),
                 bid=Decimal(m[bid_key]), depth_usd=depth, **common))
     return quotes

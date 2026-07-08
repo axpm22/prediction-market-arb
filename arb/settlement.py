@@ -1,0 +1,139 @@
+"""Settlement (SPEC §11): resolution-settled kinds resolve via oracles; every
+resolution appends ONE terminal `settled` bet_events row — rule 9's mechanism.
+Tripwire, timing guards, VOID/PARTIAL conventions live here."""
+from __future__ import annotations
+
+import json
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from zoneinfo import ZoneInfo
+
+from arb.logutil import get_logger
+from arb.matching import line_key
+
+log = get_logger("arb.settle", "logs/scan.log")
+NY = ZoneInfo("America/New_York")
+
+
+def open_resolution_bets(store):
+    return store.query(
+        """SELECT fb.* FROM flat_bets fb
+           WHERE fb.kind IN ('EV', 'NEGRISK', 'BTC')
+             AND NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id = fb.id
+                             AND be.kind IN ('settled', 'void'))""")
+
+
+def _leg_result(leg: dict, winner: str, total: Decimal | None = None) -> str:
+    """WON/LOST/VOID for one leg given the winning outcome token (or OVER/UNDER
+    semantics from the final total)."""
+    if winner == "VOID":
+        return "VOID"
+    if leg.get("market_type") == "TOTAL" and total is not None:
+        line = Decimal(line_key(leg["line"]))
+        if total == line:
+            return "VOID"  # push on integer lines
+        went = "OVER" if total > line else "UNDER"
+        hit = leg["outcome"] == went
+    else:
+        hit = leg["outcome"] == winner
+    if leg.get("side", "YES") == "NO":
+        hit = not hit
+    return "WON" if hit else "LOST"
+
+
+def settle_bet(cfg, store, bet, winner: str, source: str, now: datetime,
+               total: Decimal | None = None, fraction: Decimal | None = None) -> None:
+    start = datetime.fromisoformat(bet["event_start_utc"]) \
+        if bet["event_start_utc"] else None
+    # future-start guard: refuse to settle an event that hasn't started (§11.1)
+    if start and start > now:
+        log.warning("refusing to settle future event for bet %d", bet["id"])
+        return
+    # terminal only once the event genuinely ended (grace, §10.4)
+    if start and now < start + timedelta(
+            minutes=int(cfg["tracker"]["terminal_mute_grace_mins"])):
+        log.info("bet %d inside terminal grace; not settling yet", bet["id"])
+        return
+    legs = json.loads(bet["legs_json"])
+    results = [_leg_result(leg, winner, total) for leg in legs]
+    payload = {"result": results[0] if len(results) == 1 else results,
+               "winner": winner, "source": source,
+               "per_leg": results}
+    if fraction is not None:
+        payload["fraction"] = str(fraction)  # UMA fractional settlement (v3.4)
+    store.insert("bet_events", {
+        "bet_id": bet["id"], "created_at": now.isoformat(), "kind": "settled",
+        "payload_json": json.dumps(payload)})
+
+    placed = datetime.fromisoformat(bet["created_at"])
+    # instant-settle tripwire: resolution-settled kinds only (§10.4)
+    if (now - placed).total_seconds() < float(cfg["settle_tripwire_secs"]):
+        store.insert("annotations", {
+            "created_at": now.isoformat(), "target_kind": "bet",
+            "target_id": str(bet["id"]), "kind": "settle-tripwire",
+            "detail": "settled within one poll interval of placement"})
+        store.insert("blacklist", {
+            "fingerprint": bet["fingerprint"], "event_key": bet["event_key"],
+            "reason": "settle-tripwire", "created_at": now.isoformat()})
+    # timing guard: placed after the event started (defense in depth, §11.1)
+    if start and placed > start:
+        store.insert("annotations", {
+            "created_at": now.isoformat(), "target_kind": "bet",
+            "target_id": str(bet["id"]), "kind": "INVALID_AFTER_FINAL",
+            "detail": f"placed {placed.isoformat()} after start {start.isoformat()}"})
+
+
+def settle_manual(cfg, store, event_key: str, result: str,
+                  now: datetime | None = None) -> int:
+    """`arb settle --manual EVENT RESULT`. RESULT = winning outcome token,
+    'VOID', or 'PARTIAL:<fraction>'. Appends immutable rows — a typo is forever."""
+    now = now or datetime.now(timezone.utc)
+    fraction = None
+    winner = result
+    if result.upper().startswith("PARTIAL:"):
+        winner, fraction = "PARTIAL", Decimal(result.split(":", 1)[1])
+    n = 0
+    for bet in open_resolution_bets(store):
+        if bet["event_key"] == event_key:
+            settle_bet(cfg, store, bet, winner, "manual", now, fraction=fraction)
+            n += 1
+    return n
+
+
+def settle_auto_mlb(cfg, store, now: datetime | None = None) -> int:
+    """MLB Stats API is the primary MLB settlement oracle (free, unlimited)."""
+    from arb.matching import load_aliases, normalize_team
+    from arb.venues.mlbstats import fetch_schedule, is_final
+    now = now or datetime.now(timezone.utc)
+    aliases = load_aliases()
+    bets = [b for b in open_resolution_bets(store)
+            if b["sport"] == "baseball_mlb" and b["event_start_utc"]]
+    if not bets:
+        return 0
+    dates = sorted({datetime.fromisoformat(b["event_start_utc"]).astimezone(NY)
+                    .date().isoformat() for b in bets})
+    finals = []
+    for d in dates:
+        try:
+            finals.extend(g for g in fetch_schedule(cfg, d) if is_final(g))
+        except Exception as e:  # noqa: BLE001
+            log.warning("mlb schedule fetch failed for %s: %s", d, e)
+    n = 0
+    for bet in bets:
+        start = datetime.fromisoformat(bet["event_start_utc"])
+        for g in finals:
+            ha = normalize_team("baseball_mlb", g["home"], aliases)
+            aa = normalize_team("baseball_mlb", g["away"], aliases)
+            if not ha or not aa or {ha, aa} != set(bet["event_key"].split(":")[2:4]):
+                continue
+            if abs(g["start_utc"] - start) > timedelta(hours=6):
+                continue
+            if g["home_score"] is None or g["away_score"] is None:
+                continue
+            winner = ha if g["home_score"] > g["away_score"] else aa
+            total = Decimal(g["home_score"] + g["away_score"])
+            settle_bet(cfg, store, bet, winner, f"mlbstats:{g['gamePk']}", now,
+                       total=total)
+            n += 1
+            break
+    return n

@@ -1,0 +1,141 @@
+"""metrics.py — ONE place computing every displayed number (SPEC §14.1, bug I7).
+Derives pnl_confirmed / result / settled_at at read time from bet_events; no
+derived value is ever stored back (rule 9). The exit engine (§10.8) lives here:
+read-time counterfactual columns, pure functions of stored quotes."""
+from __future__ import annotations
+
+import json
+from decimal import Decimal
+
+from arb.models import LOCKED_KINDS, q6
+from arb.venues.fees import leg_fee_cost
+
+
+def _events(store, bet_id: int) -> list[dict]:
+    return [dict(r) for r in store.query(
+        "SELECT * FROM bet_events WHERE bet_id=? ORDER BY id", (bet_id,))]
+
+
+def _annotated(store, bet_id: int, kinds=("settle-tripwire", "INVALID_AFTER_FINAL")):
+    rows = store.query(
+        "SELECT kind FROM annotations WHERE target_kind='bet' AND target_id=?",
+        (str(bet_id),))
+    return [r["kind"] for r in rows if r["kind"] in kinds]
+
+
+def bet_effective_cost(bet: dict) -> Decimal:
+    legs = json.loads(bet["legs_json"])
+    return sum(Decimal(l["cost"]) + Decimal(l.get("fee_cost") or 0) for l in legs)
+
+
+def bet_pnl_optimistic(store, bet: dict) -> Decimal | None:
+    """Locked kinds: stored at entry. Resolution-settled: derived from the
+    terminal settled event + entry costs. Pending -> None."""
+    if bet.get("pnl_optimistic") is not None:
+        return Decimal(str(bet["pnl_optimistic"]))
+    settled = [e for e in _events(store, bet["id"]) if e["kind"] == "settled"]
+    if not settled:
+        return None
+    payload = json.loads(settled[0]["payload_json"])
+    stake = Decimal(str(bet["stake_usd"]))
+    c = bet_effective_cost(bet)
+    results = payload.get("per_leg") or [payload["result"]]
+    if "fraction" in payload:  # PARTIAL(f): pnl = stake × (f/cost − 1)  (v3.4)
+        return q6(stake * (Decimal(payload["fraction"]) / c - 1))
+    r = results[0] if len(results) == 1 else None
+    if r == "VOID":
+        return Decimal(0)
+    if r == "WON":
+        return q6(stake * (1 - c) / c)
+    if r == "LOST":
+        return -stake
+    return None
+
+
+def bet_confirmed(store, bet: dict) -> tuple[bool, Decimal | None]:
+    """(confirmed?, pnl_confirmed). Missing/in-play confirm = MISSED; the miss
+    enters the confirmed cell as $0 (§10.3 — the bet was never made)."""
+    evs = _events(store, bet["id"])
+    conf = [e for e in evs if e["kind"] == "confirmed"]
+    if not conf:
+        return False, None
+    payload = json.loads(conf[0]["payload_json"])
+    cost_sum = Decimal(payload["cost_sum"])
+    stake = Decimal(str(bet["stake_usd"]))
+    if bet["kind"] in LOCKED_KINDS:
+        return True, q6(stake * (1 / cost_sum - 1))
+    # resolution-settled: same result basis, confirmed entry price
+    opt = bet_pnl_optimistic(store, bet)
+    if opt is None:
+        return True, None  # confirmed but pending resolution
+    if opt == -stake:
+        return True, -stake
+    return True, q6(stake * (1 - cost_sum) / cost_sum) if opt > 0 else (True, opt)
+
+
+def pnl_confirmed_cell(rows: list[dict]) -> tuple[Decimal, int]:
+    """Aggregate a confirmed-P&L cell: missed counts $0 AND is counted (bug I8)."""
+    total, missed = Decimal(0), 0
+    for r in rows:
+        if not r.get("confirmed"):
+            missed += 1
+        elif r.get("pnl_if_confirmed") is not None:
+            total += Decimal(str(r["pnl_if_confirmed"]))
+    return total, missed
+
+
+def pnl_markout(cfg, bet: dict, marks: list[dict]) -> Decimal | None:
+    """One-sided adverse drift (v3.4 sign): pnl_optimistic + Σ_legs min(0, D_h) ×
+    contracts; +30s horizon, else earliest covered PREGAME horizon; in_play marks
+    excluded. Favorable drift never credited."""
+    if bet.get("pnl_optimistic") is None:
+        return None
+    legs = json.loads(bet["legs_json"])
+    costs = [Decimal(l["cost"]) for l in legs]
+    s = sum(costs)
+    contracts = Decimal(str(bet["stake_usd"])) / s  # equal counts per leg (§7.2)
+    total = Decimal(str(bet["pnl_optimistic"]))
+    for i, leg in enumerate(legs):
+        if leg.get("mid0") is None:
+            continue
+        leg_marks = sorted((m for m in marks
+                            if m["leg_index"] == i and not m["in_play"]),
+                           key=lambda m: m["horizon_secs"])
+        if not leg_marks:
+            continue
+        drift = Decimal(str(leg_marks[0]["mark_cost"])) - Decimal(leg["mid0"])
+        total += min(Decimal(0), drift) * contracts
+    return q6(total)
+
+
+def exit_policy_pnls(cfg, bet: dict, quote_series: list[dict],
+                     category: str = "sports") -> dict:
+    """§10.8 SELL engine, read-time. quote_series: [{bid, at, mid?}] ascending.
+    Sell basis binding: exit_value = bid − taker fee on the exit trade."""
+    legs = json.loads(bet["legs_json"])
+    if len(legs) != 1:
+        return {"hold": None, "take_profit": None, "trailing": None}
+    leg = legs[0]
+    c = Decimal(leg["cost"]) + Decimal(leg.get("fee_cost") or 0)
+    stake = Decimal(str(bet.get("stake_usd") or 1))
+    contracts = stake / c
+    flagged = Decimal(str(bet["edge_points"]))
+    ex = cfg["exit"]
+    out = {"hold": None, "take_profit": None, "trailing": None}
+    peak = None
+    armed = False
+    for pt in quote_series:
+        bid = Decimal(str(pt["bid"]))
+        exit_value = bid - leg_fee_cost(cfg, leg["venue"], category, bid)
+        gain = exit_value - c
+        if out["take_profit"] is None and gain >= ex["capture_fraction"] * flagged:
+            out["take_profit"] = q6(contracts * gain)
+        mid = Decimal(str(pt.get("mid", bid)))
+        unrealized = contracts * (mid - c)
+        peak = unrealized if peak is None else max(peak, unrealized)
+        if not armed and peak >= ex["min_peak_edge_fraction"] * flagged * contracts:
+            armed = True
+        if armed and out["trailing"] is None and peak > 0 \
+                and unrealized <= peak * (1 - ex["trail_fraction"]):
+            out["trailing"] = q6(contracts * gain)
+    return out

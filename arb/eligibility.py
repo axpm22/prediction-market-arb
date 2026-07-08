@@ -24,18 +24,24 @@ def classify(o: dict, cfg) -> tuple[bool, str, str]:
     """Returns (eligible, reason, lane) with lane in {'clean','review','invalid'}."""
     kind = o["kind"]
 
-    # category segregation (rule 11, §10.6): never blended into clean/headline
+    # category segregation (rule 11, §10.6): non-sports rows live in their own
+    # report section (the headline filter is trusted+sports+pregame+clean), but
+    # only single-venue locked kinds may be clean there (§12); everything else
+    # non-sports is review.
+    is_sports = o.get("category") == "sports"
     if o.get("ai_matched"):
         return False, "ai-matched", "review"
-    if o.get("category") != "sports" and kind not in ("POLITICAL",):
+    if not is_sports and kind not in ("NEGRISK", "POLITICAL"):
         return False, "nonsports-segregated", "review"
     if o.get("live"):
         return False, "live", "review"
 
-    # timing (§8.4 guards, restated for every money-touching caller)
-    if o.get("start_grade") == "absent":
+    # timing (§8.4 guards, restated for every money-touching caller);
+    # start/pregame are sports concepts — non-sports gates on resolution horizon
+    # at booking (nonsports_max_days, tracker) instead
+    if is_sports and o.get("start_grade") == "absent":
         return False, "start-unknown", "review"
-    if not o.get("pregame", True):
+    if is_sports and not o.get("pregame", True):
         return False, "in-play", "review"
 
     # quality quarantine (labels, never deletes)

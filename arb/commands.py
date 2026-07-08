@@ -101,16 +101,79 @@ def cmd_negrisk_scan(cfg, store, args):
 
 
 def cmd_report(cfg, store, args):
+    from arb.report import print_daily, write_daily
     day = args.daily or date.today().isoformat()
-    bets = store.query(
-        "SELECT * FROM flat_bets WHERE date(created_at) = ? ORDER BY id", (day,))
     polls = store.query(
         "SELECT COUNT(*) c, COALESCE(SUM(n_quotes),0) q FROM polls WHERE date(started_at) = ?",
         (day,))[0]
-    table = Table(title=f"Daily report {day} — polls={polls['c']} quotes={polls['q']}")
-    for col in ("kind", "lane", "bets", "staked", "pnl_optimistic"):
-        table.add_column(col)
-    if not bets:
-        table.add_row("—", "—", "0", "$0.00", "$0.00")
-    console.print(table)
+    console.print(f"[dim]{day}: polls={polls['c']} quotes={polls['q']}[/]")
+    write_daily(cfg, store, day)
+    print_daily(cfg, store, day)
     return 0
+
+
+def cmd_scan(cfg, store, args):
+    """Odds API consensus refresh (SPEC §13.1). RULE 2: the only credit-spending
+    command besides settle scores; no-op without a key or when disabled."""
+    from datetime import datetime, timezone
+
+    from arb.consensus import compute_consensus
+    from arb.venues import oddsapi
+    if not cfg["consensus_enabled"]:
+        console.print("[dim]consensus disabled; scan is a no-op[/]")
+        return 0
+    if not oddsapi.api_key():
+        console.print("[yellow]no ODDS_API_KEY in .env — scan is a no-op "
+                      "(add a free key from the-odds-api.com)[/]")
+        return 0
+    now = datetime.now(timezone.utc).isoformat()
+    total_c, total_b = 0, 0
+    for sport_key in cfg["consensus_sports"]:
+        rows = oddsapi.fetch_odds(cfg, str(sport_key))
+        cons, books = compute_consensus(cfg, rows, now)
+        store.insert_many("consensus", cons)
+        store.insert_many("consensus_books", books)
+        total_c += len(cons)
+        total_b += len(books)
+    console.print(f"consensus rows: {total_c}; per-book rows: {total_b}")
+    return 0
+
+
+def cmd_settle(cfg, store, args):
+    from datetime import datetime, timezone
+
+    from arb.invariants import check
+    from arb.reconcile import reconcile
+    from arb.settlement import settle_auto_mlb, settle_manual
+    if args.manual:
+        event_key, result = args.manual
+        console.print(f"[bold]manual settle[/]: event={event_key!r} result={result!r}")
+        if args.dry_run:
+            console.print("[dim]--dry-run: nothing appended[/]")
+            return 0
+        if not args.yes:
+            console.print("[red]refusing without -y: appends immutable rows — "
+                          "a typo is forever[/]")
+            return 1
+        n = settle_manual(cfg, store, event_key, result)
+        console.print(f"settled {n} bets")
+    else:
+        n = settle_auto_mlb(cfg, store)
+        console.print(f"auto-settled {n} MLB bets (mlbstats)")
+    n_rec = reconcile(cfg, store)
+    console.print(f"reconciled {n_rec} bets")
+    violations = check(cfg, store)
+    if violations:
+        console.print(f"[red]INVARIANT VIOLATIONS: {len(violations)}[/]")
+        return 1
+    return 0
+
+
+def cmd_check_invariants(cfg, store, args):
+    from arb.invariants import check
+    violations = check(cfg, store)
+    if violations:
+        for v in violations:
+            console.print(f"[red]{v}[/]")
+        return 1
+    return 0  # silent when clean

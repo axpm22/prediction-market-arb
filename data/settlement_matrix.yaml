@@ -1,0 +1,23 @@
+# Settlement matrix (SPEC §11.4): per sport × scenario, GREEN/AMBER/RED with
+# rulebook citations. The trusted gate requires EVERY cell GREEN for a sport
+# before a venue pair can be whitelisted for it. No vibes-based whitelisting.
+# ALL CELLS SHIP AMBER: nothing has been human-verified against both venues'
+# rulebooks yet. A reconcile retro-check flips cells from lived settlements.
+baseball_mlb:
+  extra_innings:   { status: AMBER, citation: "TODO: kalshi rulebook §, polymarket resolution text" }
+  suspension:      { status: AMBER, citation: "TODO" }
+  doubleheader:    { status: AMBER, citation: "TODO" }
+  postponement:    { status: AMBER, citation: "TODO" }
+basketball_nba:
+  overtime:        { status: AMBER, citation: "TODO" }
+  postponement:    { status: AMBER, citation: "TODO" }
+soccer:
+  extra_time:      { status: AMBER, citation: "TODO: 90-min vs advance-to-next divergence" }
+  penalties:       { status: AMBER, citation: "TODO" }
+  abandonment:     { status: AMBER, citation: "TODO" }
+tennis:
+  retirement:      { status: AMBER, citation: "TODO" }
+  walkover:        { status: AMBER, citation: "TODO" }
+mma:
+  no_contest:      { status: AMBER, citation: "TODO: real Kalshi-vs-Polymarket cancellation divergence found in V2 parity check" }
+  card_change:     { status: AMBER, citation: "TODO" }
