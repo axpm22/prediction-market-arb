@@ -1,0 +1,223 @@
+# ArbitrageModel config — every value the system reads (SPEC.md §15).
+# Defaults are the V2-hardened values; comments are binding documentation.
+timezone: America/New_York          # all daily boundaries EST/EDT
+bankroll_usd: 1000
+max_stake_pct: 0.10
+ev_threshold: 0.02                  # display gate only; ev.e_min is the booking floor if re-opened
+divergence_threshold: 0.03
+push_pricing: false                 # optional Poisson push-prob scaling of integer-line edges (§8.3)
+arb_stale_warn: 0.04                # ROI above this books REVIEW automatically for EVERY locked kind
+                                    #   (ARB, XSPREAD, NEGRISK, POLITICAL, BTC) — stale quote or mismatch, not edge
+max_leg_skew_secs: 60               # outer recording bound (actionable bound is execution.*)
+max_start_drift_mins: 30            # venues disagreeing on start = match suspect
+match_suspect_prob_diff: 0.15       # same outcome priced >15pts apart = matching error
+capital_charge_annual: 0.05         # locks below T-bill-ish carry are 'uneconomic'
+sport_typical_duration_hours: { baseball_mlb: 3.5, basketball_nba: 2.5,
+                                soccer: 2.0, tennis: 2.5, mma: 1.0 }
+venue_settlement_lag_hours: { kalshi: 24, polymarket: 48, sx: 24 }  # verify empirically
+min_books_for_consensus: 3
+min_books_for_consensus_totals: 2   # totals are line-fragmented
+consensus_outlier_points: 0.10      # optional outlier drop: book >10pts from cross-book median excluded
+                                    #   (disabled below 3 books; n=2 rows tagged thin-consensus)
+devig_method: power                 # coin-flip default (n=30 bake-off is noise); re-run at n>=200
+sharp_books: [lowvig, betonlineag]  # betus removed — soft book, not sharp
+weight_sharp_books: false           # measurement-parallel until it beats plain median on CLV
+consensus_anchor: { enabled: false, book: pinnacle, region: eu, markets: h2h }
+                                    # single sharp anchor experiment (§18.3); h2h ONLY:
+                                    #   420 credits/mo; h2h+totals = 540 > 500 budget (§6.4)
+min_executable_usd: 50              # the only global per-leg depth floor
+micro:                              # thin-book EV lane, SUBORDINATE to ev_enabled:
+  enabled: true                     #   while ev_enabled is false, micro books nothing
+                                    #   (would-be flags -> left_on_table)
+  min_depth_usd: 5
+  max_stake_usd: 25
+  e_min: 0.08                       # edge floor at full depth...
+  e_min_thin: 0.15                  # ...rising linearly as depth thins: interpolate from
+                                    #   (min_executable_usd -> e_min) down to
+                                    #   (micro.min_depth_usd -> e_min_thin) (pinned v3.4)
+  assume_thin_venues: [sx]
+  max_event_exposure_usd: 50
+  max_venue_exposure_usd: 100
+max_days_to_settlement: 14          # booking gate for resolution-settled bets; farther -> left_on_table
+nonsports_max_days: 7               # resolution-settled non-sports only; locked-at-entry intra-market
+                                    #   arbs (political lane) are EXEMPT — political markets run months
+sports: [baseball_mlb, basketball_nba, soccer, tennis, mma]   # add americanfootball_nfl by 2026-09-01 — activity gating is blind to sports missing here
+unreliable_start_venues: { polymarket: [tennis] }
+activity_lookahead_hours: 48        # sport ACTIVE iff a venue lists a fixture in window
+consensus_sports: [baseball_mlb]    # add tournament keys only while they run
+odds_api_sport_aliases: { soccer_fifa_world_cup: soccer,
+                          tennis_atp_wimbledon: tennis,
+                          tennis_wta_wimbledon: tennis,
+                          mma_mixed_martial_arts: mma }
+odds_api_markets: { default: "h2h,totals",
+                    tennis_atp_wimbledon: h2h, tennis_wta_wimbledon: h2h,
+                    mma_mixed_martial_arts: h2h }
+scan_breaks: true
+break_windows: { basketball_nba: [48, 15], soccer: [45, 15] }  # [offset-mins-after-start, duration-mins]
+                                    # NBA 48 is a placeholder — real halftime starts ~60-70
+                                    #   wall-clock mins after tip; calibrate from stored quotes
+watch_interval_secs: 60
+consensus_enabled: true
+ev_enabled: false                   # FROZEN by Phase A verdict; see PREREGISTRATION
+consensus_max_age_hours: 8
+consensus_pregame_max_age_hours: 3
+ev:
+  e_min: 0.05                       # booking floor when re-opened (display gate: ev_threshold)
+  clv_window_mins: 30               # closing mid = last consensus within this window of start
+  kelly_fraction: 0.25
+  edge_suspect_above: 0.25          # above = quarantine as data error
+  max_edge: 0.15                    # above = record quote, book nothing
+  require_exact_match: [tennis, mma]  # golf removed — not a supported sport anywhere in the system
+  enforce_depth_floor: true
+  reject_one_sided_books: true
+scan_times: ["06:15", "10:30", "13:30", "18:30"]
+                                    # v3.4: retimed so the 3h freshness windows cover modal
+                                    #   MLB starts (13:05-13:40, 18:40-19:10 ET); the old
+                                    #   10:00/15:00/19:00 grid left 13:00-15:00 and
+                                    #   18:00-19:00 dead (§13.1 booking rule)
+daily_report_time: "23:59"
+settle_time: "09:30"
+settle_days_from: 3                 # Odds API scores max lookback
+settle_tripwire_secs: 60            # instant-settle = knowable at placement
+tracker:
+  terminal_mute_grace_mins: 180
+  max_reappearances: 10             # observability bound, logs only
+mlbstats_enabled: true
+auto_fill: false                    # permanently false; flat_bets is the executor
+trusted_pairs: []                   # empty until the §18.2 gate clears — weeks by construction
+fuzzy_match_threshold: 92
+fee_stale_days: 30                  # fees are dated facts; stale = badge, never halt
+kalshi:      { fee_rate: 0.07, maker_fee_rate: 0.0175,   # maker = 25% of taker, NOT zero
+               source_url: "https://kalshi.com/docs/kalshi-fee-schedule.pdf",
+               confirmed_on: 2026-07-02 }
+polymarket:  { sports_fee_rate: 0.03, crypto_fee_rate: 0.07, politics_fee_rate: 0.04,
+               econ_weather_fee_rate: 0.05, geopolitics_fee_rate: 0.0, fee_rate: 0.05,
+               source_url: "https://docs.polymarket.com/trading/fees",
+               confirmed_on: 2026-07-02 }   # QUADRATIC per category; makers 0
+sx:          { fee_rate: 0.0, win_fee_rate: 0.0,   # singles free; 5% winning PARLAYS only
+               source_url: "https://help.sx.bet/en/articles/2798017-sx-bet-fees",
+               confirmed_on: 2026-07-02 }
+execution:
+  taker_price_buffer: 0.005         # half-cent per contract vs latency/queue risk
+  slippage_model: flat              # 'ladder' is a versioned change to every cost vector
+  fillable_fraction: 1.0            # flip toward 0.5 once live fills calibrate it
+  fixed_cost_per_fill_usd: { kalshi: 0.0, polymarket: 0.02, sx: 0.02 }
+                                    # gas/redemption/withdrawal amortization; projections only — verify
+  arb_size_by_ladder: false         # §18.4 gate
+  arb_size_safety_frac: 0.5
+  min_ladder_fraction: 0.5          # capacity says UNKNOWN below this
+  max_actionable_skew_secs: 10
+  venue_fetch_timeout_secs: 15      # per-venue budget; venue fetches run concurrently
+  venue_max_retries: 2              # 429/5xx backoff with jitter, then poll partial for venue
+  min_adj_edge_points: 0.002        # NB: "points" = probability FRACTION (0.002 = 0.2pts),
+                                    #   never percentage points — unit bug = 100x error
+  line_velocity_points_per_sec: { default: 0.001, baseball_mlb: 0.0008,
+                                  basketball_nba: 0.0015 }
+                                    # fractions/sec; pre-registered PLACEHOLDERS — re-estimate
+                                    #   from the lead-lag lane's stored per-event mid changes
+  doubleheader_cluster_tol_secs: 7200
+odds_api: { region: us, warn_below_credits: 100, abort_below_credits: 50 }
+negrisk:
+  enabled: true
+  min_edge: 0.006                   # dry-run patch A1: MUST exceed p_tail/(1-p_tail) where
+                                    #   p_tail = 1 - exhaustive_proof.mids_sum_min, or the
+                                    #   proof tolerance admits worst-case-NEGATIVE baskets
+                                    #   into the headline; loader enforces the inequality
+  scan_no_side: true                # also flag sum(NO asks) < N-1 baskets
+  kalshi_events: true               # also scan Kalshi event_ticker groups of mutually exclusive markets
+  require_exhaustive_exclusive: true  # enforced by the §8.4 proof below, never assumed
+  exhaustive_proof:
+    require_venue_flag: true          # Polymarket negRisk flag / Kalshi event mutually_exclusive (verify per rule 3)
+    mids_sum_min: 0.995               # dry-run patch A1: tolerated tail (1 - this) must sit
+                                      #   below min_edge; 0.98 tolerated a 2% tail against a
+                                      #   0.5pt edge floor = negative-EV baskets booked clean
+    mids_sum_max: 1.10                # above this = overlapping outcomes or stale books -> REVIEW
+    max_half_spread_sum: 0.005        # dry-run patch A2: proof invalid if summed half-spreads
+                                      #   exceed the window slack (1 - mids_sum_min) — noisy
+                                      #   mids can mask a tail larger than the tolerance;
+                                      #   loader asserts equality with (1 - mids_sum_min)
+    require_two_sided_all_outcomes: true  # any listed outcome without a live two-sided book
+                                          #   -> unproven-exhaustive (v3.4)
+  max_outcomes: 30
+  scan_limit: 200
+  scan_pages: 3                     # paginate; V1's page cap hid most of the surface
+  min_executable_usd: 5             # single-venue: thin baskets worth measuring
+btc_arb:
+  enabled: false                    # enable only WITH its settlement path + oracle-agreement study
+  window_match_secs: 5
+  max_window_minutes: 15
+  trusted: false
+parlay: { enabled: false, divergence_threshold: 0.05, min_liquidity_usd: 500,
+          sx_win_fee_rate: 0.05 }
+ai_matcher:
+  enabled: false                    # enable after ground-truth set exists (§18.5)
+  model: claude-haiku-4-5
+  min_confidence: 0.85
+  max_new_pairs_per_day: 100
+  max_rules_chars: 8000
+  paper_fill: true
+  paper_stake_usd: 1
+nonsports:
+  watch_interval_secs: 300
+  candidate_threshold: 85
+  kalshi_categories: ["Politics", "Economics", "Climate and Weather"]
+  polymarket_tags: [politics, economy, weather]
+verify: { poll_secs: 10, max_bet_age_secs: 900 }
+hot:    { poll_secs: 2, check_interval_secs: 1.0, watch_duration_secs: 900,
+          dead_checks: 3, max_watchers: 3 }   # 900s: 120s right-censored every lifetime
+scoring:                            # consumed by §18.3 segment gating (regrade/report)
+                                    # v3.3: the weighted composite score is DROPPED — an
+                                    #   arbitrary 0.40/0.25/0.20/0.15 blend is researcher
+                                    #   degrees of freedom; segments pass or fail the §18.3
+                                    #   hard gates (Wilson, CLV, ECE, n) independently
+  score_min_n: 30
+  block_below: 30
+  recent_window: 10
+  calibration_gate: true            # ECE gate blocks a segment even if ROI passes
+  ece_estimator: debiased           # v3.4: raw ECE has a noise floor — under PERFECT
+                                    #   calibration E[ECE] ~= sqrt(2/pi) * sum_b w_b *
+                                    #   sqrt(p_b(1-p_b)/n_b) ~= 0.06 at n=200 / 5 bins,
+                                    #   nearly the old 0.10 gate; gate on ECE_raw - E0
+  ece_max: 0.05                     # on the DEBIASED estimator (~= the old raw-0.10 intent)
+  ece_bins: 5                       # quantile bins; 10 equal-width bins at n=200 flap
+sizing: { kelly_fraction: 0.25, max_kelly_fraction_of_bankroll: 0.05 }
+validation:
+  ev_filter: { rule_id: H-EVFILTER, kind: EV, min_cost: 0.40, max_cost: 0.75,
+               max_flagged_edge: 0.02, target_n: 190, halfway_n: 95,
+               kill_consecutive_losses: 10 }
+supervisor:
+  processes: { watch: true }        # add lanes deliberately, one at a time
+  commands:  { watch: "watch --once" }
+  max_child_runtime_secs: { default: 600, settle: 1800 }  # per-process; settle+reconcile runs long
+data_stale_alarm_secs: 900
+clock_skew_alarm_secs: 5            # status alarms if NTP offset exceeds this
+log_retention_days: 90              # rotate daily; forensics greps these
+db_backup: { time: "04:10", dest: "backups/" }   # sqlite3 .backup daily; report prints backup age
+                                    # dest MUST be a different disk or synced folder (§13.3);
+                                    #   a same-volume dest is a startup WARNING (v3.4)
+canary: { enabled: true, day_of_month: 1 }       # monthly synthetic end-to-end fixture, tagged lane
+tape_check: { enabled: true, window_secs: 60 }   # fill tape_confirmed only if venue printed a trade
+                                    #   at-or-through the fill price in-window (verify endpoints, rule 3)
+zombie_spread_min: 0.90             # volume_24h==0 AND (ask-bid)>=this -> zombie tag, non-actionable
+risk_free_rate: { value: 0.043, source_url: "TODO-13wk-T-bill", confirmed_on: 2026-07-07 }
+                                    # dated fact like fees [VERIFY at build] (v3.5)
+deployment:                         # capital-deployment layer (addendum §2-§6); paper unaffected
+  annualized_hurdle: 0.20
+  xspread_autobook: false           # STRUCTURAL: floor max(2F,0.5%) > ceiling F+0.5% for all F>0.5%
+  auto_book_min_net_edge: "max(2*total_fees, 0.005)"   # same-venue ARB only
+  leg_failure_suspend_rate: 0.20
+  fok_window_secs: 5
+slippage: { max_edge_fraction: 0.20, depth_divisor: 5 }
+mc_sim: { n_bets: 1000, block: sport_day, ruin_threshold: 0.5, max_ruin_prob: 0.01,
+          min_history_bets: 300 }
+mismatch_pricing: { lgm: 1.0, rule_of_three: true }    # p_upper = 3/n mismatch-free positions
+caps: { per_event_frac: 0.05, per_sport_frac: 0.10, per_day_totals_frac: 0.15 }
+kind_taxonomy: { cross_venue: XSPREAD, same_venue_locked: ARB }   # RULE 1 (v3.5)
+exit:                               # SELL engine (§10.8): read-time counterfactual columns,
+  enabled: true                     #   pure function of stored quotes — no ledger writes
+  policies: [hold, take_profit, trailing]
+  capture_fraction: 0.8             # P1: sell once 80% of the flagged edge is banked in price
+  trail_fraction: 0.4               # P2: sell on a 40% drawdown from peak unrealized P&L
+  min_peak_edge_fraction: 0.5       # P2 arms only after peak >= 50% of flagged edge
+  exit_price_basis: bid_minus_fee   # sells cross the spread AND pay the taker fee
+  promote_requires: { min_n: 100, ci_excludes_zero: true, replication_month: true }

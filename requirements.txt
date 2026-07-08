@@ -1,0 +1,8 @@
+requests==2.34.2
+rich==15.0.0
+rapidfuzz==3.14.5
+python-dotenv==1.2.2
+pyyaml==6.0.3
+pytest==9.1.1
+# anthropic is an OPTIONAL extra for the AI matcher lane only (never market data):
+#   pip install anthropic  — only after the §18.5 ground-truth prerequisite exists
