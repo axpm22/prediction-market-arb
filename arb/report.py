@@ -51,6 +51,52 @@ def _cadence(store, day: str) -> dict:
             "p95": sorted(gaps)[int(0.95 * (len(gaps) - 1))]}
 
 
+def _live_section(cfg, store, day: str) -> dict:
+    """LIVE lane (PROMPT_LIVE_LEADLAG A5): always visible, never blended.
+    Populations per venue-pair, never pooled — like their pregame counterparts."""
+    import statistics as st
+    pairs = {}
+    for b in store.query(
+            "SELECT * FROM flat_bets WHERE poll_kind='live' AND date(created_at)=?",
+            (day,)):
+        p = pairs.setdefault(b["venue_pair"], {
+            "flags": 0, "confirmed": 0, "locked_pnl": Decimal(0),
+            "confirmed_pnl": Decimal(0), "lifetimes": []})
+        p["flags"] += 1
+        if b["pnl_optimistic"] is not None:
+            p["locked_pnl"] += Decimal(b["pnl_optimistic"])
+        ok, pnl_conf = metrics.bet_confirmed(store, dict(b))
+        if ok:
+            p["confirmed"] += 1
+            if pnl_conf is not None:
+                p["confirmed_pnl"] += pnl_conf
+        closed = store.query(
+            "SELECT created_at FROM bet_events WHERE bet_id=? AND "
+            "kind='lifetime_closed'", (b["id"],))
+        if closed:
+            p["lifetimes"].append(
+                (datetime.fromisoformat(closed[0]["created_at"])
+                 - datetime.fromisoformat(b["created_at"])).total_seconds())
+    for p in pairs.values():
+        p["confirm_rate"] = p["confirmed"] / p["flags"] if p["flags"] else None
+        p["median_lifetime_secs"] = st.median(p["lifetimes"]) if p["lifetimes"] else None
+        del p["lifetimes"]
+    cad_rows = store.query(
+        "SELECT started_at FROM polls WHERE kind='live' AND date(started_at)=? "
+        "ORDER BY started_at", (day,))
+    times = [datetime.fromisoformat(r["started_at"]) for r in cad_rows]
+    gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:])]
+    cov = [json.loads(r["detail"]).get("coverage") for r in store.query(
+        "SELECT detail FROM annotations WHERE kind='live-coverage' AND "
+        "date(created_at)=?", (day,))]
+    cov = [c for c in cov if c is not None]
+    return {"pairs": {k: {kk: (str(vv) if isinstance(vv, Decimal) else vv)
+                          for kk, vv in v.items()} for k, v in pairs.items()},
+            "n_polls": len(times),
+            "cadence_mean": statistics.mean(gaps) if gaps else None,
+            "coverage_mean": statistics.mean(cov) if cov else None}
+
+
 def daily_frame(cfg, store, day: str) -> dict:
     bets = [dict(r) for r in store.query(
         "SELECT * FROM flat_bets WHERE date(created_at)=? ORDER BY id", (day,))]
@@ -102,6 +148,7 @@ def daily_frame(cfg, store, day: str) -> dict:
         "venue_hours": [dict(r) for r in venue_hours],
         "headline_pnl": hl, "headline_n": hl_n,
         "capacity": capacity_frame(cfg, store, day),
+        "live_lane": _live_section(cfg, store, day),
         "data_age_secs": age,
         "data_stale": age is not None and age > float(cfg["data_stale_alarm_secs"]),
         "stale_fees": [v for v in ("kalshi", "polymarket", "sx")
@@ -163,6 +210,23 @@ def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily") -> d
                   f"${a['settled_pnl']} | {a['pending']} | {a['missed']} |")
     md.append("")
     md.extend(_capacity_md(frame["capacity"]))
+    md.append("")
+    live = frame["live_lane"]
+    md.append("## LIVE lane (in-play, review-lane forever — never headline)")
+    cov = live["coverage_mean"]
+    md.append(f"- live polls: {live['n_polls']}; cadence mean "
+              f"{live['cadence_mean'] and round(live['cadence_mean']) or '—'}s "
+              f"(target {cfg['live_lane']['cadence_secs']}s); shortlist coverage "
+              f"{f'{cov:.0%}' if cov is not None else '—'}")
+    md.append("| venue pair | flags | confirm rate | median lifetime | locked P&L | confirmed P&L |")
+    md.append("|---|---|---|---|---|---|")
+    for pair, p in sorted(live["pairs"].items()):
+        cr = f"{p['confirm_rate']:.0%}" if p["confirm_rate"] is not None else "—"
+        lt = f"{round(p['median_lifetime_secs'])}s" if p["median_lifetime_secs"] else "—"
+        md.append(f"| {pair} | {p['flags']} | {cr} | {lt} | ${p['locked_pnl']} | "
+                  f"${p['confirmed_pnl']} |")
+    if not live["pairs"]:
+        md.append("| — | 0 | — | — | $0 | $0 |")
     md.append("")
     md.append("## Left on the table")
     md.append("| reason | flags | summed edge |")

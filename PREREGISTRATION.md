@@ -116,8 +116,57 @@ modest true win rate of 0.55 detectable at 80% power / 95% confidence
   as such;
 - the kill rule (10 consecutive losses) and all other gates are unchanged.
 
+## LIVE lane (amendment 2026-07-09, frozen BEFORE the first persisted live poll)
+
+**Hypothesis:** in-play cross-venue dislocations at ~20s cadence confirm at a
+non-trivial rate and carry positive locked P&L after fees. Populations: live
+kalshi:polymarket and live polymarket:sx, separate, never pooled with each
+other or with their pregame counterparts. All live claims are
+cadence-conditional at ≥20s observation latency.
+
+**Kill gate:** at the earlier of 30 days (`live_lane.kill.max_days`) or 300
+booked live flags per pair (`live_lane.kill.min_flags`) — if the live confirm
+rate < 0.10 (`live_lane.kill.confirm_rate_floor`) **or** the confirmed-P&L
+cluster-bootstrap 95% CI includes 0, set `live_lane.enabled: false` by dated
+amendment. Data is kept (it feeds the lead-lag study); the lane stops booking.
+Re-opening requires a new amendment.
+
+**Confirmation carve-out:** the v3.4 rule "an in-play second sighting never
+confirms" was written for pregame-booked bets drifting in-play and STANDS for
+them. For bets booked by `poll_kind='live'`, in-play is the domain: a second
+consecutive live-cycle sighting writes a `confirmed` bet_event tagged `live`.
+The live confirm rate is the lane's primary statistic — the in-play analogue
+of the 88% pregame vanish rate.
+
+**Headline protection:** nothing in the live lane creates a path to the
+headline. Live bets are review-lane by the unchanged `classify()` predicate;
+an assertion test (tests/test_live_tracker.py) proves a booked live bet never
+enters the headline in either implementation (report.py and headline.sql).
+Any future live-to-clean gate is a separate pre-registered amendment with its
+own n. Markouts stay pregame-only; the lane's honesty instruments are confirm
+rate, lifetime, and locked-vs-confirmed drift.
+
+## Lead–lag study (amendment 2026-07-09)
+
+**Hypothesis:** one venue's mids systematically lead another's on the same
+proposition. Primary statistic: first-mover tally — `p_lead = wins_A /
+(wins_A + wins_B)` over matched same-sign moves (|Δmid| ≥
+`leadlag.min_move_points`, matched within `leadlag.match_window_secs`), CI by
+cluster bootstrap over event_key; a venue leads iff the 95% CI excludes 0.5.
+Median lead time among won matches is the tradability bound. Secondary:
+cross-correlation of change series at lags up to `leadlag.max_lag_polls`.
+
+**Gate:** after ≥100 matched moves (`leadlag.min_matched_moves`) across ≥50
+events (`leadlag.min_events`) for a pair — if no pair's `p_lead` CI excludes
+0.5, record the null, close the study by dated amendment; the honest successor
+claim is "no lead visible at ≥20s observation latency." The study also emits
+per-sport/venue observed live line velocities that replace the PLACEHOLDER
+`live_lane.line_velocity_points_per_sec` constants via a dated config change.
+
 ## Amendment log
 
 | Date | Change | Reason |
 |---|---|---|
 | 2026-07-08 | Initial freeze (v3.5 spec §18 + power decision: 600 effective events) | Pre-data |
+| 2026-07-09 | LIVE lane: hypothesis, kill gate, confirmation carve-out (poll_kind='live' only), headline protection | Pre-data for the lane (before first persisted live poll) |
+| 2026-07-09 | Lead–lag study: first-mover tally + cross-correlation, gate, velocity re-estimation deliverable | Pre-data for the study |

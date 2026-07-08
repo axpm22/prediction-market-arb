@@ -194,6 +194,10 @@ def run_live_cycle(cfg, store, now: datetime | None = None,
                "rejects": len(rejects), "cycle_secs": round(elapsed, 2)}
     if dry_run:
         return summary
-    persist_poll(cfg, store, "live", quotes, status, groups, opps, rejects,
-                 started=now)
+    poll_id = persist_poll(cfg, store, "live", quotes, status, groups, opps, rejects,
+                           started=now)
+    store.insert("annotations", {  # coverage per cycle, read by the daily report
+        "created_at": now.isoformat(), "target_kind": "poll",
+        "target_id": str(poll_id), "kind": "live-coverage",
+        "detail": json.dumps(summary)})
     return summary

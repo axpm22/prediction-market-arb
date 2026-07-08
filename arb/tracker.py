@@ -45,6 +45,7 @@ def candidate_from_opp(cfg, o: Opportunity) -> dict:
         "roi": q6(payout / s - 1) if s else None, "status": o.status, "notes": o.notes,
         "quality_flag": "none", "leg_skew_secs": skew, "depth_ok": depth_ok,
         "proof_status": None,
+        "live": bool(o.live or any(q.live for q in o.legs)),  # any live leg ⇒ live (A4)
     }
 
 
@@ -136,13 +137,18 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
             if not has_confirm:
                 start = bet["event_start_utc"]
                 pregame = start is None or datetime.fromisoformat(start) > now
-                if pregame:
+                # carve-out (dated amendment, PREREGISTRATION.md): for bets booked
+                # by the 'live' poll kind, in-play IS the domain — a second
+                # consecutive live-cycle sighting confirms, tagged live. The v3.4
+                # rule stands unchanged for every other poll kind.
+                if pregame or bet["poll_kind"] == "live":
+                    payload = {"poll_id": poll_id, "cost_sum": str(cand["cost_sum"]),
+                               "legs": cand["legs"]}
+                    if bet["poll_kind"] == "live":
+                        payload["live"] = True
                     store.insert("bet_events", {
                         "bet_id": bet["id"], "created_at": now.isoformat(),
-                        "kind": "confirmed",
-                        "payload_json": json.dumps({
-                            "poll_id": poll_id, "cost_sum": str(cand["cost_sum"]),
-                            "legs": cand["legs"]})})
+                        "kind": "confirmed", "payload_json": json.dumps(payload)})
                 else:
                     # an in-play second sighting never confirms (v3.4) — the bet
                     # counts missed; annotation records why at read time
@@ -208,7 +214,7 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
         pregame = cand["event_start_utc"] is None or cand["event_start_utc"] > now
         eligible, reason, lane = classify({**cand, "pregame": pregame,
                                            "micro": False, "ai_matched": False,
-                                           "live": False}, cfg)
+                                           "live": cand.get("live", False)}, cfg)
         prior = store.query(
             "SELECT id FROM flat_bets WHERE fingerprint=? ORDER BY id DESC LIMIT 1",
             (cand["fingerprint"],))
