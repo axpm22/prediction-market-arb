@@ -111,6 +111,7 @@ SCHEMA = {
     "data_stale_alarm_secs": NUM, "clock_skew_alarm_secs": NUM, "log_retention_days": NUM,
     "db_backup": {"time": STR, "dest": STR},
     "canary": {"enabled": BOOL, "day_of_month": NUM},
+    "dashboard": {"host": STR, "port": NUM},
     "tape_check": {"enabled": BOOL, "window_secs": NUM},
     "zombie_spread_min": NUM,
     "risk_free_rate": {"value": NUM, "source_url": STR, "confirmed_on": DATE},

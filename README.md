@@ -72,6 +72,7 @@ their heartbeats so a stale process is visible in `arb status` instantly.
 | `negrisk-scan` | Polymarket negRisk basket scan (both sides, exhaustiveness proof) |
 | `political` | Polymarket-only intra-market YES+NO<1 lane |
 | `verify` | 10s flash re-quote of fresh locked flags (vanish rate + paper fill oracle) |
+| `dashboard` | read-only instrument panel on `http://127.0.0.1:8722` (config `dashboard.*`) |
 | `canary` | synthetic fixture through the full pipeline; P&L must match to the cent |
 | `shape-check` | live response schema vs recorded fixtures |
 | `backup` | `VACUUM INTO` a dated snapshot in `backups/` |

@@ -66,6 +66,7 @@ def main(argv=None):
     for lane in ("negrisk-scan", "verify", "hot", "btc", "political", "nonsports"):
         lp = sub.add_parser(lane, help=f"optional {lane} lane (supervisor-owned)")
         lp.add_argument("--once", action="store_true")
+    sub.add_parser("dashboard", help="read-only local panel on dashboard.host:port (§14.3)")
     sub.add_parser("canary", help="inject the monthly synthetic fixture through the live pipeline")
     sub.add_parser("shape-check", help="weekly live response schema validation vs fixtures")
     sub.add_parser("backup", help="sqlite VACUUM INTO db_backup.dest")

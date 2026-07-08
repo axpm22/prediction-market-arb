@@ -286,6 +286,12 @@ def cmd_status(cfg, store, args):
     return 0
 
 
+def cmd_dashboard(cfg, store, args):
+    from arb.dashboard import serve
+    serve(cfg, args.db)
+    return 0
+
+
 def cmd_backup(cfg, store, args):
     from datetime import datetime, timezone
     from pathlib import Path

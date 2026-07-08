@@ -200,6 +200,8 @@ db_backup: { time: "04:10", dest: "backups/" }   # sqlite3 .backup daily; report
                                     # dest MUST be a different disk or synced folder (§13.3);
                                     #   a same-volume dest is a startup WARNING (v3.4)
 canary: { enabled: true, day_of_month: 1 }       # monthly synthetic end-to-end fixture, tagged lane
+dashboard: { host: 127.0.0.1, port: 8722 }       # read-only local panel (§14.3); GETs only,
+                                                 #   never bound beyond localhost
 tape_check: { enabled: true, window_secs: 60 }   # fill tape_confirmed only if venue printed a trade
                                     #   at-or-through the fill price in-window (verify endpoints, rule 3)
 zombie_spread_min: 0.90             # volume_24h==0 AND (ask-bid)>=this -> zombie tag, non-actionable
