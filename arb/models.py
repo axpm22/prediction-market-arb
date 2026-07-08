@@ -84,6 +84,7 @@ class Opportunity:
     notes: str
     fingerprint: str = ""
     position_key: str = ""
+    live: bool = False    # from a live cycle: review-lane forever (classify)
 
     def __post_init__(self):
         if not self.fingerprint:

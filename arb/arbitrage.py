@@ -35,7 +35,7 @@ def _zombie(cfg, q: Quote) -> bool:
             and (q.cost - q.bid) >= cfg["zombie_spread_min"])
 
 
-def _locked_opp(cfg, g, legs, now) -> tuple[Opportunity | None, str | None]:
+def _locked_opp(cfg, g, legs, now, mode="pregame") -> tuple[Opportunity | None, str | None]:
     """Build an ARB/XSPREAD opportunity from covering legs, or a rejection reason."""
     s = sum(q.effective_cost for q in legs)
     if s >= 1:
@@ -48,14 +48,21 @@ def _locked_opp(cfg, g, legs, now) -> tuple[Opportunity | None, str | None]:
     skew_secs = skew.total_seconds()
     if skew_secs > float(cfg["max_leg_skew_secs"]):
         return None, "skew-outer"  # beyond the outer recording bound: never pairs
+    live = mode == "live"
     status, notes = "OK", []
+    if live:
+        status = "REVIEW"  # live floors at REVIEW — belt over suspenders (classify
+        notes.append("live")  # would review it anyway; A3)
     if kind == "XSPREAD":
         status = "REVIEW"  # cross-venue REVIEW-only forever by default (rule 6)
         notes.append("cross-venue")
     if roi > cfg["arb_stale_warn"]:
         status = "REVIEW"  # every locked kind (§8.4 v3.3); a log line is not a guard
         notes.append(f"stale-warn roi={roi}")
-    if skew_secs > float(cfg["execution"]["max_actionable_skew_secs"]):
+    # live simultaneity is TIGHTER, not looser (A3): 3s vs the pregame 10s
+    skew_bound = float(cfg["live_lane"]["max_actionable_skew_secs"] if live
+                       else cfg["execution"]["max_actionable_skew_secs"])
+    if skew_secs > skew_bound:
         status = "REVIEW"
         notes.append(f"skew={skew_secs:.1f}s")
     if any(q.depth_usd is None or q.depth_usd < cfg["min_executable_usd"] for q in legs):
@@ -65,19 +72,27 @@ def _locked_opp(cfg, g, legs, now) -> tuple[Opportunity | None, str | None]:
     stakes = [q6(stake * q.effective_cost / s) for q in legs]
     return Opportunity(kind=kind, category="sports", event=g.event, legs=list(legs),
                        edge=edge, stakes=stakes, status=status,
-                       notes="; ".join(notes)), None
+                       notes="; ".join(notes), live=live), None
 
 
-def detect(cfg, groups: list[MatchedGroup], now: datetime | None = None
-           ) -> tuple[list[Opportunity], list[dict]]:
+def detect(cfg, groups: list[MatchedGroup], now: datetime | None = None,
+           mode: str = "pregame") -> tuple[list[Opportunity], list[dict]]:
+    """mode='pregame' (default, unchanged) or 'live' (A3): the in-play guard
+    inverts, the per-quote live rejection is skipped, everything else — zombie,
+    empty-book, complement legality, covering-set, exact lines, stale-warn,
+    depth — applies identically. The draw hole does not relax in-play."""
     now = now or datetime.now(timezone.utc)
     opps: list[Opportunity] = []
     rejects: list[dict] = []
 
     for g in groups:
-        # in-play/final guard at detection (§8.4): drop started events
-        if g.event.start_utc is not None and g.event.start_utc <= now:
+        in_play = g.event.start_utc is not None and g.event.start_utc <= now
+        if mode == "pregame" and in_play:
+            # in-play/final guard at detection (§8.4): drop started events
             _reject(rejects, g, "in-play", g.quotes)
+            continue
+        if mode == "live" and not in_play:
+            _reject(rejects, g, "pregame-in-live-cycle", g.quotes)  # diagnostic
             continue
 
         usable = []
@@ -86,7 +101,7 @@ def detect(cfg, groups: list[MatchedGroup], now: datetime | None = None
                 _reject(rejects, g, "start-unknown", [q])
             elif _zombie(cfg, q):
                 _reject(rejects, g, "zombie", [q])
-            elif q.live:
+            elif q.live and mode == "pregame":
                 _reject(rejects, g, "in-play", [q])
             else:
                 usable.append(q)
@@ -144,7 +159,7 @@ def detect(cfg, groups: list[MatchedGroup], now: datetime | None = None
             for legs in covers:
                 if len({(q.venue, q.side, q.outcome_label) for q in legs}) < len(legs):
                     continue
-                opp, why = _locked_opp(cfg, g, legs, now)
+                opp, why = _locked_opp(cfg, g, legs, now, mode)
                 if opp:
                     opps.append(opp)
                 elif why:
