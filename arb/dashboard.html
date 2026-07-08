@@ -123,6 +123,14 @@
   </div>
 
   <section>
+    <h2>Projections — sizing/capacity (§13.4, never headline)</h2>
+    <div class="hint">Parallel view only: Kelly-capped, depth/5, q*-capped sizes with
+      VWAP-priced fills. Says INSUFFICIENT_DEPTH_DATA until ≥50% of feasible flags
+      carry real multi-level ladders — top-of-book capacity numbers are fiction.</div>
+    <div id="capacity"></div>
+  </section>
+
+  <section>
     <h2>Recent flags</h2>
     <div class="hint">The last opportunities the detector saw, newest first.
       XSPREAD = cross-venue spread (never called an arb; carries settlement risk).
@@ -225,6 +233,16 @@ async function refresh(){
         {t:`${v.ok_pct.toFixed(0)}%`,r:1,c:v.ok_pct<95?'lane-review':''},
         {t:`${(v.latency/1000).toFixed(1)}s`,r:1},{t:fmt(v.quotes),r:1}]),
       'no polls in the last 2h');
+    const cap = s.capacity;
+    $('capacity').innerHTML =
+      `<div class="hint">status: <b>${esc(cap.status)}</b> · ladder capture ` +
+      `${cap.n_with_ladders}/${cap.n_feasible} feasible positions` +
+      (cap.status==='OK' ? ` · projected P&L $${esc(cap.projected_pnl)}` : '') + '</div>' +
+      (cap.status==='OK' ? table(
+        [{t:'position'},{t:'kind'},{t:'contracts',r:1},{t:'stake',r:1},{t:'net edge',r:1},{t:'proj. P&L',r:1}],
+        cap.positions.map(p=>[{t:p.position_key,c:'ell'},{t:p.kind},{t:p.contracts,r:1},
+          {t:'$'+p.stake_usd,r:1},{t:p.net_edge,r:1},{t:'$'+p.pnl_usd,r:1}]),
+        'gate open but no trusted clean positions today') : '');
     $('flags').innerHTML = table(
       [{t:'when',r:1},{t:'kind'},{t:'event'},{t:'edge (pts)',r:1},{t:'status'},{t:'notes'}],
       s.recent_flags.map(o=>[{t:ago(o.started_at),r:1},{t:o.kind},

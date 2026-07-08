@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.table import Table
 
 from arb import metrics
+from arb.capacity import capacity_frame
 from arb.venues.fees import fee_is_stale
 
 console = Console()
@@ -100,11 +101,31 @@ def daily_frame(cfg, store, day: str) -> dict:
         "cadence": _cadence(store, day),
         "venue_hours": [dict(r) for r in venue_hours],
         "headline_pnl": hl, "headline_n": hl_n,
+        "capacity": capacity_frame(cfg, store, day),
         "data_age_secs": age,
         "data_stale": age is not None and age > float(cfg["data_stale_alarm_secs"]),
         "stale_fees": [v for v in ("kalshi", "polymarket", "sx")
                        if fee_is_stale(cfg, v)],
     }
+
+
+def _capacity_md(cap: dict) -> list[str]:
+    """§13.4 parallel section — clearly labeled, never blended into headline."""
+    md = ["## PROJECTIONS — sizing/capacity (§13.4, never headline)",
+          f"- capacity: **{cap['status']}** — ladder capture "
+          f"{cap['n_with_ladders']}/{cap['n_feasible']} feasible positions "
+          f"({cap['ladder_fraction']:.0%})"]
+    if cap["status"] == "OK" and cap["positions"]:
+        md.append(f"- projected P&L at min(Kelly-cap, depth/5, q*) sizing, "
+                  f"VWAP fills: ${cap['projected_pnl']} over "
+                  f"{len(cap['positions'])} trusted clean positions")
+        md.append("")
+        md.append("| position | kind | contracts | stake | net edge | projected P&L |")
+        md.append("|---|---|---|---|---|---|")
+        for p in cap["positions"]:
+            md.append(f"| {p['position_key']} | {p['kind']} | {p['contracts']} | "
+                      f"${p['stake_usd']} | {p['net_edge']} | ${p['pnl_usd']} |")
+    return md
 
 
 def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily") -> dict:
@@ -141,6 +162,8 @@ def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily") -> d
         md.append(f"| {kind} | {lane} | {a['bets']} | ${a['staked']} | "
                   f"${a['settled_pnl']} | {a['pending']} | {a['missed']} |")
     md.append("")
+    md.extend(_capacity_md(frame["capacity"]))
+    md.append("")
     md.append("## Left on the table")
     md.append("| reason | flags | summed edge |")
     md.append("|---|---|---|")
@@ -167,6 +190,13 @@ def print_daily(cfg, store, day: str) -> None:
                   f"p95={c['p95'] and round(c['p95'])}s; quote age="
                   f"{frame['data_age_secs'] and round(frame['data_age_secs'])}s"
                   f"{' STALE' if frame['data_stale'] else ''}[/]")
+    cap = frame["capacity"]
+    console.print(f"[dim]PROJECTION (§13.4, never headline) — capacity "
+                  f"{cap['status']}, ladders {cap['n_with_ladders']}/"
+                  f"{cap['n_feasible']}"
+                  + (f", projected P&L ${cap['projected_pnl']} "
+                     f"({len(cap['positions'])} positions)"
+                     if cap["status"] == "OK" else "") + "[/]")
     if frame["left_on_table"]:
         lt = Table(title="Left on the table")
         for col in ("reason", "flags", "summed edge"):

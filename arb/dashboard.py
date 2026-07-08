@@ -93,6 +93,10 @@ def state(cfg, store) -> dict:
         "by_class": [{"kind": k, "lane": lane, **{kk: str(vv) for kk, vv in a.items()}}
                      for (k, lane), a in sorted(frame["by_class"].items())],
         "left_on_table": frame["left_on_table"],
+        "capacity": {**frame["capacity"],
+                     "projected_pnl": str(frame["capacity"]["projected_pnl"]),
+                     "positions": [{k: str(v) for k, v in p.items()}
+                                   for p in frame["capacity"]["positions"]]},
         "open_bets": [dict(r) for r in open_bets],
         "consensus_at": consensus_at,
         "consensus_rows_today": consensus_today,
