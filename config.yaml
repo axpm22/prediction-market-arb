@@ -239,6 +239,9 @@ live_lane:                          # in-play paper lane (prompts/PROMPT_LIVE_LE
 leadlag:                            # lead-lag study (read-time, stored quotes only)
   min_move_points: 0.01             # |Δmid| >= this is a "move" (probability fraction)
   match_window_secs: 60             # same-sign moves at two venues within this window match
+  tie_epsilon_secs: 5               # |Δt| <= this is a TIE: within one poll cycle the
+                                    #   fetch ORDER (kalshi ~0.7s vs PM ~15s) stamps the
+                                    #   earlier time, not market leadership (2026-07-09)
   max_lag_polls: 5                  # cross-correlation lag range [-K, +K] polls
   min_matched_moves: 100            # gate: below this, no claim either way
   min_events: 50

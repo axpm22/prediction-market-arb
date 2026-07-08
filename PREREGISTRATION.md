@@ -170,3 +170,4 @@ per-sport/venue observed live line velocities that replace the PLACEHOLDER
 | 2026-07-08 | Initial freeze (v3.5 spec §18 + power decision: 600 effective events) | Pre-data |
 | 2026-07-09 | LIVE lane: hypothesis, kill gate, confirmation carve-out (poll_kind='live' only), headline protection | Pre-data for the lane (before first persisted live poll) |
 | 2026-07-09 | Lead–lag study: first-mover tally + cross-correlation, gate, velocity re-estimation deliverable | Pre-data for the study |
+| 2026-07-09 | Lead–lag tie rule: matches with \|Δt\| ≤ `leadlag.tie_epsilon_secs` (5) are ties — within one poll cycle the fetch ORDER (kalshi ~0.7s vs PM ~15s) stamps the earlier time, not leadership. First run (pre-gate, 32 events, no claim made) showed p_lead 0.778 with a 1s median "lead" — a fetch-latency artifact this rule removes | Pre-gate refinement; no claim had been made |

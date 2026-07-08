@@ -229,6 +229,39 @@ def cmd_live(cfg, store, args):
     return 0
 
 
+def cmd_leadlag(cfg, store, args):
+    """Lead-lag study over stored quotes (read-time; PROMPT_LIVE_LEADLAG B)."""
+    from arb.leadlag import run_study
+    res = run_study(cfg, store)
+    table = Table(title=f"lead-lag — excluded (no bid): "
+                        f"{res['excluded_no_bid_fraction']:.1%}")
+    for col in ("pair", "matched", "p_lead(first)", "95% CI", "leader",
+                "median lead", "events"):
+        table.add_column(col)
+    gate_moves = int(cfg["leadlag"]["min_matched_moves"])
+    gate_events = int(cfg["leadlag"]["min_events"])
+    for pair, p in sorted(res["pairs"].items()):
+        below = p["n_matched"] < gate_moves or p["n_events"] < gate_events
+        leader = p["leader"] or "no lead"
+        if below:
+            leader += " (below gate n)"
+        table.add_row(pair, str(p["n_matched"]), f"{p['p_lead_first']:.3f}",
+                      f"[{p['ci_low']:.3f}, {p['ci_high']:.3f}]", leader,
+                      f"{p['median_lead_secs']:.0f}s" if p["median_lead_secs"]
+                      else "—", str(p["n_events"]))
+    console.print(table)
+    if res["velocities"]:
+        vt = Table(title="observed live line velocity (pts/sec) — B4: replaces "
+                         "the config PLACEHOLDERS via dated change")
+        for col in ("sport", "venue", "median |Δmid|/Δt"):
+            vt.add_column(col)
+        for sport, venues in sorted(res["velocities"].items()):
+            for venue, v in sorted(venues.items()):
+                vt.add_row(sport, venue, v)
+        console.print(vt)
+    return 0
+
+
 def cmd_verify(cfg, store, args):
     from arb.lanes.verify import run_once
     n = run_once(cfg, store)
