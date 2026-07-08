@@ -120,16 +120,19 @@ def test_polymarket_prices_from_clob_never_gamma():
 
 # ---------- Odds API + MLB Stats ----------
 
-def test_oddsapi_parses_shape_fixture():
+def test_oddsapi_parses_real_fixture():
+    # fixture = REAL response recorded 2026-07-08 (x-requests-last: 2 verified)
     from arb.venues.oddsapi import parse_events
     rows = parse_events(_fx("oddsapi_h2h.json")["events"], sport_key="baseball_mlb")
-    h2h = [r for r in rows if r["market"] == "h2h"]
-    assert len(h2h) == 6  # 3 books x 2 outcomes
-    assert {r["book"] for r in h2h} == {"lowvig", "betonlineag", "draftkings"}
-    mets = [r for r in h2h if r["outcome"] == "New York Mets" and r["book"] == "lowvig"][0]
-    assert mets["odds"] == Decimal("1.63")
-    tot = [r for r in rows if r["market"] == "totals"]
-    assert all(r["line"] == "8.5" for r in tot)
+    ev0 = [r for r in rows if r["home"] == "San Francisco Giants"]
+    h2h = [r for r in ev0 if r["market"] == "h2h"]
+    assert len(h2h) == 10  # 5 books x 2 outcomes (betrivers listed totals only)
+    dk = [r for r in h2h if r["book"] == "draftkings"
+          and r["outcome"] == "San Francisco Giants"][0]
+    assert dk["odds"] == Decimal("9.7")
+    tot = [r for r in ev0 if r["market"] == "totals"]
+    # line keys are canonical Decimal strings: 11.0 -> "11", never "11.0" (§8.3)
+    assert {r["line"] for r in tot} == {"11.5", "11"}
 
 
 def test_mlbstats_schedule_fixture():

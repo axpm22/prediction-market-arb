@@ -11,10 +11,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
 from rich.console import Console
 
 from arb.config import load as load_config
 from arb.store import Store
+
+load_dotenv()  # ODDS_API_KEY / ANTHROPIC_API_KEY from git-ignored .env
 
 DEFAULT_DB = "data/arb.sqlite"
 console = Console()

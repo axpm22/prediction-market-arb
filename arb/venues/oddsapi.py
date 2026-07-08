@@ -42,7 +42,9 @@ def _get(cfg, path: str, params: dict) -> tuple[list, int | None]:
 
 
 def parse_events(events: list[dict], sport_key: str) -> list[dict]:
-    """Flatten to per-(book, market, outcome) rows with Decimal odds and string line."""
+    """Flatten to per-(book, market, outcome) rows with Decimal odds and string line.
+    Lines go through matching.line_key so '11.0' and 11 key identically (§8.3)."""
+    from arb.matching import line_key
     rows = []
     for ev in events:
         for bm in ev.get("bookmakers", []):
@@ -54,7 +56,7 @@ def parse_events(events: list[dict], sport_key: str) -> list[dict]:
                         "home": ev["home_team"], "away": ev["away_team"],
                         "book": bm["key"], "market": mk["key"],
                         "outcome": oc["name"],
-                        "line": str(Decimal(str(oc["point"]))) if "point" in oc else None,
+                        "line": line_key(oc["point"]) if "point" in oc else None,
                         "odds": Decimal(str(oc["price"])),
                     })
     return rows
