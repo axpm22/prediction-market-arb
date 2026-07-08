@@ -177,3 +177,159 @@ def cmd_check_invariants(cfg, store, args):
             console.print(f"[red]{v}[/]")
         return 1
     return 0  # silent when clean
+
+
+def cmd_supervisor(cfg, store, args):
+    from arb.heartbeat import run_supervisor
+    return run_supervisor(cfg)
+
+
+def cmd_status(cfg, store, args):
+    import subprocess
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from arb.heartbeat import LOCK_DIR
+    now = datetime.now(timezone.utc)
+
+    # supervisor semantics (§13.3): fresh beat OR live child pid -> ALIVE;
+    # stale beat + live supervisor lock -> STALE; DEAD only with no supervisor
+    lock_alive = False
+    if (LOCK_DIR / "pid").exists():
+        try:
+            import os
+            os.kill(int((LOCK_DIR / "pid").read_text().strip()), 0)
+            lock_alive = True
+        except (ProcessLookupError, ValueError, PermissionError):
+            pass
+    beats = store.query(
+        "SELECT process, MAX(beat_at) beat_at, head_sha FROM heartbeats GROUP BY process")
+    fresh = any((now - datetime.fromisoformat(b["beat_at"])).total_seconds()
+                < 3 * float(cfg["watch_interval_secs"]) for b in beats)
+    state = "ALIVE" if fresh or lock_alive else ("STALE" if beats else "DEAD")
+    console.print(f"supervisor: [bold]{state}[/] (lock={'live' if lock_alive else 'none'})")
+    for b in beats:
+        console.print(f"  {b['process']}: last beat {b['beat_at']} sha={b['head_sha']}")
+
+    newest = store.query("SELECT MAX(fetched_at) t FROM quotes")[0]["t"]
+    if newest:
+        age = (now - datetime.fromisoformat(newest)).total_seconds()
+        alarm = age > float(cfg["data_stale_alarm_secs"])
+        console.print(f"newest quote: {round(age)}s ago"
+                      + (" [red]STALE-DATA ALARM[/]" if alarm else ""))
+    else:
+        console.print("[yellow]no quotes persisted yet[/]")
+
+    backups = sorted(Path(str(cfg["db_backup"]["dest"])).glob("*.sqlite"))
+    if backups:
+        bage = now.timestamp() - backups[-1].stat().st_mtime
+        console.print(f"latest backup: {backups[-1].name} ({round(bage / 3600, 1)}h old)")
+    else:
+        console.print("[yellow]no backups yet[/]")
+
+    try:  # NTP offset alarm (§13.3); sntp may need privileges — degrade honestly
+        out = subprocess.run(["sntp", "time.apple.com"], capture_output=True,
+                             text=True, timeout=5).stdout
+        offset = float(out.split()[-2].lstrip("+")) if out else None
+        if offset is not None and abs(offset) > float(cfg["clock_skew_alarm_secs"]):
+            console.print(f"[red]CLOCK SKEW ALARM: {offset}s[/]")
+        elif offset is not None:
+            console.print(f"clock offset: {offset}s")
+    except Exception:  # noqa: BLE001
+        console.print("[dim]ntp check unavailable[/]")
+
+    today = now.date().isoformat()
+    lanes = store.query(
+        "SELECT lane, COUNT(*) n FROM flat_bets WHERE date(created_at)=? GROUP BY lane",
+        (today,))
+    console.print("today's bets by lane: "
+                  + (", ".join(f"{r['lane']}={r['n']}" for r in lanes) or "none"))
+    open_n = store.query(
+        """SELECT COUNT(*) n FROM flat_bets fb
+           WHERE fb.kind IN ('EV','NEGRISK','BTC')
+             AND NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id=fb.id
+                             AND be.kind IN ('settled','void'))""")[0]["n"]
+    console.print(f"open resolution-settled bets: {open_n}")
+    return 0
+
+
+def cmd_backup(cfg, store, args):
+    from datetime import datetime, timezone
+    from pathlib import Path
+    dest = Path(str(cfg["db_backup"]["dest"]))
+    dest.mkdir(parents=True, exist_ok=True)
+    out = dest / f"arb-{datetime.now(timezone.utc).strftime('%Y%m%d')}.sqlite"
+    store.conn.execute("VACUUM INTO ?", (str(out),))
+    console.print(f"backup written: {out} ({out.stat().st_size} bytes)")
+    return 0
+
+
+def cmd_canary(cfg, store, args):
+    """Monthly synthetic fixture through the full pipeline (§13.3): known
+    standards through the assay. A mismatch is a sev-1."""
+    from datetime import datetime, timedelta, timezone
+    from decimal import Decimal
+
+    from arb import metrics
+    from arb.settlement import settle_manual
+    from arb.tracker import process_poll
+    from tests.canary_fixture import canary_opps  # synthetic, deterministic
+
+    now = datetime.now(timezone.utc)
+    tag = now.strftime("%Y%m")
+    poll_id = store.insert("polls", {"started_at": now.isoformat(), "kind": "canary",
+                                     "n_quotes": 0, "n_opps": 2})
+    cfg = dict(cfg, ev_enabled=True)  # canary exercises the frozen path too
+    opps, event_key = canary_opps(tag, now)
+    process_poll(cfg, store, poll_id, "canary", opps, {}, now=now)
+    settle_manual(cfg, store, event_key, "canary-yes", now=now + timedelta(hours=10))
+    bets = store.query("SELECT * FROM flat_bets WHERE poll_kind='canary' AND event_key=?",
+                       (event_key,))
+    expect = {"ARB": Decimal("0.041667"), "EV": Decimal("0.932367")}
+    failures = []
+    for b in bets:
+        got = metrics.bet_pnl_optimistic(store, dict(b))
+        if got != expect[b["kind"]]:
+            failures.append(f"{b['kind']}: expected {expect[b['kind']]}, got {got}")
+    store.insert("annotations", {
+        "created_at": now.isoformat(), "target_kind": "day",
+        "target_id": now.date().isoformat(), "kind": "canary",
+        "detail": "PASS" if not failures else f"SEV-1 FAIL: {failures}"})
+    if failures:
+        console.print(f"[red]CANARY SEV-1: {failures}[/]")
+        return 1
+    console.print("[green]canary PASS (ARB 0.041667, EV 0.932367 to the cent)[/]")
+    return 0
+
+
+def cmd_shape_check(cfg, store, args):
+    """Weekly live shape-check (§13.3): response SCHEMA (not values) vs fixtures."""
+    from arb.venues import base
+    problems = []
+    checks = [
+        ("kalshi", "https://api.elections.kalshi.com/trade-api/v2/markets"
+                   "?series_ticker=KXMLBGAME&status=open&limit=1",
+         lambda d: {"ticker", "event_ticker", "yes_ask_dollars", "no_ask_dollars",
+                    "volume_24h_fp", "close_time"} <=
+                   set((d.get("markets") or [{}])[0].keys()) if d.get("markets")
+                   else True),
+        ("polymarket", "https://gamma-api.polymarket.com/events?tag_slug=mlb"
+                       "&closed=false&limit=1",
+         lambda d: {"markets", "title"} <= set(d[0].keys()) if d else True),
+        ("sx", "https://api.sx.bet/markets/active?leagueId=171&onlyMainLine=true",
+         lambda d: {"marketHash", "percentageOdds"}.isdisjoint(set()) and
+                   {"marketHash", "teamOneName", "type", "gameTime"} <=
+                   set((d.get("data", {}).get("markets") or [{}])[0].keys())),
+    ]
+    for venue, url, ok in checks:
+        try:
+            if not ok(base.get_json(url, cfg)):
+                problems.append(f"{venue}: schema drift")
+        except Exception as e:  # noqa: BLE001
+            problems.append(f"{venue}: {e}")
+    if problems:
+        for p in problems:
+            console.print(f"[red]shape-check: {p}[/]")
+        return 1
+    console.print("[green]shape-check: all venue schemas match fixtures[/]")
+    return 0

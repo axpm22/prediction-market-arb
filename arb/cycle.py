@@ -89,9 +89,15 @@ def run_cycle(cfg, store, quotes_by_venue: dict, venue_status: dict,
                   f"{len(groups)} events, {n_flag} locked/EV flags, "
                   f"{len(opps) - n_flag} divergences, {len(rejects)} rejects[/]")
 
-    try:  # tracker arrives in Phase 6; cycle stays valid without it
-        from arb.tracker import process_poll
-        process_poll(cfg, store, poll_id, poll_kind, opps, venue_status)
-    except ImportError:
-        pass
+    from arb.tracker import process_poll
+    process_poll(cfg, store, poll_id, poll_kind, opps, venue_status)
+
+    from arb.markout import persist_marks
+    n_marks = persist_marks(cfg, store)
+    if n_marks:
+        log.info("persisted %d markout rows", n_marks)
+
+    from arb.cli import head_sha
+    from arb.heartbeat import beat
+    beat(store, poll_kind, head_sha())
     return 0
