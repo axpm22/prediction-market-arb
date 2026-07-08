@@ -9,3 +9,4 @@ logs/
 reports/daily/*.csv
 backups/
 .locks/
+.claude/settings.local.json

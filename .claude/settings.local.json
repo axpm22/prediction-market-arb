@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(curl -s -m 10 -o /dev/null -w \"kalshi %{http_code}\\\\n\" \"https://api.elections.kalshi.com/trade-api/v2/series?category=Sports&limit=1\")",
-      "Bash(curl -s -m 10 -o /dev/null -w \"gamma %{http_code}\\\\n\" \"https://gamma-api.polymarket.com/events?limit=1&closed=false\")",
-      "Bash(curl -s -m 10 -o /dev/null -w \"sx %{http_code}\\\\n\" \"https://api.sx.bet/sports\")"
-    ]
-  }
-}
