@@ -15,6 +15,7 @@ from arb.logutil import get_logger
 
 BASE = "https://api.the-odds-api.com/v4"
 log = get_logger("arb.oddsapi", "logs/scan.log")
+LAST_REMAINING: int | None = None  # last observed x-requests-remaining (this process)
 
 
 class CreditsLow(Exception):
@@ -31,6 +32,8 @@ def _get(cfg, path: str, params: dict) -> tuple[list, int | None]:
                         timeout=float(cfg["execution"]["venue_fetch_timeout_secs"]))
     remaining = resp.headers.get("x-requests-remaining")
     remaining = int(float(remaining)) if remaining else None
+    global LAST_REMAINING
+    LAST_REMAINING = remaining
     log.info("oddsapi %s -> %s, credits remaining %s", path, resp.status_code, remaining)
     if remaining is not None:
         if remaining < int(cfg["odds_api"]["abort_below_credits"]):

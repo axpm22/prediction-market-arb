@@ -6,14 +6,15 @@
 <title>ArbitrageModel — instrument panel</title>
 <style>
   :root{
-    --ink:#0b0e14; --panel:#11151d; --edge:#232a36;
+    --ink:#0b0e14; --panel:#11151d; --edge:#232a36; --edge2:#2e3745;
     --paper:#e8e6e1; --dim:#8a93a1; --faint:#5c6470;
     --ok:#3ddc97; --warn:#e8a13d; --bad:#d24c3f;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--ink);color:var(--paper);
-    font:14px/1.45 ui-monospace,"SF Mono",Menlo,Consolas,monospace}
-  .wrap{max-width:960px;margin:0 auto;padding:28px 20px 60px}
+    font:14px/1.45 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    font-variant-numeric:tabular-nums}
+  .wrap{max-width:1100px;margin:0 auto;padding:26px 20px 60px}
   header{display:flex;justify-content:space-between;align-items:baseline;
     border-bottom:1px solid var(--edge);padding-bottom:14px;flex-wrap:wrap;gap:8px}
   h1{margin:0;font:italic 600 22px/1 "Iowan Old Style",Palatino,Georgia,serif;
@@ -21,40 +22,55 @@
   h1 small{font:11px ui-monospace,Menlo,monospace;color:var(--faint);
     font-style:normal;margin-left:10px;letter-spacing:.08em}
   .meta{color:var(--faint);font-size:12px}
-  /* the signature: an instrument lamp row */
-  .lamps{display:flex;gap:26px;margin:20px 0 6px;flex-wrap:wrap}
+  /* signature: instrument lamp row */
+  .lamps{display:flex;gap:24px;margin:18px 0 4px;flex-wrap:wrap}
   .lamp{display:flex;align-items:center;gap:9px}
   .bulb{width:11px;height:11px;border-radius:50%;background:var(--faint);
-    box-shadow:0 0 0 2px var(--panel), 0 0 0 3px var(--edge)}
+    box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--edge)}
   .bulb.ok{background:var(--ok);box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--edge),0 0 8px 1px rgba(61,220,151,.55)}
   .bulb.warn{background:var(--warn);box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--edge),0 0 8px 1px rgba(232,161,61,.55)}
   .bulb.bad{background:var(--bad);box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--edge),0 0 8px 1px rgba(210,76,63,.6)}
   .lamp b{font-weight:600;font-size:11px;letter-spacing:.14em;color:var(--dim)}
-  .lamp span{font-size:12px;color:var(--paper)}
+  .lamp span{font-size:12px}
   @media (prefers-reduced-motion:no-preference){
     .bulb.ok{animation:breathe 4s ease-in-out infinite}
     @keyframes breathe{50%{box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--edge),0 0 3px 0 rgba(61,220,151,.25)}}
   }
   .headline{background:var(--panel);border:1px solid var(--edge);border-radius:4px;
-    padding:18px 20px;margin:22px 0}
-  .headline .num{font-size:40px;font-weight:700;letter-spacing:-.01em}
-  .headline .def{color:var(--dim);font-size:12px;margin-top:6px;max-width:60ch}
+    padding:16px 20px;margin:20px 0 14px;display:flex;gap:28px;flex-wrap:wrap;
+    align-items:baseline}
+  .headline .num{font-size:38px;font-weight:700}
+  .headline .def{color:var(--dim);font-size:12px;max-width:52ch}
   .headline .def em{color:var(--warn);font-style:normal}
-  section{margin-top:30px}
+  .frozen{color:var(--faint);font-size:12px;flex-basis:100%}
+  /* counters: stat tiles — numbers wear ink, never series color */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+    gap:10px;margin:14px 0 6px}
+  .tile{background:var(--panel);border:1px solid var(--edge);border-radius:4px;
+    padding:10px 14px}
+  .tile .v{font-size:22px;font-weight:700}
+  .tile .k{color:var(--faint);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    margin-top:2px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:0 40px}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  section{margin-top:28px;min-width:0}
   h2{font:600 11px/1 ui-monospace,Menlo,monospace;color:var(--dim);
-    letter-spacing:.18em;text-transform:uppercase;margin:0 0 10px;
+    letter-spacing:.18em;text-transform:uppercase;margin:0 0 3px;
     border-bottom:1px solid var(--edge);padding-bottom:6px}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th{text-align:left;color:var(--faint);font-weight:400;padding:4px 12px 4px 0}
-  td{padding:4px 12px 4px 0;border-top:1px solid var(--edge)}
-  td.r,th.r{text-align:right}
-  .lane-review{color:var(--warn)} .lane-clean{color:var(--ok)}
-  .lane-invalid{color:var(--bad)}
-  .empty{color:var(--faint);padding:10px 0}
-  .frozen{color:var(--faint);font-size:12px;margin-top:4px}
-  footer{margin-top:44px;color:var(--faint);font-size:11px;
-    border-top:1px solid var(--edge);padding-top:12px}
-  a{color:var(--dim)}
+  .hint{color:var(--faint);font-size:11.5px;margin:6px 0 8px;
+    font-family:"Iowan Old Style",Palatino,Georgia,serif;font-style:italic}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;color:var(--faint);font-weight:400;padding:4px 10px 4px 0;
+    white-space:nowrap}
+  td{padding:4px 10px 4px 0;border-top:1px solid var(--edge);vertical-align:top}
+  td.r,th.r{text-align:right;white-space:nowrap}
+  td.ell{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lane-review{color:var(--warn)} .lane-clean{color:var(--ok)} .lane-invalid{color:var(--bad)}
+  .st-OK{color:var(--ok)} .st-REVIEW{color:var(--warn)}
+  .empty{color:var(--faint);padding:10px 0;font-size:12.5px}
+  footer{margin-top:44px;color:var(--faint);font-size:12px;
+    border-top:1px solid var(--edge);padding-top:12px;line-height:1.7}
+  footer b{color:var(--dim)}
 </style>
 </head>
 <body>
@@ -69,40 +85,88 @@
   <div class="headline">
     <div class="num" id="headline">—</div>
     <div class="def">cumulative settled P&amp;L · flat $1 per flag · trusted + sports +
-      pregame + clean lane only · optimistic fill basis · <em>gross of carry</em> ·
+      pregame + clean lane only · optimistic fills · <em>gross of carry</em> ·
       <span id="hl-n"></span></div>
     <div class="frozen" id="gates"></div>
   </div>
 
+  <div class="tiles" id="tiles"></div>
+
+  <div class="grid">
+    <section>
+      <h2>Today’s ledger <span id="day"></span></h2>
+      <div class="hint">Every flag books $1 on paper. “review” is quarantine, not error —
+        cross-venue spreads, suspiciously large edges, and thin books live there by design.</div>
+      <div id="classes"></div>
+    </section>
+
+    <section>
+      <h2>Open positions</h2>
+      <div class="hint">Paper bets awaiting a second sighting or event resolution.
+        “✓ confirmed” means the price survived to the next poll.</div>
+      <div id="open"></div>
+    </section>
+
+    <section>
+      <h2>Left on the table</h2>
+      <div class="hint">Flags the filters refused, and why. The cost of caution is
+        measured, never assumed.</div>
+      <div id="lot"></div>
+    </section>
+
+    <section>
+      <h2>Venue health — last 2h</h2>
+      <div class="hint">Fetch success and latency per venue. Invisible downtime censors
+        every statistic, so it gets a table of its own.</div>
+      <div id="venues"></div>
+    </section>
+  </div>
+
   <section>
-    <h2>Today’s ledger by class × lane <span id="day"></span></h2>
-    <div id="classes"></div>
+    <h2>Recent flags</h2>
+    <div class="hint">The last opportunities the detector saw, newest first.
+      XSPREAD = cross-venue spread (never called an arb; carries settlement risk).
+      DIVERGENCE is a signal only — it never books a bet.</div>
+    <div id="flags"></div>
   </section>
 
   <section>
-    <h2>Left on the table — what the filters cost, by reason</h2>
-    <div id="lot"></div>
-  </section>
-
-  <section>
-    <h2>Cadence honesty &amp; open book</h2>
+    <h2>Cadence &amp; consensus</h2>
+    <div class="hint">The p95 interval is the loop’s real spec — timing claims key off
+      what the instrument actually did, not what was configured.</div>
     <div id="cadence"></div>
   </section>
 
   <footer>
-    Nothing on this page accepts input; control is flag files + config + supervisor
-    restart. Definitions: SPEC.md · PREREGISTRATION.md. Missed confirmations count $0.
+    <b>Reading this panel:</b> the headline only counts bets that are trusted, sports,
+    placed pregame, and in the clean lane — everything else stays visible but never blends in.
+    Missed confirmations count $0 rather than being dropped. Nothing here accepts input;
+    control is flag files (<code>data/stop-all</code>), <code>config.yaml</code>, and a
+    supervisor restart. Definitions: SPEC.md · PREREGISTRATION.md.
   </footer>
 </div>
 <script>
 const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const ago = iso => {
+  if(!iso) return '—';
+  const s = (Date.now() - new Date(iso).getTime())/1000;
+  if(s < 90) return `${Math.round(s)}s ago`;
+  if(s < 5400) return `${Math.round(s/60)}m ago`;
+  return `${(s/3600).toFixed(1)}h ago`;
+};
+const fmt = n => Number(n).toLocaleString('en-US');
+const evName = k => {
+  const p = String(k||'').split(':');
+  return p.length >= 4 ? `${p[2]} v ${p[3]}${p[4]?' ('+p[4]+')':''} · ${p[1]}` : k;
+};
 
 function lamp(label, cls, text){
   return `<div class="lamp"><span class="bulb ${cls}"></span><b>${label}</b><span>${esc(text)}</span></div>`;
 }
-function table(head, rows){
-  if(!rows.length) return '<div class="empty">nothing yet — which may be the correct result</div>';
+function tile(v, k){ return `<div class="tile"><div class="v">${esc(v)}</div><div class="k">${esc(k)}</div></div>`; }
+function table(head, rows, emptyMsg){
+  if(!rows.length) return `<div class="empty">${emptyMsg||'nothing yet — which may be the correct result'}</div>`;
   return `<table><tr>${head.map(h=>`<th class="${h.r?'r':''}">${h.t}</th>`).join('')}</tr>` +
     rows.map(r=>`<tr>${r.map(c=>`<td class="${c.r?'r':''} ${c.c||''}">${esc(c.t)}</td>`).join('')}</tr>`).join('') + '</table>';
 }
@@ -110,7 +174,7 @@ function table(head, rows){
 async function refresh(){
   try{
     const s = await (await fetch('/api/state')).json();
-    $('updated').textContent = `head ${s.head_sha||'?'} · refreshed ${s.generated_at}`;
+    $('updated').textContent = `head ${s.head_sha||'?'} · refreshed ${ago(s.generated_at)} · auto 30s`;
     const supCls = s.supervisor==='ALIVE'?'ok':(s.supervisor==='STALE'?'warn':'bad');
     const dataCls = s.data_age_secs==null?'bad':(s.data_stale?'bad':'ok');
     const dataTxt = s.data_age_secs==null?'no quotes':`${Math.round(s.data_age_secs)}s old`;
@@ -118,32 +182,61 @@ async function refresh(){
     const bkTxt = s.backup_age_hours==null?'none yet':`${s.backup_age_hours.toFixed(1)}h old`;
     const feeCls = s.stale_fees.length?'warn':'ok';
     const feeTxt = s.stale_fees.length?`stale: ${s.stale_fees.join(', ')}`:'dated & fresh';
+    const crCls = s.odds_api_credits==null?'warn':(s.odds_api_credits<100?'bad':'ok');
+    const crTxt = s.odds_api_credits==null?'no scan yet':`${s.odds_api_credits} left`;
     $('lamps').innerHTML =
       lamp('SUPERVISOR', supCls, s.supervisor) +
       lamp('DATA', dataCls, dataTxt) +
       lamp('BACKUP', bkCls, bkTxt) +
-      lamp('FEE FACTS', feeCls, feeTxt);
+      lamp('FEE FACTS', feeCls, feeTxt) +
+      lamp('ODDS CREDITS', crCls, crTxt);
     $('headline').textContent = `$${s.headline_pnl}`;
     $('hl-n').textContent = `${s.headline_n} settled bet${s.headline_n===1?'':'s'}`;
     $('gates').textContent =
-      `EV lane: ${s.ev_enabled?'ENABLED':'frozen (pre-registered)'} · trusted pairs: ` +
-      (s.trusted_pairs.length?s.trusted_pairs.join(', '):'none — cross-venue is REVIEW-only by default');
+      `EV lane: ${s.ev_enabled?'ENABLED':'frozen (pre-registered; would-be flags still recorded)'} · trusted pairs: ` +
+      (s.trusted_pairs.length?s.trusted_pairs.join(', '):'none — cross-venue stays in review until the whitelist gate clears');
+    const c = s.counters, f = c.flags||{};
+    const lockedFlags = (f.ARB||0)+(f.XSPREAD||0)+(f.NEGRISK||0)+(f.POLITICAL||0);
+    $('tiles').innerHTML =
+      tile(fmt(c.quotes), 'quotes today') +
+      tile(fmt(c.polls), 'watch polls') +
+      tile(fmt(c.events), 'events tracked') +
+      tile(fmt(lockedFlags), 'locked flags') +
+      tile(fmt(f.DIVERGENCE||0), 'divergences') +
+      tile(fmt(c.rejects), 'flags filtered');
     $('day').textContent = '· ' + s.day;
     $('classes').innerHTML = table(
-      [{t:'class'},{t:'lane'},{t:'bets',r:1},{t:'staked',r:1},{t:'settled P&L',r:1},{t:'pending',r:1},{t:'missed confirms',r:1}],
+      [{t:'class'},{t:'lane'},{t:'bets',r:1},{t:'settled P&L',r:1},{t:'pending',r:1},{t:'missed',r:1}],
       s.by_class.map(a=>[{t:a.kind},{t:a.lane,c:'lane-'+a.lane},{t:a.bets,r:1},
-        {t:'$'+a.staked,r:1},{t:'$'+a.settled_pnl,r:1},{t:a.pending,r:1},{t:a.missed,r:1}]));
+        {t:'$'+a.settled_pnl,r:1},{t:a.pending,r:1},{t:a.missed,r:1}]),
+      'no bets booked today');
+    $('open').innerHTML = table(
+      [{t:'kind'},{t:'event'},{t:'pair'},{t:'edge',r:1},{t:'lane'},{t:'age',r:1},{t:'conf.',r:1}],
+      s.open_bets.map(b=>[{t:b.kind},{t:evName(b.event_key),c:'ell'},{t:b.venue_pair},
+        {t:b.edge_points,r:1},{t:b.lane,c:'lane-'+b.lane},{t:ago(b.created_at),r:1},
+        {t:b.confirmed?'✓':'…',r:1}]),
+      'no open positions');
     $('lot').innerHTML = table(
       [{t:'reason'},{t:'flags',r:1},{t:'summed edge (pts)',r:1}],
-      s.left_on_table.map(r=>[{t:r.reason},{t:r.n,r:1},{t:(r.edge||0).toFixed(4),r:1}]));
-    const c = s.cadence;
-    const cadRows = [
-      [{t:'watch polls today'},{t:c.n_polls,r:1}],
-      [{t:'interval planned / mean / p95'},{t:`${s.planned_interval}s / ${c.mean?Math.round(c.mean)+'s':'—'} / ${c.p95?Math.round(c.p95)+'s':'—'}`,r:1}],
-      [{t:'last consensus scan'},{t:s.consensus_at||'never',r:1}],
-      ...s.open_bets.map(o=>[{t:`open ${o.kind} bets (awaiting resolution)`},{t:o.n,r:1}]),
-    ];
-    $('cadence').innerHTML = table([{t:''},{t:'',r:1}], cadRows);
+      s.left_on_table.map(r=>[{t:r.reason},{t:fmt(r.n),r:1},{t:(r.edge||0).toFixed(4),r:1}]));
+    $('venues').innerHTML = table(
+      [{t:'venue'},{t:'fetch ok',r:1},{t:'avg latency',r:1},{t:'quotes/2h',r:1}],
+      s.venues.map(v=>[{t:v.venue},
+        {t:`${v.ok_pct.toFixed(0)}%`,r:1,c:v.ok_pct<95?'lane-review':''},
+        {t:`${(v.latency/1000).toFixed(1)}s`,r:1},{t:fmt(v.quotes),r:1}]),
+      'no polls in the last 2h');
+    $('flags').innerHTML = table(
+      [{t:'when',r:1},{t:'kind'},{t:'event'},{t:'edge (pts)',r:1},{t:'status'},{t:'notes'}],
+      s.recent_flags.map(o=>[{t:ago(o.started_at),r:1},{t:o.kind},
+        {t:evName(o.event_key),c:'ell'},{t:o.edge,r:1},
+        {t:o.status,c:'st-'+o.status},{t:o.notes||'',c:'ell'}]),
+      'no flags yet — the detector is running; most polls produce none, honestly');
+    const cd = s.cadence;
+    $('cadence').innerHTML = table([{t:''},{t:'',r:1}], [
+      [{t:'interval planned / mean / p95'},{t:`${s.planned_interval}s / ${cd.mean?Math.round(cd.mean)+'s':'—'} / ${cd.p95?Math.round(cd.p95)+'s':'—'}`,r:1}],
+      [{t:'last consensus scan'},{t:s.consensus_at?ago(s.consensus_at):'never',r:1}],
+      [{t:'consensus rows today'},{t:fmt(s.consensus_rows_today),r:1}],
+    ]);
   }catch(e){
     $('updated').textContent = 'refresh failed — is the instrument running?';
   }

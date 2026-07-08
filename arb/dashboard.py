@@ -39,11 +39,42 @@ def state(cfg, store) -> dict:
         if backups else None
 
     open_bets = store.query(
-        """SELECT kind, COUNT(*) n FROM flat_bets fb
+        """SELECT fb.id, fb.kind, fb.event_key, fb.venue_pair, fb.edge_points,
+                  fb.lane, fb.created_at,
+                  EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id=fb.id
+                          AND be.kind='confirmed') confirmed
+           FROM flat_bets fb
            WHERE NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id=fb.id
                              AND be.kind IN ('settled','void','lifetime_closed'))
-           GROUP BY kind""")
+           ORDER BY fb.id DESC LIMIT 20""")
     consensus_at = store.query("SELECT MAX(computed_at) t FROM consensus")[0]["t"]
+    consensus_today = store.query(
+        "SELECT COUNT(*) n FROM consensus WHERE date(computed_at)=?", (day,))[0]["n"]
+    credits = store.query(
+        "SELECT detail FROM annotations WHERE kind='oddsapi-credits' "
+        "ORDER BY id DESC LIMIT 1")
+    counters = store.query(
+        """SELECT COALESCE(SUM(n_quotes),0) quotes, COUNT(*) polls
+           FROM polls WHERE date(started_at)=? AND kind='watch'""", (day,))[0]
+    events_today = store.query(
+        """SELECT COUNT(DISTINCT event_key) n FROM quotes
+           WHERE date(fetched_at)=? AND event_key != ''""", (day,))[0]["n"]
+    opps_today = store.query(
+        """SELECT o.kind, COUNT(*) n FROM opportunities o JOIN polls p ON p.id=o.poll_id
+           WHERE date(p.started_at)=? GROUP BY o.kind""", (day,))
+    rejects_today = store.query(
+        """SELECT COUNT(*) n FROM left_on_table lo JOIN polls p ON p.id=lo.poll_id
+           WHERE date(p.started_at)=?""", (day,))[0]["n"]
+    venues = store.query(
+        """SELECT pv.venue, AVG(pv.ok)*100 ok_pct, AVG(pv.latency_ms) latency,
+                  SUM(pv.n_quotes) quotes, COUNT(*) polls
+           FROM poll_venues pv JOIN polls p ON p.id = pv.poll_id
+           WHERE p.started_at > datetime('now', '-2 hours')
+           GROUP BY pv.venue""")
+    recent_flags = store.query(
+        """SELECT o.kind, o.event_key, o.edge, o.status, o.notes, p.started_at
+           FROM opportunities o JOIN polls p ON p.id = o.poll_id
+           ORDER BY o.id DESC LIMIT 12""")
 
     return {
         "generated_at": now.isoformat(timespec="seconds"),
@@ -64,6 +95,13 @@ def state(cfg, store) -> dict:
         "left_on_table": frame["left_on_table"],
         "open_bets": [dict(r) for r in open_bets],
         "consensus_at": consensus_at,
+        "consensus_rows_today": consensus_today,
+        "odds_api_credits": int(credits[0]["detail"]) if credits else None,
+        "counters": {"quotes": counters["quotes"], "polls": counters["polls"],
+                     "events": events_today, "rejects": rejects_today,
+                     "flags": {r["kind"]: r["n"] for r in opps_today}},
+        "venues": [dict(r) for r in venues],
+        "recent_flags": [dict(r) for r in recent_flags],
         "ev_enabled": bool(cfg["ev_enabled"]),
         "trusted_pairs": [str(p) for p in cfg["trusted_pairs"]],
     }

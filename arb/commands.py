@@ -135,6 +135,11 @@ def cmd_scan(cfg, store, args):
         store.insert_many("consensus_books", books)
         total_c += len(cons)
         total_b += len(books)
+    if oddsapi.LAST_REMAINING is not None:  # dashboard/status read the latest row
+        store.insert("annotations", {
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "target_kind": "day", "target_id": now[:10], "kind": "oddsapi-credits",
+            "detail": str(oddsapi.LAST_REMAINING)})
     console.print(f"consensus rows: {total_c}; per-book rows: {total_b}")
     return 0
 
