@@ -77,8 +77,12 @@ def run_supervisor(cfg, once: bool = False) -> int:
     children: dict[str, subprocess.Popen] = {}
     started: dict[str, float] = {}
     last_fired: dict[str, str] = {}
-    interval = float(cfg["watch_interval_secs"])
     next_run: dict[str, float] = {}
+
+    def _interval(name: str) -> float:
+        if name == "live":
+            return float(cfg["live_lane"]["cadence_secs"])
+        return float(cfg["watch_interval_secs"])
     try:
         while True:
             if STOP_FLAG.exists():
@@ -106,7 +110,7 @@ def run_supervisor(cfg, once: bool = False) -> int:
                     cmd = cfg["supervisor"]["commands"][name].split()
                     children[name] = subprocess.Popen([sys.executable, "-m", "arb", *cmd])
                     started[name] = now
-                    next_run[name] = now + interval
+                    next_run[name] = now + _interval(name)
 
             # supervisor-owned clock (the `schedule` dependency is dropped)
             for t in cfg["scan_times"]:

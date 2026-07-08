@@ -10,5 +10,11 @@ def apply(conn):
         for ddl in schema.TABLES + schema.INDEXES:
             conn.execute(ddl)
         conn.execute("INSERT INTO schema_version VALUES (1, datetime('now'))")
-    # future migrations: `if current < 2: ... ALTER TABLE ... ADD COLUMN ...` — adds only
+    if current < 2:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(quotes)")}
+        for ddl in schema.MIGRATION_2:
+            if "ADD COLUMN venue_market_id" in ddl and "venue_market_id" in cols:
+                continue  # fresh v1 DBs may already carry it via TABLES
+            conn.execute(ddl)
+        conn.execute("INSERT INTO schema_version VALUES (2, datetime('now'))")
     conn.commit()

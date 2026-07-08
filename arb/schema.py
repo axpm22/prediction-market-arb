@@ -1,7 +1,16 @@
 """SQLite DDL (SPEC §9). Money columns are TEXT holding Decimal strings, never REAL.
 Every table is INSERT-only or INSERT+terminal-row; nothing ever UPDATEs ledger rows."""
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# v2 additions (migrations only ever ADD):
+MIGRATION_2 = [
+    # live lane re-fetches shortlisted markets by their venue ids (L3)
+    "ALTER TABLE quotes ADD COLUMN venue_market_id TEXT",
+    # lead-lag study runs are append-only records (B5, SC5 discipline)
+    """CREATE TABLE IF NOT EXISTS leadlag_runs (
+        id INTEGER PRIMARY KEY, run_at TEXT, params_json TEXT, results_json TEXT)""",
+]
 
 TABLES = [
     """CREATE TABLE IF NOT EXISTS quotes (

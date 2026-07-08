@@ -210,6 +210,25 @@ def cmd_political(cfg, store, args):
     return 0
 
 
+def cmd_live(cfg, store, args):
+    """In-play lane (PROMPT_LIVE_LEADLAG Part A). Never calls The Odds API."""
+    from arb.lanes.live import run_live_cycle
+    if not cfg["live_lane"]["enabled"]:
+        console.print("[yellow]live_lane disabled (kill gate?) — no-op[/]")
+        return 0
+    s = run_live_cycle(cfg, store, dry_run=args.dry_run)
+    console.print(f"live cycle: shortlist={len(s['shortlist'])} events, "
+                  f"identities={s['identities']}, requoted={s['requoted']} "
+                  f"(coverage {s['coverage']:.0%}), flags={s['flags']}, "
+                  f"rejects={s['rejects']}, cycle={s['cycle_secs']}s "
+                  f"(target {cfg['live_lane']['cadence_secs']}s)")
+    for ek in s["shortlist"]:
+        console.print(f"  [dim]{ek}[/]")
+    if args.dry_run:
+        console.print("[dim]dry-run: nothing persisted[/]")
+    return 0
+
+
 def cmd_verify(cfg, store, args):
     from arb.lanes.verify import run_once
     n = run_once(cfg, store)

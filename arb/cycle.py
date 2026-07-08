@@ -30,6 +30,7 @@ def _quote_row(q, poll_id):
         "bid": q.bid, "volume_24h": q.volume_24h,
         "start_utc": q.start_utc.isoformat() if q.start_utc else None,
         "start_grade": q.start_grade,
+        "venue_market_id": q.venue_market_id,
     }
 
 
@@ -62,14 +63,11 @@ def fetch_mlb_schedule(cfg):
         return None
 
 
-def run_cycle(cfg, store, quotes_by_venue: dict, venue_status: dict,
-              poll_kind: str = "watch") -> int:
-    started = datetime.now(timezone.utc)
-    all_quotes = [q for qs in quotes_by_venue.values() for q in qs]
-    groups = build_groups(all_quotes, cfg, load_aliases(),
-                          mlb_schedule=fetch_mlb_schedule(cfg))
-    opps, rejects = detect(cfg, groups)
-
+def persist_poll(cfg, store, poll_kind: str, all_quotes: list, venue_status: dict,
+                 groups: list, opps: list, rejects: list,
+                 started: datetime | None = None) -> int:
+    """Shared persistence for any poll kind (watch and live use the same path)."""
+    started = started or datetime.now(timezone.utc)
     poll_id = store.insert("polls", {
         "started_at": started.isoformat(), "kind": poll_kind,
         "n_quotes": len(all_quotes), "n_opps": len(opps)})
@@ -100,4 +98,14 @@ def run_cycle(cfg, store, quotes_by_venue: dict, venue_status: dict,
     from arb.cli import head_sha
     from arb.heartbeat import beat
     beat(store, poll_kind, head_sha())
+    return poll_id
+
+
+def run_cycle(cfg, store, quotes_by_venue: dict, venue_status: dict,
+              poll_kind: str = "watch") -> int:
+    all_quotes = [q for qs in quotes_by_venue.values() for q in qs]
+    groups = build_groups(all_quotes, cfg, load_aliases(),
+                          mlb_schedule=fetch_mlb_schedule(cfg))
+    opps, rejects = detect(cfg, groups)
+    persist_poll(cfg, store, poll_kind, all_quotes, venue_status, groups, opps, rejects)
     return 0

@@ -190,9 +190,11 @@ validation:
                # live poll: detect a modest 0.55 win rate, not only >= 0.65.
                # See PREREGISTRATION.md.
 supervisor:
-  processes: { watch: true }        # add lanes deliberately, one at a time
-  commands:  { watch: "watch --once" }
-  max_child_runtime_secs: { default: 600, settle: 1800 }  # per-process; settle+reconcile runs long
+  processes: { watch: true, live: true }   # add lanes deliberately, one at a time
+  commands:  { watch: "watch --once", live: "live --once" }
+  max_child_runtime_secs: { default: 600, settle: 1800, live: 120 }
+                                    # per-process; settle+reconcile runs long;
+                                    #   a live cycle past 120s is force-restarted
 data_stale_alarm_secs: 900
 clock_skew_alarm_secs: 5            # status alarms if NTP offset exceeds this
 log_retention_days: 90              # rotate daily; forensics greps these
