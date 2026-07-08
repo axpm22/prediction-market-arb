@@ -183,8 +183,12 @@ scoring:                            # consumed by §18.3 segment gating (regrade
 sizing: { kelly_fraction: 0.25, max_kelly_fraction_of_bankroll: 0.05 }
 validation:
   ev_filter: { rule_id: H-EVFILTER, kind: EV, min_cost: 0.40, max_cost: 0.75,
-               max_flagged_edge: 0.02, target_n: 190, halfway_n: 95,
+               max_flagged_edge: 0.02, target_n: 1200, halfway_n: 600,
                kill_consecutive_losses: 10 }
+               # target_n raised 190 -> 1200 (~600 effective events at n_eff ~ n/2)
+               # per the §18.5 power decision, resolved 2026-07-08 BEFORE first
+               # live poll: detect a modest 0.55 win rate, not only >= 0.65.
+               # See PREREGISTRATION.md.
 supervisor:
   processes: { watch: true }        # add lanes deliberately, one at a time
   commands:  { watch: "watch --once" }

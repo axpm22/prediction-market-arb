@@ -14,6 +14,20 @@ from arb.matching import line_key
 log = get_logger("arb.settle", "logs/scan.log")
 NY = ZoneInfo("America/New_York")
 
+# Registered settlement paths (§12): a kind without a settler is a CONFIG ERROR
+# at startup, not a permanent-OPEN surprise later (bug E3). XSPREAD's registered
+# settler IS the locked-at-entry path (L1).
+SETTLEMENT_PATHS = {"ARB": "entry", "XSPREAD": "entry", "POLITICAL": "entry",
+                    "EV": "resolution", "NEGRISK": "resolution"}
+
+
+def validate_settlement_paths(cfg) -> None:
+    from arb.config import ConfigError
+    if cfg["btc_arb"]["enabled"] and "BTC" not in SETTLEMENT_PATHS:
+        raise ConfigError(
+            "btc_arb.enabled but BTC has no registered settlement path — build the "
+            "same-oracle settle path first (§12; V1 gap E3: permanent-OPEN bets)")
+
 
 def open_resolution_bets(store):
     return store.query(

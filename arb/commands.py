@@ -179,6 +179,39 @@ def cmd_check_invariants(cfg, store, args):
     return 0  # silent when clean
 
 
+def cmd_political(cfg, store, args):
+    """POLITICAL lane: Polymarket-only intra-market YES+NO<1 (§12)."""
+    import json as _json
+    from datetime import datetime, timezone
+
+    from arb.lanes.political import scan_market
+    from arb.tracker import process_poll
+    from arb.venues import polymarket
+    events = []
+    for tag in cfg["nonsports"]["polymarket_tags"]:
+        events.extend(polymarket.fetch_gamma_events(cfg, str(tag), max_pages=2))
+    markets = [m for e in events for m in e.get("markets", [])
+               if m.get("clobTokenIds") and not m.get("negRisk")]
+    tokens = [t for m in markets for t in _json.loads(m["clobTokenIds"])]
+    books = polymarket.fetch_books(cfg, tokens)
+    opps = [o for m in markets if (o := scan_market(cfg, m, books))]
+    now = datetime.now(timezone.utc)
+    poll_id = store.insert("polls", {"started_at": now.isoformat(), "kind": "political",
+                                     "n_quotes": len(tokens), "n_opps": len(opps)})
+    process_poll(cfg, store, poll_id, "political", opps,
+                 {"polymarket": {"ok": True, "n": len(tokens), "latency_ms": 0}}, now=now)
+    console.print(f"political: {len(markets)} binary markets scanned, "
+                  f"{len(opps)} YES+NO<1 flags")
+    return 0
+
+
+def cmd_verify(cfg, store, args):
+    from arb.lanes.verify import run_once
+    n = run_once(cfg, store)
+    console.print(f"verify: re-quoted {n} fresh locked flags")
+    return 0
+
+
 def cmd_supervisor(cfg, store, args):
     from arb.heartbeat import run_supervisor
     return run_supervisor(cfg)
