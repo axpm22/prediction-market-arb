@@ -58,6 +58,12 @@ class Quote:
     sport: str = ""
     bid: Decimal | None = None       # for mids/markouts/zombie guard
     volume_24h: Decimal | None = None
+    # venue-raw event identity; matching (§8) normalizes these and stamps event_key
+    home: str = ""
+    away: str = ""
+    start_utc: datetime | None = None
+    start_grade: str = "nominal"     # verified > nominal > absent (§11.3)
+    venue_market_id: str = ""        # ticker / conditionId+token / marketHash
 
     @property
     def effective_cost(self) -> Decimal:

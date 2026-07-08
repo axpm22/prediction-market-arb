@@ -1,0 +1,1368 @@
+{
+ "series": [
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBAQTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBAQTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-16T16:58:03.563303Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBA2QTOTAL",
+   "title": "Pro Basketball 1st Quarter Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WNBAHTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WNBAHTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-16T17:04:58.920761Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXWNBA2HTOTAL",
+   "title": "Women's Pro Basketball 2nd Half Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WNBAGAME.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WNBAGAME.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-07T20:58:05.208579Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXWNBAGAME",
+   "title": "Women's Pro Basketball Game"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ACHIEVEMENTS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ACHIEVEMENTS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-16T04:22:15.679005Z",
+   "settlement_sources": [
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    },
+    {
+     "name": "AP",
+     "url": "https://apnews.com/"
+    }
+   ],
+   "tags": [
+    "UFC"
+   ],
+   "ticker": "KXUFC",
+   "title": "UFC Weightclass Champion"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBATOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBATOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-29T22:17:56.948019Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBATOTAL",
+   "title": "Pro Basketball Total Points"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBASERIESTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBASERIESTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-02T15:39:39.886498Z",
+   "settlement_sources": [
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBASERIESTOTALPTS",
+   "title": "Pro Basketball Series Total Points"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBAQTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBAQTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-16T16:58:03.583202Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBA1QTOTAL",
+   "title": "Pro Basketball 1st Quarter Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/UFC.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/UFC.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-18T16:13:25.963418Z",
+   "settlement_sources": [
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ],
+   "tags": [
+    "MMA"
+   ],
+   "ticker": "KXUFCFIGHT",
+   "title": "UFC Fight"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBAALLSTAREVENT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBAALLSTAREVENT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBAALLSTARGAME",
+   "title": "NBA All-Star Game Winner"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBAHTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBAHTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-28T20:08:59.145154Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBA1HTOTAL",
+   "title": "Pro Basketball 1st Half Total Points"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WNBATOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WNBATOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-06T03:56:29.467516Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXWNBATOTAL",
+   "title": "Women's Pro Basketball Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WNBAGAME.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WNBAGAME.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-07T20:58:05.223913Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXWNBAASGAME",
+   "title": "WNBA All Star Game"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WNBASEASONGAMES.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WNBASEASONGAMES.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-05-14T21:29:59.030335Z",
+   "settlement_sources": [
+    {
+     "name": "Fox Sports",
+     "url": "https://foxsports.com"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    },
+    {
+     "name": "Associated Press",
+     "url": "https://apnews.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXWNBAGAMESPLAYED",
+   "title": "WNBA Games Played in a Season"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/MLBSERIESGAMECOUNT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/MLBSERIESGAMECOUNT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/"
+    }
+   ],
+   "tags": [
+    "Baseball"
+   ],
+   "ticker": "KXMLBSERIESGAMETOTAL",
+   "title": "Professional Baseball Series Total Games"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/MLBGAME.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/MLBGAME.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-09T20:58:13.466046Z",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/"
+    }
+   ],
+   "tags": [
+    "Baseball"
+   ],
+   "ticker": "KXMLBGAME",
+   "title": "Professional Baseball Game"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WNBAHTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WNBAHTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-07T15:28:32.058719Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXWNBA1HTOTAL",
+   "title": "Women's Pro Basketball 1st Half Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BASEBALLGAMEFIRSTXTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BASEBALLGAMEFIRSTXTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-29T02:18:25.791362Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/"
+    }
+   ],
+   "tags": [
+    "Baseball"
+   ],
+   "ticker": "KXMLBF5TOTAL",
+   "title": "First 5 Innings Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WNBAQTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WNBAQTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-16T17:03:04.3062Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXWNBA4QTOTAL",
+   "title": "Women's Pro Basketball 4th Quarter Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBASERIESSWEEP.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBASERIESSWEEP.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-05-07T20:22:52.190802Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBAGAME7",
+   "title": "NBA Series that Go to a Game 7"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WNBAQTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WNBAQTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-16T17:03:04.31552Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXWNBA2QTOTAL",
+   "title": "Women's Pro Basketball 2nd Quarter Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/MLBTEAMTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/MLBTEAMTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-29T02:23:23.460006Z",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/"
+    }
+   ],
+   "tags": [
+    "Baseball"
+   ],
+   "ticker": "KXMLBTEAMTOTAL",
+   "title": "Pro Baseball Team Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBASUMMERLEAGUEGAME.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBASUMMERLEAGUEGAME.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-29T20:22:52.001598Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBASUMMERGAME",
+   "title": "Pro Basketball Summer League Game"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBASERIESSTATS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBASERIESSTATS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-01T18:49:26.168101Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBA3PTALLGAMES",
+   "title": "Pro Basketball 3-Pointers in Every Game"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/SERIESTOTALGAMES.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/SERIESTOTALGAMES.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-01T16:08:34.381241Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://foxsports.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBASERIESGAMES",
+   "title": "NBA Series Total Games"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/EVENT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/EVENT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "daily",
+   "last_updated_ts": "2026-03-07T01:41:08.635897Z",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    }
+   ],
+   "tags": [
+    "Boxing"
+   ],
+   "ticker": "KXNBAGAMES",
+   "title": "NBA games"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBATEAMTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBATEAMTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-04-22T17:18:12.355953Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBATEAMTOTAL",
+   "title": "NBA Team Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBARISINGSTARS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBARISINGSTARS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "the league governing the game",
+     "url": "https://www.nba.com/"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBACELEBRITYGAME",
+   "title": "Pro Basketball All-Star Celebrity Game"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBAGAME.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBAGAME.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-29T21:33:31.460487Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBAGAME",
+   "title": "Pro Basketball Game"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBAHTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBAHTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-28T20:08:59.12945Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBA2HTOTAL",
+   "title": "Pro Basketball 2nd Half Total Points"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBAQTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBAQTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-16T16:58:03.573395Z",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBA3QTOTAL",
+   "title": "Pro Basketball 3rd Quarter Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/MLBGAME.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/MLBGAME.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "annual",
+   "last_updated_ts": "2026-06-09T20:58:13.462682Z",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/"
+    }
+   ],
+   "tags": [
+    "Baseball"
+   ],
+   "ticker": "KXMLBASGAME",
+   "title": "Professional Baseball All-Star Game"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/MLBTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/MLBTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-29T02:18:16.961336Z",
+   "settlement_sources": [
+    {
+     "name": "MLB",
+     "url": "https://www.mlb.com/"
+    }
+   ],
+   "tags": [
+    "Baseball"
+   ],
+   "ticker": "KXMLBTOTAL",
+   "title": "Pro Baseball Total Points"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WNBAQTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WNBAQTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-16T17:03:04.332977Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXWNBA3QTOTAL",
+   "title": "Women's Pro Basketball 3rd Quarter Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBASERIESSTATS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBASERIESSTATS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-01T18:49:26.188843Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBAPTSALLGAMES",
+   "title": "Pro Basketball Points in Every Game"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBAQTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBAQTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-16T16:58:03.552554Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBA4QTOTAL",
+   "title": "Pro Basketball 4th Quarter Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/MLBGAME.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/MLBGAME.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-09T20:58:13.45869Z",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/"
+    }
+   ],
+   "tags": [
+    "Baseball"
+   ],
+   "ticker": "KXMLBSTGAME",
+   "title": "Pro Baseball Spring Training game"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/TITLE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/TITLE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "annual",
+   "last_updated_ts": "2026-06-29T15:47:46.648481Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBA",
+   "title": "Pro Basketball Champion"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WNBAQTOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WNBAQTOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-16T17:03:04.324397Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.wnba.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXWNBA1QTOTAL",
+   "title": "Women's Pro Basketball 1st Quarter Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Current and former players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current and former players/coaches/staff of the specific teams in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men\u2019s Basketball Team is playing in <event>, this prohibition will restrict trades by  current/former players of that team, rather than all current/former players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBASUMMERLEAGUETOTAL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBASUMMERLEAGUETOTAL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-29T22:18:16.963926Z",
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBASUMMERTOTAL",
+   "title": "Pro Basketball Summer League Total"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NBAFINALSVIEWER.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NBAFINALSVIEWER.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com"
+    },
+    {
+     "name": "Deadline",
+     "url": "https://deadline.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "National Basketball Association",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "Nielsen Media Research",
+     "url": "https://www.nielsen.com/solutions/media/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "SportMediaWatch",
+     "url": "https://www.sportmediawatch.com"
+    },
+    {
+     "name": "Sports Business Journal",
+     "url": "https://www.sportsbusinessjournal.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Hollywood Reporter",
+     "url": "https://www.hollywoodreporter.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Turner Sports",
+     "url": "https://www.turnersports.com/"
+    },
+    {
+     "name": "Variety",
+     "url": "https://variety.com/"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBAFINALSVIEWERGAME7",
+   "title": "NBA finals viewership"
+  }
+ ]
+}
