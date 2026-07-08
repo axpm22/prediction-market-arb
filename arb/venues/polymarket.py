@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from arb.models import Quote
-from arb.venues.base import get_json, post_json
+from arb.venues.base import get_json, is_live, post_json
 from arb.venues.fees import leg_fee_cost
 
 GAMMA = "https://gamma-api.polymarket.com"
@@ -93,7 +93,7 @@ def quotes_from_event(cfg, event: dict, books: dict[str, dict], sport: str) -> l
                 fee_cost=leg_fee_cost(cfg, "polymarket", "sports", ask),
                 depth_usd=Decimal(asks[0]["size"]) * ask,
                 ladder_json=json.dumps([[a["price"], a["size"]] for a in asks]),
-                live=False, fetched_at=now, category="sports", sport=sport,
+                live=is_live(start, now), fetched_at=now, category="sports", sport=sport,
                 bid=Decimal(bids[0]["price"]) if bids else None, volume_24h=vol,
                 home=home, away=away, start_utc=start,
                 start_grade="nominal" if start else "absent",

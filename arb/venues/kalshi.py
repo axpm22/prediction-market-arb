@@ -15,7 +15,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from arb.models import Quote
-from arb.venues.base import get_json
+from arb.venues.base import get_json, is_live
 from arb.venues.fees import leg_fee_cost
 
 BASE = "https://api.elections.kalshi.com/trade-api/v2"
@@ -78,7 +78,8 @@ def parse_markets(cfg, markets: list[dict], sport: str, market_type: str) -> lis
             outcome = m.get("yes_sub_title", "")
         common = dict(
             event_key="", venue="kalshi", book="kalshi", market_type=market_type,
-            line=line, outcome_label=outcome, ladder_json=None, live=False,
+            line=line, outcome_label=outcome, ladder_json=None,
+            live=is_live(start, now),
             fetched_at=now, category="sports", sport=sport, volume_24h=vol,
             home=home, away=away, start_utc=start,
             start_grade="nominal" if start else "absent",

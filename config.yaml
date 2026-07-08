@@ -219,6 +219,27 @@ mc_sim: { n_bets: 1000, block: sport_day, ruin_threshold: 0.5, max_ruin_prob: 0.
 mismatch_pricing: { lgm: 1.0, rule_of_three: true }    # p_upper = 3/n mismatch-free positions
 caps: { per_event_frac: 0.05, per_sport_frac: 0.10, per_day_totals_frac: 0.15 }
 kind_taxonomy: { cross_venue: XSPREAD, same_venue_locked: ARB }   # RULE 1 (v3.5)
+live_lane:                          # in-play paper lane (prompts/PROMPT_LIVE_LEADLAG.md);
+  enabled: true                     #   review-lane FOREVER by classify(); kill gate in
+                                    #   PREREGISTRATION.md flips this false by dated amendment
+  cadence_secs: 20                  # live cycle target; achieved cadence printed per cycle
+  shortlist_max_events: 12          # the shortlist, not the board
+  max_game_hours: { baseball_mlb: 5.0, basketball_nba: 3.5, soccer: 3.0,
+                    tennis: 5.0, mma: 2.0 }   # past this cap an event leaves the shortlist
+  max_actionable_skew_secs: 3       # tighter than pregame (10s) — in-play moves faster
+  line_velocity_points_per_sec: { default: 0.003, baseball_mlb: 0.002,
+                                  basketball_nba: 0.004 }
+                                    # PLACEHOLDERS — re-estimated by the leadlag lane (B4)
+  kill:                             # pre-registered kill gate (PREREGISTRATION.md)
+    max_days: 30
+    min_flags: 300
+    confirm_rate_floor: 0.10
+leadlag:                            # lead-lag study (read-time, stored quotes only)
+  min_move_points: 0.01             # |Δmid| >= this is a "move" (probability fraction)
+  match_window_secs: 60             # same-sign moves at two venues within this window match
+  max_lag_polls: 5                  # cross-correlation lag range [-K, +K] polls
+  min_matched_moves: 100            # gate: below this, no claim either way
+  min_events: 50
 exit:                               # SELL engine (§10.8): read-time counterfactual columns,
   enabled: true                     #   pure function of stored quotes — no ledger writes
   policies: [hold, take_profit, trailing]

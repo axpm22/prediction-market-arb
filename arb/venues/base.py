@@ -17,6 +17,16 @@ class VenueError(Exception):
     pass
 
 
+def is_live(start_utc, now=None) -> bool:
+    """One shared rule (LIVE lane A1): live = start known AND start_utc <= now.
+    Start-unknown is never live (non-actionable everywhere, unchanged). Adapters
+    never FILTER live quotes — rule 7 persists everything."""
+    from datetime import datetime, timezone
+    if start_utc is None:
+        return False
+    return start_utc <= (now or datetime.now(timezone.utc))
+
+
 def _request(method: str, url: str, cfg, **kw):
     timeout = float(cfg["execution"]["venue_fetch_timeout_secs"])
     retries = int(cfg["execution"]["venue_max_retries"])

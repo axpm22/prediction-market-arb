@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from arb.models import Quote
-from arb.venues.base import get_json
+from arb.venues.base import get_json, is_live
 
 BASE = "https://api.sx.bet"
 SPORT_IDS = {"basketball_nba": 1, "baseball_mlb": 3, "soccer": 5, "tennis": 6, "mma": 7}
@@ -66,7 +66,7 @@ def quotes_from_orders(cfg, market: dict, orders: list[dict], sport: str) -> lis
             fee_cost=Decimal(0),  # singles 0% (§6.5); parlay 5% lives in its lane
             depth_usd=depth,
             ladder_json=str([[str(c), str(d)] for c, d in levels]),
-            live=start is not None and start < now,
+            live=is_live(start, now),
             fetched_at=now, category="sports", sport=sport,
             bid=None, volume_24h=None,  # SX prints no volume field; zombie guard n/a
             home=market.get("teamTwoName", ""), away=market.get("teamOneName", ""),
