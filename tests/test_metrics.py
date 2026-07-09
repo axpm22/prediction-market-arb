@@ -8,10 +8,58 @@ from pathlib import Path
 import pytest
 
 from arb.config import load
-from arb.metrics import (exit_policy_pnls, pnl_confirmed_cell, pnl_markout)
+from arb.metrics import (bet_confirmed, exit_policy_pnls, pnl_confirmed_cell,
+                         pnl_markout)
+from arb.store import Store
 
 CFG = load(Path(__file__).resolve().parent.parent / "config.yaml")
 NOW = datetime(2026, 7, 8, 12, 0, tzinfo=timezone.utc)
+
+
+def _confirmed_bet(tmp_path, settled_payload, cost="0.5175"):
+    """EV (resolution-settled) bet with a confirmed event (cost_sum) and one
+    terminal settled event. Returns (store, bet-dict) for bet_confirmed."""
+    store = Store(tmp_path / "m.sqlite")
+    legs = json.dumps([{"venue": "kalshi", "cost": cost, "outcome": "mets",
+                        "side": "YES"}])
+    bet_id = store.insert("flat_bets", {"kind": "EV", "stake_usd": "1",
+                                        "legs_json": legs, "status": "OPEN"})
+    store.insert("bet_events", {"bet_id": bet_id, "kind": "confirmed",
+                                "payload_json": json.dumps({"cost_sum": cost})})
+    store.insert("bet_events", {"bet_id": bet_id, "kind": "settled",
+                                "payload_json": json.dumps(settled_payload)})
+    return store, {"id": bet_id, "kind": "EV", "stake_usd": "1", "legs_json": legs}
+
+
+# payloads mirror settle_bet (settlement.py:73-77): always result + per_leg,
+# fraction added on top for UMA partial settlement.
+def test_confirmed_void_returns_flat_pnl_not_nested_tuple(tmp_path):
+    # VOID -> opt == 0; must be (True, Decimal(0)), not (True, (True, 0)) (H1)
+    store, bet = _confirmed_bet(
+        tmp_path, {"result": "VOID", "per_leg": ["VOID"], "winner": "VOID"})
+    assert bet_confirmed(store, bet) == (True, Decimal(0))
+
+
+def test_confirmed_partial_passes_through_partial_pnl(tmp_path):
+    # PARTIAL fraction 0.4 -> opt = 1*(0.4/0.5175 - 1) = -0.227053; passthrough
+    store, bet = _confirmed_bet(
+        tmp_path, {"result": "WON", "per_leg": ["WON"], "winner": "mets",
+                   "fraction": "0.4"})
+    assert bet_confirmed(store, bet) == (True, Decimal("-0.227053"))
+
+
+def test_confirmed_won_recomputes_on_confirmed_price(tmp_path):
+    # WON -> confirmed-entry basis q6(stake*(1-cost_sum)/cost_sum)
+    store, bet = _confirmed_bet(
+        tmp_path, {"result": "WON", "per_leg": ["WON"], "winner": "mets"})
+    assert bet_confirmed(store, bet) == (True, Decimal("0.932367"))
+
+
+def test_confirmed_lost_returns_negative_stake(tmp_path):
+    # LOST -> full stake lost regardless of entry price
+    store, bet = _confirmed_bet(
+        tmp_path, {"result": "LOST", "per_leg": ["LOST"], "winner": "royals"})
+    assert bet_confirmed(store, bet) == (True, Decimal("-1"))
 
 
 def test_exit_engine_vector_10_8():

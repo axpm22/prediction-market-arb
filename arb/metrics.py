@@ -68,9 +68,11 @@ def bet_confirmed(store, bet: dict) -> tuple[bool, Decimal | None]:
     opt = bet_pnl_optimistic(store, bet)
     if opt is None:
         return True, None  # confirmed but pending resolution
-    if opt == -stake:
+    if opt > 0:  # WON: recompute the win payout on the confirmed entry price
+        return True, q6(stake * (1 - cost_sum) / cost_sum)
+    if opt == -stake:  # LOST: full stake lost regardless of entry price
         return True, -stake
-    return True, q6(stake * (1 - cost_sum) / cost_sum) if opt > 0 else (True, opt)
+    return True, opt  # VOID (0) / PARTIAL(f): entry price can't change the payoff
 
 
 def pnl_confirmed_cell(rows: list[dict]) -> tuple[Decimal, int]:
