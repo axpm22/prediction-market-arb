@@ -38,18 +38,25 @@ def bet_pnl_optimistic(store, bet: dict) -> Decimal | None:
         return None
     payload = json.loads(settled[0]["payload_json"])
     stake = Decimal(str(bet["stake_usd"]))
+    legs = json.loads(bet["legs_json"])
     c = bet_effective_cost(bet)
     results = payload.get("per_leg") or [payload["result"]]
     if "fraction" in payload:  # PARTIAL(f): pnl = stake × (f/cost − 1)  (v3.4)
         return q6(stake * (Decimal(payload["fraction"]) / c - 1))
-    r = results[0] if len(results) == 1 else None
-    if r == "VOID":
-        return Decimal(0)
-    if r == "WON":
-        return q6(stake * (1 - c) / c)
-    if r == "LOST":
-        return -stake
-    return None
+    if any(r not in ("WON", "LOST", "VOID") for r in results):
+        return None  # a leg still unresolved -> whole bet pending (H2)
+    # Per-leg payoff sum (SPEC §7.2 equal-contracts identity), which subsumes the
+    # single-leg case. Multi-leg (NEGRISK baskets) previously fell through to None.
+    contracts = stake / c  # equal counts per leg
+    total = Decimal(0)
+    for leg, r in zip(legs, results):
+        ci = Decimal(leg["cost"]) + Decimal(leg.get("fee_cost") or 0)
+        if r == "WON":
+            total += contracts * (1 - ci)
+        elif r == "LOST":
+            total -= contracts * ci
+        # VOID leg: contributes 0
+    return q6(total)
 
 
 def bet_confirmed(store, bet: dict) -> tuple[bool, Decimal | None]:

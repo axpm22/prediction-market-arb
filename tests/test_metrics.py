@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from arb.config import load
-from arb.metrics import (bet_confirmed, exit_policy_pnls, pnl_confirmed_cell,
-                         pnl_markout)
+from arb.metrics import (bet_confirmed, bet_pnl_optimistic, exit_policy_pnls,
+                         pnl_confirmed_cell, pnl_markout)
 from arb.store import Store
 
 CFG = load(Path(__file__).resolve().parent.parent / "config.yaml")
@@ -60,6 +60,42 @@ def test_confirmed_lost_returns_negative_stake(tmp_path):
     store, bet = _confirmed_bet(
         tmp_path, {"result": "LOST", "per_leg": ["LOST"], "winner": "royals"})
     assert bet_confirmed(store, bet) == (True, Decimal("-1"))
+
+
+def test_multileg_negrisk_pnl_is_per_leg_sum(tmp_path):
+    # 3-leg NEGRISK NO-basket: exactly one outcome happens, so its NO LOSES and
+    # the other two NOs WIN (SPEC §7.1: NO-basket payout N-1 per unit).
+    # costs 0.30/0.25/0.35 (sum 0.90), stake $1 -> contracts = 1/0.90.
+    # per-leg payoff = c0 WON: k*(1-0.30); c1 LOST: -k*0.25; c2 WON: k*(1-0.35)
+    #   = k*(0.70 - 0.25 + 0.65) = k*1.10 = (1/0.90)*1.10 = 1.222222
+    # (equivalently contracts*((N-1) - sum_c) = (1/0.90)*(2 - 0.90)).
+    store = Store(tmp_path / "n.sqlite")
+    legs = json.dumps([{"venue": "polymarket", "cost": "0.30", "side": "NO"},
+                       {"venue": "polymarket", "cost": "0.25", "side": "NO"},
+                       {"venue": "polymarket", "cost": "0.35", "side": "NO"}])
+    bet_id = store.insert("flat_bets", {"kind": "NEGRISK", "stake_usd": "1",
+                                        "legs_json": legs, "status": "OPEN"})
+    store.insert("bet_events", {"bet_id": bet_id, "kind": "settled",
+                                "payload_json": json.dumps(
+                                    {"result": ["WON", "LOST", "WON"],
+                                     "per_leg": ["WON", "LOST", "WON"],
+                                     "winner": "outcome1"})})
+    bet = {"id": bet_id, "kind": "NEGRISK", "stake_usd": "1", "legs_json": legs}
+    assert bet_pnl_optimistic(store, bet) == Decimal("1.222222")
+
+
+def test_multileg_pending_when_a_leg_unresolved(tmp_path):
+    # a leg still unresolved -> whole bet pending (None), never a partial number
+    store = Store(tmp_path / "p.sqlite")
+    legs = json.dumps([{"venue": "polymarket", "cost": "0.30", "side": "NO"},
+                       {"venue": "polymarket", "cost": "0.35", "side": "NO"}])
+    bet_id = store.insert("flat_bets", {"kind": "NEGRISK", "stake_usd": "1",
+                                        "legs_json": legs, "status": "OPEN"})
+    store.insert("bet_events", {"bet_id": bet_id, "kind": "settled",
+                                "payload_json": json.dumps(
+                                    {"per_leg": ["WON", "PENDING"]})})
+    bet = {"id": bet_id, "kind": "NEGRISK", "stake_usd": "1", "legs_json": legs}
+    assert bet_pnl_optimistic(store, bet) is None
 
 
 def test_exit_engine_vector_10_8():

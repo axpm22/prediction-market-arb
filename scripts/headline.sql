@@ -23,11 +23,20 @@ pnl AS (
            WHEN json_extract(s.payload, '$.fraction') IS NOT NULL THEN
              CAST(fb.stake_usd AS REAL)
                * (CAST(json_extract(s.payload, '$.fraction') AS REAL) / c.c - 1)
-           WHEN json_extract(s.payload, '$.per_leg[0]') = 'WON'
-             THEN CAST(fb.stake_usd AS REAL) * (1 - c.c) / c.c
-           WHEN json_extract(s.payload, '$.per_leg[0]') = 'LOST'
-             THEN -CAST(fb.stake_usd AS REAL)
-           ELSE 0
+           -- per-leg payoff sum (SPEC §7.2), matching metrics.bet_pnl_optimistic;
+           -- subsumes single-leg. contracts = stake/c, equal counts per leg.
+           ELSE (
+             SELECT COALESCE(SUM(CASE r.value
+               WHEN 'WON' THEN (CAST(fb.stake_usd AS REAL) / c.c)
+                 * (1 - (CAST(json_extract(fb.legs_json, '$[' || r.key || '].cost') AS REAL)
+                        + COALESCE(CAST(json_extract(fb.legs_json,
+                            '$[' || r.key || '].fee_cost') AS REAL), 0)))
+               WHEN 'LOST' THEN -(CAST(fb.stake_usd AS REAL) / c.c)
+                 * (CAST(json_extract(fb.legs_json, '$[' || r.key || '].cost') AS REAL)
+                    + COALESCE(CAST(json_extract(fb.legs_json,
+                        '$[' || r.key || '].fee_cost') AS REAL), 0))
+               ELSE 0 END), 0)
+             FROM json_each(json_extract(s.payload, '$.per_leg')) r)
          END AS pnl
   FROM flat_bets fb
   JOIN settled s ON s.bet_id = fb.id
