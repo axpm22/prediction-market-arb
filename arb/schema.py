@@ -1,7 +1,7 @@
 """SQLite DDL (SPEC §9). Money columns are TEXT holding Decimal strings, never REAL.
 Every table is INSERT-only or INSERT+terminal-row; nothing ever UPDATEs ledger rows."""
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # v2 additions (migrations only ever ADD):
 MIGRATION_2 = [
@@ -10,6 +10,12 @@ MIGRATION_2 = [
     # lead-lag study runs are append-only records (B5, SC5 discipline)
     """CREATE TABLE IF NOT EXISTS leadlag_runs (
         id INTEGER PRIMARY KEY, run_at TEXT, params_json TEXT, results_json TEXT)""",
+]
+
+# v3: MLB gamePk as an ENTRY-TIME fact on flat_bets — the doubleheader
+# disambiguator (H3, §8.2). Nullable; rule 9 untouched (entry-time only).
+MIGRATION_3 = [
+    "ALTER TABLE flat_bets ADD COLUMN gamepk INTEGER",
 ]
 
 TABLES = [
@@ -35,7 +41,7 @@ TABLES = [
         venue_pair TEXT, event_key TEXT, event_start_utc TEXT, start_grade TEXT,
         legs_json TEXT, stake_usd TEXT, edge_points TEXT, trusted INTEGER, lane TEXT,
         quality_flag TEXT, consensus_age_secs REAL, leg_skew_secs REAL, status TEXT,
-        pnl_optimistic TEXT, reappearance_of INTEGER, notes TEXT)""",
+        pnl_optimistic TEXT, reappearance_of INTEGER, notes TEXT, gamepk INTEGER)""",
     # append-only lifecycle log; kind: confirmed | lifetime_closed | settled | void
     # | reconciled | leg_failure; at most one settled row per bet (terminal)
     """CREATE TABLE IF NOT EXISTS bet_events (

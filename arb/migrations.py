@@ -17,4 +17,11 @@ def apply(conn):
                 continue  # fresh v1 DBs may already carry it via TABLES
             conn.execute(ddl)
         conn.execute("INSERT INTO schema_version VALUES (2, datetime('now'))")
+    if current < 3:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(flat_bets)")}
+        for ddl in schema.MIGRATION_3:
+            if "ADD COLUMN gamepk" in ddl and "gamepk" in cols:
+                continue  # fresh DBs already carry it via TABLES
+            conn.execute(ddl)
+        conn.execute("INSERT INTO schema_version VALUES (3, datetime('now'))")
     conn.commit()

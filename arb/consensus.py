@@ -15,10 +15,43 @@ from arb.pricing import devig
 NY = ZoneInfo("America/New_York")
 
 
+def _pair_date(cfg, sport_key: str, home: str, away: str, commence: str,
+               aliases: dict):
+    """(sport, date, frozenset(names)) or None when a team can't normalize."""
+    sport = str(cfg["odds_api_sport_aliases"].get(sport_key, sport_key))
+    h = normalize_team(sport, home, aliases)
+    a = normalize_team(sport, away, aliases)
+    if not h or not a:
+        return None
+    date = datetime.fromisoformat(commence.replace("Z", "+00:00")) \
+        .astimezone(NY).date().isoformat()
+    return sport, date, frozenset((h, a))
+
+
+def _doubleheader_order(cfg, rows: list[dict], aliases: dict) -> dict:
+    """{(sport,date,pair): {commence_time: ordinal}} for pair+date groups with
+    >1 distinct commence_time. Consensus keys otherwise omit the :dhN suffix that
+    matching (§8.2) stamps on venue quotes, so the two games of a doubleheader
+    silently blend into one consensus row. This is a best-effort discriminator:
+    Odds API has no gameNumber, so a commence-time ordinal may still disagree
+    with matching's gameNumber ordering — the row is kept separate and tagged,
+    not trusted to join. (EV is frozen; H3.)"""
+    times: dict = {}
+    for r in rows:
+        pd = _pair_date(cfg, r["sport_key"], r["home"], r["away"],
+                        r["commence_time"], aliases)
+        if pd:
+            times.setdefault(pd, set()).add(r["commence_time"])
+    return {pd: {t: i + 1 for i, t in enumerate(sorted(ts))}
+            for pd, ts in times.items() if len(ts) > 1}
+
+
 def _event_key(cfg, sport_key: str, home: str, away: str, commence: str,
-               aliases: dict) -> str:
+               aliases: dict, dh_order: dict | None = None) -> str:
     """Canonical event key so consensus rows JOIN venue quotes (§8.2). Falls back
-    to raw names (unjoinable, kept for the record) when a team can't normalize."""
+    to raw names (unjoinable, kept for the record) when a team can't normalize.
+    dh_order (from _doubleheader_order) appends :dhN so same-day games of a pair
+    stay separate instead of blending."""
     sport = str(cfg["odds_api_sport_aliases"].get(sport_key, sport_key))
     h = normalize_team(sport, home, aliases)
     a = normalize_team(sport, away, aliases)
@@ -27,7 +60,10 @@ def _event_key(cfg, sport_key: str, home: str, away: str, commence: str,
     date = datetime.fromisoformat(commence.replace("Z", "+00:00")) \
         .astimezone(NY).date().isoformat()
     names = sorted((h, a))
-    return f"{sport}:{date}:{names[0]}:{names[1]}"
+    key = f"{sport}:{date}:{names[0]}:{names[1]}"
+    if dh_order and (sport, date, frozenset((h, a))) in dh_order:
+        key += f":dh{dh_order[(sport, date, frozenset((h, a)))][commence]}"
+    return key
 
 
 def compute_consensus(cfg, rows: list[dict], computed_at: str
@@ -35,10 +71,11 @@ def compute_consensus(cfg, rows: list[dict], computed_at: str
     """rows: oddsapi.parse_events output. -> (consensus rows, consensus_books rows)."""
     method = cfg["devig_method"]
     aliases = load_aliases()
+    dh_order = _doubleheader_order(cfg, rows, aliases)
     by_market: dict[tuple, dict[str, list[dict]]] = {}
     for r in rows:
         ek = _event_key(cfg, r["sport_key"], r["home"], r["away"],
-                        r["commence_time"], aliases)
+                        r["commence_time"], aliases, dh_order)
         key = (ek, r["market"], r["line"])
         by_market.setdefault(key, {}).setdefault(r["book"], []).append(r)
 

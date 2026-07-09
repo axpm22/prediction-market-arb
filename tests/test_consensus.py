@@ -28,3 +28,23 @@ def test_consensus_median_and_book_rows():
     # per-book de-vig rows persist for the bake-off re-run (v3.3)
     assert len([b for b in books if b["market_type"] == "WINNER"
                 and b["event_key"] == "baseball_mlb:2026-07-08:bluejays:giants"]) == 10
+
+
+def test_doubleheader_consensus_does_not_blend():
+    # H3: two same-pair games same day must NOT collapse to one bare-key row
+    # (which would blend both games' books). They get :dh1/:dh2 tags instead.
+    def _books(commence, fav):
+        comp = 1 / (1 - 1 / fav)  # vig-free complement
+        return [{"sport_key": "baseball_mlb", "home": "New York Mets",
+                 "away": "Kansas City Royals", "commence_time": commence,
+                 "book": bk, "market": "h2h", "line": None, "outcome": o, "odds": od}
+                for bk in ("pin", "dk", "fd")
+                for o, od in (("New York Mets", fav),
+                              ("Kansas City Royals", comp))]
+    rows = (_books("2026-07-08T17:00:00Z", 1.5)     # game 1, 1pm ET
+            + _books("2026-07-08T20:00:00Z", 3.0))  # game 2, 4pm ET
+    cons, _ = compute_consensus(CFG, rows, "2026-07-08T12:00:00Z")
+    keys = {c["event_key"] for c in cons}
+    assert "baseball_mlb:2026-07-08:mets:royals:dh1" in keys
+    assert "baseball_mlb:2026-07-08:mets:royals:dh2" in keys
+    assert "baseball_mlb:2026-07-08:mets:royals" not in keys  # never blended

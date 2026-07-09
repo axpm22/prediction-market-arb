@@ -36,6 +36,7 @@ class Event:
     away: str
     start_utc: datetime | None
     start_grade: str         # verified > nominal > absent (§11.3)
+    gamepk: int | None = None  # MLB gamePk — doubleheader disambiguator (§8.2, H3)
 
 
 @dataclass

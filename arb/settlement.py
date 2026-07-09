@@ -132,22 +132,49 @@ def settle_auto_mlb(cfg, store, now: datetime | None = None) -> int:
             finals.extend(g for g in fetch_schedule(cfg, d) if is_final(g))
         except Exception as e:  # noqa: BLE001
             log.warning("mlb schedule fetch failed for %s: %s", d, e)
+    window = timedelta(hours=6)
     n = 0
     for bet in bets:
         start = datetime.fromisoformat(bet["event_start_utc"])
+        pair = set(bet["event_key"].split(":")[2:4])
+        scored = []  # (ha, aa, game) for same-pair finals with a final score
         for g in finals:
             ha = normalize_team("baseball_mlb", g["home"], aliases)
             aa = normalize_team("baseball_mlb", g["away"], aliases)
-            if not ha or not aa or {ha, aa} != set(bet["event_key"].split(":")[2:4]):
-                continue
-            if abs(g["start_utc"] - start) > timedelta(hours=6):
+            if not ha or not aa or {ha, aa} != pair:
                 continue
             if g["home_score"] is None or g["away_score"] is None:
                 continue
-            winner = ha if g["home_score"] > g["away_score"] else aa
-            total = Decimal(g["home_score"] + g["away_score"])
-            settle_bet(cfg, store, bet, winner, f"mlbstats:{g['gamePk']}", now,
-                       total=total)
-            n += 1
-            break
+            scored.append((ha, aa, g))
+        if not scored:
+            continue
+        bet_pk = bet["gamepk"]
+        if bet_pk is not None:
+            # gamePk is authoritative — settle the exact game, ignore the window
+            chosen = next((t for t in scored if t[2]["gamePk"] == bet_pk), None)
+            if chosen is None:
+                continue  # no final for this game yet
+        else:
+            in_window = [t for t in scored
+                         if abs(t[2]["start_utc"] - start) <= window]
+            if not in_window:
+                continue
+            if len(in_window) > 1:
+                # doubleheader with no gamePk to disambiguate — refuse, don't
+                # guess (rule 3 ethos). One annotation per ambiguous bet.
+                store.insert("annotations", {
+                    "created_at": now.isoformat(), "target_kind": "bet",
+                    "target_id": str(bet["id"]), "kind": "ambiguous-doubleheader",
+                    "detail": f"{len(in_window)} same-pair finals within 6h; "
+                              "no gamePk"})
+                log.warning("bet %s: ambiguous doubleheader (%s finals in window), "
+                            "refusing to settle", bet["id"], len(in_window))
+                continue
+            chosen = in_window[0]
+        ha, aa, g = chosen
+        winner = ha if g["home_score"] > g["away_score"] else aa
+        total = Decimal(g["home_score"] + g["away_score"])
+        settle_bet(cfg, store, bet, winner, f"mlbstats:{g['gamePk']}", now,
+                   total=total)
+        n += 1
     return n

@@ -35,7 +35,7 @@ def candidate_from_opp(cfg, o: Opportunity) -> dict:
     return {
         "kind": o.kind, "category": o.category, "sport": o.event.sport,
         "event_key": o.event.event_key, "event_start_utc": o.event.start_utc,
-        "start_grade": o.event.start_grade,
+        "start_grade": o.event.start_grade, "gamepk": o.event.gamepk,
         "venue_pair": ":".join(venues) if len(venues) > 1 else f"{venues[0]}:self",
         "fingerprint": o.fingerprint,
         "position_key": position_key(o.kind, o.event.sport, o.event.event_key,
@@ -53,6 +53,7 @@ def candidate_from_basket(b: dict, endale=None) -> dict:
     return {
         "kind": b["kind"], "category": "nonsports", "sport": "",
         "event_key": b["event_key"], "event_start_utc": None, "start_grade": "absent",
+        "gamepk": None,
         "venue_pair": b["venue_pair"], "fingerprint": b["fingerprint"],
         "position_key": b["position_key"], "legs": json.loads(b["legs_json"]),
         "edge_points": b["edge_points"], "cost_sum": b["cost_sum"],
@@ -102,6 +103,7 @@ def _book(cfg, store, poll_id, poll_kind, cand, lane, reason, now,
         "consensus_age_secs": cand.get("consensus_age_secs"),
         "leg_skew_secs": cand["leg_skew_secs"], "status": cand["status"],
         "pnl_optimistic": pnl_optimistic, "reappearance_of": reappearance_of,
+        "gamepk": cand.get("gamepk"),
         "notes": f"{reason}; {cand['notes']}".strip("; ")})
     if cand["kind"] in LOCKED_KINDS and cand["kind"] not in RESOLUTION_SETTLED_KINDS:
         # ARB/XSPREAD/POLITICAL settle at entry by design (§11.1, L1) — exempt

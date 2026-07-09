@@ -176,7 +176,8 @@ def build_groups(quotes: list[Quote], cfg, aliases: dict,
             if n_same_day > 1:  # doubleheader: gameNumber primary, ordinal backstop (§8.2)
                 key += f":dh{game_no or date_counts[date]}"
             event = Event(event_key=key, category="sports", sport=sport,
-                          home=names[1], away=names[0], start_utc=start, start_grade=grade)
+                          home=names[1], away=names[0], start_utc=start,
+                          start_grade=grade, gamepk=gamepk)
             for q in cluster:
                 q.event_key = key
                 if grade == "verified":
