@@ -203,6 +203,8 @@ supervisor:
   max_child_runtime_secs: { default: 600, settle: 1800, live: 120 }
                                     # per-process; settle+reconcile runs long;
                                     #   a live cycle past 120s is force-restarted
+  schedule_catchup_grace_mins: 30   # on (re)start, only fire scheduled slots missed within
+                                    #   this window; older slots are marked done, not burst-fired (H9)
 data_stale_alarm_secs: 900
 clock_skew_alarm_secs: 5            # status alarms if NTP offset exceeds this
 log_retention_days: 90              # rotate daily; forensics greps these

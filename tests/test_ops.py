@@ -94,3 +94,61 @@ def test_canary_pass(cfg, tmp_path):
     got = {b["kind"]: metrics.bet_pnl_optimistic(store, dict(b)) for b in bets}
     assert got == {"ARB": Decimal("0.041667"), "EV": Decimal("0.932367")}
     assert all(b["lane"] == "review" for b in bets)  # canary never touches headline
+
+
+# ---------- H9: supervisor zombies + boot-time schedule burst ----------
+from zoneinfo import ZoneInfo
+NY = ZoneInfo("America/New_York")
+
+
+def test_startup_grace_marks_only_stale_slots(cfg):
+    from arb.heartbeat import initial_last_fired
+    cfg["supervisor"]["schedule_catchup_grace_mins"] = 30
+    now = datetime(2026, 7, 8, 6, 20, tzinfo=NY)  # 06:20 ET
+    marks = initial_last_fired(cfg, now)
+    assert "backup" in marks          # 04:10 -> >30min ago -> suppressed
+    assert "scan-06:15" not in marks  # 5min ago -> within grace -> allowed to catch up
+    assert "settle" not in marks      # 09:30 -> future -> not marked
+
+
+def test_due_fires_within_grace_but_suppresses_stale(cfg):
+    from arb.heartbeat import _due, initial_last_fired
+    cfg["supervisor"]["schedule_catchup_grace_mins"] = 30
+    now = datetime(2026, 7, 8, 6, 20, tzinfo=NY)
+    marks = initial_last_fired(cfg, now)
+    assert _due(marks, "scan-06:15", "06:15", now) is True      # catch up once
+    assert _due(marks, "backup", str(cfg["db_backup"]["time"]), now) is False  # stale
+
+
+def test_reap_finished_drops_exited_children():
+    from arb.heartbeat import _reap_finished
+
+    class Stub:
+        def __init__(self, code):
+            self._c = code
+
+        def poll(self):
+            return self._c
+
+    a, b = Stub(None), Stub(0)  # a still running, b exited
+    assert _reap_finished([a, b]) == [a]
+
+
+def test_terminate_kills_and_reaps_on_timeout():
+    import subprocess
+
+    from arb.heartbeat import _terminate
+    state = {"killed": False, "waits": 0}
+
+    class Stub:
+        def wait(self, timeout=None):
+            state["waits"] += 1
+            if timeout is not None and state["waits"] == 1:
+                raise subprocess.TimeoutExpired("cmd", timeout)
+            return 0
+
+        def kill(self):
+            state["killed"] = True
+
+    _terminate(Stub(), 1.0)
+    assert state["killed"] is True and state["waits"] >= 2  # timed out -> kill -> reap
