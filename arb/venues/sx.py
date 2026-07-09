@@ -7,11 +7,12 @@ SX legs start REVIEW until whitelisted per sport; settled-status semantics
 unverified (data/verified_facts.md) so they cannot leave REVIEW yet."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from arb.models import Quote
-from arb.venues.base import get_json, is_live
+from arb.venues.base import Deadline, PartialFetch, get_json, is_live
 
 BASE = "https://api.sx.bet"
 SPORT_IDS = {"basketball_nba": 1, "baseball_mlb": 3, "soccer": 5, "tennis": 6, "mma": 7}
@@ -75,30 +76,50 @@ def quotes_from_orders(cfg, market: dict, orders: list[dict], sport: str) -> lis
     return quotes
 
 
+def _fetch_sport(cfg, sport: str, deadline: Deadline) -> list[Quote]:
+    """One sport's leagues -> paginated markets -> chunked orders. Checks the
+    per-venue deadline between every paginated/chunk request (H7)."""
+    quotes: list[Quote] = []
+    sport_id = SPORT_IDS.get(sport)
+    if sport_id is None or deadline.expired():
+        return quotes
+    leagues = get_json(f"{BASE}/leagues/active?sportId={sport_id}", cfg).get("data", [])
+    for lg in leagues:
+        if deadline.expired():
+            return quotes
+        markets, next_key = [], ""
+        for _ in range(10):
+            if deadline.expired():
+                return quotes
+            url = f"{BASE}/markets/active?leagueId={lg['leagueId']}&onlyMainLine=true"
+            if next_key:
+                url += f"&paginationKey={next_key}"
+            data = get_json(url, cfg).get("data", {})
+            markets.extend(data.get("markets", []))
+            next_key = data.get("nextKey") or ""
+            if not next_key:
+                break
+        for i in range(0, len(markets), 20):
+            if deadline.expired():
+                return quotes
+            chunk = markets[i:i + 20]
+            hashes = ",".join(m["marketHash"] for m in chunk)
+            orders = get_json(f"{BASE}/orders?marketHashes={hashes}", cfg).get("data", [])
+            for m in chunk:
+                quotes.extend(quotes_from_orders(cfg, m, orders, sport))
+    return quotes
+
+
 def fetch_markets(cfg) -> list[Quote]:
-    quotes = []
-    for sport in cfg["sports"]:
-        sport_id = SPORT_IDS.get(sport)
-        if sport_id is None:
-            continue
-        leagues = get_json(f"{BASE}/leagues/active?sportId={sport_id}", cfg).get("data", [])
-        for lg in leagues:
-            markets, next_key = [], ""
-            for _ in range(10):
-                url = f"{BASE}/markets/active?leagueId={lg['leagueId']}&onlyMainLine=true"
-                if next_key:
-                    url += f"&paginationKey={next_key}"
-                data = get_json(url, cfg).get("data", {})
-                markets.extend(data.get("markets", []))
-                next_key = data.get("nextKey") or ""
-                if not next_key:
-                    break
-            for i in range(0, len(markets), 20):
-                chunk = markets[i:i + 20]
-                hashes = ",".join(m["marketHash"] for m in chunk)
-                orders = get_json(f"{BASE}/orders?marketHashes={hashes}", cfg).get("data", [])
-                for m in chunk:
-                    quotes.extend(quotes_from_orders(cfg, m, orders, sport))
+    # per-sport fan-out in parallel (H7): venue time ~ slowest single sport, not
+    # the serial sum. Thread-local Sessions (base.py) keep this connection-safe.
+    deadline = Deadline(cfg["execution"]["venue_deadline_secs"])
+    sports = list(cfg["sports"])
+    with ThreadPoolExecutor(max_workers=max(1, len(sports))) as pool:
+        per_sport = list(pool.map(lambda s: _fetch_sport(cfg, s, deadline), sports))
+    quotes = [q for sub in per_sport for q in sub]
+    if deadline.expired():  # truncated -> partial, never a full-coverage poll
+        raise PartialFetch(quotes)
     return quotes
 
 

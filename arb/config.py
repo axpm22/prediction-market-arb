@@ -76,6 +76,7 @@ SCHEMA = {
                   "fixed_cost_per_fill_usd": MAP(NUM), "arb_size_by_ladder": BOOL,
                   "arb_size_safety_frac": NUM, "min_ladder_fraction": NUM,
                   "max_actionable_skew_secs": NUM, "venue_fetch_timeout_secs": NUM,
+                  "venue_deadline_secs": NUM,
                   "venue_max_retries": NUM, "min_adj_edge_points": NUM,
                   "line_velocity_points_per_sec": MAP(NUM),
                   "doubleheader_cluster_tol_secs": NUM},

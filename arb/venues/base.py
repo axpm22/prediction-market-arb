@@ -4,6 +4,7 @@ Only public unauthenticated GETs/POSTs (rule 1)."""
 from __future__ import annotations
 
 import random
+import threading
 import time
 
 import requests
@@ -12,9 +13,42 @@ from arb.logutil import get_logger
 
 log = get_logger("arb.venues", "logs/scan.log")
 
+# One requests.Session per THREAD (H7): the fetch fan-out makes dozens of
+# sequential GETs per venue; without a Session each paid a fresh TCP+TLS
+# handshake. Sessions are not thread-safe to share, so keep one per thread.
+_local = threading.local()
+
+
+def _session() -> requests.Session:
+    s = getattr(_local, "session", None)
+    if s is None:
+        s = requests.Session()
+        _local.session = s
+    return s
+
 
 class VenueError(Exception):
     pass
+
+
+class PartialFetch(VenueError):
+    """Raised when a per-venue deadline truncates a fetch (H7). Carries the
+    quotes collected so far so the poll persists them (rule 7) while the venue
+    is marked not-ok, so §10.2 lifetime-carry never mass-closes on truncation."""
+
+    def __init__(self, quotes):
+        super().__init__("venue deadline exceeded; partial fetch")
+        self.quotes = quotes
+
+
+class Deadline:
+    """Per-venue wall-clock budget, checked between pagination/chunk requests."""
+
+    def __init__(self, secs: float):
+        self._end = time.monotonic() + float(secs)
+
+    def expired(self) -> bool:
+        return time.monotonic() >= self._end
 
 
 def is_live(start_utc, now=None) -> bool:
@@ -33,7 +67,7 @@ def _request(method: str, url: str, cfg, **kw):
     last = None
     for attempt in range(retries + 1):
         try:
-            resp = requests.request(method, url, timeout=timeout, **kw)
+            resp = _session().request(method, url, timeout=timeout, **kw)
             if resp.status_code == 429 or resp.status_code >= 500:
                 last = VenueError(f"{resp.status_code} from {url.split('?')[0]}")
             elif resp.status_code >= 400:

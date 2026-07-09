@@ -5,11 +5,12 @@ MMA keys on tag_slug=ufc; canonical sport string stays mma."""
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from arb.models import Quote
-from arb.venues.base import get_json, is_live, post_json
+from arb.venues.base import Deadline, PartialFetch, get_json, is_live, post_json
 from arb.venues.fees import leg_fee_cost
 
 GAMMA = "https://gamma-api.polymarket.com"
@@ -29,9 +30,11 @@ def _parse_start(s: str | None) -> datetime | None:
         return None
 
 
-def fetch_gamma_events(cfg, tag: str, max_pages: int = 10) -> list[dict]:
+def fetch_gamma_events(cfg, tag: str, max_pages: int = 10, deadline=None) -> list[dict]:
     events, offset = [], 0
     for _ in range(max_pages):
+        if deadline is not None and deadline.expired():
+            break  # per-venue deadline (H7): stop paginating, return what we have
         page = get_json(f"{GAMMA}/events?tag_slug={tag}&closed=false&limit=100"
                         f"&offset={offset}", cfg)
         events.extend(page)
@@ -41,9 +44,11 @@ def fetch_gamma_events(cfg, tag: str, max_pages: int = 10) -> list[dict]:
     return events
 
 
-def fetch_books(cfg, token_ids: list[str]) -> dict[str, dict]:
+def fetch_books(cfg, token_ids: list[str], deadline=None) -> dict[str, dict]:
     books = {}
     for i in range(0, len(token_ids), BOOKS_CHUNK):
+        if deadline is not None and deadline.expired():
+            break  # per-venue deadline (H7)
         chunk = token_ids[i:i + BOOKS_CHUNK]
         for b in post_json(f"{CLOB}/books", cfg, [{"token_id": t} for t in chunk]):
             if b and b.get("asset_id"):
@@ -101,21 +106,32 @@ def quotes_from_event(cfg, event: dict, books: dict[str, dict], sport: str) -> l
     return quotes
 
 
+def _fetch_sport(cfg, sport: str, deadline: Deadline) -> list[Quote]:
+    quotes: list[Quote] = []
+    tag = SPORT_TAGS.get(sport)
+    if not tag or deadline.expired():
+        return quotes
+    events = fetch_gamma_events(cfg, tag, deadline=deadline)
+    wanted = []
+    for e in events:
+        for m in e.get("markets", []):
+            if m.get("sportsMarketType") in IN_SCOPE_TYPES and m.get("clobTokenIds"):
+                wanted.extend(json.loads(m["clobTokenIds"]))
+    books = fetch_books(cfg, wanted, deadline=deadline)
+    for e in events:
+        quotes.extend(quotes_from_event(cfg, e, books, sport))
+    return quotes
+
+
 def fetch_markets(cfg) -> list[Quote]:
-    quotes = []
-    for sport in cfg["sports"]:
-        tag = SPORT_TAGS.get(sport)
-        if not tag:
-            continue
-        events = fetch_gamma_events(cfg, tag)
-        wanted = []
-        for e in events:
-            for m in e.get("markets", []):
-                if m.get("sportsMarketType") in IN_SCOPE_TYPES and m.get("clobTokenIds"):
-                    wanted.extend(json.loads(m["clobTokenIds"]))
-        books = fetch_books(cfg, wanted)
-        for e in events:
-            quotes.extend(quotes_from_event(cfg, e, books, sport))
+    # per-sport-tag fan-out in parallel (H7): venue time ~ slowest single tag.
+    deadline = Deadline(cfg["execution"]["venue_deadline_secs"])
+    sports = list(cfg["sports"])
+    with ThreadPoolExecutor(max_workers=max(1, len(sports))) as pool:
+        per_sport = list(pool.map(lambda s: _fetch_sport(cfg, s, deadline), sports))
+    quotes = [q for sub in per_sport for q in sub]
+    if deadline.expired():
+        raise PartialFetch(quotes)
     return quotes
 
 

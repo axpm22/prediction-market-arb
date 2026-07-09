@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from arb.logutil import get_logger
 from arb.venues import kalshi, polymarket, sx
+from arb.venues.base import PartialFetch
 
 log = get_logger("arb.watch", "logs/scan.log")
 
@@ -29,6 +30,14 @@ def fetch_all_venues(cfg) -> tuple[dict, dict]:
             qs = VENUES[name](cfg)
             return name, qs, {"ok": True, "n": len(qs),
                               "latency_ms": (time.monotonic() - t0) * 1000}
+        except PartialFetch as e:
+            # truncated by the per-venue deadline (H7): KEEP the collected quotes
+            # (rule 7) but mark not-ok so §10.2 never mass-closes lifetimes.
+            log.warning("venue fetch truncated: %s: %s partial quotes",
+                        name, len(e.quotes))
+            return name, e.quotes, {"ok": False, "partial": True, "n": len(e.quotes),
+                                    "latency_ms": (time.monotonic() - t0) * 1000,
+                                    "error": "deadline"}
         except Exception as e:  # noqa: BLE001 — a venue outage is data, not a crash
             log.warning("venue fetch failed: %s: %s", name, e)
             return name, [], {"ok": False, "n": 0,
