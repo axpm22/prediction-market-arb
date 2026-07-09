@@ -172,3 +172,32 @@ def test_poll_kind_ownership(cfg, tmp_path):
                                 "n_quotes": 0, "n_opps": 0})
     process_poll(cfg, store, p2, "verify", [], VENUE_OK, now=t2)
     assert store.query("SELECT * FROM bet_events WHERE kind='lifetime_closed'") == []
+
+
+def test_reappearance_storm_lots_and_annotates_instead_of_booking(cfg, tmp_path):
+    # H6: the (max_reappearances+1)-th sighting of a fingerprint in 24h must NOT
+    # book a flat_bets row — it goes to left_on_table (reappearance-storm) and
+    # writes the reappearance-storm annotation that invariant 4 looks for.
+    from arb.tracker import candidate_from_opp
+    store = Store(tmp_path / "storm.sqlite")
+    cand = candidate_from_opp(cfg, ev_opp(cfg, "0.50"))
+    cap = int(cfg["tracker"]["max_reappearances"])
+    for _ in range(cap):  # cap prior sightings within 24h, all closed
+        bid = store.insert("flat_bets", {
+            "created_at": NOW.isoformat(), "fingerprint": cand["fingerprint"],
+            "position_key": cand["position_key"], "kind": "EV",
+            "legs_json": json.dumps(cand["legs"]), "stake_usd": "1",
+            "status": "OPEN", "event_key": cand["event_key"]})
+        store.insert("bet_events", {"bet_id": bid, "kind": "lifetime_closed",
+                                    "payload_json": "{}"})
+    p = store.insert("polls", {"started_at": NOW.isoformat(), "kind": "watch",
+                               "n_quotes": 1, "n_opps": 1})
+    process_poll(cfg, store, p, "watch", [ev_opp(cfg, "0.50")], VENUE_OK, now=NOW)
+    n = store.query("SELECT COUNT(*) c FROM flat_bets WHERE fingerprint=?",
+                    (cand["fingerprint"],))[0]["c"]
+    assert n == cap  # no (cap+1)-th row booked
+    assert store.query(
+        "SELECT 1 FROM left_on_table WHERE reason='reappearance-storm'")
+    assert store.query(
+        "SELECT 1 FROM annotations WHERE kind='reappearance-storm' AND detail LIKE ?",
+        (f"%{cand['fingerprint']}%",))

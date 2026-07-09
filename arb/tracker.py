@@ -235,8 +235,19 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
         n24 = store.query(
             "SELECT COUNT(*) c FROM flat_bets WHERE fingerprint=? AND created_at > ?",
             (cand["fingerprint"], (now - timedelta(hours=24)).isoformat()))[0]["c"]
-        if n24 >= int(cfg["tracker"]["max_reappearances"]):
-            log.warning("fingerprint %s exceeded max_reappearances (%d rows/24h)",
-                        cand["fingerprint"], n24)
+        cap = int(cfg["tracker"]["max_reappearances"])
+        if n24 >= cap:
+            # storm: do NOT book unbounded rows (H6). LOT it and write the
+            # reappearance-storm annotation invariant 4 checks for (detail carries
+            # the fingerprint so its LIKE match finds it).
+            log.warning("fingerprint %s hit max_reappearances (%s rows/24h >= %s); "
+                        "not booking (reappearance-storm)", cand["fingerprint"],
+                        n24, cap)
+            _lot(store, poll_id, cand, "reappearance-storm")
+            store.insert("annotations", {
+                "created_at": now.isoformat(), "target_kind": "fingerprint",
+                "target_id": cand["fingerprint"], "kind": "reappearance-storm",
+                "detail": f"{cand['fingerprint']}: {n24} rows/24h >= cap {cap}"})
+            continue
         _book(cfg, store, poll_id, poll_kind, cand, lane, reason, now,
               reappearance_of=reappearance_of)

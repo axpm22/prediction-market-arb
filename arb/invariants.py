@@ -3,7 +3,7 @@ clean; CRITICAL log + annotation when not. Run after every settle cycle and in C
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from arb.logutil import get_logger
 
@@ -53,12 +53,16 @@ def check(cfg, store) -> list[str]:
             if datetime.fromisoformat(r["created_at"]) > start:
                 v.append(f"invariant-3: locked bet {r['id']} placed in-play")
 
-    # (4) reappearance bound un-annotated
+    # (4) reappearance bound un-annotated. Pass a Python ISO bound, not
+    # datetime('now','-1 day'): SQLite's space-separated string vs the
+    # T-separated ISO created_at compares lexicographically to a date-granularity
+    # window (off by up to a day). Match how tracker.py computes the 24h bound.
     limit = int(cfg["tracker"]["max_reappearances"])
+    bound = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     for r in store.query(
             """SELECT fingerprint, COUNT(*) n FROM flat_bets
-               WHERE created_at > datetime('now', '-1 day')
-               GROUP BY fingerprint HAVING n > ?""", (limit,)):
+               WHERE created_at > ?
+               GROUP BY fingerprint HAVING n > ?""", (bound, limit)):
         noted = store.query(
             "SELECT 1 FROM annotations WHERE kind='reappearance-storm' AND detail LIKE ?",
             (f"%{r['fingerprint']}%",))
