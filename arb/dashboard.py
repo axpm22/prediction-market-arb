@@ -20,6 +20,8 @@ def state(cfg, store) -> dict:
     now = datetime.now(timezone.utc)
     day = now.astimezone(__import__("zoneinfo").ZoneInfo(str(cfg["timezone"]))) \
         .date().isoformat()
+    from arb.metrics import day_bounds
+    start, end = day_bounds(cfg, day)  # UTC bounds for the ET day (H5)
     frame = rpt.daily_frame(cfg, store, day)
 
     beats = [dict(r) for r in store.query(
@@ -49,22 +51,26 @@ def state(cfg, store) -> dict:
            ORDER BY fb.id DESC LIMIT 20""")
     consensus_at = store.query("SELECT MAX(computed_at) t FROM consensus")[0]["t"]
     consensus_today = store.query(
-        "SELECT COUNT(*) n FROM consensus WHERE date(computed_at)=?", (day,))[0]["n"]
+        "SELECT COUNT(*) n FROM consensus WHERE computed_at >= ? AND computed_at < ?",
+        (start, end))[0]["n"]
     credits = store.query(
         "SELECT detail FROM annotations WHERE kind='oddsapi-credits' "
         "ORDER BY id DESC LIMIT 1")
     counters = store.query(
         """SELECT COALESCE(SUM(n_quotes),0) quotes, COUNT(*) polls
-           FROM polls WHERE date(started_at)=? AND kind='watch'""", (day,))[0]
+           FROM polls WHERE started_at >= ? AND started_at < ? AND kind='watch'""",
+        (start, end))[0]
     events_today = store.query(
         """SELECT COUNT(DISTINCT event_key) n FROM quotes
-           WHERE date(fetched_at)=? AND event_key != ''""", (day,))[0]["n"]
+           WHERE fetched_at >= ? AND fetched_at < ? AND event_key != ''""",
+        (start, end))[0]["n"]
     opps_today = store.query(
         """SELECT o.kind, COUNT(*) n FROM opportunities o JOIN polls p ON p.id=o.poll_id
-           WHERE date(p.started_at)=? GROUP BY o.kind""", (day,))
+           WHERE p.started_at >= ? AND p.started_at < ? GROUP BY o.kind""",
+        (start, end))
     rejects_today = store.query(
         """SELECT COUNT(*) n FROM left_on_table lo JOIN polls p ON p.id=lo.poll_id
-           WHERE date(p.started_at)=?""", (day,))[0]["n"]
+           WHERE p.started_at >= ? AND p.started_at < ?""", (start, end))[0]["n"]
     venues = store.query(
         """SELECT pv.venue, AVG(pv.ok)*100 ok_pct, AVG(pv.latency_ms) latency,
                   SUM(pv.n_quotes) quotes, COUNT(*) polls

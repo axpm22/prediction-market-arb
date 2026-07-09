@@ -101,11 +101,17 @@ def cmd_negrisk_scan(cfg, store, args):
 
 
 def cmd_report(cfg, store, args):
+    from datetime import datetime as _dt
+    from zoneinfo import ZoneInfo
+
+    from arb.metrics import day_bounds
     from arb.report import print_daily, write_daily
-    day = args.daily or date.today().isoformat()
+    # default day = today in the config timezone (§H5), not machine-local
+    day = args.daily or _dt.now(ZoneInfo(str(cfg["timezone"]))).date().isoformat()
+    start, end = day_bounds(cfg, day)
     polls = store.query(
-        "SELECT COUNT(*) c, COALESCE(SUM(n_quotes),0) q FROM polls WHERE date(started_at) = ?",
-        (day,))[0]
+        "SELECT COUNT(*) c, COALESCE(SUM(n_quotes),0) q FROM polls "
+        "WHERE started_at >= ? AND started_at < ?", (start, end))[0]
     console.print(f"[dim]{day}: polls={polls['c']} quotes={polls['q']}[/]")
     write_daily(cfg, store, day)
     print_daily(cfg, store, day)
@@ -328,10 +334,14 @@ def cmd_status(cfg, store, args):
     except Exception:  # noqa: BLE001
         console.print("[dim]ntp check unavailable[/]")
 
-    today = now.date().isoformat()
+    from zoneinfo import ZoneInfo
+
+    from arb.metrics import day_bounds
+    today = now.astimezone(ZoneInfo(str(cfg["timezone"]))).date().isoformat()  # ET
+    start, end = day_bounds(cfg, today)
     lanes = store.query(
-        "SELECT lane, COUNT(*) n FROM flat_bets WHERE date(created_at)=? GROUP BY lane",
-        (today,))
+        "SELECT lane, COUNT(*) n FROM flat_bets WHERE created_at >= ? "
+        "AND created_at < ? GROUP BY lane", (start, end))
     console.print("today's bets by lane: "
                   + (", ".join(f"{r['lane']}={r['n']}" for r in lanes) or "none"))
     demoted = store.query(

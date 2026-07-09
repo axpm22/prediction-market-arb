@@ -5,10 +5,29 @@ read-time counterfactual columns, pure functions of stored quotes."""
 from __future__ import annotations
 
 import json
+from datetime import date as _date
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from arb.models import LOCKED_KINDS, q6
 from arb.venues.fees import leg_fee_cost
+
+
+def day_bounds(cfg, day: str) -> tuple[str, str]:
+    """[start, end) UTC-ISO bounds for the config-timezone (ET) calendar day
+    `day` (YYYY-MM-DD). Daily boundaries are ET/EDT (config.yaml), but stored
+    timestamps are UTC ISO; a half-open range on them honors the timezone AND
+    lets SQLite use the created_at/fetched_at indexes instead of a per-row
+    date() function scan (H5). Uses next-ET-midnight (not +24h) so it is correct
+    across DST. Assumes stored timestamps are UTC ISO with a +00:00 offset, as
+    every writer here produces via aware-datetime .isoformat()."""
+    tz = ZoneInfo(str(cfg["timezone"]))
+    d = _date.fromisoformat(day)
+    nd = d + timedelta(days=1)
+    start = datetime(d.year, d.month, d.day, tzinfo=tz).astimezone(timezone.utc)
+    end = datetime(nd.year, nd.month, nd.day, tzinfo=tz).astimezone(timezone.utc)
+    return start.isoformat(), end.isoformat()
 
 
 def _events(store, bet_id: int) -> list[dict]:

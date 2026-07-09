@@ -39,10 +39,11 @@ def headline(cfg, store) -> tuple[Decimal, int]:
     return total, n
 
 
-def _cadence(store, day: str) -> dict:
+def _cadence(cfg, store, day: str) -> dict:
+    start, end = metrics.day_bounds(cfg, day)
     rows = store.query(
-        "SELECT started_at FROM polls WHERE kind='watch' AND date(started_at)=? "
-        "ORDER BY started_at", (day,))
+        "SELECT started_at FROM polls WHERE kind='watch' AND started_at >= ? "
+        "AND started_at < ? ORDER BY started_at", (start, end))
     times = [datetime.fromisoformat(r["started_at"]) for r in rows]
     gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:])]
     if not gaps:
@@ -55,10 +56,11 @@ def _live_section(cfg, store, day: str) -> dict:
     """LIVE lane (PROMPT_LIVE_LEADLAG A5): always visible, never blended.
     Populations per venue-pair, never pooled — like their pregame counterparts."""
     import statistics as st
+    start, end = metrics.day_bounds(cfg, day)
     pairs = {}
     for b in store.query(
-            "SELECT * FROM flat_bets WHERE poll_kind='live' AND date(created_at)=?",
-            (day,)):
+            "SELECT * FROM flat_bets WHERE poll_kind='live' AND created_at >= ? "
+            "AND created_at < ?", (start, end)):
         p = pairs.setdefault(b["venue_pair"], {
             "flags": 0, "confirmed": 0, "locked_pnl": Decimal(0),
             "confirmed_pnl": Decimal(0), "lifetimes": []})
@@ -82,13 +84,13 @@ def _live_section(cfg, store, day: str) -> dict:
         p["median_lifetime_secs"] = st.median(p["lifetimes"]) if p["lifetimes"] else None
         del p["lifetimes"]
     cad_rows = store.query(
-        "SELECT started_at FROM polls WHERE kind='live' AND date(started_at)=? "
-        "ORDER BY started_at", (day,))
+        "SELECT started_at FROM polls WHERE kind='live' AND started_at >= ? "
+        "AND started_at < ? ORDER BY started_at", (start, end))
     times = [datetime.fromisoformat(r["started_at"]) for r in cad_rows]
     gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:])]
     cov = [json.loads(r["detail"]).get("coverage") for r in store.query(
         "SELECT detail FROM annotations WHERE kind='live-coverage' AND "
-        "date(created_at)=?", (day,))]
+        "created_at >= ? AND created_at < ?", (start, end))]
     cov = [c for c in cov if c is not None]
     return {"pairs": {k: {kk: (str(vv) if isinstance(vv, Decimal) else vv)
                           for kk, vv in v.items()} for k, v in pairs.items()},
@@ -98,8 +100,10 @@ def _live_section(cfg, store, day: str) -> dict:
 
 
 def daily_frame(cfg, store, day: str) -> dict:
+    start, end = metrics.day_bounds(cfg, day)
     bets = [dict(r) for r in store.query(
-        "SELECT * FROM flat_bets WHERE date(created_at)=? ORDER BY id", (day,))]
+        "SELECT * FROM flat_bets WHERE created_at >= ? AND created_at < ? "
+        "ORDER BY id", (start, end))]
     per_bet = []
     for b in bets:
         pnl = metrics.bet_pnl_optimistic(store, b)
@@ -131,12 +135,14 @@ def daily_frame(cfg, store, day: str) -> dict:
     lot = store.query(
         """SELECT reason, COUNT(*) n, SUM(CAST(edge_points AS REAL)) edge
            FROM left_on_table lo JOIN polls p ON p.id = lo.poll_id
-           WHERE date(p.started_at)=? GROUP BY reason ORDER BY n DESC""", (day,))
+           WHERE p.started_at >= ? AND p.started_at < ?
+           GROUP BY reason ORDER BY n DESC""", (start, end))
     venue_hours = store.query(
         """SELECT pv.venue, strftime('%H', p.started_at) hour,
                   AVG(pv.ok) ok_rate, COUNT(*) n
            FROM poll_venues pv JOIN polls p ON p.id = pv.poll_id
-           WHERE date(p.started_at)=? GROUP BY pv.venue, hour""", (day,))
+           WHERE p.started_at >= ? AND p.started_at < ?
+           GROUP BY pv.venue, hour""", (start, end))
     newest = store.query("SELECT MAX(fetched_at) t FROM quotes")[0]["t"]
     age = (datetime.now(timezone.utc) - datetime.fromisoformat(newest)
            ).total_seconds() if newest else None
@@ -147,7 +153,7 @@ def daily_frame(cfg, store, day: str) -> dict:
         "day": day, "per_bet": per_bet, "by_class": by_class,
         "demoted_pairs": demoted,
         "left_on_table": [dict(r) for r in lot],
-        "cadence": _cadence(store, day),
+        "cadence": _cadence(cfg, store, day),
         "venue_hours": [dict(r) for r in venue_hours],
         "headline_pnl": hl, "headline_n": hl_n,
         "capacity": capacity_frame(cfg, store, day),

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from arb.config import load
-from arb.report import headline, write_daily
+from arb.report import daily_frame, headline, write_daily
 from arb.settlement import settle_manual
 from arb.store import Store
 from arb.tracker import process_poll
@@ -90,6 +90,22 @@ def test_headline_sql_agrees_on_multileg(cfg, tmp_path):
     row = store.conn.execute(sql).fetchone()
     assert row["n_bets"] == 1
     assert abs(row["headline_pnl"] - 0.25) < 1e-6
+
+
+def test_daily_boundary_is_config_timezone_not_utc(cfg, tmp_path):
+    # H5: config timezone is America/New_York. A bet created 01:00 UTC is 21:00
+    # EDT the PREVIOUS day, so it belongs to the 2026-07-08 ET report, not 07-09.
+    import json
+    store = Store(tmp_path / "tz.sqlite")
+    store.insert("flat_bets", {
+        "created_at": "2026-07-09T01:00:00+00:00", "kind": "EV",
+        "category": "sports", "lane": "review", "trusted": 0, "stake_usd": "1",
+        "status": "OPEN", "legs_json": json.dumps(
+            [{"venue": "kalshi", "cost": "0.5", "outcome": "mets", "side": "YES"}])})
+    ids_0708 = [b["id"] for b in daily_frame(cfg, store, "2026-07-08")["per_bet"]]
+    ids_0709 = [b["id"] for b in daily_frame(cfg, store, "2026-07-09")["per_bet"]]
+    assert len(ids_0708) == 1        # lands on the ET day it was placed
+    assert ids_0709 == []            # NOT the following UTC day
 
 
 def test_zero_flag_day_renders(cfg, tmp_path):

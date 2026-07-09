@@ -28,10 +28,12 @@ def _leg_quote(store, poll_id, event_key, leg) -> dict | None:
 
 
 def capacity_frame(cfg, store, day: str) -> dict:
+    from arb.metrics import day_bounds
+    start, end = day_bounds(cfg, day)
     ks = ",".join("?" * len(LOCKED_KINDS))
     bets = [dict(r) for r in store.query(
-        f"SELECT * FROM flat_bets WHERE date(created_at)=? AND kind IN ({ks}) "
-        "ORDER BY id", (day, *LOCKED_KINDS))]
+        f"SELECT * FROM flat_bets WHERE created_at >= ? AND created_at < ? "
+        f"AND kind IN ({ks}) ORDER BY id", (start, end, *LOCKED_KINDS))]
     seen: set[str] = set()
     feasible = []
     for b in bets:
