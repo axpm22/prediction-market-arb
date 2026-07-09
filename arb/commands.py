@@ -334,6 +334,11 @@ def cmd_status(cfg, store, args):
         (today,))
     console.print("today's bets by lane: "
                   + (", ".join(f"{r['lane']}={r['n']}" for r in lanes) or "none"))
+    demoted = store.query(
+        "SELECT DISTINCT pair FROM pair_demotions ORDER BY pair")
+    if demoted:
+        console.print("[red]demoted pairs (settlement mismatch, §11.2): "
+                      + ", ".join(r["pair"] for r in demoted) + "[/]")
     open_n = store.query(
         """SELECT COUNT(*) n FROM flat_bets fb
            WHERE fb.kind IN ('EV','NEGRISK','BTC')

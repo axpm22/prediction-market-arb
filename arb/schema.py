@@ -1,7 +1,7 @@
 """SQLite DDL (SPEC §9). Money columns are TEXT holding Decimal strings, never REAL.
 Every table is INSERT-only or INSERT+terminal-row; nothing ever UPDATEs ledger rows."""
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # v2 additions (migrations only ever ADD):
 MIGRATION_2 = [
@@ -16,6 +16,13 @@ MIGRATION_2 = [
 # disambiguator (H3, §8.2). Nullable; rule 9 untouched (entry-time only).
 MIGRATION_3 = [
     "ALTER TABLE flat_bets ADD COLUMN gamepk INTEGER",
+]
+
+# v4: append-only record of venue-pairs demoted out of the trusted path by a
+# settlement mismatch (H4, §11.2). tracker.booking_trusted reads it at entry.
+MIGRATION_4 = [
+    """CREATE TABLE IF NOT EXISTS pair_demotions (
+        id INTEGER PRIMARY KEY, pair TEXT, reason TEXT, created_at TEXT)""",
 ]
 
 TABLES = [
@@ -69,6 +76,9 @@ TABLES = [
         event_key TEXT, venue_pair TEXT, legs_json TEXT, reason TEXT, edge_points TEXT)""",
     """CREATE TABLE IF NOT EXISTS blacklist (
         fingerprint TEXT, event_key TEXT, reason TEXT, created_at TEXT)""",
+    # append-only: venue-pairs demoted from the trusted path by a mismatch (H4)
+    """CREATE TABLE IF NOT EXISTS pair_demotions (
+        id INTEGER PRIMARY KEY, pair TEXT, reason TEXT, created_at TEXT)""",
 ]
 
 # Minimal indexes — more slows the 600k-row/day insert path (§9)

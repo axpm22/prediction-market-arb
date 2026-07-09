@@ -24,4 +24,8 @@ def apply(conn):
                 continue  # fresh DBs already carry it via TABLES
             conn.execute(ddl)
         conn.execute("INSERT INTO schema_version VALUES (3, datetime('now'))")
+    if current < 4:
+        for ddl in schema.MIGRATION_4:
+            conn.execute(ddl)  # CREATE TABLE IF NOT EXISTS — idempotent
+        conn.execute("INSERT INTO schema_version VALUES (4, datetime('now'))")
     conn.commit()

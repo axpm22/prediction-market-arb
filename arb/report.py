@@ -141,8 +141,11 @@ def daily_frame(cfg, store, day: str) -> dict:
     age = (datetime.now(timezone.utc) - datetime.fromisoformat(newest)
            ).total_seconds() if newest else None
     hl, hl_n = headline(cfg, store)
+    demoted = [r["pair"] for r in store.query(
+        "SELECT DISTINCT pair FROM pair_demotions ORDER BY pair")]
     return {
         "day": day, "per_bet": per_bet, "by_class": by_class,
+        "demoted_pairs": demoted,
         "left_on_table": [dict(r) for r in lot],
         "cadence": _cadence(store, day),
         "venue_hours": [dict(r) for r in venue_hours],
@@ -261,6 +264,9 @@ def print_daily(cfg, store, day: str) -> None:
                   + (f", projected P&L ${cap['projected_pnl']} "
                      f"({len(cap['positions'])} positions)"
                      if cap["status"] == "OK" else "") + "[/]")
+    if frame.get("demoted_pairs"):
+        console.print("[red]demoted pairs (settlement mismatch, §11.2): "
+                      + ", ".join(frame["demoted_pairs"]) + "[/]")
     if frame["left_on_table"]:
         lt = Table(title="Left on the table")
         for col in ("reason", "flags", "summed edge"):

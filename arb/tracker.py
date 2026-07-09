@@ -83,13 +83,24 @@ def _lot(store, poll_id, cand, reason):
         "edge_points": cand["edge_points"]})
 
 
+def booking_trusted(cfg, store, venue_pair: str) -> bool:
+    """THE entry-time trust stamp (§11.2, H4). Trusted = self-pair OR a
+    config-whitelisted pair with NO settlement-mismatch demotion on record. This
+    is the one place trust is decided at booking; classify (rule 12) is untouched."""
+    if venue_pair.endswith(":self"):
+        return True
+    if venue_pair not in [str(p) for p in cfg["trusted_pairs"]]:
+        return False
+    return not store.query(
+        "SELECT 1 FROM pair_demotions WHERE pair=? LIMIT 1", (venue_pair,))
+
+
 def _book(cfg, store, poll_id, poll_kind, cand, lane, reason, now,
           reappearance_of=None):
     pnl_optimistic = None
     if cand["kind"] in LOCKED_KINDS:  # locked P&L IS pnl_optimistic, known at entry
         pnl_optimistic = q6(cand["payout"] / Decimal(cand["cost_sum"]) - 1)
-    trusted = cand["venue_pair"].endswith(":self") or \
-        cand["venue_pair"] in [str(p) for p in cfg["trusted_pairs"]]
+    trusted = booking_trusted(cfg, store, cand["venue_pair"])
     bet_id = store.insert("flat_bets", {
         "created_at": now.isoformat(), "poll_id": poll_id, "poll_kind": poll_kind,
         "fingerprint": cand["fingerprint"], "position_key": cand["position_key"],
