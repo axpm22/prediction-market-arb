@@ -77,6 +77,12 @@ scan_times: ["06:15", "10:30", "13:30", "18:30"]
                                     #   18:00-19:00 dead (§13.1 booking rule)
 daily_report_time: "23:59"
 settle_time: "09:30"
+archive_time: "04:40"               # daily; after the backup (04:10) so the day's data is copied first
+archive_after_days: 7               # quotes older than this move to data/archive/ (H8, §13.3).
+                                    #   FLOOR: must exceed the markout window (<=1h) with wide margin
+                                    #   AND the lead-lag study horizon — leadlag.build_series reads all
+                                    #   HOT quotes unbounded, so this IS its lookback. 7d keeps a week
+                                    #   of quotes hot for the study; archives preserve the rest (rule 7).
 settle_days_from: 3                 # Odds API scores max lookback
 settle_tripwire_secs: 60            # instant-settle = knowable at placement
 tracker:
@@ -200,7 +206,8 @@ supervisor:
 data_stale_alarm_secs: 900
 clock_skew_alarm_secs: 5            # status alarms if NTP offset exceeds this
 log_retention_days: 90              # rotate daily; forensics greps these
-db_backup: { time: "04:10", dest: "backups/" }   # sqlite3 .backup daily; report prints backup age
+db_backup: { time: "04:10", dest: "backups/", keep_last: 14 }   # sqlite3 .backup daily;
+                                    # prune to keep_last newest after each backup (H8); report prints age
                                     # dest MUST be a different disk or synced folder (§13.3);
                                     #   a same-volume dest is a startup WARNING (v3.4)
 canary: { enabled: true, day_of_month: 1 }       # monthly synthetic end-to-end fixture, tagged lane

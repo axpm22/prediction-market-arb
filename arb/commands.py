@@ -364,6 +364,20 @@ def cmd_dashboard(cfg, store, args):
     return 0
 
 
+def _prune_backups(dest, keep_last: int) -> list:
+    """Delete all but the keep_last newest arb-*.sqlite backups (H8). Returns the
+    pruned filenames. keep_last <= 0 disables pruning."""
+    from pathlib import Path
+    if keep_last is None or int(keep_last) <= 0:
+        return []
+    backups = sorted(Path(dest).glob("arb-*.sqlite"),
+                     key=lambda p: p.stat().st_mtime)
+    pruned = backups[:-int(keep_last)] if len(backups) > int(keep_last) else []
+    for p in pruned:
+        p.unlink()
+    return [p.name for p in pruned]
+
+
 def cmd_backup(cfg, store, args):
     from datetime import datetime, timezone
     from pathlib import Path
@@ -372,6 +386,17 @@ def cmd_backup(cfg, store, args):
     out = dest / f"arb-{datetime.now(timezone.utc).strftime('%Y%m%d')}.sqlite"
     store.conn.execute("VACUUM INTO ?", (str(out),))
     console.print(f"backup written: {out} ({out.stat().st_size} bytes)")
+    pruned = _prune_backups(dest, cfg["db_backup"].get("keep_last"))
+    if pruned:
+        console.print(f"pruned {len(pruned)} old backup(s) beyond keep_last")
+    return 0
+
+
+def cmd_archive(cfg, store, args):
+    from arb.archive import run_archive
+    res = run_archive(cfg, store)
+    console.print(f"archive: moved {res['moved']} quotes into "
+                  f"{len(res['months'])} monthly archive(s) under data/archive/")
     return 0
 
 

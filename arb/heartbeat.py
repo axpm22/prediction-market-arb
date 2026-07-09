@@ -122,6 +122,8 @@ def run_supervisor(cfg, once: bool = False) -> int:
                 subprocess.Popen([sys.executable, "-m", "arb", "report"])
             if _due(last_fired, "backup", str(cfg["db_backup"]["time"]), now_ny):
                 subprocess.Popen([sys.executable, "-m", "arb", "backup"])
+            if _due(last_fired, "archive", str(cfg["archive_time"]), now_ny):
+                subprocess.Popen([sys.executable, "-m", "arb", "archive"])
             if now_ny.weekday() == 0 and _due(last_fired, "shape", "05:00", now_ny):
                 subprocess.Popen([sys.executable, "-m", "arb", "shape-check"])
             if cfg["canary"]["enabled"] and \
