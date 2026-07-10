@@ -122,6 +122,9 @@ def reconcile(cfg, store, now: datetime | None = None) -> int:
         settled_payload = json.loads(store.query(
             "SELECT payload_json FROM bet_events WHERE bet_id=? AND kind='settled'",
             (bet["id"],))[0]["payload_json"])
+        if "fraction" in settled_payload:
+            continue  # UMA fractional settlement: venue verdicts are binary, a
+            # PARTIAL bet can never evidence a settlement mismatch on the pair
         expected = settled_payload.get("per_leg") or []
         for i, v in enumerate(verdicts):
             if v is not None and i < len(expected) and not isinstance(v, tuple) \

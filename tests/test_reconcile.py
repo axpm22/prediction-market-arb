@@ -69,3 +69,24 @@ def test_mismatch_demotes_pair_and_blocks_trust(cfg, tmp_path, monkeypatch):
                        ("kalshi:polymarket",)), "no pair_demotions row written"
     # the next booking on the demoted pair must NOT be trusted
     assert booking_trusted(cfg, store, "kalshi:polymarket") is False
+
+
+def test_partial_settled_bet_never_mismatch_demotes(cfg, tmp_path, monkeypatch):
+    # venue verdicts are binary; a fraction-settled bet can't evidence a bad
+    # pair — the old code compared venue "WON" against garbage per_leg and
+    # permanently demoted the pair off fiction
+    store = Store(tmp_path / "pf.sqlite")
+    legs = [{"venue": "kalshi", "venue_market_id": "k-1", "venue_side": "YES",
+             "cost": "0.5"}]
+    bid = store.insert("flat_bets", {
+        "kind": "EV", "venue_pair": "kalshi:self", "legs_json": json.dumps(legs),
+        "stake_usd": "1", "status": "OPEN"})
+    store.insert("bet_events", {"bet_id": bid, "kind": "settled",
+                                "payload_json": json.dumps(
+                                    {"result": ["PARTIAL"], "per_leg": ["PARTIAL"],
+                                     "winner": "PARTIAL", "fraction": "0.4"})})
+    monkeypatch.setattr(R, "RESOLVERS", {"kalshi": lambda c, l: "WON"})
+    R.reconcile(cfg, store, now=NOW)
+    assert not store.query("SELECT * FROM pair_demotions")
+    assert not store.query(
+        "SELECT * FROM annotations WHERE kind='settlement_mismatch'")

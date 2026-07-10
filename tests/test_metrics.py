@@ -141,3 +141,13 @@ def test_missed_confirmation_counts_zero_in_cell():
              "pnl_if_confirmed": Decimal("0.10")}]
     total, n_missed = pnl_confirmed_cell(bets)
     assert total == Decimal("0.10") and n_missed == 1
+
+
+def test_confirmed_profitable_partial_is_not_a_win(tmp_path):
+    # PARTIAL fraction 0.6 > cost 0.5175 -> opt = +0.159420. The old code
+    # inferred the result class from the SIGN of the pnl, so a profitable
+    # PARTIAL was booked as a full WIN (0.932367) on the confirmed price.
+    store, bet = _confirmed_bet(
+        tmp_path, {"result": ["PARTIAL"], "per_leg": ["PARTIAL"],
+                   "winner": "PARTIAL", "fraction": "0.6"})
+    assert bet_confirmed(store, bet) == (True, Decimal("0.159420"))

@@ -90,15 +90,24 @@ def bet_confirmed(store, bet: dict) -> tuple[bool, Decimal | None]:
     stake = Decimal(str(bet["stake_usd"]))
     if bet["kind"] in LOCKED_KINDS:
         return True, q6(stake * (1 / cost_sum - 1))
-    # resolution-settled: same result basis, confirmed entry price
+    # resolution-settled: same result basis, confirmed entry price. The result
+    # class comes from the settled payload, NEVER the sign of the pnl — a
+    # profitable PARTIAL (fraction > cost) is not a WIN.
     opt = bet_pnl_optimistic(store, bet)
     if opt is None:
         return True, None  # confirmed but pending resolution
-    if opt > 0:  # WON: recompute the win payout on the confirmed entry price
+    settled = [e for e in evs if e["kind"] == "settled"]
+    payload = json.loads(settled[0]["payload_json"])
+    results = payload.get("per_leg") or [payload["result"]]
+    if "fraction" in payload or len(results) > 1:
+        # PARTIAL(f): entry price can't change the payoff; multi-leg lacks
+        # per-leg confirmed prices to recompute on -> passthrough
+        return True, opt
+    if results[0] == "WON":  # recompute the win payout on the confirmed price
         return True, q6(stake * (1 - cost_sum) / cost_sum)
-    if opt == -stake:  # LOST: full stake lost regardless of entry price
+    if results[0] == "LOST":  # full stake lost regardless of entry price
         return True, -stake
-    return True, opt  # VOID (0) / PARTIAL(f): entry price can't change the payoff
+    return True, opt  # VOID: entry price can't change the payoff
 
 
 def pnl_confirmed_cell(rows: list[dict]) -> tuple[Decimal, int]:

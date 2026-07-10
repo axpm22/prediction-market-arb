@@ -81,3 +81,18 @@ def test_doubleheader_without_gamepk_refuses_and_annotates(cfg, tmp_path, monkey
                           "AND target_id=? AND kind='ambiguous-doubleheader'",
                           (str(bid),))
         assert ann, f"bet {bid} missing ambiguous-doubleheader annotation"
+
+
+def test_partial_settlement_writes_honest_per_leg(cfg, tmp_path):
+    # winner="PARTIAL" used to run through _leg_result, recording every YES leg
+    # LOST — fiction that reconcile then treated as truth (false demotions)
+    from arb.settlement import settle_manual
+    store = Store(tmp_path / "pl.sqlite")
+    _bet(store, 1, T1, "mets")
+    n = settle_manual(cfg, store, "baseball_mlb:2026-07-08:mets:royals:dh1",
+                      "PARTIAL:0.4", now=NOW)
+    assert n == 1
+    payload = json.loads(store.query(
+        "SELECT payload_json FROM bet_events WHERE kind='settled'")[0]["payload_json"])
+    assert payload["fraction"] == "0.4"
+    assert payload["per_leg"] == ["PARTIAL"]

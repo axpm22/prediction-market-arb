@@ -69,7 +69,10 @@ def settle_bet(cfg, store, bet, winner: str, source: str, now: datetime,
         log.info("bet %d inside terminal grace; not settling yet", bet["id"])
         return
     legs = json.loads(bet["legs_json"])
-    results = [_leg_result(leg, winner, total) for leg in legs]
+    # PARTIAL never routes through _leg_result — it would record every YES leg
+    # LOST, fiction that reconcile then compares venue verdicts against
+    results = ["PARTIAL"] * len(legs) if winner == "PARTIAL" \
+        else [_leg_result(leg, winner, total) for leg in legs]
     payload = {"result": results[0] if len(results) == 1 else results,
                "winner": winner, "source": source,
                "per_leg": results}
