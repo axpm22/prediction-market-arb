@@ -48,3 +48,19 @@ def test_doubleheader_consensus_does_not_blend():
     assert "baseball_mlb:2026-07-08:mets:royals:dh1" in keys
     assert "baseball_mlb:2026-07-08:mets:royals:dh2" in keys
     assert "baseball_mlb:2026-07-08:mets:royals" not in keys  # never blended
+
+
+def test_consensus_skips_book_with_malformed_odds():
+    # one bad book price (odds <= 1) must drop THAT book, not kill the scan
+    def _rows(book, odds_a, odds_b):
+        return [{"sport_key": "baseball_mlb", "home": "New York Mets",
+                 "away": "Kansas City Royals", "commence_time": "2026-07-08T20:00:00Z",
+                 "book": book, "market": "h2h", "line": None, "outcome": o, "odds": od}
+                for o, od in (("New York Mets", Decimal(odds_a)),
+                              ("Kansas City Royals", Decimal(odds_b)))]
+    rows = (_rows("pin", "1.91", "1.91") + _rows("dk", "1.90", "1.92")
+            + _rows("fd", "1.89", "1.93") + _rows("bad", "0.50", "1.91"))
+    cons, books = compute_consensus(CFG, rows, "2026-07-08T12:00:00Z")
+    assert cons, "good books must still produce consensus"
+    assert all(c["n_books"] == 3 for c in cons)          # bad book dropped
+    assert not [b for b in books if b["book"] == "bad"]  # and not persisted

@@ -67,3 +67,17 @@ def test_fee_staleness_is_dated_fact():
     import datetime
     assert not fee_is_stale(CFG, "kalshi", datetime.date(2026, 7, 8))
     assert fee_is_stale(CFG, "kalshi", datetime.date(2026, 9, 1))
+
+
+def test_pm_tag_category_covers_config_tags():
+    # every configured negrisk/nonsports tag must map to a REAL fee category —
+    # cmd_negrisk_scan used to price every basket as "politics" (wrong rate for
+    # economy/weather)
+    from arb.venues.fees import _PM_CATEGORY_RATE_KEY, PM_TAG_CATEGORY
+    for tag in CFG["nonsports"]["polymarket_tags"]:
+        cat = PM_TAG_CATEGORY[str(tag)]
+        assert cat in _PM_CATEGORY_RATE_KEY
+    # economy must hit the econ/weather rate, not the politics rate
+    econ = leg_fee_cost(CFG, "polymarket", PM_TAG_CATEGORY["economy"], Decimal("0.5"))
+    pol = leg_fee_cost(CFG, "polymarket", "politics", Decimal("0.5"))
+    assert econ != pol

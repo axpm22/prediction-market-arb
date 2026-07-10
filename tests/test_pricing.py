@@ -69,6 +69,24 @@ def test_negrisk_break_even_does_not_flag():
     assert basket_edge(Decimal("1.000000"), payout=Decimal(1)) == 0
 
 
+def test_devig_rejects_out_of_domain_odds():
+    # trust boundary: one malformed Odds API price must not crash/poison a scan
+    import pytest
+    for bad in ([], [Decimal("0.9"), Decimal("2.0")],
+                [Decimal("1.0"), Decimal("2.0")], [Decimal("0"), Decimal("2.0")]):
+        with pytest.raises(ValueError):
+            devig(bad, "power")
+
+
+def test_devig_solver_caps_do_not_bind_silently():
+    # heavy vig (shin z-cap) and heavy underround (power lo-cap) used to return
+    # non-normalized "probabilities" (sums 1.1146 / 0.8944) without any error
+    for odds, method in (([Decimal("1.30"), Decimal("1.30")], "shin"),
+                         ([Decimal("5.0"), Decimal("5.0")], "power")):
+        p = devig(odds, method)
+        assert abs(sum(p) - 1) < Decimal("0.0001"), (method, sum(p))
+
+
 def test_parlay_vectors():
     legs = [Decimal("0.60"), Decimal("0.55")]
     lo, hi = frechet_bounds(legs)

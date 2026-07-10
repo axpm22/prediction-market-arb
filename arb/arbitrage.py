@@ -122,7 +122,6 @@ def detect(cfg, groups: list[MatchedGroup], now: datetime | None = None,
         if g.suspect:
             # suspect groups may log divergences (tagged), never locked flags (§8.2)
             _reject(rejects, g, g.suspect, g.quotes)
-            continue
 
         by_market = groupby(
             sorted(mapped, key=lambda q: (q.market_type, line_key(q.line) or "")),
@@ -136,35 +135,36 @@ def detect(cfg, groups: list[MatchedGroup], now: datetime | None = None,
                 if k not in best or q.effective_cost < best[k].effective_cost:
                     best[k] = q
 
-            covers: list[list[Quote]] = []
-            if mtype == "WINNER":
-                outs = sorted({o for o, s in best if s == "YES"})
-                if g.event.sport in NO_DRAW_SPORTS and len(outs) == 2:
-                    covers.append([best[(outs[0], "YES")], best[(outs[1], "YES")]])
-                elif g.event.sport not in NO_DRAW_SPORTS and len(outs) >= 2:
-                    # two YES legs never cover a draw — record the audit trail
-                    pair = [best[(outs[0], "YES")], best[(outs[1], "YES")]]
-                    if sum(q.effective_cost for q in pair) < 1:
-                        _reject(rejects, g, "covering-set-fail", pair,
-                                edge=q6(1 - sum(q.effective_cost for q in pair)))
-            else:  # TOTAL: OVER+UNDER at the EXACT same line (8.5 != 9.0)
-                if ("OVER", "YES") in best and ("UNDER", "YES") in best:
-                    covers.append([best[("OVER", "YES")], best[("UNDER", "YES")]])
+            if not g.suspect:  # locked constructs never come from suspect data (§8.2)
+                covers: list[list[Quote]] = []
+                if mtype == "WINNER":
+                    outs = sorted({o for o, s in best if s == "YES"})
+                    if g.event.sport in NO_DRAW_SPORTS and len(outs) == 2:
+                        covers.append([best[(outs[0], "YES")], best[(outs[1], "YES")]])
+                    elif g.event.sport not in NO_DRAW_SPORTS and len(outs) >= 2:
+                        # two YES legs never cover a draw — record the audit trail
+                        pair = [best[(outs[0], "YES")], best[(outs[1], "YES")]]
+                        if sum(q.effective_cost for q in pair) < 1:
+                            _reject(rejects, g, "covering-set-fail", pair,
+                                    edge=q6(1 - sum(q.effective_cost for q in pair)))
+                else:  # TOTAL: OVER+UNDER at the EXACT same line (8.5 != 9.0)
+                    if ("OVER", "YES") in best and ("UNDER", "YES") in best:
+                        covers.append([best[("OVER", "YES")], best[("UNDER", "YES")]])
 
-            # same-proposition YES+NO (any sport incl. soccer — the endorsed construct)
-            for out in {o for o, _ in best}:
-                if (out, "YES") in best and (out, "NO") in best:
-                    covers.append([best[(out, "YES")], best[(out, "NO")]])
+                # same-proposition YES+NO (any sport incl. soccer — the endorsed construct)
+                for out in {o for o, _ in best}:
+                    if (out, "YES") in best and (out, "NO") in best:
+                        covers.append([best[(out, "YES")], best[(out, "NO")]])
 
-            for legs in covers:
-                if len({(q.venue, q.side, q.outcome_label) for q in legs}) < len(legs):
-                    continue
-                opp, why = _locked_opp(cfg, g, legs, now, mode)
-                if opp:
-                    opps.append(opp)
-                elif why:
-                    _reject(rejects, g, why, legs, kind="XSPREAD"
-                            if len({q.venue for q in legs}) > 1 else "ARB")
+                for legs in covers:
+                    if len({(q.venue, q.side, q.outcome_label) for q in legs}) < len(legs):
+                        continue
+                    opp, why = _locked_opp(cfg, g, legs, now, mode)
+                    if opp:
+                        opps.append(opp)
+                    elif why:
+                        _reject(rejects, g, why, legs, kind="XSPREAD"
+                                if len({q.venue for q in legs}) > 1 else "ARB")
 
             # divergence: same outcome+side across venues on raw mids (§7.2)
             for (out, side), _q in list(best.items()):

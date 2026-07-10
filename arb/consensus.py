@@ -8,10 +8,12 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
+from arb.logutil import get_logger
 from arb.matching import load_aliases, normalize_team
 from arb.models import q6
 from arb.pricing import devig
 
+log = get_logger("arb.consensus", "logs/scan.log")
 NY = ZoneInfo("America/New_York")
 
 
@@ -85,7 +87,11 @@ def compute_consensus(cfg, rows: list[dict], computed_at: str
         for book, outs in books.items():
             if len(outs) < 2:
                 continue  # cannot de-vig a one-sided listing
-            probs = devig([o["odds"] for o in outs], method)
+            try:
+                probs = devig([o["odds"] for o in outs], method)
+            except ValueError as e:
+                log.warning("consensus: dropping book %s on %s: %s", book, event_key, e)
+                continue  # one malformed book must never kill the scan
             for o, p in zip(outs, probs):
                 per_book.setdefault(o["outcome"], []).append((book, o["odds"], p))
                 book_rows.append({

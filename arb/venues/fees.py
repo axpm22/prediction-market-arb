@@ -47,6 +47,10 @@ def _sx(cfg, category, price, contracts, mode, role):
 
 FEE_BASIS = {"kalshi": _kalshi, "polymarket": _polymarket, "sx": _sx}
 
+# Gamma tag_slug -> fee category (nonsports.polymarket_tags feeds the negrisk
+# scan; pricing every basket as "politics" understated economy/weather fees)
+PM_TAG_CATEGORY = {"politics": "politics", "economy": "econ", "weather": "weather"}
+
 
 def leg_fee_cost(cfg, venue: str, category: str, price: Decimal,
                  contracts: Decimal = Decimal(1), mode: str = "paper",

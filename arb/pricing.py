@@ -26,6 +26,8 @@ def _power(qs: list[Decimal]) -> list[Decimal]:
     lo, hi = 0.5, 3.0
     while total(hi) > 1:
         hi *= 2
+    while total(lo) < 1 and lo > 1e-9:  # underround book: solution sits below 0.5
+        lo /= 2
     for _ in range(200):
         mid = (lo + hi) / 2
         if total(mid) > 1:
@@ -46,6 +48,8 @@ def _shin(qs: list[Decimal]) -> list[Decimal]:
                 for x in fq]
 
     lo, hi = 0.0, 0.3
+    while sum(probs(hi)) > 1 and hi < 0.99:  # heavy vig: z sits above the usual cap
+        hi = (hi + 1) / 2
     for _ in range(200):
         mid = (lo + hi) / 2
         if sum(probs(mid)) > 1:   # sum is decreasing in z
@@ -60,9 +64,17 @@ _METHODS = {"proportional": _proportional, "power": _power, "shin": _shin}
 
 def devig(odds: list[Decimal], method: str = "power") -> list[Decimal]:
     """Decimal odds -> de-vigged probabilities. Method is config-selected;
-    `power` is a coin-flip default, not an empirical winner (§7.2)."""
+    `power` is a coin-flip default, not an empirical winner (§7.2).
+    Raises ValueError on out-of-domain input (odds <= 1 or empty) — the Odds
+    API trust boundary; callers drop the offending book, never the scan."""
+    if not odds or any(Decimal(o) <= 1 for o in odds):
+        raise ValueError(f"devig domain: decimal odds must be > 1, got {odds}")
     qs = [1 / Decimal(o) for o in odds]
-    return _METHODS[method](qs)
+    ps = _METHODS[method](qs)
+    s = sum(ps)
+    if abs(s - 1) > Decimal("0.0001"):  # solver failed loudly, never silently
+        return [q6(p / s) for p in ps]
+    return ps
 
 
 def ev(p_hat: Decimal, effective_cost: Decimal) -> Decimal:

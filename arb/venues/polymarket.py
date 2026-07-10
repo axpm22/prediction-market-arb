@@ -144,5 +144,6 @@ def fetch_negrisk_events(cfg, tags: list[str]) -> list[dict]:
         for e in fetch_gamma_events(cfg, tag):
             if e.get("negRisk") and e.get("id") not in seen:
                 seen.add(e.get("id"))
+                e["_tag"] = tag  # source tag -> fee category (first tag wins)
                 out.append(e)
     return out

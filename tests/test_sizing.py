@@ -151,3 +151,10 @@ def test_projections_never_touch_headline(cfg, tmp_path):
     write_daily(cfg, store, "2026-07-08", outdir=tmp_path / "out")
     md = (tmp_path / "out" / "2026-07-08.md").read_text()
     assert "never headline" in md and "PROJECTION" in md.upper()
+
+
+def test_parse_ladder_bad_decimal_token_returns_empty():
+    # InvalidOperation escaped the except tuple: one malformed ladder_json row
+    # in the DB crashed capacity_frame and hence `arb report --daily`
+    assert parse_ladder('[["abc", "1"]]') == []
+    assert parse_ladder('[["0.5", "NaN%"]]') == []

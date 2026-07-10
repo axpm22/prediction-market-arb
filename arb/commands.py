@@ -76,7 +76,9 @@ def cmd_negrisk_scan(cfg, store, args):
                 "volume_24h": Decimal(str(m.get("volume24hr") or 0))})
         if any(o["yes_ask"] is None or o["yes_bid"] is None for o in outcomes):
             continue  # a one-sided outcome fails proof condition (c) anyway; skip math
-        opps = scan_group(cfg, "polymarket", "politics", f"nonsports:pm:{e['id']}",
+        from arb.venues.fees import PM_TAG_CATEGORY
+        category = PM_TAG_CATEGORY.get(str(e.get("_tag")), "politics")
+        opps = scan_group(cfg, "polymarket", category, f"nonsports:pm:{e['id']}",
                           e.get("title", ""), outcomes, venue_flag=bool(e.get("negRisk")))
         all_opps.extend(opps)
 

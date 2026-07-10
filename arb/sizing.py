@@ -21,8 +21,8 @@ def parse_ladder(ladder_json: str | None) -> list[tuple[Decimal, Decimal]]:
     try:
         levels = ast.literal_eval(ladder_json)
         return [(Decimal(str(p)), Decimal(str(s))) for p, s in levels]
-    except (ValueError, SyntaxError, TypeError):
-        return []
+    except (ValueError, SyntaxError, TypeError, ArithmeticError):
+        return []  # ArithmeticError: Decimal("abc") raises InvalidOperation
 
 
 def vwap_cost(ladder, contracts: Decimal) -> tuple[Decimal | None, Decimal]:

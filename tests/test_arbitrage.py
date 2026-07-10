@@ -132,3 +132,19 @@ def test_match_suspect_group_never_arbs():
               suspect="match-suspect-price")
     opps, _ = detect_all(g)
     assert not [o for o in opps if o.kind in ("ARB", "XSPREAD")]
+
+
+def test_match_suspect_group_logs_tagged_divergence():
+    # §8.2: suspect groups may log divergences (tagged), never locked flags.
+    # The old `continue` skipped the divergence scan entirely (dead ternary).
+    g = group([q("kalshi", "mets", cost="0.50", bid="0.48"),
+               q("polymarket", "mets", cost="0.58", bid="0.56")],
+              suspect="match-suspect-price")
+    opps, rejects = detect_all(g)
+    assert not [o for o in opps if o.kind in ("ARB", "XSPREAD")]
+    div = [o for o in opps if o.kind == "DIVERGENCE"]
+    assert len(div) == 1
+    assert div[0].notes == "match-suspect"
+    assert div[0].status == "REVIEW"
+    # the suspect reject stays on the audit trail
+    assert any(r["reason"] == "match-suspect-price" for r in rejects)
