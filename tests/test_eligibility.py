@@ -101,3 +101,23 @@ def test_nonsports_segregated():
     ok, _, lane = classify(obj(category="nonsports", kind="NEGRISK",
                                venue_pair="polymarket:self", start_grade="absent"), CFG)
     assert (ok, lane) == (True, "clean")
+
+
+def test_xspread_demoted_pair_never_clean():
+    # rule 12: trust is part of the ONE predicate. classify used to check
+    # trusted_pairs only, so a mismatch-demoted pair still classified clean
+    # while booking_trusted stamped trusted=0 — lane and trust flag disagreed.
+    cfg = dict(CFG)
+    cfg["trusted_pairs"] = ["kalshi:polymarket"]
+    cfg = {**cfg, "deployment": {**cfg["deployment"], "xspread_autobook": True}}
+    base = {"kind": "XSPREAD", "category": "sports", "sport": "baseball_mlb",
+            "venue_pair": "kalshi:polymarket", "status": "OK",
+            "quality_flag": "none", "live": False, "start_grade": "verified",
+            "pregame": True, "leg_skew_secs": 0.0, "depth_ok": True,
+            "edge_points": "0.05", "roi": "0.03", "certificate_n": 700,
+            "micro": False, "ai_matched": False}
+    ok, _, lane = classify(base, cfg)
+    assert (ok, lane) == (True, "clean")  # control: certified pair is clean
+    ok, reason, lane = classify({**base, "pair_demoted": True}, cfg)
+    assert (ok, lane) == (False, "review")
+    assert reason == "pair-demoted"

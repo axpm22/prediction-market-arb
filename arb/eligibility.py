@@ -6,7 +6,8 @@ A grep-test (test_hygiene) proves `def classify(` exists only here.
 Input: a flat dict of pinned keys (both Opportunity-shaped and bet-row-shaped
 callers build it): kind, category, sport, venue_pair, status, quality_flag,
 live, start_grade, pregame, leg_skew_secs, depth_ok, edge_points, roi,
-proof_status, ai_matched, micro, certificate_n (optional).
+proof_status, ai_matched, micro, certificate_n (optional), pair_demoted
+(optional — the caller pins the pair_demotions DB fact).
 """
 from __future__ import annotations
 
@@ -85,6 +86,10 @@ def classify(o: dict, cfg) -> tuple[bool, str, str]:
         pair = o.get("venue_pair", "")
         if pair not in [str(p) for p in cfg["trusted_pairs"]]:
             return False, "untrusted-pair", "review"
+        if o.get("pair_demoted"):
+            # settlement-mismatch demotion (§11.2) — the caller pins the DB fact;
+            # rule 12: lane and the booking_trusted stamp must never disagree
+            return False, "pair-demoted", "review"
         return True, "xspread-certified", "clean"
 
     if kind == "NEGRISK":

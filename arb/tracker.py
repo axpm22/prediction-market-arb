@@ -85,8 +85,9 @@ def _lot(store, poll_id, cand, reason):
 
 def booking_trusted(cfg, store, venue_pair: str) -> bool:
     """THE entry-time trust stamp (§11.2, H4). Trusted = self-pair OR a
-    config-whitelisted pair with NO settlement-mismatch demotion on record. This
-    is the one place trust is decided at booking; classify (rule 12) is untouched."""
+    config-whitelisted pair with NO settlement-mismatch demotion on record.
+    process_poll pins the demotion fact into classify's `pair_demoted` input so
+    the lane decision and this stamp can never disagree (rule 12)."""
     if venue_pair.endswith(":self"):
         return True
     if venue_pair not in [str(p) for p in cfg["trusted_pairs"]]:
@@ -226,9 +227,12 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
             continue
 
         pregame = cand["event_start_utc"] is None or cand["event_start_utc"] > now
-        eligible, reason, lane = classify({**cand, "pregame": pregame,
-                                           "micro": False, "ai_matched": False,
-                                           "live": cand.get("live", False)}, cfg)
+        eligible, reason, lane = classify({
+            **cand, "pregame": pregame, "micro": False, "ai_matched": False,
+            "live": cand.get("live", False),
+            "pair_demoted": not booking_trusted(cfg, store, cand["venue_pair"])
+            if cand["venue_pair"] in [str(p) for p in cfg["trusted_pairs"]] else False,
+        }, cfg)
         prior = store.query(
             "SELECT id FROM flat_bets WHERE fingerprint=? ORDER BY id DESC LIMIT 1",
             (cand["fingerprint"],))
