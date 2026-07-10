@@ -109,7 +109,7 @@ def test_exit_engine_vector_10_8():
                     {"bid": Decimal("0.58"), "at": NOW + timedelta(minutes=10)}]
     pnls = exit_policy_pnls(CFG, bet, quote_series, category="sports")
     assert pnls["take_profit"] == Decimal("0.087822")
-    assert pnls["hold"] is None  # resolution pays P0; printed beside, not invented here
+    assert "hold" not in pnls  # H10: dropped — hold-to-resolution is P0, computed elsewhere
 
 
 def test_markout_is_one_sided_adverse_only():

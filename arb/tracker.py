@@ -185,9 +185,10 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
                                                 "poll_id": poll_id})})
 
     # 2) bet creation for new sightings
+    booked_fps: set = set()  # belt: never book the same fingerprint twice in one poll (H10)
     for cand in cands:
-        if cand["fingerprint"] in active_fps:
-            continue  # sighting handled above
+        if cand["fingerprint"] in active_fps or cand["fingerprint"] in booked_fps:
+            continue  # sighting handled above, or a duplicate candidate this poll
         if cand["kind"] == "EV" and not cfg["ev_enabled"]:
             _lot(store, poll_id, cand, "ev-frozen")  # frozen: record, never book
             continue
@@ -251,3 +252,4 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
             continue
         _book(cfg, store, poll_id, poll_kind, cand, lane, reason, now,
               reappearance_of=reappearance_of)
+        booked_fps.add(cand["fingerprint"])

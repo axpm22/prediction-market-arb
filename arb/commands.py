@@ -198,9 +198,12 @@ def cmd_political(cfg, store, args):
     from arb.lanes.political import scan_market
     from arb.tracker import process_poll
     from arb.venues import polymarket
-    events = []
+    events, seen = [], set()  # dedupe by event id across overlapping tags (H10)
     for tag in cfg["nonsports"]["polymarket_tags"]:
-        events.extend(polymarket.fetch_gamma_events(cfg, str(tag), max_pages=2))
+        for e in polymarket.fetch_gamma_events(cfg, str(tag), max_pages=2):
+            if e.get("id") not in seen:
+                seen.add(e.get("id"))
+                events.append(e)
     markets = [m for e in events for m in e.get("markets", [])
                if m.get("clobTokenIds") and not m.get("negRisk")]
     tokens = [t for m in markets for t in _json.loads(m["clobTokenIds"])]

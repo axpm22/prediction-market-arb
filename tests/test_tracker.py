@@ -201,3 +201,14 @@ def test_reappearance_storm_lots_and_annotates_instead_of_booking(cfg, tmp_path)
     assert store.query(
         "SELECT 1 FROM annotations WHERE kind='reappearance-storm' AND detail LIKE ?",
         (f"%{cand['fingerprint']}%",))
+
+
+def test_duplicate_fingerprint_books_once_per_poll(cfg, tmp_path):
+    # H10 belt: two candidates with the same fingerprint in ONE poll (overlapping
+    # tags) must book a single flat_bets row, not one per duplicate.
+    store = Store(tmp_path / "dup.sqlite")
+    p = store.insert("polls", {"started_at": NOW.isoformat(), "kind": "watch",
+                               "n_quotes": 2, "n_opps": 2})
+    opp = ev_opp(cfg, "0.50")
+    process_poll(cfg, store, p, "watch", [opp, opp], VENUE_OK, now=NOW)
+    assert store.query("SELECT COUNT(*) c FROM flat_bets WHERE kind='EV'")[0]["c"] == 1

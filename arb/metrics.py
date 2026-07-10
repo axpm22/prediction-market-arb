@@ -139,17 +139,19 @@ def pnl_markout(cfg, bet: dict, marks: list[dict]) -> Decimal | None:
 def exit_policy_pnls(cfg, bet: dict, quote_series: list[dict],
                      category: str = "sports") -> dict:
     """§10.8 SELL engine, read-time. quote_series: [{bid, at, mid?}] ascending.
-    Sell basis binding: exit_value = bid − taker fee on the exit trade."""
+    Sell basis binding: exit_value = bid − taker fee on the exit trade. (H10
+    dropped the never-computed "hold" key — hold-to-resolution pays P0, which
+    bet_pnl_optimistic already computes; a perpetually-None column is dead.)"""
     legs = json.loads(bet["legs_json"])
     if len(legs) != 1:
-        return {"hold": None, "take_profit": None, "trailing": None}
+        return {"take_profit": None, "trailing": None}
     leg = legs[0]
     c = Decimal(leg["cost"]) + Decimal(leg.get("fee_cost") or 0)
     stake = Decimal(str(bet.get("stake_usd") or 1))
     contracts = stake / c
     flagged = Decimal(str(bet["edge_points"]))
     ex = cfg["exit"]
-    out = {"hold": None, "take_profit": None, "trailing": None}
+    out = {"take_profit": None, "trailing": None}
     peak = None
     armed = False
     for pt in quote_series:

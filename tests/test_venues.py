@@ -114,6 +114,13 @@ def test_polymarket_prices_from_clob_never_gamma():
     assert q.ladder_json                       # full book captured (bug B4)
     assert q.volume_24h == Decimal("133.02")
     assert {q.away, q.home} == {"Colorado Rockies", "San Francisco Giants"}
+    # H10: lock the outcomes[0]=away, outcomes[1]=home order the adapter assumes
+    # (poly.py). Grouping is frozenset-safe so live drift is cosmetic, but pin the
+    # order here so a Polymarket outcome-order flip is caught, not silently trusted.
+    m = [mk for mk in ev["markets"] if mk.get("sportsMarketType") == "moneyline"][0]
+    outcomes = json.loads(m["outcomes"])
+    assert outcomes == ["Colorado Rockies", "San Francisco Giants"]
+    assert q.away == outcomes[0] and q.home == outcomes[1]
     # tokens with no book -> no quote (unknown depth is None, never infinite)
     assert all(x.venue_market_id.split(":")[1] in books for x in quotes)
 
@@ -143,3 +150,13 @@ def test_mlbstats_schedule_fixture():
     assert g["away"] == "Toronto Blue Jays" and g["home"] == "San Francisco Giants"
     assert g["start_utc"] == datetime(2026, 7, 8, 19, 45, tzinfo=timezone.utc)
     assert g["gameNumber"] == 1
+
+
+def test_fetch_negrisk_events_dedupes_across_overlapping_tags(monkeypatch):
+    # H10: overlapping tags return the same event; fetch_negrisk_events must
+    # yield it once, not once per tag (else duplicate NEGRISK candidates).
+    import arb.venues.polymarket as pm
+    ev = {"id": "E1", "negRisk": True}
+    monkeypatch.setattr(pm, "fetch_gamma_events", lambda cfg, tag, **k: [ev])
+    out = pm.fetch_negrisk_events({}, ["politics", "us-politics"])
+    assert len(out) == 1 and out[0]["id"] == "E1"

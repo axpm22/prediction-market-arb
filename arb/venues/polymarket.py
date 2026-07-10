@@ -136,8 +136,13 @@ def fetch_markets(cfg) -> list[Quote]:
 
 
 def fetch_negrisk_events(cfg, tags: list[str]) -> list[dict]:
-    """Events carrying the venue's structural negRisk flag (proof condition a)."""
-    out = []
+    """Events carrying the venue's structural negRisk flag (proof condition a).
+    Deduped by event id: overlapping tags otherwise yield the same event twice,
+    which process_poll would book as duplicate candidates (H10)."""
+    seen, out = set(), []
     for tag in tags:
-        out.extend(e for e in fetch_gamma_events(cfg, tag) if e.get("negRisk"))
+        for e in fetch_gamma_events(cfg, tag):
+            if e.get("negRisk") and e.get("id") not in seen:
+                seen.add(e.get("id"))
+                out.append(e)
     return out
