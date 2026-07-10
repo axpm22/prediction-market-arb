@@ -158,3 +158,28 @@ def test_parse_ladder_bad_decimal_token_returns_empty():
     # in the DB crashed capacity_frame and hence `arb report --daily`
     assert parse_ladder('[["abc", "1"]]') == []
     assert parse_ladder('[["0.5", "NaN%"]]') == []
+
+
+def test_capacity_finds_complement_mapped_leg_quote(cfg, tmp_path):
+    # quotes persist PRE-map (cycle.py stores the raw fetch); a NO(mets) quote
+    # complement-maps to a YES(royals) leg at detection. The old join on the
+    # post-map (outcome, side) missed every such leg — the position was
+    # silently excluded and dragged ladder_fraction under the gate.
+    store = Store(tmp_path / "cm.sqlite")
+    p1 = store.insert("polls", {"started_at": NOW.isoformat(), "kind": "watch",
+                                "n_quotes": 2, "n_opps": 1})
+    process_poll(cfg, store, p1, "watch", [arb_opp(cfg, "0.49", "0.49")],
+                 VENUE_OK, now=NOW)
+    ladder = '[["0.49", "100"], ["0.51", "100"]]'
+    common = {"poll_id": p1, "fetched_at": NOW.isoformat(),
+              "event_key": "baseball_mlb:2026-07-08:mets:royals",
+              "category": "sports", "sport": "baseball_mlb", "venue": "kalshi",
+              "book": "kalshi", "market_type": "WINNER", "line": None,
+              "raw_price": "0.49", "cost": "0.49", "fee_cost": "0",
+              "depth_usd": "100", "ladder_json": ladder, "live": 0}
+    store.insert("quotes", {**common, "outcome": "mets", "side": "YES"})
+    # the royals YES leg exists in the DB only as its pre-map NO(mets) source
+    store.insert("quotes", {**common, "outcome": "mets", "side": "NO"})
+    f = capacity_frame(cfg, store, "2026-07-08")
+    assert f["n_with_ladders"] == 1
+    assert f["status"] == "OK"

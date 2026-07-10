@@ -18,12 +18,20 @@ INSUFFICIENT = "INSUFFICIENT_DEPTH_DATA"
 
 
 def _leg_quote(store, poll_id, event_key, leg) -> dict | None:
-    rows = store.query(
-        """SELECT ladder_json, depth_usd FROM quotes
-           WHERE poll_id=? AND venue=? AND event_key=? AND market_type=?
-             AND outcome=? AND side=? AND (line IS ? OR line=?) LIMIT 1""",
-        (poll_id, leg["venue"], event_key, leg["market_type"],
-         leg["outcome"], leg["side"], leg["line"], leg["line"]))
+    sql = """SELECT ladder_json, depth_usd FROM quotes
+             WHERE poll_id=? AND venue=? AND event_key=? AND market_type=?
+               AND (line IS ? OR line=?) AND side=? AND {outcome} LIMIT 1"""
+    args = (poll_id, leg["venue"], event_key, leg["market_type"],
+            leg["line"], leg["line"])
+    rows = store.query(sql.format(outcome="outcome=?"),
+                       (*args, leg["side"], leg["outcome"]))
+    if not rows and leg["side"] == "YES":
+        # quotes persist PRE-map (cycle.py); a complement-mapped YES leg's
+        # source row is the OTHER outcome's NO (matching.complement_map keeps
+        # cost/ladder unchanged, so the row prices this leg exactly)
+        other = {"OVER": "UNDER", "UNDER": "OVER"}.get(leg["outcome"])
+        clause, arg = ("outcome=?", other) if other else ("outcome!=?", leg["outcome"])
+        rows = store.query(sql.format(outcome=clause), (*args, "NO", arg))
     return dict(rows[0]) if rows else None
 
 
