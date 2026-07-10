@@ -14,9 +14,12 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from arb.logutil import get_logger
 from arb.models import Quote
-from arb.venues.base import get_json, is_live
+from arb.venues.base import Deadline, PartialFetch, get_json, is_live
 from arb.venues.fees import leg_fee_cost
+
+log = get_logger("arb.kalshi", "logs/scan.log")
 
 BASE = "https://api.elections.kalshi.com/trade-api/v2"
 NY = ZoneInfo("America/New_York")
@@ -99,20 +102,28 @@ def parse_markets(cfg, markets: list[dict], sport: str, market_type: str) -> lis
 
 
 def fetch_markets(cfg) -> list[Quote]:
+    # serial by design: one host, few series — the deadline still bounds it (H7)
+    deadline = Deadline(cfg["execution"]["venue_deadline_secs"])
     quotes = []
     for sport in cfg["sports"]:
         for series, mtype in SPORT_SERIES.get(sport, []):
             cursor, pages = "", 0
             while pages < 10:
+                if deadline.expired():  # truncated -> partial, never full coverage
+                    raise PartialFetch(quotes)
                 url = f"{BASE}/markets?series_ticker={series}&status=open&limit=200"
                 if cursor:
                     url += f"&cursor={cursor}"
-                data = get_json(url, cfg)
+                data = get_json(url, cfg, deadline=deadline)
                 quotes.extend(parse_markets(cfg, data.get("markets", []), sport, mtype))
                 cursor = data.get("cursor") or ""
                 pages += 1
                 if not cursor:
                     break
+            else:
+                if cursor:  # cap hit with pages pending — never truncate silently
+                    log.warning("kalshi pagination cap hit for %s; coverage truncated",
+                                series)
     return quotes
 
 

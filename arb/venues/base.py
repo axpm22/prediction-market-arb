@@ -42,13 +42,17 @@ class PartialFetch(VenueError):
 
 
 class Deadline:
-    """Per-venue wall-clock budget, checked between pagination/chunk requests."""
+    """Per-venue wall-clock budget, checked between pagination/chunk requests
+    AND inside _request (trims the per-call timeout, skips retries)."""
 
     def __init__(self, secs: float):
         self._end = time.monotonic() + float(secs)
 
     def expired(self) -> bool:
         return time.monotonic() >= self._end
+
+    def remaining(self) -> float:
+        return self._end - time.monotonic()
 
 
 def is_live(start_utc, now=None) -> bool:
@@ -61,11 +65,16 @@ def is_live(start_utc, now=None) -> bool:
     return start_utc <= (now or datetime.now(timezone.utc))
 
 
-def _request(method: str, url: str, cfg, **kw):
+def _request(method: str, url: str, cfg, deadline=None, **kw):
     timeout = float(cfg["execution"]["venue_fetch_timeout_secs"])
     retries = int(cfg["execution"]["venue_max_retries"])
     last = None
     for attempt in range(retries + 1):
+        if deadline is not None:
+            remaining = deadline.remaining()
+            if remaining <= 0:
+                break  # venue budget spent: a retry ladder can't help (H7)
+            timeout = min(timeout, remaining)
         try:
             resp = _session().request(method, url, timeout=timeout, **kw)
             if resp.status_code == 429 or resp.status_code >= 500:
@@ -78,14 +87,15 @@ def _request(method: str, url: str, cfg, **kw):
                 return resp.json()
         except (requests.RequestException, ValueError) as e:
             last = e
-        if attempt < retries:
+        if attempt < retries and (deadline is None or not deadline.expired()):
             time.sleep((2 ** attempt) * 0.5 + random.uniform(0, 0.3))
-    raise VenueError(str(last))
+    raise VenueError(str(last) if last is not None else
+                     f"venue deadline expired before request to {url.split('?')[0]}")
 
 
-def get_json(url: str, cfg, headers=None):
-    return _request("GET", url, cfg, headers=headers)
+def get_json(url: str, cfg, headers=None, deadline=None):
+    return _request("GET", url, cfg, deadline=deadline, headers=headers)
 
 
-def post_json(url: str, cfg, payload):
-    return _request("POST", url, cfg, json=payload)
+def post_json(url: str, cfg, payload, deadline=None):
+    return _request("POST", url, cfg, deadline=deadline, json=payload)

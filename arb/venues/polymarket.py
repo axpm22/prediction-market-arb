@@ -9,9 +9,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from arb.logutil import get_logger
 from arb.models import Quote
 from arb.venues.base import Deadline, PartialFetch, get_json, is_live, post_json
 from arb.venues.fees import leg_fee_cost
+
+log = get_logger("arb.polymarket", "logs/scan.log")
 
 GAMMA = "https://gamma-api.polymarket.com"
 CLOB = "https://clob.polymarket.com"
@@ -36,11 +39,15 @@ def fetch_gamma_events(cfg, tag: str, max_pages: int = 10, deadline=None) -> lis
         if deadline is not None and deadline.expired():
             break  # per-venue deadline (H7): stop paginating, return what we have
         page = get_json(f"{GAMMA}/events?tag_slug={tag}&closed=false&limit=100"
-                        f"&offset={offset}", cfg)
+                        f"&offset={offset}", cfg, deadline=deadline)
         events.extend(page)
         if len(page) < 100:
             break
         offset += 100
+    else:  # cap hit with a full last page — never truncate silently
+        # NB: %s only — the logutil redacting filter str()s every arg
+        log.warning("gamma pagination cap hit for tag %s at %s events; "
+                    "coverage truncated", tag, len(events))
     return events
 
 
@@ -50,7 +57,8 @@ def fetch_books(cfg, token_ids: list[str], deadline=None) -> dict[str, dict]:
         if deadline is not None and deadline.expired():
             break  # per-venue deadline (H7)
         chunk = token_ids[i:i + BOOKS_CHUNK]
-        for b in post_json(f"{CLOB}/books", cfg, [{"token_id": t} for t in chunk]):
+        for b in post_json(f"{CLOB}/books", cfg, [{"token_id": t} for t in chunk],
+                           deadline=deadline):
             if b and b.get("asset_id"):
                 books[b["asset_id"]] = b
     return books

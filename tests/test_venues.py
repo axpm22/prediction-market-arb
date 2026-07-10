@@ -160,3 +160,20 @@ def test_fetch_negrisk_events_dedupes_across_overlapping_tags(monkeypatch):
     monkeypatch.setattr(pm, "fetch_gamma_events", lambda cfg, tag, **k: [ev])
     out = pm.fetch_negrisk_events({}, ["politics", "us-politics"])
     assert len(out) == 1 and out[0]["id"] == "E1"
+
+
+def test_sx_ladder_units_are_contracts():
+    # sizing/capacity walk ladder sizes as CONTRACT counts (the polymarket
+    # convention); sx stored USD taker depth in the same slot, so the shared
+    # consumer misread every stored sx ladder by a factor of cost
+    from arb.sizing import parse_ladder
+    from arb.venues.sx import quotes_from_orders
+    market = _fx("sx_markets.json")["data"]["markets"][0]
+    orders = _fx("sx_orders.json")["data"]
+    one = [q for q in quotes_from_orders(CFG, market, orders, "baseball_mlb")
+           if q.outcome_label == "San Francisco Giants"][0]
+    price, size = parse_ladder(one.ladder_json)[0]
+    assert price == one.cost
+    # contracts x cost = USD taker depth (depth_usd stays in USD, unchanged)
+    assert (size * price).quantize(Decimal("0.01")) == \
+        one.depth_usd.quantize(Decimal("0.01"))
