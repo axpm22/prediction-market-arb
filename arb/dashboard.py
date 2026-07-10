@@ -5,7 +5,7 @@ log (forensics greps must stay clean)."""
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -75,8 +75,11 @@ def state(cfg, store) -> dict:
         """SELECT pv.venue, AVG(pv.ok)*100 ok_pct, AVG(pv.latency_ms) latency,
                   SUM(pv.n_quotes) quotes, COUNT(*) polls
            FROM poll_venues pv JOIN polls p ON p.id = pv.poll_id
-           WHERE p.started_at > datetime('now', '-2 hours')
-           GROUP BY pv.venue""")
+           WHERE p.started_at > ?
+           GROUP BY pv.venue""",
+        # Python ISO bound, never datetime('now'): the 'T' separator makes the
+        # SQLite form compare by date only (the invariants.py trap)
+        ((now - timedelta(hours=2)).isoformat(),))
     recent_flags = store.query(
         """SELECT o.kind, o.event_key, o.edge, o.status, o.notes, p.started_at
            FROM opportunities o JOIN polls p ON p.id = o.poll_id

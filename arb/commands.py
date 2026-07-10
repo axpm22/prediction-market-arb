@@ -282,7 +282,21 @@ def cmd_verify(cfg, store, args):
 
 def cmd_supervisor(cfg, store, args):
     from arb.heartbeat import run_supervisor
-    return run_supervisor(cfg)
+    # children must inherit --db/--config or data silently splits across DBs
+    return run_supervisor(cfg, db=args.db, config=args.config)
+
+
+def _sntp_offset(out: str) -> float | None:
+    """Offset seconds from `sntp` output: the token before '+/-'
+    (`+0.014657 +/- 0.009361 time.apple.com ...`). None when unparseable —
+    the old split()[-2] read the server hostname and the alarm never fired."""
+    toks = (out or "").split()
+    if "+/-" not in toks:
+        return None
+    try:
+        return float(toks[toks.index("+/-") - 1])
+    except (ValueError, IndexError):
+        return None
 
 
 def cmd_status(cfg, store, args):
@@ -331,7 +345,7 @@ def cmd_status(cfg, store, args):
     try:  # NTP offset alarm (§13.3); sntp may need privileges — degrade honestly
         out = subprocess.run(["sntp", "time.apple.com"], capture_output=True,
                              text=True, timeout=5).stdout
-        offset = float(out.split()[-2].lstrip("+")) if out else None
+        offset = _sntp_offset(out)
         if offset is not None and abs(offset) > float(cfg["clock_skew_alarm_secs"]):
             console.print(f"[red]CLOCK SKEW ALARM: {offset}s[/]")
         elif offset is not None:
@@ -389,7 +403,10 @@ def cmd_backup(cfg, store, args):
     dest = Path(str(cfg["db_backup"]["dest"]))
     dest.mkdir(parents=True, exist_ok=True)
     out = dest / f"arb-{datetime.now(timezone.utc).strftime('%Y%m%d')}.sqlite"
-    store.conn.execute("VACUUM INTO ?", (str(out),))
+    tmp = out.with_suffix(".sqlite.tmp")
+    tmp.unlink(missing_ok=True)
+    store.conn.execute("VACUUM INTO ?", (str(tmp),))
+    tmp.replace(out)  # VACUUM INTO refuses an existing target; §14.1 idempotency
     console.print(f"backup written: {out} ({out.stat().st_size} bytes)")
     pruned = _prune_backups(dest, cfg["db_backup"].get("keep_last"))
     if pruned:

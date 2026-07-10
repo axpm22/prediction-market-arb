@@ -152,3 +152,68 @@ def test_terminate_kills_and_reaps_on_timeout():
 
     _terminate(Stub(), 1.0)
     assert state["killed"] is True and state["waits"] >= 2  # timed out -> kill -> reap
+
+
+def test_sntp_offset_parses_real_macos_output():
+    # the OLD parse read split()[-2] — the server hostname — so float() raised,
+    # the blanket except swallowed it, and the clock-skew alarm could NEVER fire
+    from arb.commands import _sntp_offset
+    out = "+0.014657 +/- 0.009361 time.apple.com 2620:149:a33:4000::21"
+    assert abs(_sntp_offset(out) - 0.014657) < 1e-9
+    assert abs(_sntp_offset("sntp 4.x\n-0.5 +/- 0.1 time.apple.com") + 0.5) < 1e-9
+    assert _sntp_offset("no offset here") is None
+    assert _sntp_offset("") is None
+
+
+def test_backup_is_idempotent_same_day(cfg, tmp_path):
+    # cli.py:3 contract: every command is safe to run twice. VACUUM INTO
+    # refuses an existing target, so a second same-day backup crashed.
+    from arb.commands import cmd_backup
+    from arb.store import Store
+    store = Store(tmp_path / "b.sqlite")
+    c = {**cfg, "db_backup": {**cfg["db_backup"], "dest": str(tmp_path / "bk")}}
+    assert cmd_backup(c, store, None) == 0
+    assert cmd_backup(c, store, None) == 0
+
+
+def test_supervisor_children_inherit_db_and_config(cfg, tmp_path, monkeypatch):
+    # children spawned as `python -m arb <cmd>` read the DEFAULT db/config —
+    # a supervisor on a non-default DB silently split data across two databases
+    import arb.heartbeat as hb
+    argvs = []
+
+    class FakeProc:
+        def __init__(self, argv):
+            argvs.append(argv)
+
+        def poll(self):
+            return 0
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
+    monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "absent-stop")
+    monkeypatch.setattr(hb.subprocess, "Popen", lambda argv: FakeProc(argv))
+    hb.run_supervisor(cfg, once=True, db="other.sqlite", config="alt.yaml")
+    assert argvs, "no children spawned"
+    for argv in argvs:
+        assert argv[argv.index("--db") + 1] == "other.sqlite", argv
+        assert argv[argv.index("--config") + 1] == "alt.yaml", argv
+
+
+def test_one_rotating_handler_per_logfile():
+    # every module logger attached its OWN TimedRotatingFileHandler to
+    # logs/scan.log; at midnight each handler renames the file independently,
+    # clobbering backups (well-known TimedRotatingFileHandler failure mode)
+    import logging
+
+    from arb.logutil import get_logger
+    a = get_logger("arb.test_rot_a", "logs/scan.log")
+    b = get_logger("arb.test_rot_b", "logs/scan.log")
+    fa = [h for h in a.handlers if isinstance(h, logging.handlers.TimedRotatingFileHandler)]
+    fb = [h for h in b.handlers if isinstance(h, logging.handlers.TimedRotatingFileHandler)]
+    assert fa and fb and fa[0] is fb[0]

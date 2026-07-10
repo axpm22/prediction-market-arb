@@ -23,20 +23,29 @@ class _RedactingFilter(logging.Filter):
         return True
 
 
+# ONE rotating handler per logfile per process: a handler per LOGGER means
+# several handlers rotating the same file at midnight, clobbering backups
+_file_handlers: dict[str, logging.Handler] = {}
+
+
+def _decorate(h: logging.Handler) -> logging.Handler:
+    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    h.addFilter(_RedactingFilter())
+    return h
+
+
 def get_logger(name: str, logfile: str | Path | None = None,
                retention_days: int = 90) -> logging.Logger:
     logger = logging.getLogger(name)
     if logger.handlers:
         return logger
     logger.setLevel(logging.INFO)
-    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
-    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    logger.addHandler(_decorate(logging.StreamHandler()))
     if logfile:
-        Path(logfile).parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(TimedRotatingFileHandler(
-            logfile, when="midnight", backupCount=retention_days))
-    for h in handlers:
-        h.setFormatter(fmt)
-        h.addFilter(_RedactingFilter())
-        logger.addHandler(h)
+        key = str(logfile)
+        if key not in _file_handlers:
+            Path(logfile).parent.mkdir(parents=True, exist_ok=True)
+            _file_handlers[key] = _decorate(TimedRotatingFileHandler(
+                logfile, when="midnight", backupCount=retention_days))
+        logger.addHandler(_file_handlers[key])
     return logger

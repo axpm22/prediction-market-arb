@@ -113,11 +113,14 @@ def _terminate(proc, timeout: float) -> None:
         proc.wait()
 
 
-def run_supervisor(cfg, once: bool = False) -> int:
+def run_supervisor(cfg, once: bool = False, db: str | None = None,
+                   config: str | None = None) -> int:
     if not acquire_lock():
         log.critical("another supervisor is running; refusing to double-run")
         return 1
     log.info("supervisor up")
+    # children inherit the supervisor's --db/--config, or data silently splits
+    flags = (["--db", db] if db else []) + (["--config", config] if config else [])
     children: dict[str, subprocess.Popen] = {}
     started: dict[str, float] = {}
     # suppress the boot-time burst: slots long past are pre-marked as fired (H9)
@@ -126,7 +129,7 @@ def run_supervisor(cfg, once: bool = False) -> int:
     scheduled: list[subprocess.Popen] = []  # one-shot clock children, reaped each tick
 
     def _spawn(*cmd):
-        scheduled.append(subprocess.Popen([sys.executable, "-m", "arb", *cmd]))
+        scheduled.append(subprocess.Popen([sys.executable, "-m", "arb", *flags, *cmd]))
 
     def _interval(name: str) -> float:
         if name == "live":
@@ -162,7 +165,8 @@ def run_supervisor(cfg, once: bool = False) -> int:
                     children.pop(name)
                 if now >= next_run.get(name, 0):
                     cmd = cfg["supervisor"]["commands"][name].split()
-                    children[name] = subprocess.Popen([sys.executable, "-m", "arb", *cmd])
+                    children[name] = subprocess.Popen(
+                        [sys.executable, "-m", "arb", *flags, *cmd])
                     started[name] = now
                     next_run[name] = now + _interval(name)
 

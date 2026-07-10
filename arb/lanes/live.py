@@ -30,8 +30,11 @@ def shortlist(cfg, store, now: datetime) -> list[dict]:
                   MAX(venue_market_id IS NOT NULL) has_ids
            FROM quotes
            WHERE event_key != '' AND start_utc IS NOT NULL
-             AND fetched_at > datetime('now', '-1 day')
-           GROUP BY event_key""")
+             AND fetched_at > ?
+           GROUP BY event_key""",
+        # Python ISO bound, never datetime('now'): the 'T' separator makes the
+        # SQLite form compare by date only (the invariants.py trap)
+        ((now - timedelta(days=1)).isoformat(),))
     open_live = {r["event_key"] for r in store.query(
         """SELECT DISTINCT event_key FROM flat_bets fb
            WHERE fb.poll_kind = 'live'

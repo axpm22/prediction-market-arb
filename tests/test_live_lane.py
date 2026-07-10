@@ -78,3 +78,26 @@ def test_live_lane_config_keys_loaded():
     assert ll["kill"]["confirm_rate_floor"] == Decimal("0.10")
     assert "baseball_mlb" in ll["max_game_hours"]
     assert CFG["leadlag"]["min_matched_moves"] == 100
+
+
+def test_shortlist_day_window_is_time_precise(tmp_path):
+    # 'T'-separated ISO timestamps vs SQLite datetime('now') compare by DATE
+    # only ('T' > ' '), so the "1 day" quote window stretched up to 2 days
+    from datetime import datetime, timedelta, timezone
+
+    from arb.lanes.live import shortlist
+    from arb.store import Store
+    store = Store(tmp_path / "sl.sqlite")
+    now = datetime.now(timezone.utc)
+    common = {"poll_id": 1, "event_key": "e", "category": "sports",
+              "sport": "baseball_mlb", "venue": "kalshi", "book": "kalshi",
+              "market_type": "WINNER", "line": None, "outcome": "mets",
+              "side": "YES", "raw_price": "0.5", "cost": "0.5", "fee_cost": "0",
+              "live": 1, "venue_market_id": "T1",
+              "start_utc": (now - timedelta(hours=1)).isoformat()}
+    store.insert("quotes", {**common,
+                            "fetched_at": (now - timedelta(hours=25)).isoformat()})
+    assert shortlist(CFG, store, now) == []  # stale quote: outside the window
+    store.insert("quotes", {**common,
+                            "fetched_at": (now - timedelta(hours=23)).isoformat()})
+    assert [e["event_key"] for e in shortlist(CFG, store, now)] == ["e"]
