@@ -149,7 +149,8 @@ def fetch_negrisk_events(cfg, tags: list[str]) -> list[dict]:
     which process_poll would book as duplicate candidates (H10)."""
     seen, out = set(), []
     for tag in tags:
-        for e in fetch_gamma_events(cfg, tag):
+        for e in fetch_gamma_events(cfg, tag,
+                                    max_pages=int(cfg["negrisk"]["scan_pages"])):
             if e.get("negRisk") and e.get("id") not in seen:
                 seen.add(e.get("id"))
                 e["_tag"] = tag  # source tag -> fee category (first tag wins)

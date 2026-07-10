@@ -217,3 +217,26 @@ def test_one_rotating_handler_per_logfile():
     fa = [h for h in a.handlers if isinstance(h, logging.handlers.TimedRotatingFileHandler)]
     fb = [h for h in b.handlers if isinstance(h, logging.handlers.TimedRotatingFileHandler)]
     assert fa and fb and fa[0] is fb[0]
+
+
+def test_negrisk_scan_pages_config_is_wired(monkeypatch):
+    # negrisk.scan_pages existed to fix a named V1 bug but was never read —
+    # the adapter hardcoded max_pages=10
+    import arb.venues.polymarket as pm
+    seen = []
+    monkeypatch.setattr(
+        pm, "fetch_gamma_events",
+        lambda cfg, tag, max_pages=10, deadline=None: seen.append(max_pages) or [])
+    pm.fetch_negrisk_events({"negrisk": {"scan_pages": 7}}, ["politics"])
+    assert seen == [7]
+
+
+def test_log_retention_days_config_is_wired(tmp_path, monkeypatch):
+    # log_retention_days was read by nothing; every logger hardcoded 90
+    import logging.handlers as lh
+
+    import arb.logutil as lu
+    monkeypatch.setattr(lu, "RETENTION_DAYS", 7)
+    lg = lu.get_logger("arb.test_retention", tmp_path / "r.log")
+    h = [h for h in lg.handlers if isinstance(h, lh.TimedRotatingFileHandler)][0]
+    assert h.backupCount == 7

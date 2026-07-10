@@ -40,3 +40,12 @@ def test_log_sinks_redact_query_strings():
     # host+path stay greppable
     assert "api.the-odds-api.com/v4/sports/" in redact(
         "https://api.the-odds-api.com/v4/sports/?apiKey=SECRET")
+
+
+def test_no_hardcoded_schedule_times_or_windows():
+    # rule 4 (review 2026-07-10): shape/canary fire times and the two 6h match/
+    # settle windows moved to config.yaml; literals must not reappear in code
+    hb = (ARB / "heartbeat.py").read_text()
+    assert "05:00" not in hb and "05:30" not in hb
+    assert "timedelta(hours=6)" not in (ARB / "matching.py").read_text()
+    assert "timedelta(hours=6)" not in (ARB / "settlement.py").read_text()

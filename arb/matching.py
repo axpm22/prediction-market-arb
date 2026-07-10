@@ -24,7 +24,6 @@ EVENT_KEY_ALIASES_PATH = Path("data/event_key_aliases.json")
 # Soccer NEVER: NO(A) = {B ∪ draw} (§7.1).
 STRICT_BINARY_WINNER_SPORTS = {"baseball_mlb", "basketball_nba", "tennis", "mma"}
 LAST_TOKEN_FALLBACK_SPORTS = {"baseball_mlb", "basketball_nba"}
-MATCH_WINDOW = timedelta(hours=6)
 
 
 def load_aliases() -> dict:
@@ -154,8 +153,9 @@ def build_groups(quotes: list[Quote], cfg, aliases: dict,
             start, grade, gamepk, game_no = (min(starts) if starts else None), \
                 ("nominal" if starts else "absent"), None, None
             if sport == "baseball_mlb" and start is not None:
+                window = timedelta(hours=int(cfg["schedule_match_window_hours"]))
                 cands = [g for g in sched_by_pair.get(pair, [])
-                         if abs(g["start_utc"] - start) <= MATCH_WINDOW]
+                         if abs(g["start_utc"] - start) <= window]
                 if cands:
                     g = min(cands, key=lambda g: abs(g["start_utc"] - start))
                     # verified start outranks all venue times (§11.3)

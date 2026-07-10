@@ -158,7 +158,8 @@ def test_fetch_negrisk_events_dedupes_across_overlapping_tags(monkeypatch):
     import arb.venues.polymarket as pm
     ev = {"id": "E1", "negRisk": True}
     monkeypatch.setattr(pm, "fetch_gamma_events", lambda cfg, tag, **k: [ev])
-    out = pm.fetch_negrisk_events({}, ["politics", "us-politics"])
+    out = pm.fetch_negrisk_events({"negrisk": {"scan_pages": 3}},
+                                  ["politics", "us-politics"])
     assert len(out) == 1 and out[0]["id"] == "E1"
 
 

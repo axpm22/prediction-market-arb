@@ -49,20 +49,6 @@ def candidate_from_opp(cfg, o: Opportunity) -> dict:
     }
 
 
-def candidate_from_basket(b: dict, endale=None) -> dict:
-    return {
-        "kind": b["kind"], "category": "nonsports", "sport": "",
-        "event_key": b["event_key"], "event_start_utc": None, "start_grade": "absent",
-        "gamepk": None,
-        "venue_pair": b["venue_pair"], "fingerprint": b["fingerprint"],
-        "position_key": b["position_key"], "legs": json.loads(b["legs_json"]),
-        "edge_points": b["edge_points"], "cost_sum": b["cost_sum"],
-        "payout": b["payout"], "roi": b["roi"], "status": b["status"],
-        "notes": b["notes"], "quality_flag": "none", "leg_skew_secs": 0.0,
-        "depth_ok": True, "proof_status": b["proof_status"],
-    }
-
-
 def _active_bets(store, poll_kind: str):
     return store.query(
         """SELECT fb.* FROM flat_bets fb

@@ -27,7 +27,8 @@ def state(cfg, store) -> dict:
     beats = [dict(r) for r in store.query(
         "SELECT process, MAX(beat_at) beat_at, head_sha FROM heartbeats GROUP BY process")]
     fresh = any((now - datetime.fromisoformat(b["beat_at"])).total_seconds()
-                < 3 * float(cfg["watch_interval_secs"]) for b in beats)
+                < int(cfg["heartbeat_stale_polls"]) * float(cfg["watch_interval_secs"])
+                for b in beats)
     lock_pid = Path(".locks/supervisor/pid")
     lock_alive = False
     if lock_pid.exists():

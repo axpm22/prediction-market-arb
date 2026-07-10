@@ -135,7 +135,7 @@ def settle_auto_mlb(cfg, store, now: datetime | None = None) -> int:
             finals.extend(g for g in fetch_schedule(cfg, d) if is_final(g))
         except Exception as e:  # noqa: BLE001
             log.warning("mlb schedule fetch failed for %s: %s", d, e)
-    window = timedelta(hours=6)
+    window = timedelta(hours=int(cfg["settle_doubleheader_window_hours"]))
     n = 0
     for bet in bets:
         start = datetime.fromisoformat(bet["event_start_utc"])
@@ -168,8 +168,8 @@ def settle_auto_mlb(cfg, store, now: datetime | None = None) -> int:
                 store.insert("annotations", {
                     "created_at": now.isoformat(), "target_kind": "bet",
                     "target_id": str(bet["id"]), "kind": "ambiguous-doubleheader",
-                    "detail": f"{len(in_window)} same-pair finals within 6h; "
-                              "no gamePk"})
+                    "detail": f"{len(in_window)} same-pair finals within "
+                              f"{cfg['settle_doubleheader_window_hours']}h; no gamePk"})
                 log.warning("bet %s: ambiguous doubleheader (%s finals in window), "
                             "refusing to settle", bet["id"], len(in_window))
                 continue

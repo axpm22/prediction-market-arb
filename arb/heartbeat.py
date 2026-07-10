@@ -77,7 +77,8 @@ def _schedule(cfg) -> list[tuple[str, str]]:
               ("report", str(cfg["daily_report_time"])),
               ("backup", str(cfg["db_backup"]["time"])),
               ("archive", str(cfg["archive_time"])),
-              ("shape", "05:00"), ("canary", "05:30")]
+              ("shape", str(cfg["supervisor"]["shape_time"])),
+              ("canary", str(cfg["canary"]["time"]))]
     return slots
 
 
@@ -183,11 +184,12 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                 _spawn("backup")
             if _due(last_fired, "archive", str(cfg["archive_time"]), now_ny):
                 _spawn("archive")
-            if now_ny.weekday() == 0 and _due(last_fired, "shape", "05:00", now_ny):
+            if now_ny.weekday() == 0 and _due(
+                    last_fired, "shape", str(cfg["supervisor"]["shape_time"]), now_ny):
                 _spawn("shape-check")
             if cfg["canary"]["enabled"] and \
                     now_ny.day == int(cfg["canary"]["day_of_month"]) and \
-                    _due(last_fired, "canary", "05:30", now_ny):
+                    _due(last_fired, "canary", str(cfg["canary"]["time"]), now_ny):
                 _spawn("canary")
 
             if once:

@@ -27,6 +27,10 @@ class _RedactingFilter(logging.Filter):
 # several handlers rotating the same file at midnight, clobbering backups
 _file_handlers: dict[str, logging.Handler] = {}
 
+# cli.main() overwrites this from cfg["log_retention_days"] BEFORE the command
+# modules import (module-level loggers are created at import time)
+RETENTION_DAYS = 90
+
 
 def _decorate(h: logging.Handler) -> logging.Handler:
     h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
@@ -35,7 +39,7 @@ def _decorate(h: logging.Handler) -> logging.Handler:
 
 
 def get_logger(name: str, logfile: str | Path | None = None,
-               retention_days: int = 90) -> logging.Logger:
+               retention_days: int | None = None) -> logging.Logger:
     logger = logging.getLogger(name)
     if logger.handlers:
         return logger
@@ -46,6 +50,8 @@ def get_logger(name: str, logfile: str | Path | None = None,
         if key not in _file_handlers:
             Path(logfile).parent.mkdir(parents=True, exist_ok=True)
             _file_handlers[key] = _decorate(TimedRotatingFileHandler(
-                logfile, when="midnight", backupCount=retention_days))
+                logfile, when="midnight",
+                backupCount=retention_days if retention_days is not None
+                else RETENTION_DAYS))
         logger.addHandler(_file_handlers[key])
     return logger

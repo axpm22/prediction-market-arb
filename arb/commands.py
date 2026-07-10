@@ -202,7 +202,8 @@ def cmd_political(cfg, store, args):
     from arb.venues import polymarket
     events, seen = [], set()  # dedupe by event id across overlapping tags (H10)
     for tag in cfg["nonsports"]["polymarket_tags"]:
-        for e in polymarket.fetch_gamma_events(cfg, str(tag), max_pages=2):
+        for e in polymarket.fetch_gamma_events(
+                cfg, str(tag), max_pages=int(cfg["nonsports"]["gamma_scan_pages"])):
             if e.get("id") not in seen:
                 seen.add(e.get("id"))
                 events.append(e)
@@ -320,7 +321,8 @@ def cmd_status(cfg, store, args):
     beats = store.query(
         "SELECT process, MAX(beat_at) beat_at, head_sha FROM heartbeats GROUP BY process")
     fresh = any((now - datetime.fromisoformat(b["beat_at"])).total_seconds()
-                < 3 * float(cfg["watch_interval_secs"]) for b in beats)
+                < int(cfg["heartbeat_stale_polls"]) * float(cfg["watch_interval_secs"])
+                for b in beats)
     state = "ALIVE" if fresh or lock_alive else ("STALE" if beats else "DEAD")
     console.print(f"supervisor: [bold]{state}[/] (lock={'live' if lock_alive else 'none'})")
     for b in beats:

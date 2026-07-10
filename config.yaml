@@ -10,6 +10,9 @@ arb_stale_warn: 0.04                # ROI above this books REVIEW automatically 
                                     #   (ARB, XSPREAD, NEGRISK, POLITICAL, BTC) — stale quote or mismatch, not edge
 max_leg_skew_secs: 60               # outer recording bound (actionable bound is execution.*)
 max_start_drift_mins: 30            # venues disagreeing on start = match suspect
+schedule_match_window_hours: 6      # MLB-schedule start-verify window (matching, §8.2)
+settle_doubleheader_window_hours: 6 # same-pair finals ambiguity window (settle, §8.2);
+                                    #   distinct from execution.doubleheader_cluster_tol_secs
 match_suspect_prob_diff: 0.15       # same outcome priced >15pts apart = matching error
 capital_charge_annual: 0.05         # locks below T-bill-ish carry are 'uneconomic'
 sport_typical_duration_hours: { baseball_mlb: 3.5, basketball_nba: 2.5,
@@ -148,7 +151,9 @@ negrisk:
                                           #   -> unproven-exhaustive (v3.4)
   max_outcomes: 30
   scan_limit: 200
-  scan_pages: 3                     # paginate; V1's page cap hid most of the surface
+  scan_pages: 10                    # paginate; V1's page cap hid most of the surface
+                                    #   (10 = the previously hardcoded adapter cap; the
+                                    #   old value 3 was never read — review 2026-07-10)
   min_executable_usd: 5             # single-venue: thin baskets worth measuring
 btc_arb:
   enabled: false                    # enable only WITH its settlement path + oracle-agreement study
@@ -167,6 +172,7 @@ ai_matcher:
   paper_stake_usd: 1
 nonsports:
   watch_interval_secs: 300
+  gamma_scan_pages: 2               # political-lane Gamma pagination cap
   candidate_threshold: 85
   kalshi_categories: ["Politics", "Economics", "Climate and Weather"]
   polymarket_tags: [politics, economy, weather]
@@ -205,14 +211,18 @@ supervisor:
                                     #   a live cycle past 120s is force-restarted
   schedule_catchup_grace_mins: 30   # on (re)start, only fire scheduled slots missed within
                                     #   this window; older slots are marked done, not burst-fired (H9)
+  shape_time: "05:00"               # weekly (Monday) shape-check fire time
 data_stale_alarm_secs: 900
+heartbeat_stale_polls: 3            # supervisor beat older than this many watch
+                                    #   intervals reads STALE (status + dashboard)
 clock_skew_alarm_secs: 5            # status alarms if NTP offset exceeds this
 log_retention_days: 90              # rotate daily; forensics greps these
 db_backup: { time: "04:10", dest: "backups/", keep_last: 14 }   # sqlite3 .backup daily;
                                     # prune to keep_last newest after each backup (H8); report prints age
                                     # dest MUST be a different disk or synced folder (§13.3);
                                     #   a same-volume dest is a startup WARNING (v3.4)
-canary: { enabled: true, day_of_month: 1 }       # monthly synthetic end-to-end fixture, tagged lane
+canary: { enabled: true, day_of_month: 1, time: "05:30" }   # monthly synthetic
+                                                 #   end-to-end fixture, tagged lane
 dashboard: { host: 127.0.0.1, port: 8722 }       # read-only local panel (§14.3); GETs only,
                                                  #   never bound beyond localhost
 tape_check: { enabled: true, window_secs: 60 }   # fill tape_confirmed only if venue printed a trade

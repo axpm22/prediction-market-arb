@@ -79,6 +79,8 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     cfg = load_config(args.config)
+    from arb import logutil
+    logutil.RETENTION_DAYS = int(cfg["log_retention_days"])  # before module loggers exist
     from arb.settlement import validate_settlement_paths
     validate_settlement_paths(cfg)  # a kind without a settler is a startup error (§12)
     console.print(f"[dim]db={args.db} head={head_sha()}[/]")
