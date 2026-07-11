@@ -116,3 +116,28 @@ def test_zero_flag_day_renders(cfg, tmp_path):
     assert frame["by_class"] == {}
     assert frame["headline_n"] == 0
     assert (tmp_path / "2026-07-08.md").exists()
+
+
+def test_headline_sql_agrees_on_unresolved_leg(cfg, tmp_path):
+    # D4 (review 2026-07-10): a settled event carrying an unresolved leg is
+    # PENDING in metrics (excluded from the headline); the SQL's ELSE 0 counted
+    # the bet with a partial per-leg sum. Both must exclude it.
+    import json
+    store = Store(tmp_path / "ur.sqlite")
+    legs = json.dumps([{"venue": "kalshi", "cost": "0.40", "side": "YES"},
+                       {"venue": "kalshi", "cost": "0.35", "side": "NO"}])
+    bet_id = store.insert("flat_bets", {
+        "created_at": NOW.isoformat(), "kind": "EV", "category": "sports",
+        "lane": "clean", "trusted": 1, "event_start_utc": (NOW + timedelta(
+            hours=6)).isoformat(), "legs_json": legs, "stake_usd": "0.75",
+        "status": "OPEN"})
+    store.insert("bet_events", {"bet_id": bet_id, "kind": "settled",
+                                "payload_json": json.dumps(
+                                    {"result": ["WON", "PENDING"],
+                                     "per_leg": ["WON", "PENDING"]})})
+    hl, n = headline(cfg, store)
+    assert n == 0 and hl == Decimal("0")
+    sql = (ROOT / "scripts" / "headline.sql").read_text()
+    row = store.conn.execute(sql).fetchone()
+    assert row["n_bets"] == 0
+    assert row["headline_pnl"] == 0

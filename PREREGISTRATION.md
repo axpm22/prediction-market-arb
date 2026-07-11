@@ -163,6 +163,17 @@ claim is "no lead visible at ≥20s observation latency." The study also emits
 per-sport/venue observed live line velocities that replace the PLACEHOLDER
 `live_lane.line_velocity_points_per_sec` constants via a dated config change.
 
+## Non-sports program (STUB — to be completed and dated BEFORE the first
+## persisted negrisk/political poll under the new pipeline; plan Phase 4.1)
+
+Scope when filled in: per-lane (NEGRISK, POLITICAL, XSPREAD-nonsports) primary
+metrics (proven-basket rate/week, median net edge at ≥ min executable depth,
+depth distribution, settlement-mismatch count), kill gates, and the AI-matcher
+acceptance bar (precision on the held-out `nonsports_map.yaml` ground truth,
+threshold pre-registered before scoring). Until this section is dated and
+filled, the new lanes may run for PIPELINE VALIDATION only — no edge claims
+from data collected before the freeze date.
+
 ## Amendment log
 
 | Date | Change | Reason |

@@ -44,5 +44,12 @@ pnl AS (
   WHERE fb.trusted = 1 AND fb.category = 'sports' AND fb.lane = 'clean'
     AND (fb.event_start_utc IS NULL OR fb.created_at < fb.event_start_utc)
     AND fb.id NOT IN (SELECT bet_id FROM excluded)
+    -- a leg still unresolved -> whole bet PENDING, never a partial sum
+    -- (matches metrics.bet_pnl_optimistic; review 2026-07-10 D4)
+    AND (fb.pnl_optimistic IS NOT NULL
+         OR json_extract(s.payload, '$.fraction') IS NOT NULL
+         OR NOT EXISTS (
+           SELECT 1 FROM json_each(json_extract(s.payload, '$.per_leg')) r
+           WHERE r.value NOT IN ('WON', 'LOST', 'VOID')))
 )
 SELECT ROUND(COALESCE(SUM(pnl), 0), 6) AS headline_pnl, COUNT(*) AS n_bets FROM pnl;

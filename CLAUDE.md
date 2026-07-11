@@ -2,7 +2,7 @@
 
 These rules bind every phase, every module, every prompt. Copied verbatim from SPEC.md §4.
 
-1. **Paper trading only.** Never call authenticated or order-placement endpoints. Only public, unauthenticated GETs (plus The Odds API key as a query param for market data).
+1. **Paper trading only.** Never call authenticated or order-placement endpoints. Only public, unauthenticated GETs/POSTs — POST solely for read-only batch quote endpoints verified in §6 (Polymarket `POST /books`) — plus The Odds API key as a query param for market data. (Wording amended 2026-07-10; substance unchanged — base.py enforced this reading since H7.)
 2. **Never spend Odds API credits in tests or loops.** The free tier is 500 credits/month. All tests run against recorded fixtures in `tests/fixtures/`. Live calls happen only in `scan`/`settle` commands. Log the `x-requests-remaining` response header on every live call; warn below 100, abort the scan below 50.
 3. **Do not invent API endpoints or fields.** Use only the endpoints listed in SPEC.md §6 (verified working June–July 2026). If one returns 404/4xx, stop and report — do not guess alternatives.
 4. **No magic numbers.** Every threshold, fee rate, bankroll figure, and schedule time lives in `config.yaml`.
