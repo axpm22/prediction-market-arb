@@ -1,0 +1,3483 @@
+{
+ "series": [
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/GDP.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/GDP.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-03-25T21:21:17.20175Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Economic Analysis",
+     "url": "https://www.bea.gov/data/gdp/gross-domestic-product"
+    }
+   ],
+   "tags": [
+    "GDP"
+   ],
+   "ticker": "KXGDP",
+   "title": "US GDP growth"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-07-07T22:48:38.421505Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Jobs & Economy"
+   ],
+   "ticker": "KXSARETAIL",
+   "title": "South Africa retail sales MoM"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/OIL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/OIL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Energy Information Administration",
+     "url": "https://www.eia.gov/dnav/pet/PET_PRI_SPT_S1_D.htm"
+    }
+   ],
+   "tags": [
+    "Oil and energy"
+   ],
+   "ticker": "OIL",
+   "title": "Price of oil monthly"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/GOVTBUDGET.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/GOVTBUDGET.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-03-25T21:22:33.819354Z",
+   "settlement_sources": [
+    {
+     "name": "FRED",
+     "url": "https://fred.stlouisfed.org/series/FGEXPND"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "KXGOVTCUTS",
+   "title": "Government budget cuts"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-07-07T22:48:38.209011Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Jobs & Economy"
+   ],
+   "ticker": "KXILPENDEBT",
+   "title": "Illinois pension debt above X in fiscal year X?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/YOYCPICORE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/YOYCPICORE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics",
+     "url": "https://www.bls.gov/cpi/"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "CPICOREYOY",
+   "title": "Core inflation"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/GDPAMT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/GDPAMT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-03-25T21:24:43.103145Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    }
+   ],
+   "tags": [
+    "GDP"
+   ],
+   "ticker": "KXGDPNOM",
+   "title": "Nominal GDP "
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/FEDHIKE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/FEDHIKE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve",
+     "url": "https://www.federalreserve.gov/monetarypolicy/openmarket.htm"
+    }
+   ],
+   "tags": [
+    "Fed"
+   ],
+   "ticker": "KXFEDHIKE",
+   "title": "Next Fed rate hike"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-07-07T22:48:38.151605Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Jobs & Economy"
+   ],
+   "ticker": "KXCANUSTRIPS",
+   "title": "Canadian trips to U.S. down X% in [year]?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-07T22:48:38.409923Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXCHINACPI",
+   "title": "CPI in China"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/LEPOP.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/LEPOP.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve Bank of St. Louis",
+     "url": "https://fred.stlouisfed.org/series/LNS12300060"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXEPOP",
+   "title": "Employment-population ratio"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CREDEF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CREDEF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-03-24T15:13:56.458199Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve",
+     "url": "https://www.federalreserve.gov/releases/chargeoff/delallsa.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXCREDEF",
+   "title": "Commercial real estate defaults"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/MANHEIM.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/MANHEIM.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Manheim",
+     "url": "https://site.manheim.com/en/services/consulting/used-vehicle-value-index.html"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXMANHEIMUSEDCAR",
+   "title": "Manheim Used Vehicle Value Index"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONPATH.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONPATH.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve Economic Data",
+     "url": "https://fred.stlouisfed.org/series/CPIAUCSL"
+    },
+    {
+     "name": "Federal Reserve Economic Data",
+     "url": "https://fred.stlouisfed.org/series/UNRATE"
+    }
+   ],
+   "tags": [
+    "Employment",
+    "Inflation"
+   ],
+   "ticker": "ECONPATH",
+   "title": "State of the economy"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CREDITCDEF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CREDITCDEF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-03-24T15:14:07.249951Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve",
+     "url": "https://www.federalreserve.gov"
+    }
+   ],
+   "tags": [
+    "Retail/consumer spending"
+   ],
+   "ticker": "KXCREDITCDEF",
+   "title": "Credit card defaults up"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/STRIKE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/STRIKE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-05-17T18:44:58.278949Z",
+   "settlement_sources": [
+    {
+     "name": "official statements from  or its parent organization",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "official statements from the employer",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "the U",
+     "url": "https://kalshi.com/"
+    }
+   ],
+   "tags": [
+    "Local",
+    "Jobs & Economy"
+   ],
+   "ticker": "KXNURSESTRIKE",
+   "title": "When will the NYC nurse strike end?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONPATH.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONPATH.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-03-25T22:08:15.17279Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve Economic Data",
+     "url": "https://fred.stlouisfed.org/series/UNRATE"
+    },
+    {
+     "name": "Federal Reserve Economic Data",
+     "url": "https://fred.stlouisfed.org/series/CPIAUCSL"
+    }
+   ],
+   "tags": [
+    "Inflation",
+    "Jobs & Economy"
+   ],
+   "ticker": "KXECONPATH",
+   "title": "State of the economy"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/MEDIANRENT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/MEDIANRENT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Zillow",
+     "url": "https://www.zillow.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXMEDIANRENTCHI",
+   "title": "MEDIAN RENT CHICAGO"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/LAYOFFSY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/LAYOFFSY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-05-27T14:32:59.670664Z",
+   "settlement_sources": [
+    {
+     "name": "FRED",
+     "url": "https://fred.stlouisfed.org/series/JTU5100LDL#"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXLAYOFFSYPBS",
+   "title": "Professional and Business Services layoffs"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NFPDELAY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NFPDELAY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "NFPDELAY",
+   "title": "Jobs data released"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WTAX.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WTAX.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov"
+    }
+   ],
+   "tags": [
+    "Bills",
+    "Growth"
+   ],
+   "ticker": "WTAX",
+   "title": "Wealth tax"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/MUSKWEALTH.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/MUSKWEALTH.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-06-05T17:27:07.097205Z",
+   "settlement_sources": [
+    {
+     "name": "Forbes",
+     "url": "https://www.forbes.com/real-time-billionaires/#45c1a6b23d78"
+    }
+   ],
+   "tags": [
+    "Growth",
+    "2026 Mega IPOs"
+   ],
+   "ticker": "KXMUSKTRILLION27",
+   "title": "Musk Trillionaire by 2027"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/COSTCO.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/COSTCO.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Costco",
+     "url": "https://www.costco.com/"
+    }
+   ],
+   "tags": [
+    "Retail/consumer spending"
+   ],
+   "ticker": "COSTCOMEMBER",
+   "title": "Costco membership price increase"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/HOUSELENGTH.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/HOUSELENGTH.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "FRED",
+     "url": "https://fred.stlouisfed.org/series/MEDDAYONMARUS"
+    }
+   ],
+   "tags": [
+    "Housing"
+   ],
+   "ticker": "KXHOUSELENGTH",
+   "title": "US house average sale length"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/EXPORTTARIFF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/EXPORTTARIFF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "the Executive Branch",
+     "url": "https://www.whitehouse.gov/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "KXEXPORTTARIFF",
+   "title": "Export tariffs"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/GDP.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/GDP.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Economic Analysis",
+     "url": "https://www.bea.gov/data/gdp/gross-domestic-product"
+    }
+   ],
+   "tags": [
+    "Growth",
+    "Retail/consumer spending"
+   ],
+   "ticker": "GDP",
+   "title": "US GDP growth"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-07T22:48:38.293833Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Fed"
+   ],
+   "ticker": "KX2YFOMC",
+   "title": "2-year Treasury yield move on FOMC day"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "World",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WGDP.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WGDP.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "World Bank",
+     "url": "https://data.worldbank.org/indicator/NY.GDP.MKTP.KD.ZG"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "KXGDPCN",
+   "title": "China GDP growth"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/LCPI.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/LCPI.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics",
+     "url": "https://www.bls.gov/cpi/"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "LCPIMAX",
+   "title": "Inflation surge"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-07T22:48:38.450532Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "GDP"
+   ],
+   "ticker": "KXSAGDPQOQ",
+   "title": "South Africa GDP growth QoQ"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CREDITRATING.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CREDITRATING.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-03-25T21:25:11.521092Z",
+   "settlement_sources": [
+    {
+     "name": "Fitch",
+     "url": "https://www.fitchratings.com/sovereigns"
+    },
+    {
+     "name": "Moody's",
+     "url": "https://www.moodys.com/Pages/Sovereign-Default-Research.aspx"
+    },
+    {
+     "name": "Standard & Poor's",
+     "url": "https://disclosure.spglobal.com/sri/"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "KXCREDITRATING",
+   "title": "US credit rating downgrade"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/SFRENT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/SFRENT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Zillow",
+     "url": "https://www.zillow.com/research/data/"
+    }
+   ],
+   "tags": [
+    "Retail/consumer spending"
+   ],
+   "ticker": "SFRENTSY",
+   "title": "SF yearly rent growth"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/GASMINMAX.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/GASMINMAX.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Energy Information Administration",
+     "url": "https://www.eia.gov/dnav/pet/PET_PRI_SPT_S1_D.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "GASMIN",
+   "title": "EIA Gas lowest price yearly"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/LCPIYOY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/LCPIYOY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-03-25T21:24:09.549133Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics",
+     "url": "https://www.bls.gov/cpi/"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXLCPIMAXYOY",
+   "title": "Inflation surge this year"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/MORTGAGEDEF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/MORTGAGEDEF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve",
+     "url": "https://www.federalreserve.gov/releases/chargeoff/delallsa.htm"
+    }
+   ],
+   "tags": [
+    "Defaults",
+    "Housing",
+    "Mortgages"
+   ],
+   "ticker": "KXMORTGAGEDEF",
+   "title": "Mortgage defaults"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CBDECISION.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CBDECISION.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-07T13:30:38.71812Z",
+   "settlement_sources": [
+    {
+     "name": "central bank",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "in hierarchical order",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "MarketWatch",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "Associated Press",
+     "url": "https://apnews.com"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com/news"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "Federal Reserve Economic Data",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "Bloomberg Terminal",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Financial Times",
+     "url": "https://www.ft.com"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com"
+    }
+   ],
+   "tags": [
+    "Global Central Banks"
+   ],
+   "ticker": "KXCBDECISIONNZ",
+   "title": "Reserve Bank of New Zealand rate decision"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CORECPI.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CORECPI.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics",
+     "url": "https://www.bls.gov/cpi/"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "CPICORE",
+   "title": "CPI core"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/FEDFACILITY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/FEDFACILITY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-03-24T15:14:02.977409Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve",
+     "url": "https://www.federalreserve.gov"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXFEDFACILITY",
+   "title": "Fed facility"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-07T22:48:38.039778Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Housing"
+   ],
+   "ticker": "KXMIAHOMEVAL",
+   "title": "Miami typical home value for date"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-07-09T15:13:25.24416Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXTBCRUNCHWRAP",
+   "title": "Taco Bell Crunchwrap Supreme price in [month]"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-07T22:48:37.973831Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXHIGHINFLATION",
+   "title": "Highest Inflation"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-07T22:48:38.120044Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Housing"
+   ],
+   "ticker": "KXUSHOMEVAL",
+   "title": "US Metro typical home value for date"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/MEDIANRENT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/MEDIANRENT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Zillow",
+     "url": "https://www.zillow.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXMEDIANRENTLA",
+   "title": "MEDIAN RENT LA"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ACPICORE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ACPICORE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics",
+     "url": "https://www.bls.gov/news.release/empsit.toc.htm"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXCPICOREA",
+   "title": "Core CPI annually"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-07T22:48:38.251079Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Oil and energy"
+   ],
+   "ticker": "KXRUCRUDEX",
+   "title": "Russia crude exports in [month] below x.x mbpd?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-07T22:48:37.978593Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Jobs & Economy"
+   ],
+   "ticker": "KXCCCHGOFF",
+   "title": "Credit-card charge-off rate above X% in QX?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/EVENTCONFIRMED.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/EVENTCONFIRMED.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-06-20T19:21:00.777557Z",
+   "settlement_sources": [
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Associated Press",
+     "url": "https://apnews.com"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "the New York Times",
+     "url": "https://www.nytimes.com"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    }
+   ],
+   "tags": [
+    "Oil and energy"
+   ],
+   "ticker": "KXMEXCUBOIL",
+   "title": "Mexico resumes oil exports to Cuba before date"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-07T22:48:38.220103Z",
+   "settlement_sources": [
+    {
+     "name": "rwa.xyz",
+     "url": "https://app.rwa.xyz/treasuries"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXTOKENUST",
+   "title": "Tokenized Treasuries"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/SPR.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/SPR.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "EIA",
+     "url": "https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx?n=PET&s=WCSSTUS1&f=W"
+    }
+   ],
+   "tags": [
+    "Oil and energy"
+   ],
+   "ticker": "KXSPRMAX",
+   "title": "SPRMAX"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-07T22:48:37.869714Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXECONSTATCPIYOY",
+   "title": "year over year inflation"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/EVENTCONFIRMED.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/EVENTCONFIRMED.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T11:10:27.716664Z",
+   "settlement_sources": [
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Associated Press",
+     "url": "https://apnews.com"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "the New York Times",
+     "url": "https://www.nytimes.com"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    }
+   ],
+   "tags": [
+    "Jobs & Economy"
+   ],
+   "ticker": "KXTSLAYOFF",
+   "title": "Will Tesla announce layoffs by [date]?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/QRECESS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/QRECESS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "NBER",
+     "url": "https://www.nber.org/research/business-cycle-dating/business-cycle-dating-committee-announcements"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXQRECESS",
+   "title": "Recession start"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PESO.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PESO.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "weekly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve System",
+     "url": "https://www.federalreserve.gov/releases/h10/current/default.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "FXPESO",
+   "title": "USD/Mexican peso exchange rate"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/EASTCOASTPORTSTRIKE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/EASTCOASTPORTSTRIKE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXEASTCOASTPORTSTRIKE",
+   "title": "ILA strike"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/EVENTCONFIRMED.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/EVENTCONFIRMED.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-06-20T19:21:00.668939Z",
+   "settlement_sources": [
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Associated Press",
+     "url": "https://apnews.com"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "the New York Times",
+     "url": "https://www.nytimes.com"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXWHCA2",
+   "title": "Will another White House Correspondents' Dinner be held in 2026?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/RATECUT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/RATECUT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve",
+     "url": "https://www.federalreserve.gov/monetarypolicy/openmarket.htm"
+    }
+   ],
+   "tags": [
+    "Interest rates"
+   ],
+   "ticker": "RATECUT",
+   "title": "Fed rate cut"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTATTE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTATTE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-05-02T17:31:57.839519Z",
+   "settlement_sources": [
+    {
+     "name": "Trading Economics",
+     "url": "https://tradingeconomics.com/united-states/producer-price-inflation-mom"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXUSPPI",
+   "title": "United States PPI MoM"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/DEFAULT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/DEFAULT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-03-25T21:22:05.60967Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Department of the Treasury",
+     "url": "https://home.treasury.gov/"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "KXDEFAULT",
+   "title": "US defaults"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/GAS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/GAS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Energy Information Agency",
+     "url": "https://www.eia.gov/dnav/pet/PET_PRI_GND_DCUS_NUS_W.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "GAS-MONTH",
+   "title": "Gas monthly"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-07-07T22:48:38.537645Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXUSGBEEF",
+   "title": "US ground beef consumer price in [month]"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/STRIKE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/STRIKE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-05-17T18:44:58.295102Z",
+   "settlement_sources": [
+    {
+     "name": "official statements from  or its parent organization",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "official statements from the employer",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "the U",
+     "url": "https://kalshi.com/"
+    }
+   ],
+   "tags": [
+    "Local",
+    "Jobs & Economy"
+   ],
+   "ticker": "KXAIRCANADASTRIKE",
+   "title": "Air Canada strike"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTATTE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTATTE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-05-02T17:31:57.774566Z",
+   "settlement_sources": [
+    {
+     "name": "Trading Economics",
+     "url": "https://tradingeconomics.com/germany/inflation-cpi"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXDECPIPREL",
+   "title": "Germany Inflation Rate YoY Prel"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-07T22:48:38.516739Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXNYCCBDENTRY",
+   "title": "NYC CBD Vehicle Entries"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/DEBTSIZE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/DEBTSIZE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-03-25T15:20:03.960401Z",
+   "settlement_sources": [
+    {
+     "name": "FRED",
+     "url": "https://fred.stlouisfed.org/series/GFDEBTN"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "KXDEBTGROWTH",
+   "title": "U.S. debt growth"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTATTE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTATTE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-05-02T17:31:57.766984Z",
+   "settlement_sources": [
+    {
+     "name": "Trading Economics",
+     "url": "https://tradingeconomics.com/japan/inflation-cpi"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXJPCPIYOY",
+   "title": "Japan Inflation Rate YoY"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/AAAGAS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/AAAGAS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "AAA",
+     "url": "https://gasprices.aaa.com/"
+    }
+   ],
+   "tags": [
+    "Oil and energy"
+   ],
+   "ticker": "AAAGASM",
+   "title": "US gas price"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-07-07T22:48:38.104062Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Jobs & Economy"
+   ],
+   "ticker": "KXTRUMPTRADEGAP",
+   "title": "Will Trump close the China trade gap?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-07-07T22:48:38.299937Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXUSPPIYOY",
+   "title": "US PPI YoY in [month]"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-07-07T22:48:38.182982Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Jobs & Economy"
+   ],
+   "ticker": "KXCANRECESSION",
+   "title": "Canada recession in [year]?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/FEDFACILITY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/FEDFACILITY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve",
+     "url": "https://www.federalreserve.gov"
+    }
+   ],
+   "tags": [
+    "Bankruptcy & Defaults"
+   ],
+   "ticker": "FEDFACILITY",
+   "title": "Fed facility"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/COIN.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/COIN.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Department of the Treasury",
+     "url": "https://home.treasury.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "COIN",
+   "title": "Trillion dollar coin minted"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTATPERIOD.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTATPERIOD.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-03-11T19:42:12.007824Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXJUSTATEST",
+   "title": "Just a test"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/LAYOFFSY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/LAYOFFSY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-05-27T14:32:59.684165Z",
+   "settlement_sources": [
+    {
+     "name": "FRED",
+     "url": "https://fred.stlouisfed.org/series/JTU5100LDL#"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXLAYOFFSY",
+   "title": "layoffs"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/DIESEL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/DIESEL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Energy Information Administration",
+     "url": "https://www.eia.gov/dnav/pet/PET_PRI_SPT_S1_D.htm"
+    }
+   ],
+   "tags": [
+    "Gas"
+   ],
+   "ticker": "DIESELM",
+   "title": "Diesel price this month"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-07-07T22:48:38.443622Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Global Central Banks"
+   ],
+   "ticker": "KXCANCUTS",
+   "title": "Number of BoC rate cuts in [year]?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/RUBLE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/RUBLE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "weekly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "International Monetary Fund",
+     "url": "https://www.imf.org/external/np/fin/data/rms_rep.aspx"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXRUBLE",
+   "title": "Price of Ruble"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/AAAGAS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/AAAGAS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "AAA",
+     "url": "https://gasprices.aaa.com/"
+    }
+   ],
+   "tags": [
+    "Oil and energy"
+   ],
+   "ticker": "AAAGASY",
+   "title": "US gas price up"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-07T22:48:38.0932Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Housing"
+   ],
+   "ticker": "KXNHSALES",
+   "title": "New home sales in time period"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/OIL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/OIL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "weekly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Energy Information Administration",
+     "url": "https://www.eia.gov/dnav/pet/PET_PRI_SPT_S1_D.htm"
+    }
+   ],
+   "tags": [
+    "Oil and energy"
+   ],
+   "ticker": "OILW",
+   "title": "Price of oil weekly"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/AAAGAS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/AAAGAS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-07-06T14:35:03.901966Z",
+   "settlement_sources": [
+    {
+     "name": "AAA",
+     "url": "https://gasprices.aaa.com/"
+    }
+   ],
+   "tags": [
+    "Oil & Gas"
+   ],
+   "ticker": "KXAAAGASY",
+   "title": "US gas price up"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "weekly",
+   "last_updated_ts": "2026-07-07T22:48:38.27753Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "KX30YUSTW",
+   "title": "Where will the 30Y US Treasury Yield close this week?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CORECPI.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CORECPI.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-04-21T13:50:19.696351Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics",
+     "url": "https://www.bls.gov/cpi/"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXCPICORE220",
+   "title": "Will the BLS Core CPI YoY print below 2.20% "
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CBDECISION.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CBDECISION.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-07T13:30:38.714032Z",
+   "settlement_sources": [
+    {
+     "name": "central bank",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "in hierarchical order",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "MarketWatch",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "Associated Press",
+     "url": "https://apnews.com"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com/news"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "Federal Reserve Economic Data",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "Bloomberg Terminal",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Financial Times",
+     "url": "https://www.ft.com"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com"
+    }
+   ],
+   "tags": [
+    "Global Central Banks"
+   ],
+   "ticker": "KXCBDECISIONJAPAN",
+   "title": "Bank Of Japan policy interest rate decision"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/TERMINALRATE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/TERMINALRATE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve",
+     "url": "https://www.federalreserve.gov/monetarypolicy/openmarket.htm"
+    }
+   ],
+   "tags": [
+    "Fed"
+   ],
+   "ticker": "KXTERMINALRATE",
+   "title": "Fed funds highest rate"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/SFRENT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/SFRENT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Zillow",
+     "url": "https://www.zillow.com/research/data/"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "KXSFRENTSY",
+   "title": "SF yearly rent growth"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-07T22:48:38.198389Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Fed"
+   ],
+   "ticker": "KXDXYFOMC",
+   "title": "U.S. Dollar Index move on FOMC day?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CPISHELTER.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CPISHELTER.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Housing",
+    "Inflation"
+   ],
+   "ticker": "KXCPISHELTER",
+   "title": "CPI on shelter"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WCPI.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WCPI.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve Economic Data",
+     "url": "https://fred.stlouisfed.org/categories/32266"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXWCPI-RU",
+   "title": "Russian inflation"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/TSAW.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/TSAW.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "weekly",
+   "last_updated_ts": "2026-07-06T14:36:58.930478Z",
+   "settlement_sources": [
+    {
+     "name": "Transportation Security Administration",
+     "url": "https://www.tsa.gov/travel/passenger-volumes"
+    }
+   ],
+   "tags": [
+    "Econ Weekly",
+    "Jobs & Economy"
+   ],
+   "ticker": "KXTSAW",
+   "title": "TSA check-ins this week"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-07T22:48:38.071504Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Oil and energy"
+   ],
+   "ticker": "KXSPRLVL",
+   "title": "SPR level on date"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/RENTNYC.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/RENTNYC.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Zillow",
+     "url": "https://www.zillow.com/research/data/"
+    }
+   ],
+   "tags": [
+    "Housing"
+   ],
+   "ticker": "KXRENTNYCY",
+   "title": "Rent price increase in NYC yearly"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-07T22:48:38.322813Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXBRAZILJOBS",
+   "title": "Brazil New Caged net formal job creation "
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONTWEETS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONTWEETS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "weekly",
+   "last_updated_ts": "2026-07-06T14:36:13.348279Z",
+   "settlement_sources": [
+    {
+     "name": "X",
+     "url": "https://twitter.com/home"
+    }
+   ],
+   "tags": [
+    "Econ Weekly"
+   ],
+   "ticker": "KXWEFTWEETS",
+   "title": "WEF tweets"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/DEBTSIZE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/DEBTSIZE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-03-25T15:20:04.034958Z",
+   "settlement_sources": [
+    {
+     "name": "FRED",
+     "url": "https://fred.stlouisfed.org/series/GFDEBTN"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "KXDEBTSHRINK",
+   "title": "U.S. debt shrink"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-07-07T22:48:37.815442Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXBRINFHIGH",
+   "title": "How high will Brazil inflation rate get this year?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WEALTH.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WEALTH.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Forbes",
+     "url": "https://www.forbes.com/real-time-billionaires/#45c1a6b23d78"
+    }
+   ],
+   "tags": [
+    "CEOs",
+    "Elon Musk"
+   ],
+   "ticker": "WEALTH",
+   "title": "Person wealthiest"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/FTAPER.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/FTAPER.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve Bank of New York",
+     "url": "https://www.newyorkfed.org/markets/domestic-market-operations/monetary-policy-implementation/treasury-securities/treasury-securities-operational-details#monthly-details"
+    },
+    {
+     "name": "Federal Reserve Board of Governors",
+     "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXFTAPER",
+   "title": "Fed tapering"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/GAS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/GAS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "weekly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Energy Information Agency",
+     "url": "https://www.eia.gov/dnav/pet/PET_PRI_GND_DCUS_NUS_W.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "GAS",
+   "title": "Gas weekly"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTATTE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTATTE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-02T17:31:57.789105Z",
+   "settlement_sources": [
+    {
+     "name": "Trading Economics",
+     "url": "https://tradingeconomics.com/italy/gdp-growth"
+    }
+   ],
+   "tags": [
+    "GDP"
+   ],
+   "ticker": "KXITGDPQOQA",
+   "title": "Italy GDP Growth Rate QoQ Adv (quarterly)"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-07-07T22:48:38.318763Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "KXMUSKNW",
+   "title": "Elon Musk net worth on [date]"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WCPI.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WCPI.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve Economic Data",
+     "url": "https://fred.stlouisfed.org/categories/32266"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXWCPI-TR",
+   "title": "Turkey inflation"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/LGDP.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/LGDP.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Economic Analysis",
+     "url": "https://apps.bea.gov/iTable/iTable.cfm?reqid=19&step=2#reqid=19&step=2&isuri=1&1921=survey"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "GDPUSMAX",
+   "title": "US GDP peak "
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTATTE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTATTE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-05-02T17:31:57.867716Z",
+   "settlement_sources": [
+    {
+     "name": "Trading Economics",
+     "url": "https://tradingeconomics.com/germany/consumer-confidence"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "KXDEGFK",
+   "title": "Germany GfK Consumer Confidence"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTATTE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTATTE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-05-02T17:31:58.012641Z",
+   "settlement_sources": [
+    {
+     "name": "Trading Economics",
+     "url": "https://tradingeconomics.com/japan/balance-of-trade"
+    }
+   ],
+   "tags": [
+    "Growth"
+   ],
+   "ticker": "KXJPTRADEBAL",
+   "title": "Japan Balance of Trade"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BOEGOLD.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BOEGOLD.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://www.abc.net.au/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "the BBC",
+     "url": "https://www.bbc.com/"
+    },
+    {
+     "name": "The Guardian",
+     "url": "https://www.theguardian.com/us"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXBOEGOLD",
+   "title": "BOE gold withdrawals"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-07T22:48:37.883794Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Housing"
+   ],
+   "ticker": "KXBUILDPERMS",
+   "title": "Building permits for month"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-07T22:48:37.906426Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Fed"
+   ],
+   "ticker": "KXUSTYLD",
+   "title": "Treasury note yield on date"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTATTRU.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTATTRU.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-05-29T22:20:32.839468Z",
+   "settlement_sources": [
+    {
+     "name": "Truflation",
+     "url": "https://truflation.com/marketplace/ev-index"
+    }
+   ],
+   "tags": [
+    "Econ Daily"
+   ],
+   "ticker": "KXTRUEV",
+   "title": "Truflation EV"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CNGDP.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CNGDP.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "National Bureau of Statistics of China",
+     "url": "http://www.stats.gov.cn/english/PressRelease/"
+    }
+   ],
+   "tags": [
+    "Growth",
+    "International"
+   ],
+   "ticker": "CNGDP",
+   "title": "China quarterly GDP change in 2021 Q2"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-07-07T22:48:38.010874Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXJPMOMINF",
+   "title": "Japan inflation MoM in [month]"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WHEAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WHEAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "United States Department of Agriculture",
+     "url": "https://www.usda.gov/oce/commodity/wasde"
+    }
+   ],
+   "tags": null,
+   "ticker": "WHEAT",
+   "title": "Average wheat price"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-07T22:48:37.983352Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Credit & Bonds"
+   ],
+   "ticker": "KXHLENDHALT",
+   "title": "BlackRock HLEND suspend repurchases by [date]"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/LEPOP.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/LEPOP.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve Bank of St. Louis",
+     "url": "https://fred.stlouisfed.org/series/LNS12300060"
+    }
+   ],
+   "tags": null,
+   "ticker": "EPOP",
+   "title": "Employment-population ratio"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/HPI.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/HPI.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Housing Finance Agency",
+     "url": "https://www.fhfa.gov/DataTools/Downloads/Pages/House-Price-Index-Datasets.aspx#mpo"
+    }
+   ],
+   "tags": [
+    "Housing"
+   ],
+   "ticker": "HPI",
+   "title": "Housing Price Index"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ETHETF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ETHETF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXETHETF",
+   "title": "ETH ETF listed"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/AAAGASMINMAX.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/AAAGASMINMAX.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-05-03T23:50:23.021373Z",
+   "settlement_sources": [
+    {
+     "name": "AAA",
+     "url": "https://gasprices.aaa.com/"
+    }
+   ],
+   "tags": [
+    "Oil & Gas",
+    "Oil and energy"
+   ],
+   "ticker": "KXAAAGASMAXCA",
+   "title": "California highest gas price yearly"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-07T22:48:37.821324Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Jobs & Economy"
+   ],
+   "ticker": "KXAILABDIS",
+   "title": "AI disrupt labor market"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONSTAT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONSTAT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-07-07T22:48:37.776826Z",
+   "settlement_sources": [
+    {
+     "name": "Bureau of Labor Statistics- Employment Situation",
+     "url": "https://www.bls.gov/news.release/empsit.nr0.htm"
+    },
+    {
+     "name": "Bureau of Labor Statistics- Consumer Price Index",
+     "url": "https://www.bls.gov/news.release/cpi.nr0.htm"
+    }
+   ],
+   "tags": [
+    "Inflation"
+   ],
+   "ticker": "KXUSGASCPI",
+   "title": "US gasoline CPI in [month]"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/FEDDECISION.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/FEDDECISION.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve",
+     "url": "https://www.federalreserve.gov"
+    }
+   ],
+   "tags": [
+    "Fed"
+   ],
+   "ticker": "KXFEDDECISION",
+   "title": "Fed meeting"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ECONTWEETS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ECONTWEETS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "weekly",
+   "last_updated_ts": "2026-07-06T14:36:13.352963Z",
+   "settlement_sources": [
+    {
+     "name": "X",
+     "url": "https://twitter.com/home"
+    }
+   ],
+   "tags": [
+    "Econ Weekly"
+   ],
+   "ticker": "KXIMFTWEETS",
+   "title": "IMF tweets"
+  }
+ ],
+ "_fixture_note": "recorded 2026-07-11; truncated to 120 series"
+}

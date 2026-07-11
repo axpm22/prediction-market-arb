@@ -1,0 +1,5837 @@
+{
+ "series": [
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CHILEPARTY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CHILEPARTY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.wsj.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXCHILESENATE",
+   "title": "Chilean Senate"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BILL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BILL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T15:23:13.995666Z",
+   "settlement_sources": [
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    },
+    {
+     "name": "Library of Congress",
+     "url": "https://congress.gov"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXHILLARYCONTEMPT",
+   "title": "Will the House find Hillary Clinton in contempt of Congress?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/HOMANMEX.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/HOMANMEX.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "AP",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXHOMANMEX",
+   "title": "Tom Homan visiting Mexico"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PORTUGALSECOND.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PORTUGALSECOND.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Politico EU",
+     "url": "https://www.politico.eu/europe-poll-of-polls/united-kingdom/#national-parliament-voting-intention"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.wsj.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXPORTUGALSECOND",
+   "title": "Portugal second place"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CABOUT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CABOUT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-04-20T21:39:52.779239Z",
+   "settlement_sources": [
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXCABOUT",
+   "title": "Next Cabinet memeber out"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/STATESCOTUS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/STATESCOTUS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXWISCOTUS",
+   "title": "WI State Supreme Court"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/RECOGCOUNTRY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/RECOGCOUNTRY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-03-07T20:01:21.127217Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.com/news"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Financial Times",
+     "url": "https://ft.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": [
+    "International"
+   ],
+   "ticker": "KXRECOGPALESTINE",
+   "title": "Palestine recognition"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ROMANIAMOV.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ROMANIAMOV.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.wsj.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXROMANIAMOV",
+   "title": "Romania presidential election MOV"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CONFCOUNT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CONFCOUNT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-12T01:16:18.533452Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Senate",
+     "url": "https://www.rules.senate.gov/rules-of-the-senate"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXHEGSETHCOUNT",
+   "title": "Hegseth Senate Yeas"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BILL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BILL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T15:23:14.054636Z",
+   "settlement_sources": [
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    },
+    {
+     "name": "Library of Congress",
+     "url": "https://congress.gov"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXCONCEALEDRECIPROCITY",
+   "title": "Nationwide concealed carry reciprocity becomes law"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/SECRIPPLE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/SECRIPPLE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Securities and Exchange Commission",
+     "url": "https://www.sec.gov/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXSECRIPPLE",
+   "title": "SEC drop ripple lawsuit"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/AIORDER.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/AIORDER.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-03-21T00:26:33.139103Z",
+   "settlement_sources": [
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    }
+   ],
+   "tags": [
+    "AI"
+   ],
+   "ticker": "KXAIORDER",
+   "title": "Biden AI Order"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/OBJECT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/OBJECT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "United States Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXOBJECT",
+   "title": "Electoral results objectors"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/LICENSE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/LICENSE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com"
+    },
+    {
+     "name": "government body",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://www.ap.org"
+    },
+    {
+     "name": "The Economist",
+     "url": "https://www.eiu.com/n/campaigns/democracy-index-2023/"
+    },
+    {
+     "name": "the Federal Register",
+     "url": "https://www.federalregister.gov/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXNOAALICENSE",
+   "title": "NOAA License"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/GOVAPPTCOUNT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/GOVAPPTCOUNT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com/news"
+    },
+    {
+     "name": "CNBC",
+     "url": "https://www.cnbc.com"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "president",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "the Federal Register",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "the Federal Reserve System Board of Governors",
+     "url": "http://www.federalreserve.gov/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "the U.S. Senate",
+     "url": "https://senate.gov"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com"
+    },
+    {
+     "name": "the White House",
+     "url": "https://kalshi.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXGOVAPPTCOUNT",
+   "title": "Fed Board of Governors"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CABMEMBERCOUNT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CABMEMBERCOUNT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXTRUMPAGCOUNT",
+   "title": "Trump Attorneys General"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/STOPWORK.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/STOPWORK.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://www.abc.net.au/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXSTOPWOPRK",
+   "title": "x"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PERSONPUBLIC.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PERSONPUBLIC.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-09T20:55:43.848047Z",
+   "settlement_sources": [
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "the New York Times",
+     "url": "https://nytimes.com"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com"
+    },
+    {
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "local media outlets and news agencies serving the area where \u2019s appearance is situated",
+     "url": "https://x.com/home"
+    },
+    {
+     "name": "family members of ",
+     "url": "https://x.com/home"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "TMZ",
+     "url": "https://www.tmz.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Getty Images",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Entertainment Weekly",
+     "url": "https://ew.com"
+    },
+    {
+     "name": "affiliates or employees of ",
+     "url": "https://x.com/home"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "Associated Press",
+     "url": "https://apnews.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "Sky News",
+     "url": "https://news.sky.com/"
+    },
+    {
+     "name": "The Guardian",
+     "url": "https://www.theguardian.com"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXPUBLICKHAMENI",
+   "title": "Ali Khamenei"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/APPROVE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/APPROVE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "weekly",
+   "last_updated_ts": "2026-05-04T23:08:54.309809Z",
+   "settlement_sources": [
+    {
+     "name": "RealClearPolitics",
+     "url": "https://www.realclearpolling.com/polls/approval/donald-trump/approval-rating"
+    }
+   ],
+   "tags": [
+    "Recurring",
+    "Trump"
+   ],
+   "ticker": "KXAPRPOTUS",
+   "title": "President RCP approval rating this week"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PARDONS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PARDONS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-09T14:45:19.498439Z",
+   "settlement_sources": [
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    },
+    {
+     "name": "the Department of Justice",
+     "url": "https://www.justice.gov"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXPARDONSBIDEN",
+   "title": "Biden pardons"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BILLCOUNT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BILLCOUNT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-05-19T19:14:36.880392Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXSENATEEPSTEINH",
+   "title": "How many Senate votes will the bill to unseal Epstein records receive? (Higher strikes)"
+  },
+  {
+   "additional_prohibitions": [
+    "Holders of federal and statewide public office.",
+    "Anyone working in a vote-tallying capacity, or who has the potential ability to observe official vote counts before they are public.",
+    "Anyone working in a vote-tallying capacity",
+    "Third-party vendors and contractors (and employees thereof) of Presidential campaigns.",
+    "Paid employees of Democratic and Republican Party organizations, such as the Democratic Congressional Campaign Committee or the Republican National Committee.",
+    " Paid employees of Political Action Committees (PACs) and \u201cSuper PACs\u201d (independent expenditure only political committees).",
+    "Paid employees of major polling organizations. ",
+    "Employees of Decision Desks at major media organizations.",
+    "All Electors who may cast ballots in connection with the determination of the President and/or Vice-President of the United States.",
+    "All staff of the U.S. House of Representatives and its members.",
+    "All staff of the U.S. Senate and its members.",
+    "All staff of the Office of the President of the United States.",
+    "All staff of the Office of the Vice President of the United States.",
+    "All staff of the U.S. Supreme Court and its Justices.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract.",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    ""
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PRESPARTYFULL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PRESPARTYFULL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-10T18:04:41.730818Z",
+   "settlement_sources": [
+    {
+     "name": "United States Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": [
+    "US Elections"
+   ],
+   "ticker": "PRESPARTYFULL",
+   "title": "Popular vote/Electoral College winner"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PRESACTION.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PRESACTION.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T18:05:34.200169Z",
+   "settlement_sources": [
+    {
+     "name": "the White House",
+     "url": "https://www.whitehouse.gov"
+    },
+    {
+     "name": "Federal Register",
+     "url": "https://www.federalregister.gov/"
+    },
+    {
+     "name": "the President of the United States",
+     "url": "https://www.whitehouse.gov/"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXAIREVIEW",
+   "title": "Will Trump order pre-release federal review of AI models?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PRESACTION.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PRESACTION.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T18:05:34.196628Z",
+   "settlement_sources": [
+    {
+     "name": "the White House",
+     "url": "https://www.whitehouse.gov"
+    },
+    {
+     "name": "Federal Register",
+     "url": "https://www.federalregister.gov/"
+    },
+    {
+     "name": "the President of the United States",
+     "url": "https://www.whitehouse.gov/"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXELECTIONEMERGENCY",
+   "title": "Will Trump declare an election emergency?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NGUARDCITY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NGUARDCITY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-06-15T16:58:46.937476Z",
+   "settlement_sources": [
+    {
+     "name": "the New York Times",
+     "url": "https://www.nytimes.com"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXNATLGUARDDC",
+   "title": "National guard deployed to DC?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NOMINEECONF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NOMINEECONF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-08T22:27:48.837676Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Senate",
+     "url": "https://www.rules.senate.gov/rules-of-the-senate"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXUNDSECSTATEMGMT",
+   "title": "Under Secretary of State for Management"
+  },
+  {
+   "additional_prohibitions": [
+    "Any candidate currently listed as a market within this event.",
+    "Immediate family members (spouses and dependents) of any candidate currently listed as a market within this event.",
+    "Paid staffers on any campaign listed within this event.",
+    "Third-party vendors, contractors, consultants, and outside counsel (and employees thereof) engaged by any campaign listed within this event.",
+    "Paid employees of national, state, or congressional party organizations (including, e.g., the DNC, RNC, DCCC, NRCC, DSCC, and NRSC).",
+    "Paid employees of Political Action Committees (PACs) and independent-expenditure-only political committees (\"Super PACs\") active in any race listed within this event.",
+    "Registered federal lobbyists retained by any campaign, party organization, or PAC active in any race listed within this event.",
+    "Holders of federal and statewide public office.",
+    "State legislators serving on committees with jurisdiction over election administration in any state with a race listed within this event.",
+    "All staff of the U.S. House of Representatives and its members.",
+    "All staff of the U.S. Senate and its members.",
+    "All staff of the Executive Office of the President, including the Office of the President and the Office of the Vice President.",
+    "Commissioners and staff of the Federal Election Commission.",
+    "Senior staff (Schedule C and equivalent political appointees) of any federal agency with jurisdiction over election administration, election security, or election-related enforcement, including without limitation the Department of Justice (Public Integrity Section, Election Crimes Branch, and Civil Rights Division Voting Section) and the Department of Homeland Security (CISA).",
+    "All staff of the U.S. Supreme Court and its Justices.",
+    "Federal and state judges presiding over active litigation related to any race listed within this event.",
+    "All Electors who may cast ballots in connection with the determination of the President and/or Vice President of the United States.",
+    "State Secretaries of State (and equivalent chief election officials), members of state and local boards of elections, election directors, registrars, and senior staff of state and local election administration offices.",
+    "Any person working in a vote-tallying capacity, or who has the potential ability to observe official vote counts before they are public.",
+    "Paid employees of major polling organizations. The Exchange shall maintain and publish a list of polling organizations it has designated as \"major\" and may modify that list at any time. This prohibition does not apply to all employees of an organization that contains a polling division (e.g., the prohibition does not apply to all employees of Quinnipiac University despite the presence of Quinnipiac University's polling division).",
+    "Employees of Decision Desks at major media organizations, including but not limited to Fox News, ABC News, the Associated Press, CNN, CBS News, Decision Desk HQ, NBC News, The New York Times, and Reuters.",
+    "Employees of exit-polling and election-night survey operations engaged by media organizations or campaigns in any race listed within this event, including but not limited to Edison Research and the National Election Pool."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/SILVERSTATES.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/SILVERSTATES.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-05-26T23:43:43.448175Z",
+   "settlement_sources": [
+    {
+     "name": "Silver Bulletin",
+     "url": "https://www.natesilver.net/p/nate-silver-2024-president-election-polls-model"
+    }
+   ],
+   "tags": [
+    "US Elections"
+   ],
+   "ticker": "KXSILVERSTATES",
+   "title": "Silver states in 2024 election"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CRIMECHARGE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CRIMECHARGE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-03-21T22:50:31.276406Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "NPR",
+     "url": "https://www.npr.org"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com"
+    },
+    {
+     "name": "the New York Times",
+     "url": "https://www.nytimes.com"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": [
+    "International"
+   ],
+   "ticker": "KXMUSKCHARGE",
+   "title": "Will Elon Musk be criminally charged in Spain or France?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Economics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/STRIKE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/STRIKE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-05-17T18:44:58.311342Z",
+   "settlement_sources": [
+    {
+     "name": "official statements from  or its parent organization",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "official statements from the employer",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "the U",
+     "url": "https://kalshi.com/"
+    }
+   ],
+   "tags": [
+    "Local",
+    "Jobs & Economy"
+   ],
+   "ticker": "KXRBWSTRIKE",
+   "title": "NYC RBW Strike"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/VISITAREA.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/VISITAREA.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-08T18:35:50.188989Z",
+   "settlement_sources": [
+    {
+     "name": "The Guardian",
+     "url": "https://www.theguardian.com"
+    },
+    {
+     "name": "official representatives or offices of ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "official social media accounts of  or their official representatives",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "CNBC",
+     "url": "https://www.cnbc.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "local news outlets with verifiable mastheads in ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "official government sources of ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com"
+    }
+   ],
+   "tags": [
+    "International"
+   ],
+   "ticker": "KXTRUMPCHINA",
+   "title": "When will Trump visit China?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CABSEC.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CABSEC.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXSECCOM",
+   "title": "Next Secretary of Commerce"
+  },
+  {
+   "additional_prohibitions": [
+    "Holders of federal and statewide public office.",
+    "Anyone working in a vote-tallying capacity, or who has the potential ability to observe official vote counts before they are public.",
+    "Third-party vendors and contractors (and employees thereof) of Presidential campaigns.",
+    "Paid employees of Democratic and Republican Party organizations, such as the Democratic Congressional Campaign Committee or the Republican National Committee.",
+    "Paid employees of Political Action Committees (PACs) and \u201cSuper PACs\u201d (independent expenditure only political committees).",
+    "Paid employees of major polling organizations. ",
+    "Employees of Decision Desks at major media organizations.",
+    "All Electors who may cast ballots in connection with the determination of the President and/or Vice-President of the United States.",
+    "All staff of the U.S. House of Representatives and its members.",
+    "All staff of the U.S. Senate and its members.",
+    "All staff of the Office of the President of the United States.",
+    "All staff of the Office of the Vice President of the United States.",
+    "All staff of the U.S. Supreme Court and its Justices.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract.",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    ""
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PRESPARTYDISTRICT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PRESPARTYDISTRICT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-10T18:04:30.264335Z",
+   "settlement_sources": [
+    {
+     "name": "United States Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": [
+    "US Elections"
+   ],
+   "ticker": "PRESPARTYNE2",
+   "title": "NE-2 presidential winner"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ATTEND.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ATTEND.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T01:03:39.853506Z",
+   "settlement_sources": [
+    {
+     "name": "USA Today",
+     "url": "https://www.usatoday.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Vogue",
+     "url": "https://www.vogue.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Billboard",
+     "url": "https://www.billboard.com/charts/hot-100/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXATTENDGRAMMYS",
+   "title": "WHO WILL ATTEND THE GRAMMYS"
+  },
+  {
+   "additional_prohibitions": [
+    "Any candidate currently listed as a market within this event.",
+    "Immediate family members (spouses and dependents) of any candidate currently listed as a market within this event.",
+    "Paid staffers on any campaign listed within this event.",
+    "Third-party vendors, contractors, consultants, and outside counsel (and employees thereof) engaged by any campaign listed within this event.",
+    "Paid employees of national, state, or congressional party organizations (including, e.g., the DNC, RNC, DCCC, NRCC, DSCC, and NRSC).",
+    "Paid employees of Political Action Committees (PACs) and independent-expenditure-only political committees (\"Super PACs\") active in any race listed within this event.",
+    "Registered federal lobbyists retained by any campaign, party organization, or PAC active in any race listed within this event.",
+    "Holders of federal and statewide public office.",
+    "State legislators serving on committees with jurisdiction over election administration in any state with a race listed within this event.",
+    "All staff of the U.S. House of Representatives and its members.",
+    "All staff of the U.S. Senate and its members.",
+    "All staff of the Executive Office of the President, including the Office of the President and the Office of the Vice President.",
+    "Commissioners and staff of the Federal Election Commission.",
+    "Senior staff (Schedule C and equivalent political appointees) of any federal agency with jurisdiction over election administration, election security, or election-related enforcement, including without limitation the Department of Justice (Public Integrity Section, Election Crimes Branch, and Civil Rights Division Voting Section) and the Department of Homeland Security (CISA).",
+    "All staff of the U.S. Supreme Court and its Justices.",
+    "Federal and state judges presiding over active litigation related to any race listed within this event.",
+    "All Electors who may cast ballots in connection with the determination of the President and/or Vice President of the United States.",
+    "State Secretaries of State (and equivalent chief election officials), members of state and local boards of elections, election directors, registrars, and senior staff of state and local election administration offices.",
+    "Any person working in a vote-tallying capacity, or who has the potential ability to observe official vote counts before they are public.",
+    "Paid employees of major polling organizations. The Exchange shall maintain and publish a list of polling organizations it has designated as \"major\" and may modify that list at any time. This prohibition does not apply to all employees of an organization that contains a polling division (e.g., the prohibition does not apply to all employees of Quinnipiac University despite the presence of Quinnipiac University's polling division).",
+    "Employees of Decision Desks at major media organizations, including but not limited to Fox News, ABC News, the Associated Press, CNN, CBS News, Decision Desk HQ, NBC News, The New York Times, and Reuters.",
+    "Employees of exit-polling and election-night survey operations engaged by media organizations or campaigns in any race listed within this event, including but not limited to Edison Research and the National Election Pool."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CANADARIDING.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CANADARIDING.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-05-20T23:24:12.792613Z",
+   "settlement_sources": [
+    {
+     "name": "CBC",
+     "url": "https://www.cbc.ca/"
+    }
+   ],
+   "tags": [
+    "Foreign Elections"
+   ],
+   "ticker": "KXTROIS",
+   "title": "Trois-Rivi\u00e8res"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PERSONPUBLIC.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PERSONPUBLIC.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T20:55:43.839368Z",
+   "settlement_sources": [
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "the New York Times",
+     "url": "https://nytimes.com"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com"
+    },
+    {
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "local media outlets and news agencies serving the area where \u2019s appearance is situated",
+     "url": "https://x.com/home"
+    },
+    {
+     "name": "family members of ",
+     "url": "https://x.com/home"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "TMZ",
+     "url": "https://www.tmz.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Getty Images",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Entertainment Weekly",
+     "url": "https://ew.com"
+    },
+    {
+     "name": "affiliates or employees of ",
+     "url": "https://x.com/home"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "Associated Press",
+     "url": "https://apnews.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "Sky News",
+     "url": "https://news.sky.com/"
+    },
+    {
+     "name": "The Guardian",
+     "url": "https://www.theguardian.com"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXPUBLICAPPEAR",
+   "title": "Who will publicly appear?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NOMINEECONF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NOMINEECONF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-08T22:27:48.504172Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Senate",
+     "url": "https://www.rules.senate.gov/rules-of-the-senate"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXADMINWHD",
+   "title": "Administrator of the Wage and Hour Division"
+  },
+  {
+   "additional_prohibitions": [
+    "Any candidate currently listed as a market within this event.",
+    "Immediate family members (spouses and dependents) of any candidate currently listed as a market within this event.",
+    "Paid staffers on any campaign listed within this event.",
+    "Third-party vendors, contractors, consultants, and outside counsel (and employees thereof) engaged by any campaign listed within this event.",
+    "Paid employees of national, state, or congressional party organizations (including, e.g., the DNC, RNC, DCCC, NRCC, DSCC, and NRSC).",
+    "Paid employees of Political Action Committees (PACs) and independent-expenditure-only political committees (\"Super PACs\") active in any race listed within this event.",
+    "Registered federal lobbyists retained by any campaign, party organization, or PAC active in any race listed within this event.",
+    "Holders of federal and statewide public office.",
+    "State legislators serving on committees with jurisdiction over election administration in any state with a race listed within this event.",
+    "All staff of the U.S. House of Representatives and its members.",
+    "All staff of the U.S. Senate and its members.",
+    "All staff of the Executive Office of the President, including the Office of the President and the Office of the Vice President.",
+    "Commissioners and staff of the Federal Election Commission.",
+    "Senior staff (Schedule C and equivalent political appointees) of any federal agency with jurisdiction over election administration, election security, or election-related enforcement, including without limitation the Department of Justice (Public Integrity Section, Election Crimes Branch, and Civil Rights Division Voting Section) and the Department of Homeland Security (CISA).",
+    "All staff of the U.S. Supreme Court and its Justices.",
+    "Federal and state judges presiding over active litigation related to any race listed within this event.",
+    "All Electors who may cast ballots in connection with the determination of the President and/or Vice President of the United States.",
+    "State Secretaries of State (and equivalent chief election officials), members of state and local boards of elections, election directors, registrars, and senior staff of state and local election administration offices.",
+    "Any person working in a vote-tallying capacity, or who has the potential ability to observe official vote counts before they are public.",
+    "Paid employees of major polling organizations. The Exchange shall maintain and publish a list of polling organizations it has designated as \"major\" and may modify that list at any time. This prohibition does not apply to all employees of an organization that contains a polling division (e.g., the prohibition does not apply to all employees of Quinnipiac University despite the presence of Quinnipiac University's polling division).",
+    "Employees of Decision Desks at major media organizations, including but not limited to Fox News, ABC News, the Associated Press, CNN, CBS News, Decision Desk HQ, NBC News, The New York Times, and Reuters.",
+    "Employees of exit-polling and election-night survey operations engaged by media organizations or campaigns in any race listed within this event, including but not limited to Edison Research and the National Election Pool."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/AUSPM.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/AUSPM.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-20T23:24:12.792613Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://www.abc.net.au/"
+    }
+   ],
+   "tags": [
+    "Foreign Elections"
+   ],
+   "ticker": "KXAUSPM",
+   "title": "Australia PM"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/AGREEMENT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/AGREEMENT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-04-01T19:58:42.445464Z",
+   "settlement_sources": [
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    }
+   ],
+   "tags": [
+    "International"
+   ],
+   "ticker": "KXUKRAINE",
+   "title": "Ukraine agreements"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BORDERBILL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BORDERBILL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXBORDERBILL",
+   "title": "Border bill"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CONFCOUNT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CONFCOUNT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-06-12T01:16:18.674126Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Senate",
+     "url": "https://www.rules.senate.gov/rules-of-the-senate"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXVOUGHTCOUNT",
+   "title": "Vought votes"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/LEAVEAREA.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/LEAVEAREA.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-08T20:59:19.79579Z",
+   "settlement_sources": [
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "verified social media accounts belonging to ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "official representatives or spokespersons for ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "CNBC",
+     "url": "https://www.cnbc.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXLEAVECAMARCA",
+   "title": "Leave CA Marc Andreesen"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/SHUTLENGTH.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/SHUTLENGTH.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Office of Personnel Management",
+     "url": "https://www.opm.gov/policy-data-oversight/snow-dismissal-procedures/current-status/"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXGOVSHUTLENGTH",
+   "title": "Number of days of government shutdown?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BILL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BILL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T15:23:13.867216Z",
+   "settlement_sources": [
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    },
+    {
+     "name": "Library of Congress",
+     "url": "https://congress.gov"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXCARRIEDINTEREST",
+   "title": "Will Congress close the carried interest loophole?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Financials",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NEWROLE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NEWROLE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-08T18:55:29.280769Z",
+   "settlement_sources": [
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "TechCrunch",
+     "url": "https://techcrunch.com"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Wired",
+     "url": "https://www.wired.com"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Athletic",
+     "url": "https://theathletic.com"
+    },
+    {
+     "name": "company/organization",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "\ue907 The New York Times",
+     "url": "https://www.nytimes.com"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com/news"
+    }
+   ],
+   "tags": [
+    "CEOs",
+    "Companies"
+   ],
+   "ticker": "KXOPENDOORCEO",
+   "title": "Opendoor CEO"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NEWSCOTUSCONF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NEWSCOTUSCONF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts",
+    "Trump"
+   ],
+   "ticker": "KXNEWSCOTUSCONF",
+   "title": "SCOTUS confirmations"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ISTANBULMAYORGUILTY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ISTANBULMAYORGUILTY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://www.abc.net.au/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.cbsnews.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXISTANBULMAYORGUILTY",
+   "title": "Istanbul Mayor guilty"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ALLVOTE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ALLVOTE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Senate",
+     "url": "https://www.rules.senate.gov/rules-of-the-senate"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXALLVOTETG",
+   "title": "Tulsi Gabbard all vote"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CABDATE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CABDATE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXCABDATE",
+   "title": "First Trump cabinet confirmation"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BILLCOUNT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BILLCOUNT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-19T19:14:36.988961Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXTAIWANDOUBLETAX",
+   "title": "Taiwan double taxation bill"
+  },
+  {
+   "additional_prohibitions": [
+    "Any candidate currently listed as a market within this event.",
+    "Immediate family members (spouses and dependents) of any candidate currently listed as a market within this event.",
+    "Paid staffers on any campaign listed within this event.",
+    "Third-party vendors, contractors, consultants, and outside counsel (and employees thereof) engaged by any campaign listed within this event.",
+    "Paid employees of national, state, or congressional party organizations (including, e.g., the DNC, RNC, DCCC, NRCC, DSCC, and NRSC).",
+    "Paid employees of Political Action Committees (PACs) and independent-expenditure-only political committees (\"Super PACs\") active in any race listed within this event.",
+    "Registered federal lobbyists retained by any campaign, party organization, or PAC active in any race listed within this event.",
+    "Holders of federal and statewide public office.",
+    "State legislators serving on committees with jurisdiction over election administration in any state with a race listed within this event.",
+    "All staff of the U.S. House of Representatives and its members.",
+    "All staff of the U.S. Senate and its members.",
+    "All staff of the Executive Office of the President, including the Office of the President and the Office of the Vice President.",
+    "Commissioners and staff of the Federal Election Commission.",
+    "Senior staff (Schedule C and equivalent political appointees) of any federal agency with jurisdiction over election administration, election security, or election-related enforcement, including without limitation the Department of Justice (Public Integrity Section, Election Crimes Branch, and Civil Rights Division Voting Section) and the Department of Homeland Security (CISA).",
+    "All staff of the U.S. Supreme Court and its Justices.",
+    "Federal and state judges presiding over active litigation related to any race listed within this event.",
+    "All Electors who may cast ballots in connection with the determination of the President and/or Vice President of the United States.",
+    "State Secretaries of State (and equivalent chief election officials), members of state and local boards of elections, election directors, registrars, and senior staff of state and local election administration offices.",
+    "Any person working in a vote-tallying capacity, or who has the potential ability to observe official vote counts before they are public.",
+    "Paid employees of major polling organizations. The Exchange shall maintain and publish a list of polling organizations it has designated as \"major\" and may modify that list at any time. This prohibition does not apply to all employees of an organization that contains a polling division (e.g., the prohibition does not apply to all employees of Quinnipiac University despite the presence of Quinnipiac University's polling division).",
+    "Employees of Decision Desks at major media organizations, including but not limited to Fox News, ABC News, the Associated Press, CNN, CBS News, Decision Desk HQ, NBC News, The New York Times, and Reuters.",
+    "Employees of exit-polling and election-night survey operations engaged by media organizations or campaigns in any race listed within this event, including but not limited to Edison Research and the National Election Pool."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/IRELANDPARTY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/IRELANDPARTY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-05-20T23:24:12.792613Z",
+   "settlement_sources": [
+    {
+     "name": "Irish Times",
+     "url": "https://www.irishtimes.com/"
+    }
+   ],
+   "tags": [
+    "Foreign Elections"
+   ],
+   "ticker": "KXIRELANDPARTY",
+   "title": "Irish election winner"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NYTFULLWIDTH.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NYTFULLWIDTH.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "monthly",
+   "last_updated_ts": "2026-07-09T10:36:02.133241Z",
+   "settlement_sources": [
+    {
+     "name": "New York Times",
+     "url": "https://store.nytimes.com/collections/new-york-times-page-reprints/products/new-york-times-front-page-reprint"
+    }
+   ],
+   "tags": [
+    "Recurring"
+   ],
+   "ticker": "KXNYTHEAD",
+   "title": "Major news story this month?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CRIMECHARGE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CRIMECHARGE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-03-21T22:50:30.964248Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "NPR",
+     "url": "https://www.npr.org"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com"
+    },
+    {
+     "name": "the New York Times",
+     "url": "https://www.nytimes.com"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts"
+   ],
+   "ticker": "KXCOOKCHARGE",
+   "title": "Lisa Cook federally charged"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PEPFAR.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PEPFAR.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXPEPFAR",
+   "title": "PEPFAR funding unfrozen"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/VISITAREA.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/VISITAREA.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-08T18:35:50.17378Z",
+   "settlement_sources": [
+    {
+     "name": "The Guardian",
+     "url": "https://www.theguardian.com"
+    },
+    {
+     "name": "official representatives or offices of ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "official social media accounts of  or their official representatives",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "CNBC",
+     "url": "https://www.cnbc.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "local news outlets with verifiable mastheads in ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "official government sources of ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com"
+    }
+   ],
+   "tags": [
+    "International"
+   ],
+   "ticker": "KXTRUMPVISITCA",
+   "title": "Trump visiting CA"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PRESINDEX.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PRESINDEX.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "daily",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Tilt",
+     "url": "https://tilt.io/pin?redirect=%2F"
+    }
+   ],
+   "tags": null,
+   "ticker": "PRESINDEXD",
+   "title": "Presidential index performance"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CANELECTRICCHARGE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CANELECTRICCHARGE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.wsj.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXCANELECTRICCHARGE",
+   "title": "Canada"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/EFFECTIVELEAVE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/EFFECTIVELEAVE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T21:18:20.512429Z",
+   "settlement_sources": [
+    {
+     "name": "person",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com/news"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "official government records and registries",
+     "url": "https://kalshi.com"
+    },
+    {
+     "name": "the body, agency, company, organization, or entity at which role is held",
+     "url": "https://kalshi.com"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "the New York Times",
+     "url": "https://www.nytimes.com"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXLUTNICKOUT",
+   "title": "Howard Lutnick out as Commerce Secretary?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/SCOTUSCASE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/SCOTUSCASE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-06-30T20:35:21.280249Z",
+   "settlement_sources": [
+    {
+     "name": "Supreme Court",
+     "url": "https://www.supremecourt.gov"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts"
+   ],
+   "ticker": "KXWOLFORDLOPEZ",
+   "title": "Wolford v. Lopez"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BILL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BILL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-09T15:23:13.856528Z",
+   "settlement_sources": [
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    },
+    {
+     "name": "Library of Congress",
+     "url": "https://congress.gov"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXSENATEBILL",
+   "title": "Senate bill passing"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/TRUMPCANBAN.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/TRUMPCANBAN.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://www.abc.net.au/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://abc.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXTRUMPCANBAN",
+   "title": "Trump Canada ban"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BILL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BILL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T15:23:13.954311Z",
+   "settlement_sources": [
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    },
+    {
+     "name": "Library of Congress",
+     "url": "https://congress.gov"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXFEDDC",
+   "title": "Will DC be federalized?"
+  },
+  {
+   "additional_prohibitions": [
+    "Holders of federal and statewide public office.",
+    "Anyone working in a vote-tallying capacity, or who has the potential ability to observe official vote counts before they are public.",
+    "Anyone working in a vote-tallying capacity.",
+    "Third-party vendors and contractors (and employees thereof) of Presidential campaigns.",
+    "Paid employees of Democratic and Republican Party organizations, such as the Democratic Congressional Campaign Committee or the Republican National Committee.",
+    "Paid employees of Political Action Committees (PACs) and \u201cSuper PACs\u201d (independent expenditure only political committees).",
+    "Paid employees of major polling organizations. ",
+    "Employees of Decision Desks at major media organizations.",
+    "All Electors who may cast ballots in connection with the determination of the President and/or Vice-President of the United States.",
+    "All staff of the U.S. House of Representatives and its members.",
+    "All staff of the U.S. Senate and its members.",
+    "All staff of the Office of the President of the United States.",
+    "All staff of the Office of the Vice President of the United States.",
+    "All staff of the U.S. Supreme Court and its Justices.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract.",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    ""
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PRESPARTYSTATE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PRESPARTYSTATE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-06-10T18:04:55.639511Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": [
+    "US Elections"
+   ],
+   "ticker": "PRESPARTYNE",
+   "title": "Nebraska presidential winner"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/REPORTTOPIC.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/REPORTTOPIC.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-10T13:38:53.301736Z",
+   "settlement_sources": [
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Guardian",
+     "url": "https://www.theguardian.com"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com/news"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "South China Morning Post",
+     "url": "https://www.scmp.com"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Verge",
+     "url": "https://www.theverge.com"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "ABC News Australia",
+     "url": "http://www.abc.net.au/news/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "CBC",
+     "url": "https://www.cbc.ca/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXTRUMPPASSPORT",
+   "title": "When will a Trump passport be issued?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/DOJPARDONS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/DOJPARDONS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "PACER",
+     "url": "https://pacer.uscourts.gov/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts",
+    "Trump"
+   ],
+   "ticker": "KXDOJPARDONS",
+   "title": "DOJ pardon claim"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WLEADER.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WLEADER.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXWLEADERNET",
+   "title": "Netanyahu"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/INAUGVIEWS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/INAUGVIEWS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Nielsen",
+     "url": "https://www.nielsen.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXINAUGVIEWS",
+   "title": "Inauguration viewership"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/TAXWAIVE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/TAXWAIVE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXTAXWAIVE",
+   "title": "Taxes waived"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/TARIFFRATE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/TARIFFRATE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "the President of the United States",
+     "url": "https://www.whitehouse.gov/"
+    },
+    {
+     "name": "the United States Congress",
+     "url": "https://www.congress.gov/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": [
+    "International",
+    "Trump"
+   ],
+   "ticker": "KXTARIFFRATECA",
+   "title": "Canada tariff rate"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/TESLATARIFF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/TESLATARIFF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXTESLATARIFF",
+   "title": "Tesla tariffs"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/AXONFTC.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/AXONFTC.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Supreme Court",
+     "url": "https://www.supremecourt.gov"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts"
+   ],
+   "ticker": "AXONFTC",
+   "title": "FTC SCOTUS case"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NGUARDCITY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NGUARDCITY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-06-15T16:58:46.91692Z",
+   "settlement_sources": [
+    {
+     "name": "the New York Times",
+     "url": "https://www.nytimes.com"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXNGUARDCITY",
+   "title": "Which Cities will Trump deploy the national guard in"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/RPUNISH.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/RPUNISH.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Clerk of the House of Representatives ",
+     "url": "https://clerk.house.gov/committees"
+    },
+    {
+     "name": "House Minority Leader",
+     "url": "https://www.republicanleader.gov/category/press/"
+    }
+   ],
+   "tags": null,
+   "ticker": "PPUNISH",
+   "title": "Republican punished"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CABSEC.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CABSEC.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXSECLABOR",
+   "title": "Next Secretary of Labor"
+  },
+  {
+   "additional_prohibitions": [
+    "Holders of federal and statewide public office.",
+    "Paid campaign staffers on Presidential campaigns.",
+    "Anyone working in a vote-tallying capacity, or who has the potential ability to observe official vote counts before they are public.",
+    "Third-party vendors and contractors (and employees thereof) of Presidential campaigns.",
+    "Paid employees of Democratic and Republican Party organizations, such as the Democratic Congressional Campaign Committee or the Republican National Committee.",
+    "Paid employees of Political Action Committees (PACs) and \u201cSuper PACs\u201d (independent expenditure only political committees).",
+    "Paid employees of major polling organizations. ",
+    "Employees of Decision Desks at major media organizations.",
+    "All staff of the U.S. House of Representatives and its members.",
+    "All staff of the U.S. Senate and its members.",
+    "All staff of the Office of the President of the United States.",
+    "All staff of the Office of the Vice President of the United States.",
+    "All staff of the U.S. Supreme Court and its Justices.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract.",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/POPVOTESTATEMOV.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/POPVOTESTATEMOV.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-06-10T18:03:20.541829Z",
+   "settlement_sources": [
+    {
+     "name": "United States Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": [
+    "US Elections"
+   ],
+   "ticker": "POPVOTEKHME",
+   "title": "Kamala Maine"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CABSEC.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CABSEC.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXSECDEF",
+   "title": "New Secretary of Defense"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NYVOTING.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NYVOTING.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://www.abc.net.au/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXNYVOTING",
+   "title": "New York voting law"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BILL.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BILL.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-09T15:23:13.820535Z",
+   "settlement_sources": [
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    },
+    {
+     "name": "Library of Congress",
+     "url": "https://congress.gov"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXDCFUNDINGH",
+   "title": "DC funding House"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CABSEC.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CABSEC.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": [
+    "Cabinet"
+   ],
+   "ticker": "SECLABOR",
+   "title": "Next Secretary of Labor"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/TRUMPADMINROLE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/TRUMPADMINROLE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXTRUMPFEMA",
+   "title": "Trump FEMA Administrator"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/RESIGN.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/RESIGN.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-08T00:22:05.187115Z",
+   "settlement_sources": [
+    {
+     "name": "Office of the Presidency",
+     "url": "https://www.whitehouse.gov/administration/executive-office-of-the-president/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXBIDENRESIGN",
+   "title": "Biden resignation"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CRIMECHARGE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CRIMECHARGE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-03-21T22:50:30.883253Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "NPR",
+     "url": "https://www.npr.org"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com"
+    },
+    {
+     "name": "the New York Times",
+     "url": "https://www.nytimes.com"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts"
+   ],
+   "ticker": "KXOBAMACHARGE",
+   "title": "Obama charged"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/LEAVEOFFICE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/LEAVEOFFICE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-08T01:54:06.616524Z",
+   "settlement_sources": [
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "official government websites relevant to ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "office or organization where  holds ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com/news"
+    }
+   ],
+   "tags": [
+    "International"
+   ],
+   "ticker": "KXVANCEOUT",
+   "title": "VANCEOUT"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ATTEND.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ATTEND.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T01:03:39.959596Z",
+   "settlement_sources": [
+    {
+     "name": "USA Today",
+     "url": "https://www.usatoday.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Vogue",
+     "url": "https://www.vogue.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Billboard",
+     "url": "https://www.billboard.com/charts/hot-100/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXPORTNOYATTEND",
+   "title": "Will Dave portnoy attenend event "
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/AGENCYCONF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/AGENCYCONF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://congress.gov"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXATF",
+   "title": "ATF Director"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/JUDGEMENT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/JUDGEMENT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-06-30T13:57:53.576271Z",
+   "settlement_sources": [
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "PACER",
+     "url": "https://pacer.uscourts.gov/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts"
+   ],
+   "ticker": "KXMACRONWIFE",
+   "title": "Is Macrons wife a man"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/XBAN.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/XBAN.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "X",
+     "url": "https://twitter.com/home"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXBANXGER",
+   "title": "Germany bans X"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/ATTEND.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/ATTEND.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T01:03:39.868675Z",
+   "settlement_sources": [
+    {
+     "name": "USA Today",
+     "url": "https://www.usatoday.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Vogue",
+     "url": "https://www.vogue.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Billboard",
+     "url": "https://www.billboard.com/charts/hot-100/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXJEFFNADU",
+   "title": "Will jeff Nadu attend poker event"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PMLEAVE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PMLEAVE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXCAPMLEAVE",
+   "title": "CANADA PM leaving"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/GENSLER.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/GENSLER.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Securities and Exchange Commission",
+     "url": "https://www.sec.gov/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXGENSLER",
+   "title": "Gensler leaving early"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CANRESIGNPARTY.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CANRESIGNPARTY.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "CBC",
+     "url": "https://www.cbc.ca/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXCANRESIGNPARTY",
+   "title": "Canadian party leaders resigning"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/SOHN.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/SOHN.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "SOHN",
+   "title": "Gigi Sohn FCC confirmation"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/TRUMPSETTLE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/TRUMPSETTLE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "PACER",
+     "url": "https://pacer.uscourts.gov/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXTRUMPSETTLE",
+   "title": "Trump settles with media companies"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/STATEWITHHOLD.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/STATEWITHHOLD.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://www.abc.net.au/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://abc.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXSTATEWITHHOLD",
+   "title": "State withholding"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CFPB.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CFPB.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Supreme Court",
+     "url": "https://www.supremecourt.gov"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts"
+   ],
+   "ticker": "KXCFPB",
+   "title": "SCOTUS considers CFPB unconstitutional"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/FOMCVOTE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/FOMCVOTE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Federal Reserve Board of Governors",
+     "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXFOMCVOTE",
+   "title": "Next FOMC vote unanimous"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/INFR.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/INFR.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Congressional Budget Office",
+     "url": "https://www.cbo.gov/cost-estimates"
+    },
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov"
+    }
+   ],
+   "tags": null,
+   "ticker": "INFRA",
+   "title": "Senate pass infrastructure bill"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NONCOMPETEBAN.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NONCOMPETEBAN.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "PACER",
+     "url": "https://pacer.uscourts.gov/"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts"
+   ],
+   "ticker": "NONCOMPETEBAN",
+   "title": "Non-compete ban"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/WITHDRAW.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/WITHDRAW.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "AP",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "United States Congress",
+     "url": "https://www.congress.gov/"
+    },
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    }
+   ],
+   "tags": [
+    "International",
+    "Trump"
+   ],
+   "ticker": "KXWITHDRAW",
+   "title": "U.S. withdrawing from international organizations"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/538APPROVEMINMAX.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/538APPROVEMINMAX.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "FiveThirtyEight",
+     "url": "https://projects.fivethirtyeight.com/biden-approval-rating/?cid=rrpromo"
+    }
+   ],
+   "tags": null,
+   "ticker": "KX538APPROVEMIN",
+   "title": "Biden 538 lowest approval rating"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/UKPARTYPOLLS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/UKPARTYPOLLS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "The Times",
+     "url": "https://www.thetimes.co.uk/"
+    },
+    {
+     "name": "UK Government",
+     "url": "https://www.legislation.gov.uk/"
+    },
+    {
+     "name": "UK Parliament",
+     "url": "https://votes.parliament.uk/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXUKPARTYPOLLS",
+   "title": "UKPARTYPOLLS"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/TARIFFRATE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/TARIFFRATE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "the President of the United States",
+     "url": "https://www.whitehouse.gov/"
+    },
+    {
+     "name": "the United States Congress",
+     "url": "https://www.congress.gov/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": [
+    "International",
+    "Trump"
+   ],
+   "ticker": "KXTARIFFRATEBR",
+   "title": "Brazil tariff rate"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BILLSTATE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BILLSTATE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "State governments",
+     "url": "https://www.myfloridahouse.gov/Sections/Bills/billsdetail.aspx?BillId=79719"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXCAHOUSINGLAW",
+   "title": "California SB 79"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NOMINEECONF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NOMINEECONF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-08T22:27:48.64058Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Senate",
+     "url": "https://www.rules.senate.gov/rules-of-the-senate"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXCDCDIRECTOR",
+   "title": "CDC Director Confirmation"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CRIMECHARGE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CRIMECHARGE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-03-21T22:50:31.000956Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "NPR",
+     "url": "https://www.npr.org"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com"
+    },
+    {
+     "name": "the New York Times",
+     "url": "https://www.nytimes.com"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts"
+   ],
+   "ticker": "KXJACKSMITHCHARGE",
+   "title": "Jack Smith charged with a federal crime"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/TARIFFS.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/TARIFFS.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-03-01T02:03:36.219853Z",
+   "settlement_sources": [
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXTARIFFSCOPPER",
+   "title": "Copper tariffs"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/SKVOTE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/SKVOTE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://www.abc.net.au/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXSKVOTE",
+   "title": "SK vote"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/JUDGEMENT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/JUDGEMENT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-06-30T13:57:53.566723Z",
+   "settlement_sources": [
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "PACER",
+     "url": "https://pacer.uscourts.gov/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": [
+    "SCOTUS & courts"
+   ],
+   "ticker": "KXSTJUDE",
+   "title": "St Jude Overturned"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NOMINEECONF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NOMINEECONF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-08T22:27:48.540113Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Senate",
+     "url": "https://www.rules.senate.gov/rules-of-the-senate"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXASSTSECSTATEEAP",
+   "title": "Assistant Secretary of State for East Asian and Pacific Affairs"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/POST.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/POST.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXPOST",
+   "title": "Jeff Bezos selling the Post"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/VETO.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/VETO.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "United States Congress",
+     "url": "https://www.congress.gov/"
+    },
+    {
+     "name": "White House",
+     "url": "https://whitehouse.gov/"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXVETOCOUNT",
+   "title": "Trump vetoes"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PERSONMEETING.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PERSONMEETING.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "annual",
+   "last_updated_ts": "2026-06-03T17:23:13.508514Z",
+   "settlement_sources": [
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "The White House",
+     "url": "https://www.whitehouse.gov"
+    },
+    {
+     "name": "Associated Press",
+     "url": "https://apnews.com"
+    },
+    {
+     "name": "BBC",
+     "url": "https://www.bbc.co.uk"
+    },
+    {
+     "name": "ABC News",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "CNBC",
+     "url": "https://www.cnbc.com"
+    },
+    {
+     "name": "POLITICO",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "Financial Times",
+     "url": "https://www.ft.com"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://bloomberg.org"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "CBS News",
+     "url": "https://www.cbsnews.com/"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXTRUMPMEETING",
+   "title": "Who will Trump meet this year?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/PMLEAVE.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/PMLEAVE.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXFRPMLEAVE",
+   "title": "French PM leaving"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/VISITAREA.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/VISITAREA.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-08T18:35:50.150545Z",
+   "settlement_sources": [
+    {
+     "name": "The Guardian",
+     "url": "https://www.theguardian.com"
+    },
+    {
+     "name": "official representatives or offices of ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "official social media accounts of  or their official representatives",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "CNBC",
+     "url": "https://www.cnbc.com"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "local news outlets with verifiable mastheads in ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "official government sources of ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com"
+    }
+   ],
+   "tags": [
+    "International"
+   ],
+   "ticker": "KXVISITMN",
+   "title": "Who will visit Minnesota?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/COURTBLOCK.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/COURTBLOCK.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "Bloomberg",
+     "url": "https://www.bloomberg.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "PACER",
+     "url": "https://pacer.uscourts.gov/"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "United States District Courts",
+     "url": "https://www.uscourts.gov/courts/district-courts"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXBLOCKH1B",
+   "title": "courts block trump h1b proclamation"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/CONFCOUNT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/CONFCOUNT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-06-12T01:16:18.511841Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Senate",
+     "url": "https://www.rules.senate.gov/rules-of-the-senate"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXROLLINSCOUNT",
+   "title": "Rollins votes"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/LAW.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/LAW.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-09T21:11:04.095185Z",
+   "settlement_sources": [
+    {
+     "name": "geography\u2019s official government websites",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "The Source Agencies are",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "the Federal Register",
+     "url": "https://www.federalregister.gov/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "The United States Congress",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "in hierarchical order: geography\u2019s legislative bodies",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "The White House",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://semafor.com"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "relevant governmental agency in geography",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "major newspapers in geography",
+     "url": "https://kalshi.com/"
+    }
+   ],
+   "tags": [
+    "Local"
+   ],
+   "ticker": "KXNYCDEPTSAFETY",
+   "title": "Will Mamdani establish a Department of Community Safety before 2027?"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/AGENCYCONF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/AGENCYCONF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://congress.gov"
+    }
+   ],
+   "tags": [
+    "Trump"
+   ],
+   "ticker": "KXOSTP",
+   "title": "Next Director of OSTP"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Entertainment",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/STATEMENTCOUNT.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/STATEMENTCOUNT.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "one_off",
+   "last_updated_ts": "2026-07-08T00:16:44.445448Z",
+   "settlement_sources": [
+    {
+     "name": "The Washington Post",
+     "url": "https://www.washingtonpost.com/"
+    },
+    {
+     "name": "official social media accounts verified by the platform",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "official press release distribution services",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "Fox News",
+     "url": "https://www.foxnews.com/"
+    },
+    {
+     "name": "MSNBC",
+     "url": "https://www.msnbc.com/"
+    },
+    {
+     "name": "The Wall Street Journal",
+     "url": "https://www.wsj.com/"
+    },
+    {
+     "name": "Semafor",
+     "url": "https://www.semafor.com/"
+    },
+    {
+     "name": "The Information",
+     "url": "https://www.theinformation.com/"
+    },
+    {
+     "name": "ABC",
+     "url": "https://abcnews.go.com/"
+    },
+    {
+     "name": "the Associated Press",
+     "url": "https://apnews.com/"
+    },
+    {
+     "name": "NBC",
+     "url": "https://www.nbcnews.com/"
+    },
+    {
+     "name": "Axios",
+     "url": "https://www.axios.com/"
+    },
+    {
+     "name": "The New York Times",
+     "url": "https://www.nytimes.com/"
+    },
+    {
+     "name": "Politico",
+     "url": "https://www.politico.com"
+    },
+    {
+     "name": "official government websites where such statements may be posted",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "CNN",
+     "url": "https://www.cnn.com"
+    },
+    {
+     "name": "Reuters",
+     "url": "https://www.reuters.com"
+    },
+    {
+     "name": "official websites of ",
+     "url": "https://kalshi.com/"
+    },
+    {
+     "name": "CBS",
+     "url": "https://www.cbsnews.com/"
+    },
+    {
+     "name": "Bloomberg News",
+     "url": "https://www.bloomberg.com/news"
+    }
+   ],
+   "tags": null,
+   "ticker": "KXSTATEMENTCOUNTPOPESS",
+   "title": "POPE STATEMENT SAME SEX"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/NOMINEECONF.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/NOMINEECONF.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-07-08T22:27:48.685935Z",
+   "settlement_sources": [
+    {
+     "name": "U.S. Senate",
+     "url": "https://www.rules.senate.gov/rules-of-the-senate"
+    }
+   ],
+   "tags": [
+    "Congress"
+   ],
+   "ticker": "KXUSAMBVATICAN",
+   "title": "Ambassador to the Holy See (Vatican)"
+  },
+  {
+   "additional_prohibitions": [
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "category": "Politics",
+   "contract_terms_url": "https://kalshi-public-docs.s3.amazonaws.com/contract_terms/BEDOYA.pdf",
+   "contract_url": "https://kalshi-public-docs.s3.us-east-1.amazonaws.com/regulatory/product-certifications/BEDOYA.pdf",
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-02-26T08:50:31.901806Z",
+   "settlement_sources": [
+    {
+     "name": "Library of Congress",
+     "url": "https://www.congress.gov/"
+    }
+   ],
+   "tags": [
+    "Confirmations"
+   ],
+   "ticker": "BEDOYA",
+   "title": "Alvaro Bedoya FTC confirmation"
+  }
+ ],
+ "_fixture_note": "recorded 2026-07-11; truncated to 120 series"
+}
