@@ -89,7 +89,11 @@ def bet_confirmed(store, bet: dict) -> tuple[bool, Decimal | None]:
     cost_sum = Decimal(payload["cost_sum"])
     stake = Decimal(str(bet["stake_usd"]))
     if bet["kind"] in LOCKED_KINDS:
-        return True, q6(stake * (1 / cost_sum - 1))
+        # payout per unit basket: 1 unless stamped at entry (NEGRISK NO-baskets
+        # pay N-1; assuming 1 was review-H3's wrong-money formula)
+        payout = Decimal(str(bet["payout"])) \
+            if "payout" in bet.keys() and bet["payout"] is not None else Decimal(1)
+        return True, q6(stake * (payout / cost_sum - 1))
     # resolution-settled: same result basis, confirmed entry price. The result
     # class comes from the settled payload, NEVER the sign of the pnl — a
     # profitable PARTIAL (fraction > cost) is not a WIN.

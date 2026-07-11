@@ -1,7 +1,7 @@
 """SQLite DDL (SPEC §9). Money columns are TEXT holding Decimal strings, never REAL.
 Every table is INSERT-only or INSERT+terminal-row; nothing ever UPDATEs ledger rows."""
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # v2 additions (migrations only ever ADD):
 MIGRATION_2 = [
@@ -23,6 +23,13 @@ MIGRATION_3 = [
 MIGRATION_4 = [
     """CREATE TABLE IF NOT EXISTS pair_demotions (
         id INTEGER PRIMARY KEY, pair TEXT, reason TEXT, created_at TEXT)""",
+]
+
+# v5: payout per unit basket as an ENTRY-TIME fact (D1, review 2026-07-10).
+# NEGRISK NO-baskets pay N-1; without the column, confirmed P&L had to assume
+# payout=1. Nullable; rule 9 untouched (entry-time only).
+MIGRATION_5 = [
+    "ALTER TABLE flat_bets ADD COLUMN payout TEXT",
 ]
 
 TABLES = [
@@ -48,7 +55,8 @@ TABLES = [
         venue_pair TEXT, event_key TEXT, event_start_utc TEXT, start_grade TEXT,
         legs_json TEXT, stake_usd TEXT, edge_points TEXT, trusted INTEGER, lane TEXT,
         quality_flag TEXT, consensus_age_secs REAL, leg_skew_secs REAL, status TEXT,
-        pnl_optimistic TEXT, reappearance_of INTEGER, notes TEXT, gamepk INTEGER)""",
+        pnl_optimistic TEXT, reappearance_of INTEGER, notes TEXT, gamepk INTEGER,
+        payout TEXT)""",
     # append-only lifecycle log; kind: confirmed | lifetime_closed | settled | void
     # | reconciled | leg_failure; at most one settled row per bet (terminal)
     """CREATE TABLE IF NOT EXISTS bet_events (

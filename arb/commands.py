@@ -36,13 +36,15 @@ def cmd_negrisk_scan(cfg, store, args):
     from arb.negrisk import scan_group
     from arb.venues import polymarket
 
+    from arb.tracker import candidate_from_basket, process_poll
     if not cfg["negrisk"]["enabled"]:
         console.print("[yellow]negrisk disabled[/]")
         return 0
     tags = list(cfg["nonsports"]["polymarket_tags"])
     events = polymarket.fetch_negrisk_events(cfg, tags)[:int(cfg["negrisk"]["scan_limit"])]
     console.print(f"[dim]negrisk: {len(events)} flagged events across tags {tags}[/]")
-    all_opps = []
+    now = datetime.now(timezone.utc)
+    all_opps, all_quotes = [], []
     for e in events:
         markets = [m for m in e.get("markets", []) if m.get("clobTokenIds")]
         if not markets or len(markets) > int(cfg["negrisk"]["max_outcomes"]):
@@ -76,15 +78,24 @@ def cmd_negrisk_scan(cfg, store, args):
                 "volume_24h": Decimal(str(m.get("volume24hr") or 0))})
         if any(o["yes_ask"] is None or o["yes_bid"] is None for o in outcomes):
             continue  # a one-sided outcome fails proof condition (c) anyway; skip math
+        from arb.negrisk import quote_rows
         from arb.venues.fees import PM_TAG_CATEGORY
         category = PM_TAG_CATEGORY.get(str(e.get("_tag")), "politics")
+        all_quotes.extend(quote_rows(cfg, "polymarket", category,
+                                     f"nonsports:pm:{e['id']}", outcomes, now))
         opps = scan_group(cfg, "polymarket", category, f"nonsports:pm:{e['id']}",
                           e.get("title", ""), outcomes, venue_flag=bool(e.get("negRisk")))
         all_opps.extend(opps)
 
     poll_id = store.insert("polls", {
-        "started_at": datetime.now(timezone.utc).isoformat(), "kind": "negrisk",
-        "n_quotes": 0, "n_opps": len(all_opps)})
+        "started_at": now.isoformat(), "kind": "negrisk",
+        "n_quotes": len(all_quotes), "n_opps": len(all_opps)})
+    store.insert_many("quotes", [{**q, "poll_id": poll_id} for q in all_quotes])
+    # D1 (review 2026-07-10): baskets BOOK — $1 across the basket (§10.1)
+    process_poll(cfg, store, poll_id, "negrisk",
+                 [candidate_from_basket(b) for b in all_opps],
+                 {"polymarket": {"ok": True, "n": len(all_quotes),
+                                 "latency_ms": 0}}, now=now)
     store.insert_many("opportunities", [
         {"poll_id": poll_id, "fingerprint": o["fingerprint"],
          "position_key": o["position_key"], "kind": o["kind"], "category": o["category"],
@@ -197,7 +208,7 @@ def cmd_political(cfg, store, args):
     import json as _json
     from datetime import datetime, timezone
 
-    from arb.lanes.political import scan_market
+    from arb.lanes.political import book_quote_rows, scan_market
     from arb.tracker import process_poll
     from arb.venues import polymarket
     events, seen = [], set()  # dedupe by event id across overlapping tags (H10)
@@ -213,10 +224,12 @@ def cmd_political(cfg, store, args):
     books = polymarket.fetch_books(cfg, tokens)
     opps = [o for m in markets if (o := scan_market(cfg, m, books))]
     now = datetime.now(timezone.utc)
+    quotes = [q for m in markets for q in book_quote_rows(cfg, m, books, now)]
     poll_id = store.insert("polls", {"started_at": now.isoformat(), "kind": "political",
-                                     "n_quotes": len(tokens), "n_opps": len(opps)})
+                                     "n_quotes": len(quotes), "n_opps": len(opps)})
+    store.insert_many("quotes", [{**q, "poll_id": poll_id} for q in quotes])
     process_poll(cfg, store, poll_id, "political", opps,
-                 {"polymarket": {"ok": True, "n": len(tokens), "latency_ms": 0}}, now=now)
+                 {"polymarket": {"ok": True, "n": len(quotes), "latency_ms": 0}}, now=now)
     console.print(f"political: {len(markets)} binary markets scanned, "
                   f"{len(opps)} YES+NO<1 flags")
     return 0

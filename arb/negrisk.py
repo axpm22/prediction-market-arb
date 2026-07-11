@@ -42,8 +42,8 @@ def _basket(cfg, venue, category, event_key, title, outcomes, side, proof_status
     ask_key = "yes_ask" if side == "YES" else "no_ask"
     if any(o.get(ask_key) is None for o in outcomes):
         return None
-    costs = [o[ask_key] + leg_fee_cost(cfg, venue, category, o[ask_key])
-             for o in outcomes]
+    fees = [leg_fee_cost(cfg, venue, category, o[ask_key]) for o in outcomes]
+    costs = [o[ask_key] + f for o, f in zip(outcomes, fees)]
     s = sum(costs)
     payout = Decimal(1) if side == "YES" else Decimal(n - 1)
     edge = 1 - s / payout   # edge_points per $1 payout (§7.1)
@@ -71,11 +71,39 @@ def _basket(cfg, venue, category, event_key, title, outcomes, side, proof_status
         "fingerprint": hashlib.sha1(
             f"{event_key}|NEGRISK|{side}|{basket_sha}".encode()).hexdigest(),
         "position_key": f"{category}|{event_key}|BASKET|{basket_sha}",
-        "legs_json": json.dumps([{ "label": o["label"], "side": side,
-                                   "cost": str(q6(costs[i]))}
-                                 for i, o in enumerate(outcomes)]),
+        # consumer schema (capacity/sizing/tracker/settle all read these keys);
+        # cost and fee split — fee-inclusive-only legs were the D1 trap
+        "legs_json": json.dumps([{
+            "venue": venue, "market_type": "WINNER", "line": None,
+            "outcome": o["label"], "side": side,
+            "cost": str(q6(o[ask_key])), "fee_cost": str(q6(fees[i]))}
+            for i, o in enumerate(outcomes)]),
         "venue_pair": f"{venue}:self",
     }
+
+
+def quote_rows(cfg, venue: str, category: str, event_key: str,
+               outcomes: list[dict], now) -> list[dict]:
+    """Every observed outcome side as a quotes row (rule 7 — the scan's books
+    are backtest data whether or not a basket flags)."""
+    rows = []
+    for o in outcomes:
+        for side, ask_key, bid_key in (("YES", "yes_ask", "yes_bid"),
+                                       ("NO", "no_ask", "no_bid")):
+            ask = o.get(ask_key)
+            if ask is None:
+                continue
+            rows.append({
+                "fetched_at": now.isoformat(), "event_key": event_key,
+                "category": "nonsports", "sport": category, "venue": venue,
+                "book": venue, "market_type": "WINNER", "line": None,
+                "outcome": o["label"], "side": side, "raw_price": ask,
+                "cost": ask, "fee_cost": leg_fee_cost(cfg, venue, category, ask),
+                "depth_usd": o.get("depth_usd") if side == "YES" else None,
+                "ladder_json": None, "live": False, "bid": o.get(bid_key),
+                "volume_24h": o.get("volume_24h"), "start_utc": None,
+                "start_grade": "absent", "venue_market_id": None})
+    return rows
 
 
 def scan_group(cfg, venue: str, category: str, event_key: str, title: str,

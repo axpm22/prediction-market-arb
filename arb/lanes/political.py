@@ -13,6 +13,38 @@ from arb.models import Event, Opportunity, Quote, q6
 from arb.venues.fees import leg_fee_cost
 
 
+def book_quote_rows(cfg, market: dict, books: dict, now,
+                    category: str = "politics") -> list[dict]:
+    """Every observed side of a scanned binary market as a quotes row (rule 7)
+    — persisted whether or not the market flags."""
+    tokens = json.loads(market.get("clobTokenIds") or "[]")
+    if len(tokens) != 2:
+        return []
+    event_key = f"nonsports:pm:{market.get('conditionId') or market.get('id')}"
+    rows = []
+    for token, side in zip(tokens, ("YES", "NO")):
+        book = books.get(token)
+        if not book or not book.get("asks"):
+            continue
+        ask = min(Decimal(a["price"]) for a in book["asks"])
+        bid = max((Decimal(b["price"]) for b in book.get("bids") or []),
+                  default=None)
+        size = [a for a in book["asks"] if Decimal(a["price"]) == ask][0]["size"]
+        rows.append({
+            "fetched_at": now.isoformat(), "event_key": event_key,
+            "category": "nonsports", "sport": "politics", "venue": "polymarket",
+            "book": "polymarket", "market_type": "WINNER", "line": None,
+            "outcome": market.get("question", "")[:80], "side": side,
+            "raw_price": ask, "cost": ask,
+            "fee_cost": leg_fee_cost(cfg, "polymarket", category, ask),
+            "depth_usd": Decimal(size) * ask, "ladder_json": None,
+            "live": False, "bid": bid,
+            "volume_24h": Decimal(str(market.get("volume24hr") or 0)),
+            "start_utc": None, "start_grade": "absent",
+            "venue_market_id": f"{market.get('conditionId') or market.get('id')}:{token}"})
+    return rows
+
+
 def scan_market(cfg, market: dict, books: dict, category: str = "politics"
                 ) -> Opportunity | None:
     """One Polymarket binary market: YES ask + NO ask (each + fee) < 1 -> locked."""

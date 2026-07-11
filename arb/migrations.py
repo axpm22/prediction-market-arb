@@ -28,4 +28,11 @@ def apply(conn):
         for ddl in schema.MIGRATION_4:
             conn.execute(ddl)  # CREATE TABLE IF NOT EXISTS — idempotent
         conn.execute("INSERT INTO schema_version VALUES (4, datetime('now'))")
+    if current < 5:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(flat_bets)")}
+        for ddl in schema.MIGRATION_5:
+            if "ADD COLUMN payout" in ddl and "payout" in cols:
+                continue  # fresh DBs already carry it via TABLES
+            conn.execute(ddl)
+        conn.execute("INSERT INTO schema_version VALUES (5, datetime('now'))")
     conn.commit()

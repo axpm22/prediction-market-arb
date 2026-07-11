@@ -18,5 +18,18 @@ high_temp_las_vegas: [["maximum", "temperature", "vegas"],
                       ["las", "vegas", "max", "daily", "temperature"]]
 high_temp_austin: [["highest", "temperature", "austin"],
                    ["maximum", "temperature", "austin"]]
-low_temp_dc: [["lowest", "temperature", "dc"]]
+low_temp_dc: [["lowest", "temperature", "dc"], ["dc", "min", "daily", "temperature"]]
+high_temp_chicago: [["maximum", "temperature", "chicago"],
+                    ["highest", "temperature", "chicago"]]
+high_temp_miami: [["maximum", "temperature", "miami"],
+                  ["highest", "temperature", "miami"]]
+high_temp_denver: [["maximum", "temperature", "denver"],
+                   ["highest", "temperature", "denver"]]
+high_temp_philadelphia: [["maximum", "temperature", "philadelphia"],
+                         ["highest", "temperature", "philadelphia"]]
+high_temp_houston: [["maximum", "temperature", "houston"],
+                    ["highest", "temperature", "houston"]]
+high_temp_phoenix: [["maximum", "temperature", "phoenix"],
+                    ["highest", "temperature", "phoenix"]]
 named_storm: [["named", "storm"], ["hurricane", "landfall"]]
+jobless_claims: [["jobless", "claims"], ["initial", "claims"]]

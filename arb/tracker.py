@@ -49,6 +49,27 @@ def candidate_from_opp(cfg, o: Opportunity) -> dict:
     }
 
 
+def candidate_from_basket(b: dict) -> dict:
+    """NEGRISK basket (the negrisk._basket dict, NOT an opportunities row —
+    the V1-era version read columns that table doesn't have) -> booking
+    candidate for process_poll (D1, review 2026-07-10)."""
+    return {
+        # b["category"] is the FEE category (politics/econ/weather/geopolitics);
+        # the ledger taxonomy is sports|nonsports, fee category rides in sport
+        # (same convention as negrisk.quote_rows)
+        "kind": b["kind"], "category": "nonsports", "sport": b["category"],
+        "event_key": b["event_key"], "event_start_utc": None,
+        "start_grade": "absent", "gamepk": None,
+        "venue_pair": b["venue_pair"], "fingerprint": b["fingerprint"],
+        "position_key": b["position_key"], "legs": json.loads(b["legs_json"]),
+        "edge_points": b["edge_points"], "cost_sum": b["cost_sum"],
+        "payout": b["payout"], "roi": b["roi"], "status": b["status"],
+        "notes": b["notes"], "quality_flag": "none", "leg_skew_secs": 0.0,
+        "depth_ok": True,  # thin-depth already REVIEWs via status (negrisk.py)
+        "proof_status": b["proof_status"], "live": False,
+    }
+
+
 def _active_bets(store, poll_kind: str):
     return store.query(
         """SELECT fb.* FROM flat_bets fb
@@ -101,7 +122,7 @@ def _book(cfg, store, poll_id, poll_kind, cand, lane, reason, now,
         "consensus_age_secs": cand.get("consensus_age_secs"),
         "leg_skew_secs": cand["leg_skew_secs"], "status": cand["status"],
         "pnl_optimistic": pnl_optimistic, "reappearance_of": reappearance_of,
-        "gamepk": cand.get("gamepk"),
+        "gamepk": cand.get("gamepk"), "payout": cand.get("payout"),
         "notes": f"{reason}; {cand['notes']}".strip("; ")})
     if cand["kind"] in LOCKED_KINDS and cand["kind"] not in RESOLUTION_SETTLED_KINDS:
         # ARB/XSPREAD/POLITICAL settle at entry by design (§11.1, L1) — exempt

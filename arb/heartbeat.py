@@ -98,6 +98,18 @@ def initial_last_fired(cfg, now_ny: datetime) -> dict:
     return marks
 
 
+def lane_interval(cfg, name: str) -> float:
+    """Each lane's cadence knob (values live in config, rule 4); anything
+    unlisted runs at the watch cadence."""
+    if name == "live":
+        return float(cfg["live_lane"]["cadence_secs"])
+    if name in ("negrisk", "political", "nonsports"):
+        return float(cfg["nonsports"]["watch_interval_secs"])
+    if name == "verify":
+        return float(cfg["verify"]["poll_secs"])
+    return float(cfg["watch_interval_secs"])
+
+
 def _reap_finished(procs: list) -> list:
     """Return the still-running children; poll() reaps any that have exited, so
     one-shot scheduled children never linger as zombies (H9)."""
@@ -132,10 +144,6 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
     def _spawn(*cmd):
         scheduled.append(subprocess.Popen([sys.executable, "-m", "arb", *flags, *cmd]))
 
-    def _interval(name: str) -> float:
-        if name == "live":
-            return float(cfg["live_lane"]["cadence_secs"])
-        return float(cfg["watch_interval_secs"])
     try:
         while True:
             if STOP_FLAG.exists():
@@ -169,7 +177,7 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                     children[name] = subprocess.Popen(
                         [sys.executable, "-m", "arb", *flags, *cmd])
                     started[name] = now
-                    next_run[name] = now + _interval(name)
+                    next_run[name] = now + lane_interval(cfg, name)
 
             # supervisor-owned clock (the `schedule` dependency is dropped); every
             # one-shot goes through _spawn so it is tracked and reaped (H9)
