@@ -1,0 +1,22 @@
+# Curated concept synonyms for the blocking stage (arb/nonsports/match.py).
+# A text hits a concept if ALL tokens of any one phrase appear in it.
+# Deterministic and auditable — extending this file is how coverage grows
+# (rule 11: manual-first). City-scoped concepts stay city-scoped: a bare
+# "temperature" phrase would pair Las Vegas with NYC.
+unemployment: [["unemployment"], ["jobless", "rate"]]
+cpi: [["cpi"], ["inflation", "rate"], ["consumer", "price", "index"]]
+fed_decision: [["fomc"], ["fed", "rate", "decision"], ["federal", "funds", "rate"]]
+retail_sales: [["retail", "sales"]]
+gdp: [["gdp"]]
+payrolls: [["payrolls"], ["nonfarm"]]
+recession: [["recession"]]
+gas_price: [["gas", "price"], ["gasoline"]]
+high_temp_nyc: [["maximum", "temperature", "nyc"], ["highest", "temperature", "nyc"],
+                ["high", "temperature", "new", "york"]]
+high_temp_las_vegas: [["maximum", "temperature", "vegas"],
+                      ["highest", "temperature", "vegas"],
+                      ["las", "vegas", "max", "daily", "temperature"]]
+high_temp_austin: [["highest", "temperature", "austin"],
+                   ["maximum", "temperature", "austin"]]
+low_temp_dc: [["lowest", "temperature", "dc"]]
+named_storm: [["named", "storm"], ["hurricane", "landfall"]]

@@ -274,6 +274,18 @@ def cmd_leadlag(cfg, store, args):
     return 0
 
 
+def cmd_nonsports(cfg, store, args):
+    """Phase 1.2 blocking-key matcher: writes data/nonsports_candidates.yaml
+    for human curation (data/nonsports_curation_protocol.md)."""
+    from arb.nonsports.scan import run_match
+    s = run_match(cfg)
+    console.print(f"nonsports match: {s['candidates']} candidates "
+                  f"({s['new']} new) from {s['kalshi_rows']} kalshi x "
+                  f"{s['pm_rows']} pm rows; {s['unverdicted']} of "
+                  f"{s['total_on_file']} on file await curation")
+    return 0
+
+
 def cmd_verify(cfg, store, args):
     from arb.lanes.verify import run_once
     n = run_once(cfg, store)

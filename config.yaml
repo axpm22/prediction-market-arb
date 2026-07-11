@@ -173,6 +173,11 @@ ai_matcher:
 nonsports:
   watch_interval_secs: 300
   gamma_scan_pages: 2               # political-lane Gamma pagination cap
+  match_date_window_days: 3         # blocking stage: resolution dates within this
+  max_candidates: 400               # per matcher run, closest-date first
+  max_series_fetch: 150             # kalshi series whose open markets get pulled
+  match_deadline_secs: 240          # wall-clock budget for one matcher run
+                                    #   (batch command, not a poll)
   candidate_threshold: 85
   kalshi_categories: ["Politics", "Economics", "Climate and Weather"]
   polymarket_tags: [politics, economy, weather]
