@@ -240,3 +240,16 @@ def test_log_retention_days_config_is_wired(tmp_path, monkeypatch):
     lg = lu.get_logger("arb.test_retention", tmp_path / "r.log")
     h = [h for h in lg.handlers if isinstance(h, lh.TimedRotatingFileHandler)][0]
     assert h.backupCount == 7
+
+
+def test_redacting_filter_handles_single_dict_arg(caplog):
+    # logging special-cases a single dict arg (record.args IS the dict); the
+    # filter's tuple(...) turned it into a tuple of KEYS and broke formatting
+    import logging
+
+    from arb.logutil import get_logger
+    lg = get_logger("arb.test_dictarg")
+    with caplog.at_level(logging.INFO, logger="arb.test_dictarg"):
+        lg.info("summary: %s", {"a": 1, "b": "x?secret"})
+    assert any("'a': 1" in r.getMessage() for r in caplog.records)
+    assert not any("secret" in r.getMessage() for r in caplog.records)  # redacted

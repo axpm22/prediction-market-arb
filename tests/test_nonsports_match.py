@@ -109,3 +109,28 @@ def test_merge_never_touches_curated_entries(tmp_path):
     assert merged["K1|P1"]["verdict"] == "same"             # untouched
     assert merged["K1|P1"]["verdict_note"] == "checked 7 points"
     assert merged["K2|P2"]["concept"] == "y"
+
+
+def test_disjoint_country_entities_never_pair():
+    # the first live run paired China GDP with South Korea GDP (same strike,
+    # same quarter-end) — country-parameterized series need entity scoping
+    from datetime import datetime, timezone
+    from decimal import Decimal
+    k = [{"venue": "kalshi", "id": "KXCNGDP-26Q2-T4.0",
+          "text": "China GDP Growth Rate YoY | above 4.0%?", "rules": "",
+          "strikes": {Decimal("4.0")},
+          "date": datetime(2026, 7, 15, tzinfo=timezone.utc), "source": ""}]
+    p = [{"venue": "polymarket", "id": "0xkr",
+          "text": "South Korea GDP growth (YoY) in Q2 2026? | 4.0-4.4%",
+          "rules": "", "strikes": {Decimal("4.0")},
+          "date": datetime(2026, 7, 15, tzinfo=timezone.utc), "source": "",
+          "neg_risk": True},
+         {"venue": "polymarket", "id": "0xcn",
+          "text": "China GDP growth above 4% in Q2 2026?",
+          "rules": "", "strikes": {Decimal("4")},
+          "date": datetime(2026, 7, 15, tzinfo=timezone.utc), "source": "",
+          "neg_risk": True}]
+    concepts = {"gdp": [["gdp"]]}
+    entities = {"china": [["china"]], "south_korea": [["korea"]]}
+    cands = block_candidates(CFG, k, p, concepts, entities)
+    assert [c["pm_id"] for c in cands] == ["0xcn"]  # Korea pair rejected

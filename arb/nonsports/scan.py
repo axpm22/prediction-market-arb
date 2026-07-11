@@ -11,7 +11,7 @@ import yaml
 
 from arb.logutil import get_logger
 from arb.nonsports.match import (block_candidates, concepts_of, kalshi_rows,
-                                 load_concepts, pm_rows)
+                                 load_concepts, load_entities, pm_rows)
 from arb.venues.base import Deadline, get_json
 
 log = get_logger("arb.nonsports", "logs/scan.log")
@@ -72,7 +72,7 @@ def run_match(cfg, out_path: str | Path = CANDIDATES_PATH) -> dict:
     concepts = load_concepts()
     k_rows = _kalshi_side(cfg, concepts, deadline)
     p_rows = _pm_side(cfg, deadline)
-    cands = block_candidates(cfg, k_rows, p_rows, concepts)
+    cands = block_candidates(cfg, k_rows, p_rows, concepts, load_entities())
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     merged, added = merge_candidates(out_path, cands)

@@ -19,6 +19,7 @@ from pathlib import Path
 import yaml
 
 CONCEPTS_PATH = Path("data/nonsports_concepts.yaml")
+ENTITIES_PATH = Path("data/nonsports_entities.yaml")
 
 _NUM = re.compile(r"\d[\d,]*(?:\.\d+)?")
 _STOP = frozenset("a an and at be by for in of on or the to will you what "
@@ -28,6 +29,13 @@ _STOP = frozenset("a an and at be by for in of on or the to will you what "
 def load_concepts(path: str | Path = CONCEPTS_PATH) -> dict:
     """{concept: [[token, ...], ...]} — a text hits the concept if ALL tokens
     of any one phrase appear in it. Curated, auditable, human-extendable."""
+    return yaml.safe_load(Path(path).read_text()) or {}
+
+
+def load_entities(path: str | Path = ENTITIES_PATH) -> dict:
+    """Same phrase format as concepts: {entity: [[token, ...], ...]}. Guard:
+    when BOTH sides of a pair name entities and the sets are disjoint, the
+    pair is rejected (China GDP is not South Korea GDP, whatever the strike)."""
     return yaml.safe_load(Path(path).read_text()) or {}
 
 
@@ -100,21 +108,26 @@ def pm_rows(events: list[dict]) -> list[dict]:
 
 
 def block_candidates(cfg, k_rows: list[dict], p_rows: list[dict],
-                     concepts: dict) -> list[dict]:
+                     concepts: dict, entities: dict | None = None) -> list[dict]:
+    entities = entities if entities is not None else {}
     window_days = int(cfg["nonsports"]["match_date_window_days"])
     cap = int(cfg["nonsports"]["max_candidates"])
     by_concept: dict[str, list[dict]] = {}
     for r in p_rows:
+        r["_ents"] = concepts_of(r["text"], entities)
         for c in concepts_of(r["text"], concepts):
             by_concept.setdefault(c, []).append(r)
     out = []
     for k in k_rows:
         if k["date"] is None:
             continue
+        k_ents = concepts_of(k["text"], entities)
         for concept in concepts_of(k["text"], concepts):
             for p in by_concept.get(concept, []):
                 if p["date"] is None:
                     continue
+                if k_ents and p["_ents"] and not (k_ents & p["_ents"]):
+                    continue  # both name entities, none shared: never a pair
                 gap = abs((k["date"] - p["date"]).total_seconds()) / 86400
                 if gap > window_days:
                     continue

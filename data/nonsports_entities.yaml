@@ -1,0 +1,18 @@
+# Entity guard for the blocking stage (arb/nonsports/match.py). Same phrase
+# format as concepts. When BOTH sides of a candidate name entities and the
+# sets are disjoint, the pair is rejected — the first live run paired China
+# GDP with South Korea GDP on a shared strike. One side naming no entity stays
+# generous (US is often implicit on Kalshi); the curator settles those.
+us: [["us"], ["u.s."], ["united", "states"], ["america"], ["american"]]
+china: [["china"], ["chinese"]]
+south_korea: [["south", "korea"], ["korea"], ["korean"]]
+japan: [["japan"], ["japanese"]]
+argentina: [["argentina"], ["argentine"]]
+uk: [["uk"], ["united", "kingdom"], ["britain"], ["british"]]
+eu: [["eu"], ["eurozone"], ["euro", "area"], ["european", "union"]]
+canada: [["canada"], ["canadian"]]
+mexico: [["mexico"], ["mexican"]]
+germany: [["germany"], ["german"]]
+france: [["france"], ["french"]]
+india: [["india"], ["indian"]]
+brazil: [["brazil"], ["brazilian"]]

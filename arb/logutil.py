@@ -19,7 +19,11 @@ class _RedactingFilter(logging.Filter):
     def filter(self, record):
         record.msg = redact(str(record.msg))
         if record.args:
-            record.args = tuple(redact(str(a)) for a in record.args)
+            # logging special-cases a single dict arg (record.args IS the
+            # dict); tuple() over it would yield its KEYS and break %-format
+            record.args = (redact(str(record.args)),) \
+                if isinstance(record.args, dict) \
+                else tuple(redact(str(a)) for a in record.args)
         return True
 
 
