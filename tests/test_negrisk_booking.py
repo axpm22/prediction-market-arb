@@ -105,3 +105,27 @@ def test_migration_5_payout_column_exists(tmp_path):
     store = Store(tmp_path / "m.sqlite")
     cols = {r[1] for r in store.conn.execute("PRAGMA table_info(flat_bets)")}
     assert "payout" in cols
+
+
+def test_negrisk_scan_persists_quotes_even_for_one_sided_events(tmp_path, monkeypatch):
+    # rule 7: the fetched books are backtest data whether or not the group is
+    # scannable — the one-sided skip must not skip persistence
+    from types import SimpleNamespace
+
+    from arb.commands import cmd_negrisk_scan
+    import arb.venues.polymarket as pm
+    ev = {"id": "E9", "negRisk": True, "_tag": "politics", "title": "t",
+          "markets": [{"clobTokenIds": json.dumps(["y1", "n1"]),
+                       "groupItemTitle": "o0", "volume24hr": 1}]}
+    books = {"y1": {"asks": [{"price": "0.40", "size": "10"}], "bids": []},
+             "n1": {"asks": [{"price": "0.65", "size": "10"}], "bids": []}}
+    monkeypatch.setattr(pm, "fetch_negrisk_events", lambda cfg, tags: [ev])
+    monkeypatch.setattr(pm, "fetch_books", lambda cfg, tokens: books)
+    store = Store(tmp_path / "q.sqlite")
+    cmd_negrisk_scan(CFG, store, SimpleNamespace(once=True))
+    # yes_bid is None (one-sided) -> group unscannable, but the YES/NO asks
+    # observed must still be quotes rows
+    rows = store.query("SELECT side, cost FROM quotes WHERE event_key='nonsports:pm:E9'")
+    assert {(r["side"], r["cost"]) for r in rows} == \
+        {("YES", "0.400000"), ("NO", "0.650000")}
+    assert store.query("SELECT n_quotes FROM polls")[0]["n_quotes"] == 2

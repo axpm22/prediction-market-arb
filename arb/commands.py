@@ -76,13 +76,15 @@ def cmd_negrisk_scan(cfg, store, args):
                 "depth_usd": (Decimal(min(yb["asks"], key=lambda x: Decimal(x["price"]))["size"]) * ya)
                              if yb and yb.get("asks") else None,
                 "volume_24h": Decimal(str(m.get("volume24hr") or 0))})
-        if any(o["yes_ask"] is None or o["yes_bid"] is None for o in outcomes):
-            continue  # a one-sided outcome fails proof condition (c) anyway; skip math
         from arb.negrisk import quote_rows
         from arb.venues.fees import PM_TAG_CATEGORY
         category = PM_TAG_CATEGORY.get(str(e.get("_tag")), "politics")
+        # rule 7: observed books persist BEFORE any skip — they are backtest
+        # data whether or not the group can be scanned
         all_quotes.extend(quote_rows(cfg, "polymarket", category,
                                      f"nonsports:pm:{e['id']}", outcomes, now))
+        if any(o["yes_ask"] is None or o["yes_bid"] is None for o in outcomes):
+            continue  # a one-sided outcome fails proof condition (c) anyway; skip math
         opps = scan_group(cfg, "polymarket", category, f"nonsports:pm:{e['id']}",
                           e.get("title", ""), outcomes, venue_flag=bool(e.get("negRisk")))
         all_opps.extend(opps)
