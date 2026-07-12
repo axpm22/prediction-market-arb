@@ -31,5 +31,10 @@ high_temp_houston: [["maximum", "temperature", "houston"],
                     ["highest", "temperature", "houston"]]
 high_temp_phoenix: [["maximum", "temperature", "phoenix"],
                     ["highest", "temperature", "phoenix"]]
-named_storm: [["named", "storm"], ["hurricane", "landfall"]]
+named_storm: [["named", "storm"], ["hurricane", "landfall"],
+              ["hurricane", "hits"], ["hurricane", "make", "landfall"]]
+earthquake: [["earthquake"]]
 jobless_claims: [["jobless", "claims"], ["initial", "claims"]]
+# note (2026-07-12): PM's weather tag carries climate/disaster events, not the
+# daily city temperatures Kalshi lists — the city-temp concepts above have no
+# PM counterpart under current tags; disasters and econ are the overlap.
