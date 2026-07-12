@@ -141,3 +141,15 @@ def test_headline_sql_agrees_on_unresolved_leg(cfg, tmp_path):
     row = store.conn.execute(sql).fetchone()
     assert row["n_bets"] == 0
     assert row["headline_pnl"] == 0
+
+
+def test_write_daily_appends_hash_chain(cfg, fixture_db, tmp_path):
+    # verifiability: every write appends (never rewrites) the day's report
+    # hashes; an idempotent recompute reproduces the same hash
+    import hashlib
+    write_daily(cfg, fixture_db, "2026-07-08", outdir=tmp_path)
+    write_daily(cfg, fixture_db, "2026-07-08", outdir=tmp_path)
+    lines = (tmp_path / "HASHES.log").read_text().strip().splitlines()
+    assert len(lines) == 2 and lines[0] == lines[1]  # append-only, reproducible
+    want = hashlib.sha256((tmp_path / "2026-07-08.md").read_bytes()).hexdigest()
+    assert f"md:{want}" in lines[-1]

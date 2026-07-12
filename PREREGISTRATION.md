@@ -163,16 +163,50 @@ claim is "no lead visible at ≥20s observation latency." The study also emits
 per-sport/venue observed live line velocities that replace the PLACEHOLDER
 `live_lane.line_velocity_points_per_sec` constants via a dated config change.
 
-## Non-sports program (STUB — to be completed and dated BEFORE the first
-## persisted negrisk/political poll under the new pipeline; plan Phase 4.1)
+## Non-sports program (frozen 2026-07-12, amendment; plan Phase 4.1)
 
-Scope when filled in: per-lane (NEGRISK, POLITICAL, XSPREAD-nonsports) primary
-metrics (proven-basket rate/week, median net edge at ≥ min executable depth,
-depth distribution, settlement-mismatch count), kill gates, and the AI-matcher
-acceptance bar (precision on the held-out `nonsports_map.yaml` ground truth,
-threshold pre-registered before scoring). Until this section is dated and
-filled, the new lanes may run for PIPELINE VALIDATION only — no edge claims
-from data collected before the freeze date.
+Data collected before this date was PIPELINE VALIDATION only and enters no
+claim. Measurement starts with the first poll after this freeze.
+
+**Hypothesis.** Retail participants in non-sports prediction markets leave
+structural mispricings — crossed intra-market books (POLITICAL), negRisk
+basket sum violations (NEGRISK) — that persist across ≥1 poll interval (300s)
+because these books are too small for professional market-making to fully
+police. Counterparty: retail. No speed claim is made or needed.
+
+**Primary metrics, per lane (NEGRISK, POLITICAL), computed weekly from stored
+polls; every CI cluster-bootstrapped by event_key:**
+1. flag rate: proven (NEGRISK) / OK (POLITICAL) flags per week;
+2. median net edge (fee-inclusive) of those flags at ≥ the lane's
+   min-executable depth floor;
+3. persistence: fraction of flags re-sighted at the next poll (the
+   tradability proxy at 300s latency — the honest replacement for "faster");
+4. settlement integrity: settlement_mismatch count (must be 0; any mismatch
+   on an AI-matched pair permanently bans the pair — mechanical, rule 11).
+
+**Kill gates (evaluated 3 weeks after freeze, then weekly):**
+- A lane averaging < 1 qualifying flag/week over the trailing 3 weeks is
+  recorded a NULL by dated amendment ("no harvestable structural mispricing
+  at 300s observation latency in period X") and its cadence may be reduced —
+  the lane keeps persisting quotes (rule 7) either way.
+- Any single settlement mismatch on a non-sports bet halts the affected
+  matcher path (map entry or AI pair) pending a written post-mortem.
+
+**Edge claim bar (for the writeup):** no positive-edge claim for a lane
+without ≥ 50 settled bets AND a cluster-bootstrapped 95% CI on mean settled
+P&L excluding 0. Anything less is reported as flag-rate + persistence only.
+
+**AI matcher acceptance bar (§18.5, pre-registered BEFORE the first eval
+run):** `ai_matcher.enabled` may flip true only by dated amendment after
+`arb nonsports --eval` shows, on ≥ 80 human-verdicted pairs (≥ 50 same,
+≥ 30 different), precision of AI-same at confidence ≥ `min_confidence`
+**≥ 0.95 with zero false positives**. The eval set is
+data/nonsports_candidates.yaml verdicts; the prompt is pinned by rules_sha in
+the verdicts cache — a prompt edit resets the evaluation.
+
+**Cross-venue non-sports (XSPREAD via nonsports_map.yaml):** measurement-only
+forever until the §18.2 settlement-matrix gate; no additional claim
+registered here.
 
 ## Amendment log
 
@@ -182,4 +216,5 @@ from data collected before the freeze date.
 | 2026-07-09 | LIVE lane: hypothesis, kill gate, confirmation carve-out (poll_kind='live' only), headline protection | Pre-data for the lane (before first persisted live poll) |
 | 2026-07-09 | Lead–lag study: first-mover tally + cross-correlation, gate, velocity re-estimation deliverable | Pre-data for the study |
 | 2026-07-09 | Lead–lag tie rule: matches with \|Δt\| ≤ `leadlag.tie_epsilon_secs` (5) are ties — within one poll cycle the fetch ORDER (kalshi ~0.7s vs PM ~15s) stamps the earlier time, not leadership. First run (pre-gate, 32 events, no claim made) showed p_lead 0.778 with a 1s median "lead" — a fetch-latency artifact this rule removes | Pre-gate refinement; no claim had been made |
+| 2026-07-12 | Non-sports program frozen (section above): hypothesis, per-lane metrics (flag rate, fee-inclusive median edge at depth floor, 300s persistence, mismatch count), 3-week kill gates, 50-bet/CI edge-claim bar, and the §18.5 AI acceptance bar (precision ≥ 0.95, zero false positives, ≥ 80 verdicted pairs) — registered before the first post-freeze poll and before any AI eval run | Pre-data for the pivoted program; prior lane polls were pipeline validation only |
 | 2026-07-10 | Bug-fix batch from the full-code review (reports/code-review-2026-07-10.md), instrument correctness only, no hypothesis change. Measurement-affecting: devig rejects odds ≤ 1 and renormalizes when solver caps bind (was silent garbage); suspect groups log tagged divergences per §8.2 (were dropped); sx ladder levels store CONTRACTS not USD from this date (rows stored earlier carry USD); PM negRisk baskets fee-priced by their real tag category (economy/weather were priced as politics); PARTIAL settlements write per_leg=PARTIAL, profitable partials no longer misbooked as WINs, reconcile never mismatch-demotes on fraction-settled bets; capacity finds complement-mapped legs' pre-map quote rows. `negrisk.scan_pages` wired at 10 (the previously hardcoded cap) so coverage is unchanged | Bug fixes to the instrument, pre-gate; derived read-time cells may shift where inputs were previously wrong |

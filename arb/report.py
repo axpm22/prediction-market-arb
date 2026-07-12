@@ -243,6 +243,12 @@ def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily") -> d
     for r in frame["left_on_table"]:
         md.append(f"| {r['reason']} | {r['n']} | {round(r['edge'] or 0, 4)} |")
     (outdir / f"{day}.md").write_text("\n".join(md) + "\n")
+    # append-only hash chain: cheap tamper-evidence for the paper track record
+    # (writeup verifiability; recomputing a day must reproduce its hash)
+    import hashlib
+    with (outdir / "HASHES.log").open("a") as f:
+        f.write(f"{day} md:{hashlib.sha256((outdir / f'{day}.md').read_bytes()).hexdigest()} "
+                f"csv:{hashlib.sha256(csv_path.read_bytes()).hexdigest()}\n")
     return frame
 
 
