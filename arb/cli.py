@@ -63,9 +63,16 @@ def main(argv=None):
     p_regrade = sub.add_parser("regrade", help="re-score consensus vs venue mids (read-only)")
     p_regrade.add_argument("--regrade-db", metavar="PATH", default=None)
     sub.add_parser("supervisor", help="own all loops; the only sanctioned way to run them")
-    for lane in ("negrisk-scan", "verify", "hot", "btc", "political", "nonsports"):
+    for lane in ("negrisk-scan", "verify", "hot", "btc", "political"):
         lp = sub.add_parser(lane, help=f"optional {lane} lane (supervisor-owned)")
         lp.add_argument("--once", action="store_true")
+    p_ns = sub.add_parser("nonsports", help="blocking-key matcher -> candidates "
+                                            "for curation; --ai/--eval gate §18.5")
+    p_ns.add_argument("--once", action="store_true")
+    p_ns.add_argument("--ai", action="store_true",
+                      help="Haiku stage, live mode (requires ai_matcher.enabled)")
+    p_ns.add_argument("--eval", action="store_true", dest="ai_eval",
+                      help="classify curated pairs + score precision vs ground truth")
     p_live = sub.add_parser("live", help="in-play lane: shortlisted re-quotes at "
                                          "live cadence (review-lane forever)")
     p_live.add_argument("--once", action="store_true")
