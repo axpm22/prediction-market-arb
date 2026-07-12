@@ -5,7 +5,7 @@ unresolved — a whole bet is never skipped for one venue (V1's structural no-op
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from arb.logutil import get_logger
@@ -98,18 +98,36 @@ def reconcile(cfg, store, now: datetime | None = None) -> int:
         covered = _reconciled_legs(store, bet["id"])
         if len(covered) >= len(legs):
             continue  # every leg already reconciled — nothing left to do
+        sev = store.query(
+            "SELECT created_at, payload_json FROM bet_events "
+            "WHERE bet_id=? AND kind='settled'", (bet["id"],))[0]
+        settled_at = datetime.fromisoformat(sev["created_at"]) \
+            if sev["created_at"] else None
         verdicts = []
         for i, leg in enumerate(legs):
             resolver = RESOLVERS.get(leg.get("venue", ""))
-            if i in covered or resolver is None:
-                verdicts.append(None)  # already reconciled, or no resolver
+            if i in covered:
+                verdicts.append(None)  # already reconciled
                 continue
-            try:
-                verdicts.append(resolver(cfg, leg))
-            except Exception as e:  # noqa: BLE001
-                log.warning("resolver %s failed for bet %d: %s", leg.get("venue"),
-                            bet["id"], e)
-                verdicts.append(None)
+            v = None
+            if resolver is not None:
+                try:
+                    v = resolver(cfg, leg)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("resolver %s failed for bet %d: %s",
+                                leg.get("venue"), bet["id"], e)
+            if v is None and settled_at is not None:
+                # D5 give-up bound: past the venue's settlement lag plus grace,
+                # a still-None leg records UNRESOLVABLE (covered — never
+                # re-fetched). SX legs were re-fetched every pass forever.
+                lag_h = float(cfg["venue_settlement_lag_hours"]
+                              .get(leg.get("venue"), 0))
+                if now > settled_at + timedelta(
+                        hours=lag_h, days=int(cfg["reconcile_give_up_days"])):
+                    v = "UNRESOLVABLE"
+                    log.info("bet %s leg %s: giving up reconcile (%s, settled %s)",
+                             bet["id"], i, leg.get("venue"), sev["created_at"])
+            verdicts.append(v)
         if all(v is None for v in verdicts):
             continue  # no NEW leg resolved this pass; stays provisional
         store.insert("bet_events", {
@@ -119,16 +137,14 @@ def reconcile(cfg, store, now: datetime | None = None) -> int:
                              {"partial": str(v[1])} for v in verdicts]})})
         n += 1
         # mismatch on a trusted pair reverts the pair to REVIEW immediately (§11.2)
-        settled_payload = json.loads(store.query(
-            "SELECT payload_json FROM bet_events WHERE bet_id=? AND kind='settled'",
-            (bet["id"],))[0]["payload_json"])
+        settled_payload = json.loads(sev["payload_json"])
         if "fraction" in settled_payload:
             continue  # UMA fractional settlement: venue verdicts are binary, a
             # PARTIAL bet can never evidence a settlement mismatch on the pair
         expected = settled_payload.get("per_leg") or []
         for i, v in enumerate(verdicts):
             if v is not None and i < len(expected) and not isinstance(v, tuple) \
-                    and v != expected[i]:
+                    and v != "UNRESOLVABLE" and v != expected[i]:
                 log.critical("reconcile MISMATCH bet %s leg %s: settled %s venue %s",
                              bet["id"], i, expected[i], v)
                 store.insert("annotations", {

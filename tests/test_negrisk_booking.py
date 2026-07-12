@@ -129,3 +129,51 @@ def test_negrisk_scan_persists_quotes_even_for_one_sided_events(tmp_path, monkey
     assert {(r["side"], r["cost"]) for r in rows} == \
         {("YES", "0.400000"), ("NO", "0.650000")}
     assert store.query("SELECT n_quotes FROM polls")[0]["n_quotes"] == 2
+
+
+def test_resolution_horizon_gate_lots_far_baskets(tmp_path):
+    # D2: nonsports_max_days now bites via resolution_date (Gamma endDate) —
+    # the old gate keyed on event_start_utc, which nonsports never has
+    from datetime import timedelta
+    store = Store(tmp_path / "h.sqlite")
+    b = _no_basket()
+    far = dict(candidate_from_basket(b),
+               resolution_date=(NOW + timedelta(days=60)).isoformat())
+    near = dict(candidate_from_basket(b),
+                resolution_date=(NOW + timedelta(days=3)).isoformat(),
+                fingerprint="fp-near", position_key="pos-near")
+    poll_id = store.insert("polls", {"started_at": NOW.isoformat(),
+                                     "kind": "negrisk", "n_quotes": 0, "n_opps": 2})
+    process_poll(CFG, store, poll_id, "negrisk", [far, near],
+                 {"polymarket": {"ok": True, "n": 0, "latency_ms": 0}}, now=NOW)
+    bets = store.query("SELECT fingerprint FROM flat_bets")
+    assert [r["fingerprint"] for r in bets] == ["fp-near"]
+    lot = store.query("SELECT reason FROM left_on_table")
+    assert [r["reason"] for r in lot] == ["resolution-horizon"]
+
+
+def test_negrisk_scan_lots_skipped_events(tmp_path, monkeypatch):
+    # M9: silent drops contradicted the bug-E2 doctrine — skips are now LOT rows
+    from types import SimpleNamespace
+
+    from arb.commands import cmd_negrisk_scan
+    import arb.venues.polymarket as pm
+    big = {"id": "BIG", "negRisk": True, "_tag": "politics", "title": "big",
+           "markets": [{"clobTokenIds": json.dumps([f"y{i}", f"n{i}"])}
+                       for i in range(31)]}  # > max_outcomes 30
+    monkeypatch.setattr(pm, "fetch_negrisk_events", lambda cfg, tags: [big])
+    monkeypatch.setattr(pm, "fetch_books", lambda cfg, tokens: {})
+    store = Store(tmp_path / "l.sqlite")
+    cmd_negrisk_scan(CFG, store, SimpleNamespace(once=True))
+    lot = store.query("SELECT reason, event_key FROM left_on_table")
+    assert [(r["reason"], r["event_key"]) for r in lot] == \
+        [("too-many-outcomes", "nonsports:pm:BIG")]
+
+
+def test_migration_6_indexes_exist(tmp_path):
+    store = Store(tmp_path / "i.sqlite")
+    idx = {r[1] for r in store.conn.execute(
+        "SELECT * FROM sqlite_master WHERE type='index'").fetchall()}
+    for want in ("idx_flat_bets_created", "idx_polls_started",
+                 "idx_heartbeats_process", "idx_annotations_target"):
+        assert want in idx, want

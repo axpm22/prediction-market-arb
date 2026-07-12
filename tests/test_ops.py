@@ -253,3 +253,24 @@ def test_redacting_filter_handles_single_dict_arg(caplog):
         lg.info("summary: %s", {"a": 1, "b": "x?secret"})
     assert any("'a': 1" in r.getMessage() for r in caplog.records)
     assert not any("secret" in r.getMessage() for r in caplog.records)  # redacted
+
+
+def test_cmd_scan_aborts_gracefully_on_credits_low(cfg, tmp_path, monkeypatch):
+    # M4: CreditsLow used to propagate as a raw traceback and skip the
+    # oddsapi-credits annotation exactly when the count mattered most
+    from types import SimpleNamespace
+
+    from arb.commands import cmd_scan
+    from arb.store import Store
+    import arb.venues.oddsapi as oa
+
+    def blow(c, s):
+        oa.LAST_REMAINING = 49
+        raise oa.CreditsLow("49 credits left — aborting (rule 2)")
+
+    monkeypatch.setattr(oa, "fetch_odds", blow)
+    monkeypatch.setattr(oa, "api_key", lambda: "k")
+    store = Store(tmp_path / "c.sqlite")
+    assert cmd_scan(cfg, store, SimpleNamespace()) == 1
+    row = store.query("SELECT detail FROM annotations WHERE kind='oddsapi-credits'")
+    assert row and row[0]["detail"] == "49"

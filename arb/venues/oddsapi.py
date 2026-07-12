@@ -2,8 +2,8 @@
 
 RULE 2: never called from tests or loops; live calls only from scan/settle.
 Logs x-requests-remaining on every call (redacted sinks); warn <100, abort <50.
-No key -> callers no-op gracefully (fixture oddsapi_h2h.json is SYNTHETIC until
-a real key records one; see data/verified_facts.md)."""
+No key -> callers no-op gracefully. Fixture oddsapi_h2h.json is a REAL response
+recorded 2026-07-08 (data/verified_facts.md)."""
 from __future__ import annotations
 
 import os
@@ -11,7 +11,8 @@ from decimal import Decimal
 
 import requests
 
-from arb.logutil import get_logger
+from arb.logutil import get_logger, redact
+from arb.venues.base import VenueError
 
 BASE = "https://api.the-odds-api.com/v4"
 log = get_logger("arb.oddsapi", "logs/scan.log")
@@ -40,7 +41,12 @@ def _get(cfg, path: str, params: dict) -> tuple[list, int | None]:
             raise CreditsLow(f"{remaining} credits left — aborting (rule 2)")
         if remaining < int(cfg["odds_api"]["warn_below_credits"]):
             log.warning("odds api credits low: %s", remaining)
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as e:
+        # requests embeds the full URL incl. apiKey in the message; an
+        # uncaught traceback bypasses log redaction (M3)
+        raise VenueError(redact(str(e))) from None
     return resp.json(), remaining
 
 

@@ -26,6 +26,9 @@ def exhaustiveness_proof(cfg, outcomes: list[dict], venue_flag: bool
             if not o.get("yes_ask") or not o.get("yes_bid") \
                     or o["yes_ask"] >= 1 or o["yes_bid"] <= 0:
                 return "unproven-exhaustive", f"two-sided-fail:{o['label']}"
+    if any(o.get("yes_ask") is None or o.get("yes_bid") is None for o in outcomes):
+        # mids need both sides regardless of the flag (M8: Decimal + None crash)
+        return "unproven-exhaustive", "one-sided-outcome"
     mids = [(o["yes_ask"] + o["yes_bid"]) / 2 for o in outcomes]
     mids_sum = sum(mids)
     if not (proof["mids_sum_min"] <= mids_sum <= proof["mids_sum_max"]):

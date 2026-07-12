@@ -46,6 +46,7 @@ SCHEMA = {
     "schedule_match_window_hours": NUM, "settle_doubleheader_window_hours": NUM,
     "capital_charge_annual": NUM,
     "sport_typical_duration_hours": MAP(NUM), "venue_settlement_lag_hours": MAP(NUM),
+    "reconcile_give_up_days": NUM,
     "min_books_for_consensus": NUM, "min_books_for_consensus_totals": NUM,
     "consensus_outlier_points": NUM, "devig_method": STR, "sharp_books": LIST,
     "weight_sharp_books": BOOL,

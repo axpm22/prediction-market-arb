@@ -67,6 +67,7 @@ def candidate_from_basket(b: dict) -> dict:
         "notes": b["notes"], "quality_flag": "none", "leg_skew_secs": 0.0,
         "depth_ok": True,  # thin-depth already REVIEWs via status (negrisk.py)
         "proof_status": b["proof_status"], "live": False,
+        "resolution_date": b.get("resolution_date"),  # Gamma endDate (D2 gate)
     }
 
 
@@ -219,6 +220,19 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
                           else cfg["max_days_to_settlement"])
             if cand["event_start_utc"] > now + timedelta(days=horizon):
                 _lot(store, poll_id, cand, "too-far-to-settlement")
+                continue
+        elif cand["kind"] in RESOLUTION_SETTLED_KINDS \
+                and cand["category"] != "sports" and cand.get("resolution_date"):
+            # D2: nonsports has no start; the horizon gates on the venue's
+            # resolution date (Gamma endDate). POLITICAL is exempt by kind
+            # (locked at entry, not resolution-settled — config comment binding)
+            try:
+                res = datetime.fromisoformat(
+                    str(cand["resolution_date"]).replace("Z", "+00:00"))
+            except ValueError:
+                res = None
+            if res and res > now + timedelta(days=int(cfg["nonsports_max_days"])):
+                _lot(store, poll_id, cand, "resolution-horizon")
                 continue
         pos = active_positions.get(cand["position_key"])
         if pos:

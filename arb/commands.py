@@ -44,10 +44,14 @@ def cmd_negrisk_scan(cfg, store, args):
     events = polymarket.fetch_negrisk_events(cfg, tags)[:int(cfg["negrisk"]["scan_limit"])]
     console.print(f"[dim]negrisk: {len(events)} flagged events across tags {tags}[/]")
     now = datetime.now(timezone.utc)
-    all_opps, all_quotes = [], []
+    all_opps, all_quotes, skipped = [], [], []
     for e in events:
         markets = [m for m in e.get("markets", []) if m.get("clobTokenIds")]
         if not markets or len(markets) > int(cfg["negrisk"]["max_outcomes"]):
+            # M9: skips are audit rows, never silent (bug-E2 doctrine)
+            skipped.append((f"nonsports:pm:{e['id']}",
+                            "no-tradable-markets" if not markets
+                            else "too-many-outcomes"))
             continue
         tokens = []
         for m in markets:
@@ -84,15 +88,23 @@ def cmd_negrisk_scan(cfg, store, args):
         all_quotes.extend(quote_rows(cfg, "polymarket", category,
                                      f"nonsports:pm:{e['id']}", outcomes, now))
         if any(o["yes_ask"] is None or o["yes_bid"] is None for o in outcomes):
-            continue  # a one-sided outcome fails proof condition (c) anyway; skip math
+            # a one-sided outcome fails proof condition (c) anyway; skip math
+            skipped.append((f"nonsports:pm:{e['id']}", "one-sided-outcome"))
+            continue
         opps = scan_group(cfg, "polymarket", category, f"nonsports:pm:{e['id']}",
                           e.get("title", ""), outcomes, venue_flag=bool(e.get("negRisk")))
+        for b in opps:
+            b["resolution_date"] = e.get("endDate")  # D2 horizon gate input
         all_opps.extend(opps)
 
     poll_id = store.insert("polls", {
         "started_at": now.isoformat(), "kind": "negrisk",
         "n_quotes": len(all_quotes), "n_opps": len(all_opps)})
     store.insert_many("quotes", [{**q, "poll_id": poll_id} for q in all_quotes])
+    store.insert_many("left_on_table", [
+        {"poll_id": poll_id, "fingerprint": "", "kind": "NEGRISK",
+         "event_key": ek, "venue_pair": "polymarket:self", "legs_json": "[]",
+         "reason": reason, "edge_points": None} for ek, reason in skipped])
     # D1 (review 2026-07-10): baskets BOOK — $1 across the basket (§10.1)
     process_poll(cfg, store, poll_id, "negrisk",
                  [candidate_from_basket(b) for b in all_opps],
@@ -148,21 +160,27 @@ def cmd_scan(cfg, store, args):
                       "(add a free key from the-odds-api.com)[/]")
         return 0
     now = datetime.now(timezone.utc).isoformat()
-    total_c, total_b = 0, 0
-    for sport_key in cfg["consensus_sports"]:
-        rows = oddsapi.fetch_odds(cfg, str(sport_key))
-        cons, books = compute_consensus(cfg, rows, now)
-        store.insert_many("consensus", cons)
-        store.insert_many("consensus_books", books)
-        total_c += len(cons)
-        total_b += len(books)
+    total_c, total_b, aborted = 0, 0, False
+    try:
+        for sport_key in cfg["consensus_sports"]:
+            rows = oddsapi.fetch_odds(cfg, str(sport_key))
+            cons, books = compute_consensus(cfg, rows, now)
+            store.insert_many("consensus", cons)
+            store.insert_many("consensus_books", books)
+            total_c += len(cons)
+            total_b += len(books)
+    except oddsapi.CreditsLow as e:
+        # rule 2 abort, gracefully: the credits row must land on exactly the
+        # path where credits matter most (M4)
+        console.print(f"[red]scan aborted: {e}[/]")
+        aborted = True
     if oddsapi.LAST_REMAINING is not None:  # dashboard/status read the latest row
         store.insert("annotations", {
             "created_at": datetime.now(timezone.utc).isoformat(),
             "target_kind": "day", "target_id": now[:10], "kind": "oddsapi-credits",
             "detail": str(oddsapi.LAST_REMAINING)})
     console.print(f"consensus rows: {total_c}; per-book rows: {total_b}")
-    return 0
+    return 1 if aborted else 0
 
 
 def cmd_settle(cfg, store, args):

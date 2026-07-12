@@ -1,7 +1,7 @@
 """SQLite DDL (SPEC §9). Money columns are TEXT holding Decimal strings, never REAL.
 Every table is INSERT-only or INSERT+terminal-row; nothing ever UPDATEs ledger rows."""
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # v2 additions (migrations only ever ADD):
 MIGRATION_2 = [
@@ -30,6 +30,15 @@ MIGRATION_4 = [
 # payout=1. Nullable; rule 9 untouched (entry-time only).
 MIGRATION_5 = [
     "ALTER TABLE flat_bets ADD COLUMN payout TEXT",
+]
+
+# v6: the four read-path indexes the daily report/status/invariants actually
+# hit (review M26); insert-path cost measured acceptable vs the H8 archive.
+MIGRATION_6 = [
+    "CREATE INDEX IF NOT EXISTS idx_flat_bets_created ON flat_bets(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_polls_started ON polls(started_at)",
+    "CREATE INDEX IF NOT EXISTS idx_heartbeats_process ON heartbeats(process, beat_at)",
+    "CREATE INDEX IF NOT EXISTS idx_annotations_target ON annotations(target_kind, target_id)",
 ]
 
 TABLES = [

@@ -18,6 +18,8 @@ capital_charge_annual: 0.05         # locks below T-bill-ish carry are 'uneconom
 sport_typical_duration_hours: { baseball_mlb: 3.5, basketball_nba: 2.5,
                                 soccer: 2.0, tennis: 2.5, mma: 1.0 }
 venue_settlement_lag_hours: { kalshi: 24, polymarket: 48, sx: 24 }  # verify empirically
+reconcile_give_up_days: 14          # past lag+this, an unresolved leg records
+                                    #   UNRESOLVABLE and is never re-fetched (D5)
 min_books_for_consensus: 3
 min_books_for_consensus_totals: 2   # totals are line-fragmented
 consensus_outlier_points: 0.10      # optional outlier drop: book >10pts from cross-book median excluded

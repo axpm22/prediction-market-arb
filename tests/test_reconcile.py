@@ -90,3 +90,52 @@ def test_partial_settled_bet_never_mismatch_demotes(cfg, tmp_path, monkeypatch):
     assert not store.query("SELECT * FROM pair_demotions")
     assert not store.query(
         "SELECT * FROM annotations WHERE kind='settlement_mismatch'")
+
+
+def test_reconcile_gives_up_after_settlement_lag_plus_grace(cfg, tmp_path, monkeypatch):
+    # D5: SX legs (resolver always None) were re-fetched every pass forever.
+    # Past venue_settlement_lag_hours + reconcile_give_up_days the leg records
+    # UNRESOLVABLE (covered) and is never attempted again.
+    store = Store(tmp_path / "g.sqlite")
+    legs = [{"venue": "sx", "venue_market_id": "s-1", "venue_side": "YES",
+             "cost": "0.5"}]
+    bid = store.insert("flat_bets", {
+        "kind": "EV", "venue_pair": "sx:self", "legs_json": json.dumps(legs),
+        "stake_usd": "1", "status": "OPEN"})
+    settled_at = datetime(2026, 6, 1, tzinfo=timezone.utc)  # 38 days before NOW
+    store.insert("bet_events", {"bet_id": bid, "kind": "settled",
+                                "created_at": settled_at.isoformat(),
+                                "payload_json": json.dumps({"per_leg": ["WON"],
+                                                            "result": ["WON"]})})
+    calls = {"n": 0}
+
+    def counting_sx(c, l):
+        calls["n"] += 1
+        return None
+
+    monkeypatch.setattr(R, "RESOLVERS", {"sx": counting_sx})
+    NOW2 = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
+    assert R.reconcile(cfg, store, now=NOW2) == 1
+    assert calls["n"] == 1
+    events = _reconciled_verdicts(store, bid)
+    assert events == [["UNRESOLVABLE"]]
+    # no mismatch fired off the sentinel, and the next pass never re-fetches
+    assert not store.query("SELECT 1 FROM pair_demotions")
+    R.reconcile(cfg, store, now=NOW2)
+    assert calls["n"] == 1
+
+
+def test_reconcile_does_not_give_up_inside_the_lag(cfg, tmp_path, monkeypatch):
+    store = Store(tmp_path / "f.sqlite")
+    legs = [{"venue": "polymarket", "venue_market_id": "0xa:1",
+             "venue_side": "YES", "cost": "0.5"}]
+    bid = store.insert("flat_bets", {
+        "kind": "EV", "venue_pair": "polymarket:self",
+        "legs_json": json.dumps(legs), "stake_usd": "1", "status": "OPEN"})
+    store.insert("bet_events", {"bet_id": bid, "kind": "settled",
+                                "created_at": NOW.isoformat(),
+                                "payload_json": json.dumps({"per_leg": ["WON"],
+                                                            "result": ["WON"]})})
+    monkeypatch.setattr(R, "RESOLVERS", {"polymarket": lambda c, l: None})
+    R.reconcile(cfg, store, now=NOW)  # inside PM's 48h lag: stays provisional
+    assert _reconciled_verdicts(store, bid) == []

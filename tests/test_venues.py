@@ -178,3 +178,30 @@ def test_sx_ladder_units_are_contracts():
     # contracts x cost = USD taker depth (depth_usd stays in USD, unchanged)
     assert (size * price).quantize(Decimal("0.01")) == \
         one.depth_usd.quantize(Decimal("0.01"))
+
+
+def test_oddsapi_http_error_never_leaks_the_key(monkeypatch):
+    # M3: requests embeds the full URL incl. apiKey in HTTPError; an uncaught
+    # traceback bypasses the log redaction entirely
+    import pytest
+    import requests
+
+    import arb.venues.oddsapi as oa
+    from arb.venues.base import VenueError
+
+    class FakeResp:
+        status_code = 401
+        headers = {"x-requests-remaining": "400"}
+
+        def raise_for_status(self):
+            raise requests.HTTPError(
+                "401 for url: https://api.the-odds-api.com/v4/x?apiKey=SEKRET")
+
+        def json(self):
+            return []
+
+    monkeypatch.setattr(oa.requests, "get", lambda *a, **k: FakeResp())
+    with pytest.raises(VenueError) as ei:
+        oa._get(CFG, "/x", {})
+    assert "SEKRET" not in str(ei.value)
+    assert "<redacted>" in str(ei.value)

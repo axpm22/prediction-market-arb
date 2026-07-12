@@ -111,3 +111,16 @@ def test_unproven_group_records_as_review_never_dropped():
     no = [o for o in opps if o["side"] == "NO"]
     assert no and no[0]["status"] == "REVIEW"
     assert no[0]["proof_status"] == "unproven-exhaustive"
+
+
+def test_proof_one_sided_never_crashes_with_flag_disabled():
+    # M8: mids ran unconditionally; with require_two_sided_all_outcomes false a
+    # one-sided outcome crashed on Decimal + None instead of failing the proof
+    cfg = dict(CFG)
+    cfg["negrisk"] = {**CFG["negrisk"],
+                      "exhaustive_proof": {**CFG["negrisk"]["exhaustive_proof"],
+                                           "require_two_sided_all_outcomes": False}}
+    outs = [dict(out("a", "0.34", "0.33"), yes_bid=None),
+            out("b", "0.33", "0.328"), out("c", "0.33", "0.328")]
+    status, reason = exhaustiveness_proof(cfg, outs, venue_flag=True)
+    assert status == "unproven-exhaustive" and "one-sided" in reason

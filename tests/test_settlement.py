@@ -96,3 +96,18 @@ def test_partial_settlement_writes_honest_per_leg(cfg, tmp_path):
         "SELECT payload_json FROM bet_events WHERE kind='settled'")[0]["payload_json"])
     assert payload["fraction"] == "0.4"
     assert payload["per_leg"] == ["PARTIAL"]
+
+
+def test_settle_manual_warns_on_unknown_winner_token(cfg, tmp_path, caplog):
+    # M6: 'a typo is forever' — a winner token matching no leg outcome across
+    # the event's bets at least screams before settling
+    import logging
+
+    from arb.settlement import settle_manual
+    store = Store(tmp_path / "w.sqlite")
+    _bet(store, 1, T1, "mets")
+    with caplog.at_level(logging.WARNING):
+        n = settle_manual(cfg, store, "baseball_mlb:2026-07-08:mets:royals:dh1",
+                          "Mets", now=NOW)  # capital-M typo: matches nothing
+    assert n == 1  # still settles (single-leg opponents are legitimate)...
+    assert any("matches no leg outcome" in r.getMessage() for r in caplog.records)

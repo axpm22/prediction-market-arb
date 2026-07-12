@@ -109,11 +109,21 @@ def settle_manual(cfg, store, event_key: str, result: str,
     winner = result
     if result.upper().startswith("PARTIAL:"):
         winner, fraction = "PARTIAL", Decimal(result.split(":", 1)[1])
+    matched = [b for b in open_resolution_bets(store)
+               if b["event_key"] == event_key]
+    if matched and winner not in ("VOID", "PARTIAL"):
+        outcomes = {leg.get("outcome") for b in matched
+                    for leg in json.loads(b["legs_json"])}
+        if winner not in outcomes:
+            # legitimate for single-leg bets (opponent wins) — but scream, a
+            # typo'd token silently settles every YES leg LOST, forever (M6)
+            log.warning("settle --manual %s: winner %r matches no leg outcome "
+                        "%s — verify spelling before trusting this settlement",
+                        event_key, winner, sorted(o for o in outcomes if o))
     n = 0
-    for bet in open_resolution_bets(store):
-        if bet["event_key"] == event_key:
-            settle_bet(cfg, store, bet, winner, "manual", now, fraction=fraction)
-            n += 1
+    for bet in matched:
+        settle_bet(cfg, store, bet, winner, "manual", now, fraction=fraction)
+        n += 1
     return n
 
 
