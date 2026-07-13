@@ -168,7 +168,8 @@ ai_matcher:
   enabled: false                    # enable after ground-truth set exists (§18.5)
   model: claude-haiku-4-5
   min_confidence: 0.85
-  max_new_pairs_per_day: 100
+  max_new_pairs_per_day: 300        # raised 100->300 for the first sweep batch
+                                    #   (257 pairs, ~$0.25 at Haiku prices)
   max_rules_chars: 8000
   paper_fill: true
   paper_stake_usd: 1

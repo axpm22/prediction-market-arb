@@ -100,7 +100,7 @@ def _spent_today(store, now: datetime) -> int:
 def run_ai(cfg, store, mode: str = "eval", client=None,
            candidates_path: str | Path = CANDIDATES_PATH,
            now: datetime | None = None) -> dict:
-    assert mode in ("eval", "live")
+    assert mode in ("eval", "live", "sweep")
     now = now or datetime.now(timezone.utc)
     aicfg = cfg["ai_matcher"]
     if mode == "live" and not aicfg["enabled"]:
@@ -109,20 +109,33 @@ def run_ai(cfg, store, mode: str = "eval", client=None,
                         "and a dated amendment flip it, nothing else"}
     path = Path(candidates_path)
     cands = yaml.safe_load(path.read_text()) or {}
-    # eval scores curated pairs; live extends to the unverdicted frontier
+    # eval scores curated pairs; live extends to the unverdicted frontier;
+    # sweep classifies everything uncached (second-opinion / pre-compute) —
+    # verdicts are cached either way, so no call is ever repeated
     todo = [c for c in cands.values()
-            if (("verdict" in c) if mode == "eval" else ("verdict" not in c))
+            if (("verdict" in c) if mode == "eval" else
+                ("verdict" not in c) if mode == "live" else True)
             and not _cached(store, c["pair_id"], str(aicfg["model"]))]
     budget = int(aicfg["max_new_pairs_per_day"]) - _spent_today(store, now)
     classified, budget_exhausted = 0, False
     if client is None and todo and budget > 0:
         client = _client()
+    errors = 0
     for c in todo:
         if classified >= budget:
             budget_exhausted = True
             break
-        v = classify_pair(client, str(aicfg["model"]), c,
-                          int(aicfg["max_rules_chars"]))
+        try:
+            v = classify_pair(client, str(aicfg["model"]), c,
+                              int(aicfg["max_rules_chars"]))
+        except Exception as e:  # noqa: BLE001 — one bad pair never kills a run
+            log.warning("ai classify failed for %s: %s", c["pair_id"], e)
+            errors += 1
+            if errors >= 5:
+                log.warning("ai matcher: %s consecutive-ish errors — stopping "
+                            "the run early", errors)
+                break
+            continue
         store.insert("verdicts", {
             "created_at": now.isoformat(), "pair_key": c["pair_id"],
             "verdict": "same" if v["same_event"] else "different",
@@ -137,7 +150,8 @@ def run_ai(cfg, store, mode: str = "eval", client=None,
         path.write_text(yaml.safe_dump(cands, sort_keys=True, width=100,
                                        allow_unicode=True))
     s = {"status": "ok", "mode": mode, "classified": classified,
-         "budget_exhausted": budget_exhausted, "cached_or_done": len(cands)}
+         "budget_exhausted": budget_exhausted, "errors": errors,
+         "cached_or_done": len(cands)}
     log.info("ai matcher: %s", s)
     return s
 

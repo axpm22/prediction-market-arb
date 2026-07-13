@@ -73,6 +73,8 @@ def main(argv=None):
                       help="Haiku stage, live mode (requires ai_matcher.enabled)")
     p_ns.add_argument("--eval", action="store_true", dest="ai_eval",
                       help="classify curated pairs + score precision vs ground truth")
+    p_ns.add_argument("--sweep", action="store_true", dest="ai_sweep",
+                      help="classify ALL uncached candidates (second opinion)")
     p_live = sub.add_parser("live", help="in-play lane: shortlisted re-quotes at "
                                          "live cadence (review-lane forever)")
     p_live.add_argument("--once", action="store_true")

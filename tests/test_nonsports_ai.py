@@ -107,3 +107,27 @@ def test_ai_never_touches_human_verdict_fields(tmp_path):
     data = yaml.safe_load(path.read_text())["K1|P1"]
     assert data["verdict"] == "same"           # human field untouched
     assert data["ai_verdict"] in ("same", "different")  # convenience annotation
+
+
+def test_sweep_mode_classifies_unverdicted_and_tolerates_errors(tmp_path):
+    store = Store(tmp_path / "s.sqlite")
+    path = _cands(tmp_path, [PAIR_SAME, PAIR_NEW])
+
+    class FlakyClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            outer = self
+
+            class M:
+                def create(_self, **kw):
+                    outer.calls += 1
+                    if outer.calls == 1:
+                        raise RuntimeError("transient api error")
+                    return FakeResp({"same_event": True, "confidence": 0.9,
+                                     "reason": "fake"})
+            self.messages = M()
+
+    s = ai.run_ai(CFG, store, mode="sweep", client=FlakyClient(),
+                  candidates_path=path, now=NOW)
+    # sweep covers BOTH pairs (curated + not); the one error is absorbed
+    assert s["classified"] == 1 and s["errors"] == 1

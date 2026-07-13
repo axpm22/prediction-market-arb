@@ -312,9 +312,11 @@ def cmd_nonsports(cfg, store, args):
     for human curation (data/nonsports_curation_protocol.md). --eval runs the
     Haiku stage on curated pairs and scores it (§18.5); --ai is the live stage
     (requires ai_matcher.enabled, flipped only by dated amendment)."""
-    if getattr(args, "ai", False) or getattr(args, "ai_eval", False):
+    if getattr(args, "ai", False) or getattr(args, "ai_eval", False) \
+            or getattr(args, "ai_sweep", False):
         from arb.nonsports.ai import evaluate, run_ai
-        mode = "eval" if getattr(args, "ai_eval", False) else "live"
+        mode = ("eval" if getattr(args, "ai_eval", False) else
+                "sweep" if getattr(args, "ai_sweep", False) else "live")
         s = run_ai(cfg, store, mode=mode)
         console.print(f"ai matcher [{mode}]: {s}")
         if mode == "eval":
