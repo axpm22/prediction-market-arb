@@ -35,7 +35,7 @@ class FakeClient:
                 self.calls += 1
                 text = kw["messages"][0]["content"]
                 same = text.lower().count("unemployment") >= 2
-                return FakeResp({"same_event": same, "confidence": 0.97,
+                return FakeResp({"same_measurand": same, "confidence": 0.97,
                                  "reason": "fake"})
         self.messages = M()
 
@@ -75,13 +75,14 @@ def test_eval_mode_scores_only_curated_pairs_and_caches(tmp_path):
     fc = FakeClient()
     s = ai.run_ai(CFG, store, mode="eval", client=fc,
                   candidates_path=path, now=NOW)
-    assert s["classified"] == 2 and fc.calls == 2  # PAIR_NEW has no verdict
+    assert s["classified"] == 2  # PAIR_NEW has no verdict
+    assert fc.calls == 1  # PAIR_DIFF is shape-unparsed: code answers, no API call
     rows = store.query("SELECT pair_key, verdict FROM verdicts ORDER BY pair_key")
     assert [r["pair_key"] for r in rows] == ["K1|P1", "K2|P2"]
     # cache: a second run makes ZERO api calls (append-only, budgeted)
     s2 = ai.run_ai(CFG, store, mode="eval", client=fc,
                    candidates_path=path, now=NOW)
-    assert fc.calls == 2 and s2["classified"] == 0
+    assert fc.calls == 1 and s2["classified"] == 0
 
     m = ai.evaluate(CFG, store, candidates_path=path)
     # fake says same iff 'unemployment' x2: SAME pair -> TP; DIFF pair -> TN
@@ -123,8 +124,8 @@ def test_sweep_mode_classifies_unverdicted_and_tolerates_errors(tmp_path):
                     outer.calls += 1
                     if outer.calls == 1:
                         raise RuntimeError("transient api error")
-                    return FakeResp({"same_event": True, "confidence": 0.9,
-                                     "reason": "fake"})
+                    return FakeResp({"same_measurand": True,
+                                     "confidence": 0.9, "reason": "fake"})
             self.messages = M()
 
     s = ai.run_ai(CFG, store, mode="sweep", client=FlakyClient(),

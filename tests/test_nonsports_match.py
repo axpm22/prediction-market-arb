@@ -144,3 +144,22 @@ def test_extract_strikes_ignores_year_tokens():
     # non-year 4-digit values with decimals/commas stay strikes
     assert Decimal("100000") in extract_strikes("reach $100,000 by 2026")
     assert Decimal("2026.5") in extract_strikes("above 2026.5 points")
+
+
+def test_shape_relation_decides_every_first_eval_false_positive():
+    # v2's seven 0.92-0.95-confidence boundary errors, now decided in code
+    from arb.nonsports.match import shape_relation
+    fp = [("rise more than 0.6% in July", "0.6%+ be 0.6% or more"),      # gt vs gte
+          ("is exactly 4.0% in Jul", "≤3.9% be ≤3.9%"),                  # exact vs lte
+          ("increase by more than 1.0%", "<1.0% be less than 1.0%"),     # gt vs lt
+          ("increase by more than 2.0%", "<1.0% be less than 1.0%"),
+          ("increase by more than 3.5%", "between 3.0–3.5%"),            # gt vs range
+          ("be above 4.7% in July", "≥4.7% be ≥4.7%")]                   # gt vs gte
+    for k, p in fp:
+        assert shape_relation(k, p) == "different", (k, p)
+    # and the nine true positives keep their shapes
+    assert shape_relation("be above 3.9% in July", "≤3.9% be ≤3.9%") == "inverted"
+    assert shape_relation("rise more than 0.0% core", "≤0.0% be 0.0% or less") == "inverted"
+    assert shape_relation("is exactly 4.2% in Jul", "4.2% be 4.2%?") == "identical"
+    # unparsable propositions stay unknown (conservative downstream)
+    assert shape_relation("something odd", "no numbers") == "unknown"

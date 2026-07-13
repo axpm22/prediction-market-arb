@@ -59,6 +59,46 @@ def extract_strikes(text: str) -> set[Decimal]:
                     and 1900 <= int(m) <= 2100)}
 
 
+SHAPE_VERSION = "shape-v1"  # folded into the verdict-cache sha (ai.py)
+
+_REL_RES = [
+    ("range", re.compile(r"(\d+(?:\.\d+)?)\s*%?\s*(?:–|-)\s*(\d+(?:\.\d+)?)\s*%")),
+    ("gte", re.compile(r"(?:≥\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%?\s*(?:\+|or more|or higher|or above))")),
+    ("lte", re.compile(r"(?:≤\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%?\s*(?:or less|or lower|or below))")),
+    ("gt", re.compile(r"(?:>|above|more than|exceed[s]?)\s*(\d+(?:\.\d+)?)")),
+    ("lt", re.compile(r"(?:<|below|less than|under)\s*(\d+(?:\.\d+)?)")),
+    ("exact", re.compile(r"(?:exactly|be)\s*(\d+(?:\.\d+)?)\s*%")),
+]
+
+
+def parse_relation(text: str) -> tuple | None:
+    """(op, strike[, hi]) from a market's proposition text; None = unparsed.
+    Order matters: '0.6% or more' must hit gte before exact's bare 'be X%'."""
+    for op, rx in _REL_RES:
+        m = rx.search(text)
+        if m:
+            vals = [Decimal(g) for g in m.groups() if g is not None]
+            return (op, *vals)
+    return None
+
+
+def shape_relation(a_text: str, b_text: str) -> str:
+    """'identical' | 'inverted' | 'different' | 'unknown' from proposition
+    SHAPE alone (boundary worlds are decidable in code — the AI matcher failed
+    exactly here at 0.95 confidence, first eval 2026-07-13). Says nothing about
+    source/measurand; that's the AI's half."""
+    a, b = parse_relation(a_text), parse_relation(b_text)
+    if a is None or b is None:
+        return "unknown"
+    if a == b:
+        return "identical"
+    # exact complements on the same published print
+    inv = {("gt", "lte"), ("lte", "gt"), ("lt", "gte"), ("gte", "lt")}
+    if (a[0], b[0]) in inv and a[1] == b[1]:
+        return "inverted"
+    return "different"  # any other shape pair has a boundary world that splits
+
+
 def _iso(s: str | None) -> datetime | None:
     if not s:
         return None

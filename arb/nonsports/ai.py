@@ -23,6 +23,7 @@ from pathlib import Path
 import yaml
 
 from arb.logutil import get_logger
+from arb.nonsports.match import SHAPE_VERSION, shape_relation
 from arb.nonsports.scan import CANDIDATES_PATH
 
 log = get_logger("arb.nonsports.ai", "logs/scan.log")
@@ -35,27 +36,41 @@ _OUT_PER_TOK = Decimal("5.00") / Decimal(10 ** 6)
 SCHEMA = {
     "type": "object",
     "properties": {
-        "same_event": {"type": "boolean"},
+        # v3: the AI answers ONLY source/measurand/period identity. Boundary
+        # and threshold-shape logic is decided in code (match.shape_relation)
+        # — v2 showed Haiku fails boundary worlds at 0.95 confidence while
+        # nailing source identification in every reason text (2026-07-13).
+        "same_measurand": {"type": "boolean"},
         "confidence": {"type": "number"},
         "reason": {"type": "string"},
     },
-    "required": ["same_event", "confidence", "reason"],
+    "required": ["same_measurand", "confidence", "reason"],
     "additionalProperties": False,
 }
 
-PROMPT = """You judge whether two prediction markets are SETTLEMENT-IDENTICAL:
-would every possible state of the world settle both the same way? Same topic
-is NOT enough. Check, in order: (1) resolution source; (2) threshold and
-direction — '>= 3.0%' vs '> 3.0%' differ, 'more than X' (threshold) vs
-'exactly X' (bucket) differ; (3) units, rounding, seasonal adjustment,
-headline vs core; (4) measurement period AND settlement cutoff; (5) entity
-precision — 'a Republican' is not 'Trump', China is not South Korea; (6)
-inverted framing can still be identical (note it in reason); (7) divergent
-cancellation/revision handling means different. When uncertain, same_event is
-false and confidence is low. Confidence is your probability the verdict is
-correct, 0-1."""
+PROMPT = """Two prediction markets each settle on a published statistic. \
+Ignore the thresholds, directions, and strike values completely — another \
+system checks those. Answer ONE question: do both markets settle on the SAME \
+underlying published number?
 
-_RULES_SHA = hashlib.sha1(PROMPT.encode()).hexdigest()
+same_measurand is true only if ALL of these match:
+1. SOURCE: the same publication by the same institution. "reported by the \
+BLS", "the Employment Situation report", and "the official unemployment rate \
+(U-3)" all name the same print.
+2. QUANTITY: exactly the same series. Headline CPI is not core CPI; \
+seasonally adjusted is not unadjusted; MoM is not YoY; a LEVEL ("core CPI is \
+X") is not a COMPARISON ("core above headline"); real GDP Advance Estimate \
+is not a later revision.
+3. ENTITY: same country/person/place. China is not South Korea; 'a \
+Republican' is not 'Trump'.
+4. PERIOD AND SETTLING RELEASE: same measurement period, settled by the same \
+release. One side counting 2025 when the other starts at 2026 -> false.
+5. EDGE CLAUSES: materially divergent cancellation/revision handling -> false.
+
+When genuinely uncertain, same_measurand is false with low confidence. \
+Confidence is your probability the answer is correct, 0-1."""
+
+_RULES_SHA = hashlib.sha1((PROMPT + "|" + SHAPE_VERSION).encode()).hexdigest()
 
 
 def _client():
@@ -81,9 +96,23 @@ def classify_pair(client, model: str, cand: dict, max_chars: int) -> dict:
     data = json.loads(resp.content[0].text)
     cost = (Decimal(resp.usage.input_tokens) * _IN_PER_TOK
             + Decimal(resp.usage.output_tokens) * _OUT_PER_TOK)
-    return {"same_event": bool(data["same_event"]),
+    return {"same_measurand": bool(data["same_measurand"]),
             "confidence": Decimal(str(data["confidence"])),
             "reason": str(data["reason"])[:500], "cost_usd": cost}
+
+
+def system_verdict(shape: str, ai: dict | None) -> tuple[str, Decimal, str]:
+    """(verdict, confidence, reason): code decides shape, AI decides measurand.
+    shape 'different'/'unknown' never reaches the API — 'unknown' is
+    conservative-different pending a human look."""
+    if shape == "different":
+        return "different", Decimal(1), "shape: boundary/threshold mismatch (code)"
+    if shape == "unknown":
+        return "different", Decimal(1), "shape: unparsed proposition (code, conservative)"
+    if not ai["same_measurand"]:
+        return "different", ai["confidence"], f"measurand: {ai['reason']}"
+    verdict = "same" if shape == "identical" else "same-inverted"
+    return verdict, ai["confidence"], f"shape:{shape} + measurand: {ai['reason']}"
 
 
 def _cached(store, pair_key: str, model: str) -> bool:
@@ -125,26 +154,32 @@ def run_ai(cfg, store, mode: str = "eval", client=None,
         if classified >= budget:
             budget_exhausted = True
             break
-        try:
-            v = classify_pair(client, str(aicfg["model"]), c,
-                              int(aicfg["max_rules_chars"]))
-        except Exception as e:  # noqa: BLE001 — one bad pair never kills a run
-            log.warning("ai classify failed for %s: %s", c["pair_id"], e)
-            errors += 1
-            if errors >= 5:
-                log.warning("ai matcher: %s consecutive-ish errors — stopping "
-                            "the run early", errors)
-                break
-            continue
+        shape = shape_relation(
+            f"{c.get('kalshi_text', '')} {c.get('kalshi_rules', '')}",
+            c.get("pm_text", ""))
+        ai = None
+        if shape in ("identical", "inverted"):  # only then is the API needed
+            try:
+                ai = classify_pair(client, str(aicfg["model"]), c,
+                                   int(aicfg["max_rules_chars"]))
+            except Exception as e:  # noqa: BLE001 — one bad pair never kills a run
+                log.warning("ai classify failed for %s: %s", c["pair_id"], e)
+                errors += 1
+                if errors >= 5:
+                    log.warning("ai matcher: %s consecutive-ish errors — "
+                                "stopping the run early", errors)
+                    break
+                continue
+        verdict, conf, reason = system_verdict(shape, ai)
         store.insert("verdicts", {
             "created_at": now.isoformat(), "pair_key": c["pair_id"],
-            "verdict": "same" if v["same_event"] else "different",
-            "confidence": v["confidence"], "rules_sha": _RULES_SHA,
-            "model": str(aicfg["model"]), "cost_usd": v["cost_usd"]})
+            "verdict": verdict, "confidence": conf, "rules_sha": _RULES_SHA,
+            "model": str(aicfg["model"]),
+            "cost_usd": ai["cost_usd"] if ai else Decimal(0)})
         # convenience annotation for the curator; never touches human fields
-        c.setdefault("ai_verdict", "same" if v["same_event"] else "different")
-        c.setdefault("ai_confidence", float(v["confidence"]))
-        c.setdefault("ai_reason", v["reason"])
+        c["ai_verdict"] = verdict
+        c["ai_confidence"] = float(conf)
+        c["ai_reason"] = reason[:500]
         classified += 1
     if classified:
         path.write_text(yaml.safe_dump(cands, sort_keys=True, width=100,
@@ -172,7 +207,7 @@ def evaluate(cfg, store, candidates_path: str | Path = CANDIDATES_PATH) -> dict:
         if truth is None:
             continue
         n += 1
-        says_same = (row["verdict"] == "same"
+        says_same = (row["verdict"].startswith("same")
                      and Decimal(str(row["confidence"]))
                      >= Decimal(str(aicfg["min_confidence"])))
         if says_same and truth == "same":
