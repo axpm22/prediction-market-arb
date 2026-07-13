@@ -2,6 +2,9 @@ KXCPI-26JUL-T0.0|0xd46a37b0de386fb56b804ab8ff86d0cb287228556ccc1a985875926ef5944
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.41
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 3: Kalshi is HEADLINE CPI, PM is CORE CPI (ex food & energy) — different index'
+  draft_verdict: different
   kalshi_date: '2026-08-12T13:56:00+00:00'
   kalshi_id: KXCPI-26JUL-T0.0
   kalshi_rules: If the Consumer Price Index (CPI) increases by more than 0.0% (single-decimal) in July
@@ -44,6 +47,9 @@ KXCPI-26JUL-T0.1|0x214895321b0081616c50ff0b5669103adb213ac0f1b4690c74f21a3e1f384
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.41
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 3: Kalshi is HEADLINE CPI, PM is CORE CPI (ex food & energy) — different index'
+  draft_verdict: different
   kalshi_date: '2026-08-12T13:56:00+00:00'
   kalshi_id: KXCPI-26JUL-T0.1
   kalshi_rules: If the Consumer Price Index (CPI) increases by more than 0.1% (single-decimal) in July
@@ -86,6 +92,9 @@ KXCPI-26JUL-T0.2|0xb07b92ca1121ebe093f69404fff30fc3a8496038e21e7a731f93c32308f75
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.41
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 3: Kalshi is HEADLINE CPI, PM is CORE CPI (ex food & energy) — different index'
+  draft_verdict: different
   kalshi_date: '2026-08-12T13:56:00+00:00'
   kalshi_id: KXCPI-26JUL-T0.2
   kalshi_rules: If the Consumer Price Index (CPI) increases by more than 0.2% (single-decimal) in July
@@ -128,6 +137,9 @@ KXCPI-26JUL-T0.3|0x2f63bb68f40eee0d7032180ce6b72be92bad9340ba58f243c0ab8de9a0a5b
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.41
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 3: Kalshi is HEADLINE CPI, PM is CORE CPI (ex food & energy) — different index'
+  draft_verdict: different
   kalshi_date: '2026-08-12T13:56:00+00:00'
   kalshi_id: KXCPI-26JUL-T0.3
   kalshi_rules: If the Consumer Price Index (CPI) increases by more than 0.3% (single-decimal) in July
@@ -170,6 +182,9 @@ KXCPI-26JUL-T0.4|0x997c746e78e1f2b4991af0f46dbd1938da6db74b4c36a53c9f413d65407a2
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.41
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 3: Kalshi is HEADLINE CPI, PM is CORE CPI (ex food & energy) — different index'
+  draft_verdict: different
   kalshi_date: '2026-08-12T13:56:00+00:00'
   kalshi_id: KXCPI-26JUL-T0.4
   kalshi_rules: If the Consumer Price Index (CPI) increases by more than 0.4% (single-decimal) in July
@@ -212,6 +227,9 @@ KXCPI-26JUL-T0.5|0x93f7fd567b5bc4f362127427477e02c6d764e2690f176e03a1303f4141988
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.41
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 3: Kalshi is HEADLINE CPI, PM is CORE CPI (ex food & energy) — different index'
+  draft_verdict: different
   kalshi_date: '2026-08-12T13:56:00+00:00'
   kalshi_id: KXCPI-26JUL-T0.5
   kalshi_rules: If the Consumer Price Index (CPI) increases by more than 0.5% (single-decimal) in July
@@ -254,6 +272,10 @@ KXCPICORE-26JUL-T0.0|0xd46a37b0de386fb56b804ab8ff86d0cb287228556ccc1a985875926ef
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.42
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'exact complements: K ''above 0.0%'' == NOT P ''<= 0.0%''; same core CPI MoM, SA, BLS single
+    decimal. inverted: true'
+  draft_verdict: same
   kalshi_date: '2026-08-12T14:00:00+00:00'
   kalshi_id: KXCPICORE-26JUL-T0.0
   kalshi_rules: 'If the seasonally adjusted Consumer Price Index for All Urban Consumers: All Items less
@@ -297,6 +319,9 @@ KXCPICORE-26JUL-T0.1|0x214895321b0081616c50ff0b5669103adb213ac0f1b4690c74f21a3e1
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.42
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: K ''above X'' threshold vs P exact-value bucket — bucket X settles K No, P Yes'
+  draft_verdict: different
   kalshi_date: '2026-08-12T14:00:00+00:00'
   kalshi_id: KXCPICORE-26JUL-T0.1
   kalshi_rules: 'If the seasonally adjusted Consumer Price Index for All Urban Consumers: All Items less
@@ -340,6 +365,9 @@ KXCPICORE-26JUL-T0.2|0xb07b92ca1121ebe093f69404fff30fc3a8496038e21e7a731f93c3230
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.42
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: K ''above X'' threshold vs P exact-value bucket — bucket X settles K No, P Yes'
+  draft_verdict: different
   kalshi_date: '2026-08-12T14:00:00+00:00'
   kalshi_id: KXCPICORE-26JUL-T0.2
   kalshi_rules: 'If the seasonally adjusted Consumer Price Index for All Urban Consumers: All Items less
@@ -383,6 +411,9 @@ KXCPICORE-26JUL-T0.3|0x2f63bb68f40eee0d7032180ce6b72be92bad9340ba58f243c0ab8de9a
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.42
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: K ''above X'' threshold vs P exact-value bucket — bucket X settles K No, P Yes'
+  draft_verdict: different
   kalshi_date: '2026-08-12T14:00:00+00:00'
   kalshi_id: KXCPICORE-26JUL-T0.3
   kalshi_rules: 'If the seasonally adjusted Consumer Price Index for All Urban Consumers: All Items less
@@ -426,6 +457,9 @@ KXCPICORE-26JUL-T0.4|0x997c746e78e1f2b4991af0f46dbd1938da6db74b4c36a53c9f413d654
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.42
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: K ''above X'' threshold vs P exact-value bucket — bucket X settles K No, P Yes'
+  draft_verdict: different
   kalshi_date: '2026-08-12T14:00:00+00:00'
   kalshi_id: KXCPICORE-26JUL-T0.4
   kalshi_rules: 'If the seasonally adjusted Consumer Price Index for All Urban Consumers: All Items less
@@ -469,6 +503,9 @@ KXCPICORE-26JUL-T0.5|0x93f7fd567b5bc4f362127427477e02c6d764e2690f176e03a1303f414
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.42
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: K ''above X'' threshold vs P exact-value bucket — bucket X settles K No, P Yes'
+  draft_verdict: different
   kalshi_date: '2026-08-12T14:00:00+00:00'
   kalshi_id: KXCPICORE-26JUL-T0.5
   kalshi_rules: 'If the seasonally adjusted Consumer Price Index for All Urban Consumers: All Items less
@@ -512,6 +549,9 @@ KXCPICORE-26JUL-T0.6|0xab285be97251f406a40fd3998108c458e00a639d9c7a42622d1fbf433
   block_reason: concept=cpi gap=0.4d strike-match
   concept: cpi
   date_gap_days: 0.42
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: K ''above X'' threshold vs P exact-value bucket — bucket X settles K No, P Yes'
+  draft_verdict: different
   kalshi_date: '2026-08-12T14:00:00+00:00'
   kalshi_id: KXCPICORE-26JUL-T0.6
   kalshi_rules: 'If the seasonally adjusted Consumer Price Index for All Urban Consumers: All Items less
@@ -555,6 +595,10 @@ KXCPICOREHEAD-26JUL14-CVH|0x25457d735ac8863606fccb1182f2f7a501c806cef9746b1ff3b2
   block_reason: concept=cpi gap=0.6d strike-match
   concept: cpi
   date_gap_days: 0.65
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 5: Kalshi asks core-vs-headline COMPARISON, PM asks core YoY LEVEL — different propositions,
+    strike coincidence'
+  draft_verdict: different
   kalshi_date: '2026-07-14T12:25:00+00:00'
   kalshi_id: KXCPICOREHEAD-26JUL14-CVH
   kalshi_rules: If U.S. CPI all items less food and energy year-over-year inflation is above U.S. CPI
@@ -598,6 +642,10 @@ KXCPICOREHEAD-26JUL14-CVH|0x697825d6953e04594d23b445ea5476f1f6db0ae1d17e1c8d4ae3
   block_reason: concept=cpi gap=0.6d strike-match
   concept: cpi
   date_gap_days: 0.65
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 5: Kalshi asks core-vs-headline COMPARISON, PM asks core YoY LEVEL — different propositions,
+    strike coincidence'
+  draft_verdict: different
   kalshi_date: '2026-07-14T12:25:00+00:00'
   kalshi_id: KXCPICOREHEAD-26JUL14-CVH
   kalshi_rules: If U.S. CPI all items less food and energy year-over-year inflation is above U.S. CPI
@@ -641,6 +689,10 @@ KXCPICOREHEAD-26JUL14-CVH|0x7ea93ae193b84828905684c530c95280e4acdc5f943aa12bb19b
   block_reason: concept=cpi gap=0.6d strike-match
   concept: cpi
   date_gap_days: 0.65
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 5: Kalshi asks core-vs-headline COMPARISON, PM asks core YoY LEVEL — different propositions,
+    strike coincidence'
+  draft_verdict: different
   kalshi_date: '2026-07-14T12:25:00+00:00'
   kalshi_id: KXCPICOREHEAD-26JUL14-CVH
   kalshi_rules: If U.S. CPI all items less food and energy year-over-year inflation is above U.S. CPI
@@ -684,6 +736,10 @@ KXCPICOREHEAD-26JUL14-CVH|0xb63e0f0801c00ed0bef14e2c5265bcfa2b89622afaa4fe5773ba
   block_reason: concept=cpi gap=0.6d strike-match
   concept: cpi
   date_gap_days: 0.65
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 5: Kalshi asks core-vs-headline COMPARISON, PM asks core YoY LEVEL — different propositions,
+    strike coincidence'
+  draft_verdict: different
   kalshi_date: '2026-07-14T12:25:00+00:00'
   kalshi_id: KXCPICOREHEAD-26JUL14-CVH
   kalshi_rules: If U.S. CPI all items less food and energy year-over-year inflation is above U.S. CPI
@@ -727,6 +783,10 @@ KXCPICOREHEAD-26JUL14-CVH|0xbfbfbe66121eb1b7ce2e966bc968c59ed5840f59af460612be9a
   block_reason: concept=cpi gap=0.6d strike-match
   concept: cpi
   date_gap_days: 0.65
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 5: Kalshi asks core-vs-headline COMPARISON, PM asks core YoY LEVEL — different propositions,
+    strike coincidence'
+  draft_verdict: different
   kalshi_date: '2026-07-14T12:25:00+00:00'
   kalshi_id: KXCPICOREHEAD-26JUL14-CVH
   kalshi_rules: If U.S. CPI all items less food and energy year-over-year inflation is above U.S. CPI
@@ -770,6 +830,10 @@ KXCPICOREHEAD-26JUL14-CVH|0xc057e97b93854dba71b86278402504f1ed59fbcaeb48e56d08fa
   block_reason: concept=cpi gap=0.6d strike-match
   concept: cpi
   date_gap_days: 0.65
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 5: Kalshi asks core-vs-headline COMPARISON, PM asks core YoY LEVEL — different propositions,
+    strike coincidence'
+  draft_verdict: different
   kalshi_date: '2026-07-14T12:25:00+00:00'
   kalshi_id: KXCPICOREHEAD-26JUL14-CVH
   kalshi_rules: If U.S. CPI all items less food and energy year-over-year inflation is above U.S. CPI
@@ -813,6 +877,10 @@ KXCPICOREHEAD-26JUL14-CVH|0xc4f73f035bfee52531a7d0dc600d6bdc9aadd6fbfef9b664aa1d
   block_reason: concept=cpi gap=0.6d strike-match
   concept: cpi
   date_gap_days: 0.65
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 5: Kalshi asks core-vs-headline COMPARISON, PM asks core YoY LEVEL — different propositions,
+    strike coincidence'
+  draft_verdict: different
   kalshi_date: '2026-07-14T12:25:00+00:00'
   kalshi_id: KXCPICOREHEAD-26JUL14-CVH
   kalshi_rules: If U.S. CPI all items less food and energy year-over-year inflation is above U.S. CPI
@@ -856,6 +924,10 @@ KXCPICOREHEAD-26JUL14-CVH|0xe3d71d453b2769d2575a1ed3f0bbe244d4cb6950622bb9c42052
   block_reason: concept=cpi gap=0.6d strike-match
   concept: cpi
   date_gap_days: 0.65
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 5: Kalshi asks core-vs-headline COMPARISON, PM asks core YoY LEVEL — different propositions,
+    strike coincidence'
+  draft_verdict: different
   kalshi_date: '2026-07-14T12:25:00+00:00'
   kalshi_id: KXCPICOREHEAD-26JUL14-CVH
   kalshi_rules: If U.S. CPI all items less food and energy year-over-year inflation is above U.S. CPI
@@ -899,6 +971,10 @@ KXCPICOREHEAD-26JUL14-CVH|0xeee8d9e03b113461aa9a774283d9bc8092f9087a42f80c62d9e9
   block_reason: concept=cpi gap=0.6d strike-match
   concept: cpi
   date_gap_days: 0.65
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 5: Kalshi asks core-vs-headline COMPARISON, PM asks core YoY LEVEL — different propositions,
+    strike coincidence'
+  draft_verdict: different
   kalshi_date: '2026-07-14T12:25:00+00:00'
   kalshi_id: KXCPICOREHEAD-26JUL14-CVH
   kalshi_rules: If U.S. CPI all items less food and energy year-over-year inflation is above U.S. CPI
@@ -942,6 +1018,10 @@ KXCPICOREHEAD-26JUL14-CVH|0xf7f918f4c706e2039ade745cc6c57b6760a81b4d4b440aa45fde
   block_reason: concept=cpi gap=0.6d strike-match
   concept: cpi
   date_gap_days: 0.65
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 5: Kalshi asks core-vs-headline COMPARISON, PM asks core YoY LEVEL — different propositions,
+    strike coincidence'
+  draft_verdict: different
   kalshi_date: '2026-07-14T12:25:00+00:00'
   kalshi_id: KXCPICOREHEAD-26JUL14-CVH
   kalshi_rules: If U.S. CPI all items less food and energy year-over-year inflation is above U.S. CPI
@@ -985,6 +1065,10 @@ KXECONSTATU3-26JUL-T3.3|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.3%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.3
   kalshi_rules: If the Unemployment rate is exactly 3.3% in Jul 2026, then the market resolves to Yes.
@@ -1022,6 +1106,10 @@ KXECONSTATU3-26JUL-T3.3|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.3%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.3
   kalshi_rules: If the Unemployment rate is exactly 3.3% in Jul 2026, then the market resolves to Yes.
@@ -1059,6 +1147,10 @@ KXECONSTATU3-26JUL-T3.3|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.3%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.3
   kalshi_rules: If the Unemployment rate is exactly 3.3% in Jul 2026, then the market resolves to Yes.
@@ -1096,6 +1188,10 @@ KXECONSTATU3-26JUL-T3.3|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.3%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.3
   kalshi_rules: If the Unemployment rate is exactly 3.3% in Jul 2026, then the market resolves to Yes.
@@ -1133,6 +1229,10 @@ KXECONSTATU3-26JUL-T3.3|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.3%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.3
   kalshi_rules: If the Unemployment rate is exactly 3.3% in Jul 2026, then the market resolves to Yes.
@@ -1170,6 +1270,10 @@ KXECONSTATU3-26JUL-T3.3|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.3%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.3
   kalshi_rules: If the Unemployment rate is exactly 3.3% in Jul 2026, then the market resolves to Yes.
@@ -1207,6 +1311,10 @@ KXECONSTATU3-26JUL-T3.3|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.3%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.3
   kalshi_rules: If the Unemployment rate is exactly 3.3% in Jul 2026, then the market resolves to Yes.
@@ -1244,6 +1352,10 @@ KXECONSTATU3-26JUL-T3.3|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.3%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.3
   kalshi_rules: If the Unemployment rate is exactly 3.3% in Jul 2026, then the market resolves to Yes.
@@ -1281,6 +1393,10 @@ KXECONSTATU3-26JUL-T3.3|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.3%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.3
   kalshi_rules: If the Unemployment rate is exactly 3.3% in Jul 2026, then the market resolves to Yes.
@@ -1318,6 +1434,10 @@ KXECONSTATU3-26JUL-T3.4|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.4%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.4
   kalshi_rules: If the Unemployment rate is exactly 3.4% in Jul 2026, then the market resolves to Yes.
@@ -1355,6 +1475,10 @@ KXECONSTATU3-26JUL-T3.4|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.4%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.4
   kalshi_rules: If the Unemployment rate is exactly 3.4% in Jul 2026, then the market resolves to Yes.
@@ -1392,6 +1516,10 @@ KXECONSTATU3-26JUL-T3.4|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.4%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.4
   kalshi_rules: If the Unemployment rate is exactly 3.4% in Jul 2026, then the market resolves to Yes.
@@ -1429,6 +1557,10 @@ KXECONSTATU3-26JUL-T3.4|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.4%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.4
   kalshi_rules: If the Unemployment rate is exactly 3.4% in Jul 2026, then the market resolves to Yes.
@@ -1466,6 +1598,10 @@ KXECONSTATU3-26JUL-T3.4|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.4%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.4
   kalshi_rules: If the Unemployment rate is exactly 3.4% in Jul 2026, then the market resolves to Yes.
@@ -1503,6 +1639,10 @@ KXECONSTATU3-26JUL-T3.4|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.4%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.4
   kalshi_rules: If the Unemployment rate is exactly 3.4% in Jul 2026, then the market resolves to Yes.
@@ -1540,6 +1680,10 @@ KXECONSTATU3-26JUL-T3.4|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.4%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.4
   kalshi_rules: If the Unemployment rate is exactly 3.4% in Jul 2026, then the market resolves to Yes.
@@ -1577,6 +1721,10 @@ KXECONSTATU3-26JUL-T3.4|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.4%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.4
   kalshi_rules: If the Unemployment rate is exactly 3.4% in Jul 2026, then the market resolves to Yes.
@@ -1614,6 +1762,10 @@ KXECONSTATU3-26JUL-T3.4|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.4%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.4
   kalshi_rules: If the Unemployment rate is exactly 3.4% in Jul 2026, then the market resolves to Yes.
@@ -1651,6 +1803,10 @@ KXECONSTATU3-26JUL-T3.5|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.5%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.5
   kalshi_rules: If the Unemployment rate is exactly 3.5% in Jul 2026, then the market resolves to Yes.
@@ -1688,6 +1844,10 @@ KXECONSTATU3-26JUL-T3.5|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.5%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.5
   kalshi_rules: If the Unemployment rate is exactly 3.5% in Jul 2026, then the market resolves to Yes.
@@ -1725,6 +1885,10 @@ KXECONSTATU3-26JUL-T3.5|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.5%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.5
   kalshi_rules: If the Unemployment rate is exactly 3.5% in Jul 2026, then the market resolves to Yes.
@@ -1762,6 +1926,10 @@ KXECONSTATU3-26JUL-T3.5|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.5%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.5
   kalshi_rules: If the Unemployment rate is exactly 3.5% in Jul 2026, then the market resolves to Yes.
@@ -1799,6 +1967,10 @@ KXECONSTATU3-26JUL-T3.5|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.5%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.5
   kalshi_rules: If the Unemployment rate is exactly 3.5% in Jul 2026, then the market resolves to Yes.
@@ -1836,6 +2008,10 @@ KXECONSTATU3-26JUL-T3.5|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.5%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.5
   kalshi_rules: If the Unemployment rate is exactly 3.5% in Jul 2026, then the market resolves to Yes.
@@ -1873,6 +2049,10 @@ KXECONSTATU3-26JUL-T3.5|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.5%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.5
   kalshi_rules: If the Unemployment rate is exactly 3.5% in Jul 2026, then the market resolves to Yes.
@@ -1910,6 +2090,10 @@ KXECONSTATU3-26JUL-T3.5|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.5%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.5
   kalshi_rules: If the Unemployment rate is exactly 3.5% in Jul 2026, then the market resolves to Yes.
@@ -1947,6 +2131,10 @@ KXECONSTATU3-26JUL-T3.5|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.5%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.5
   kalshi_rules: If the Unemployment rate is exactly 3.5% in Jul 2026, then the market resolves to Yes.
@@ -1984,6 +2172,10 @@ KXECONSTATU3-26JUL-T3.6|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.6%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.6
   kalshi_rules: If the Unemployment rate is exactly 3.6% in Jul 2026, then the market resolves to Yes.
@@ -2021,6 +2213,10 @@ KXECONSTATU3-26JUL-T3.6|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.6%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.6
   kalshi_rules: If the Unemployment rate is exactly 3.6% in Jul 2026, then the market resolves to Yes.
@@ -2058,6 +2254,10 @@ KXECONSTATU3-26JUL-T3.6|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.6%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.6
   kalshi_rules: If the Unemployment rate is exactly 3.6% in Jul 2026, then the market resolves to Yes.
@@ -2095,6 +2295,10 @@ KXECONSTATU3-26JUL-T3.6|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.6%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.6
   kalshi_rules: If the Unemployment rate is exactly 3.6% in Jul 2026, then the market resolves to Yes.
@@ -2132,6 +2336,10 @@ KXECONSTATU3-26JUL-T3.6|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.6%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.6
   kalshi_rules: If the Unemployment rate is exactly 3.6% in Jul 2026, then the market resolves to Yes.
@@ -2169,6 +2377,10 @@ KXECONSTATU3-26JUL-T3.6|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.6%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.6
   kalshi_rules: If the Unemployment rate is exactly 3.6% in Jul 2026, then the market resolves to Yes.
@@ -2206,6 +2418,10 @@ KXECONSTATU3-26JUL-T3.6|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.6%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.6
   kalshi_rules: If the Unemployment rate is exactly 3.6% in Jul 2026, then the market resolves to Yes.
@@ -2243,6 +2459,10 @@ KXECONSTATU3-26JUL-T3.6|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.6%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.6
   kalshi_rules: If the Unemployment rate is exactly 3.6% in Jul 2026, then the market resolves to Yes.
@@ -2280,6 +2500,10 @@ KXECONSTATU3-26JUL-T3.6|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.6%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.6
   kalshi_rules: If the Unemployment rate is exactly 3.6% in Jul 2026, then the market resolves to Yes.
@@ -2317,6 +2541,10 @@ KXECONSTATU3-26JUL-T3.7|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.7%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.7
   kalshi_rules: If the Unemployment rate is exactly 3.7% in Jul 2026, then the market resolves to Yes.
@@ -2354,6 +2582,10 @@ KXECONSTATU3-26JUL-T3.7|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.7%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.7
   kalshi_rules: If the Unemployment rate is exactly 3.7% in Jul 2026, then the market resolves to Yes.
@@ -2391,6 +2623,10 @@ KXECONSTATU3-26JUL-T3.7|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.7%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.7
   kalshi_rules: If the Unemployment rate is exactly 3.7% in Jul 2026, then the market resolves to Yes.
@@ -2428,6 +2664,10 @@ KXECONSTATU3-26JUL-T3.7|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.7%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.7
   kalshi_rules: If the Unemployment rate is exactly 3.7% in Jul 2026, then the market resolves to Yes.
@@ -2465,6 +2705,10 @@ KXECONSTATU3-26JUL-T3.7|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.7%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.7
   kalshi_rules: If the Unemployment rate is exactly 3.7% in Jul 2026, then the market resolves to Yes.
@@ -2502,6 +2746,10 @@ KXECONSTATU3-26JUL-T3.7|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.7%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.7
   kalshi_rules: If the Unemployment rate is exactly 3.7% in Jul 2026, then the market resolves to Yes.
@@ -2539,6 +2787,10 @@ KXECONSTATU3-26JUL-T3.7|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.7%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.7
   kalshi_rules: If the Unemployment rate is exactly 3.7% in Jul 2026, then the market resolves to Yes.
@@ -2576,6 +2828,10 @@ KXECONSTATU3-26JUL-T3.7|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.7%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.7
   kalshi_rules: If the Unemployment rate is exactly 3.7% in Jul 2026, then the market resolves to Yes.
@@ -2613,6 +2869,10 @@ KXECONSTATU3-26JUL-T3.7|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.7%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.7
   kalshi_rules: If the Unemployment rate is exactly 3.7% in Jul 2026, then the market resolves to Yes.
@@ -2650,6 +2910,10 @@ KXECONSTATU3-26JUL-T3.8|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.8%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.8
   kalshi_rules: If the Unemployment rate is exactly 3.8% in Jul 2026, then the market resolves to Yes.
@@ -2687,6 +2951,10 @@ KXECONSTATU3-26JUL-T3.8|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.8%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.8
   kalshi_rules: If the Unemployment rate is exactly 3.8% in Jul 2026, then the market resolves to Yes.
@@ -2724,6 +2992,10 @@ KXECONSTATU3-26JUL-T3.8|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.8%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.8
   kalshi_rules: If the Unemployment rate is exactly 3.8% in Jul 2026, then the market resolves to Yes.
@@ -2761,6 +3033,10 @@ KXECONSTATU3-26JUL-T3.8|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.8%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.8
   kalshi_rules: If the Unemployment rate is exactly 3.8% in Jul 2026, then the market resolves to Yes.
@@ -2798,6 +3074,10 @@ KXECONSTATU3-26JUL-T3.8|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.8%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.8
   kalshi_rules: If the Unemployment rate is exactly 3.8% in Jul 2026, then the market resolves to Yes.
@@ -2835,6 +3115,10 @@ KXECONSTATU3-26JUL-T3.8|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.8%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.8
   kalshi_rules: If the Unemployment rate is exactly 3.8% in Jul 2026, then the market resolves to Yes.
@@ -2872,6 +3156,10 @@ KXECONSTATU3-26JUL-T3.8|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.8%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.8
   kalshi_rules: If the Unemployment rate is exactly 3.8% in Jul 2026, then the market resolves to Yes.
@@ -2909,6 +3197,10 @@ KXECONSTATU3-26JUL-T3.8|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.8%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.8
   kalshi_rules: If the Unemployment rate is exactly 3.8% in Jul 2026, then the market resolves to Yes.
@@ -2946,6 +3238,10 @@ KXECONSTATU3-26JUL-T3.8|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.8%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.8
   kalshi_rules: If the Unemployment rate is exactly 3.8% in Jul 2026, then the market resolves to Yes.
@@ -2983,6 +3279,10 @@ KXECONSTATU3-26JUL-T3.9|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.9%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.9
   kalshi_rules: If the Unemployment rate is exactly 3.9% in Jul 2026, then the market resolves to Yes.
@@ -3020,6 +3320,10 @@ KXECONSTATU3-26JUL-T3.9|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.9%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.9
   kalshi_rules: If the Unemployment rate is exactly 3.9% in Jul 2026, then the market resolves to Yes.
@@ -3057,6 +3361,10 @@ KXECONSTATU3-26JUL-T3.9|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.9%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.9
   kalshi_rules: If the Unemployment rate is exactly 3.9% in Jul 2026, then the market resolves to Yes.
@@ -3094,6 +3402,10 @@ KXECONSTATU3-26JUL-T3.9|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.9%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.9
   kalshi_rules: If the Unemployment rate is exactly 3.9% in Jul 2026, then the market resolves to Yes.
@@ -3131,6 +3443,10 @@ KXECONSTATU3-26JUL-T3.9|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.9%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.9
   kalshi_rules: If the Unemployment rate is exactly 3.9% in Jul 2026, then the market resolves to Yes.
@@ -3168,6 +3484,10 @@ KXECONSTATU3-26JUL-T3.9|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.9%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.9
   kalshi_rules: If the Unemployment rate is exactly 3.9% in Jul 2026, then the market resolves to Yes.
@@ -3205,6 +3525,10 @@ KXECONSTATU3-26JUL-T3.9|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.9%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.9
   kalshi_rules: If the Unemployment rate is exactly 3.9% in Jul 2026, then the market resolves to Yes.
@@ -3242,6 +3566,10 @@ KXECONSTATU3-26JUL-T3.9|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.9%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.9
   kalshi_rules: If the Unemployment rate is exactly 3.9% in Jul 2026, then the market resolves to Yes.
@@ -3279,6 +3607,10 @@ KXECONSTATU3-26JUL-T3.9|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 3.9%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T3.9
   kalshi_rules: If the Unemployment rate is exactly 3.9% in Jul 2026, then the market resolves to Yes.
@@ -3316,6 +3648,10 @@ KXECONSTATU3-26JUL-T4.0|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.0%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.0
   kalshi_rules: If the Unemployment rate is exactly 4.0% in Jul 2026, then the market resolves to Yes.
@@ -3353,6 +3689,10 @@ KXECONSTATU3-26JUL-T4.0|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.0%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.0
   kalshi_rules: If the Unemployment rate is exactly 4.0% in Jul 2026, then the market resolves to Yes.
@@ -3390,6 +3730,10 @@ KXECONSTATU3-26JUL-T4.0|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.0%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.0
   kalshi_rules: If the Unemployment rate is exactly 4.0% in Jul 2026, then the market resolves to Yes.
@@ -3427,6 +3771,10 @@ KXECONSTATU3-26JUL-T4.0|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.0%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.0
   kalshi_rules: If the Unemployment rate is exactly 4.0% in Jul 2026, then the market resolves to Yes.
@@ -3464,6 +3812,10 @@ KXECONSTATU3-26JUL-T4.0|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.0%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.0
   kalshi_rules: If the Unemployment rate is exactly 4.0% in Jul 2026, then the market resolves to Yes.
@@ -3501,6 +3853,10 @@ KXECONSTATU3-26JUL-T4.0|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.0%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.0
   kalshi_rules: If the Unemployment rate is exactly 4.0% in Jul 2026, then the market resolves to Yes.
@@ -3538,6 +3894,10 @@ KXECONSTATU3-26JUL-T4.0|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'both resolve YES iff U-3 prints exactly 4.0% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adjusted — PM does explicitly'
+  draft_verdict: same
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.0
   kalshi_rules: If the Unemployment rate is exactly 4.0% in Jul 2026, then the market resolves to Yes.
@@ -3575,6 +3935,10 @@ KXECONSTATU3-26JUL-T4.0|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.0%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.0
   kalshi_rules: If the Unemployment rate is exactly 4.0% in Jul 2026, then the market resolves to Yes.
@@ -3612,6 +3976,10 @@ KXECONSTATU3-26JUL-T4.0|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.0%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.0
   kalshi_rules: If the Unemployment rate is exactly 4.0% in Jul 2026, then the market resolves to Yes.
@@ -3649,6 +4017,10 @@ KXECONSTATU3-26JUL-T4.1|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.1%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.1
   kalshi_rules: If the Unemployment rate is exactly 4.1% in Jul 2026, then the market resolves to Yes.
@@ -3686,6 +4058,10 @@ KXECONSTATU3-26JUL-T4.1|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.1%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.1
   kalshi_rules: If the Unemployment rate is exactly 4.1% in Jul 2026, then the market resolves to Yes.
@@ -3723,6 +4099,10 @@ KXECONSTATU3-26JUL-T4.1|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.1%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.1
   kalshi_rules: If the Unemployment rate is exactly 4.1% in Jul 2026, then the market resolves to Yes.
@@ -3760,6 +4140,10 @@ KXECONSTATU3-26JUL-T4.1|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.1%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.1
   kalshi_rules: If the Unemployment rate is exactly 4.1% in Jul 2026, then the market resolves to Yes.
@@ -3797,6 +4181,10 @@ KXECONSTATU3-26JUL-T4.1|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'both resolve YES iff U-3 prints exactly 4.1% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adjusted — PM does explicitly'
+  draft_verdict: same
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.1
   kalshi_rules: If the Unemployment rate is exactly 4.1% in Jul 2026, then the market resolves to Yes.
@@ -3834,6 +4222,10 @@ KXECONSTATU3-26JUL-T4.1|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.1%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.1
   kalshi_rules: If the Unemployment rate is exactly 4.1% in Jul 2026, then the market resolves to Yes.
@@ -3871,6 +4263,10 @@ KXECONSTATU3-26JUL-T4.1|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.1%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.1
   kalshi_rules: If the Unemployment rate is exactly 4.1% in Jul 2026, then the market resolves to Yes.
@@ -3908,6 +4304,10 @@ KXECONSTATU3-26JUL-T4.1|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.1%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.1
   kalshi_rules: If the Unemployment rate is exactly 4.1% in Jul 2026, then the market resolves to Yes.
@@ -3945,6 +4345,10 @@ KXECONSTATU3-26JUL-T4.1|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.1%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.1
   kalshi_rules: If the Unemployment rate is exactly 4.1% in Jul 2026, then the market resolves to Yes.
@@ -3982,6 +4386,10 @@ KXECONSTATU3-26JUL-T4.2|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.2%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.2
   kalshi_rules: If the Unemployment rate is exactly 4.2% in Jul 2026, then the market resolves to Yes.
@@ -4019,6 +4427,10 @@ KXECONSTATU3-26JUL-T4.2|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'both resolve YES iff U-3 prints exactly 4.2% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adjusted — PM does explicitly'
+  draft_verdict: same
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.2
   kalshi_rules: If the Unemployment rate is exactly 4.2% in Jul 2026, then the market resolves to Yes.
@@ -4056,6 +4468,10 @@ KXECONSTATU3-26JUL-T4.2|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.2%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.2
   kalshi_rules: If the Unemployment rate is exactly 4.2% in Jul 2026, then the market resolves to Yes.
@@ -4093,6 +4509,10 @@ KXECONSTATU3-26JUL-T4.2|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.2%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.2
   kalshi_rules: If the Unemployment rate is exactly 4.2% in Jul 2026, then the market resolves to Yes.
@@ -4130,6 +4550,10 @@ KXECONSTATU3-26JUL-T4.2|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.2%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.2
   kalshi_rules: If the Unemployment rate is exactly 4.2% in Jul 2026, then the market resolves to Yes.
@@ -4167,6 +4591,10 @@ KXECONSTATU3-26JUL-T4.2|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.2%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.2
   kalshi_rules: If the Unemployment rate is exactly 4.2% in Jul 2026, then the market resolves to Yes.
@@ -4204,6 +4632,10 @@ KXECONSTATU3-26JUL-T4.2|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.2%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.2
   kalshi_rules: If the Unemployment rate is exactly 4.2% in Jul 2026, then the market resolves to Yes.
@@ -4241,6 +4673,10 @@ KXECONSTATU3-26JUL-T4.2|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.2%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.2
   kalshi_rules: If the Unemployment rate is exactly 4.2% in Jul 2026, then the market resolves to Yes.
@@ -4278,6 +4714,10 @@ KXECONSTATU3-26JUL-T4.2|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.2%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.2
   kalshi_rules: If the Unemployment rate is exactly 4.2% in Jul 2026, then the market resolves to Yes.
@@ -4315,6 +4755,10 @@ KXECONSTATU3-26JUL-T4.3|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.3%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.3
   kalshi_rules: If the Unemployment rate is exactly 4.3% in Jul 2026, then the market resolves to Yes.
@@ -4352,6 +4796,10 @@ KXECONSTATU3-26JUL-T4.3|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.3%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.3
   kalshi_rules: If the Unemployment rate is exactly 4.3% in Jul 2026, then the market resolves to Yes.
@@ -4389,6 +4837,10 @@ KXECONSTATU3-26JUL-T4.3|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.3%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.3
   kalshi_rules: If the Unemployment rate is exactly 4.3% in Jul 2026, then the market resolves to Yes.
@@ -4426,6 +4878,10 @@ KXECONSTATU3-26JUL-T4.3|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'both resolve YES iff U-3 prints exactly 4.3% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adjusted — PM does explicitly'
+  draft_verdict: same
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.3
   kalshi_rules: If the Unemployment rate is exactly 4.3% in Jul 2026, then the market resolves to Yes.
@@ -4463,6 +4919,10 @@ KXECONSTATU3-26JUL-T4.3|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.3%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.3
   kalshi_rules: If the Unemployment rate is exactly 4.3% in Jul 2026, then the market resolves to Yes.
@@ -4500,6 +4960,10 @@ KXECONSTATU3-26JUL-T4.3|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.3%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.3
   kalshi_rules: If the Unemployment rate is exactly 4.3% in Jul 2026, then the market resolves to Yes.
@@ -4537,6 +5001,10 @@ KXECONSTATU3-26JUL-T4.3|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.3%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.3
   kalshi_rules: If the Unemployment rate is exactly 4.3% in Jul 2026, then the market resolves to Yes.
@@ -4574,6 +5042,10 @@ KXECONSTATU3-26JUL-T4.3|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.3%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.3
   kalshi_rules: If the Unemployment rate is exactly 4.3% in Jul 2026, then the market resolves to Yes.
@@ -4611,6 +5083,10 @@ KXECONSTATU3-26JUL-T4.3|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.3%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.3
   kalshi_rules: If the Unemployment rate is exactly 4.3% in Jul 2026, then the market resolves to Yes.
@@ -4648,6 +5124,10 @@ KXECONSTATU3-26JUL-T4.4|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.4%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.4
   kalshi_rules: If the Unemployment rate is exactly 4.4% in Jul 2026, then the market resolves to Yes.
@@ -4685,6 +5165,10 @@ KXECONSTATU3-26JUL-T4.4|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.4%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.4
   kalshi_rules: If the Unemployment rate is exactly 4.4% in Jul 2026, then the market resolves to Yes.
@@ -4722,6 +5206,10 @@ KXECONSTATU3-26JUL-T4.4|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'both resolve YES iff U-3 prints exactly 4.4% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adjusted — PM does explicitly'
+  draft_verdict: same
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.4
   kalshi_rules: If the Unemployment rate is exactly 4.4% in Jul 2026, then the market resolves to Yes.
@@ -4759,6 +5247,10 @@ KXECONSTATU3-26JUL-T4.4|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.4%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.4
   kalshi_rules: If the Unemployment rate is exactly 4.4% in Jul 2026, then the market resolves to Yes.
@@ -4796,6 +5288,10 @@ KXECONSTATU3-26JUL-T4.4|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.4%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.4
   kalshi_rules: If the Unemployment rate is exactly 4.4% in Jul 2026, then the market resolves to Yes.
@@ -4833,6 +5329,10 @@ KXECONSTATU3-26JUL-T4.4|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.4%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.4
   kalshi_rules: If the Unemployment rate is exactly 4.4% in Jul 2026, then the market resolves to Yes.
@@ -4870,6 +5370,10 @@ KXECONSTATU3-26JUL-T4.4|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.4%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.4
   kalshi_rules: If the Unemployment rate is exactly 4.4% in Jul 2026, then the market resolves to Yes.
@@ -4907,6 +5411,10 @@ KXECONSTATU3-26JUL-T4.4|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.4%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.4
   kalshi_rules: If the Unemployment rate is exactly 4.4% in Jul 2026, then the market resolves to Yes.
@@ -4944,6 +5452,10 @@ KXECONSTATU3-26JUL-T4.4|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.4%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.4
   kalshi_rules: If the Unemployment rate is exactly 4.4% in Jul 2026, then the market resolves to Yes.
@@ -4981,6 +5493,10 @@ KXECONSTATU3-26JUL-T4.5|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.5%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.5
   kalshi_rules: If the Unemployment rate is exactly 4.5% in Jul 2026, then the market resolves to Yes.
@@ -5018,6 +5534,10 @@ KXECONSTATU3-26JUL-T4.5|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.5%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.5
   kalshi_rules: If the Unemployment rate is exactly 4.5% in Jul 2026, then the market resolves to Yes.
@@ -5055,6 +5575,10 @@ KXECONSTATU3-26JUL-T4.5|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.5%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.5
   kalshi_rules: If the Unemployment rate is exactly 4.5% in Jul 2026, then the market resolves to Yes.
@@ -5092,6 +5616,10 @@ KXECONSTATU3-26JUL-T4.5|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.5%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.5
   kalshi_rules: If the Unemployment rate is exactly 4.5% in Jul 2026, then the market resolves to Yes.
@@ -5129,6 +5657,10 @@ KXECONSTATU3-26JUL-T4.5|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.5%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.5
   kalshi_rules: If the Unemployment rate is exactly 4.5% in Jul 2026, then the market resolves to Yes.
@@ -5166,6 +5698,10 @@ KXECONSTATU3-26JUL-T4.5|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.5%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.5
   kalshi_rules: If the Unemployment rate is exactly 4.5% in Jul 2026, then the market resolves to Yes.
@@ -5203,6 +5739,10 @@ KXECONSTATU3-26JUL-T4.5|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.5%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.5
   kalshi_rules: If the Unemployment rate is exactly 4.5% in Jul 2026, then the market resolves to Yes.
@@ -5240,6 +5780,10 @@ KXECONSTATU3-26JUL-T4.5|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.5%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.5
   kalshi_rules: If the Unemployment rate is exactly 4.5% in Jul 2026, then the market resolves to Yes.
@@ -5277,6 +5821,10 @@ KXECONSTATU3-26JUL-T4.5|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'both resolve YES iff U-3 prints exactly 4.5% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adjusted — PM does explicitly'
+  draft_verdict: same
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.5
   kalshi_rules: If the Unemployment rate is exactly 4.5% in Jul 2026, then the market resolves to Yes.
@@ -5314,6 +5862,10 @@ KXECONSTATU3-26JUL-T4.6|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'both resolve YES iff U-3 prints exactly 4.6% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adjusted — PM does explicitly'
+  draft_verdict: same
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.6
   kalshi_rules: If the Unemployment rate is exactly 4.6% in Jul 2026, then the market resolves to Yes.
@@ -5351,6 +5903,10 @@ KXECONSTATU3-26JUL-T4.6|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.6%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.6
   kalshi_rules: If the Unemployment rate is exactly 4.6% in Jul 2026, then the market resolves to Yes.
@@ -5388,6 +5944,10 @@ KXECONSTATU3-26JUL-T4.6|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.6%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.6
   kalshi_rules: If the Unemployment rate is exactly 4.6% in Jul 2026, then the market resolves to Yes.
@@ -5425,6 +5985,10 @@ KXECONSTATU3-26JUL-T4.6|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.6%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.6
   kalshi_rules: If the Unemployment rate is exactly 4.6% in Jul 2026, then the market resolves to Yes.
@@ -5462,6 +6026,10 @@ KXECONSTATU3-26JUL-T4.6|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.6%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.6
   kalshi_rules: If the Unemployment rate is exactly 4.6% in Jul 2026, then the market resolves to Yes.
@@ -5499,6 +6067,10 @@ KXECONSTATU3-26JUL-T4.6|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.6%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.6
   kalshi_rules: If the Unemployment rate is exactly 4.6% in Jul 2026, then the market resolves to Yes.
@@ -5536,6 +6108,10 @@ KXECONSTATU3-26JUL-T4.6|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.6%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.6
   kalshi_rules: If the Unemployment rate is exactly 4.6% in Jul 2026, then the market resolves to Yes.
@@ -5573,6 +6149,10 @@ KXECONSTATU3-26JUL-T4.6|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.6%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.6
   kalshi_rules: If the Unemployment rate is exactly 4.6% in Jul 2026, then the market resolves to Yes.
@@ -5610,6 +6190,10 @@ KXECONSTATU3-26JUL-T4.6|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.6%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.6
   kalshi_rules: If the Unemployment rate is exactly 4.6% in Jul 2026, then the market resolves to Yes.
@@ -5647,6 +6231,10 @@ KXECONSTATU3-26JUL-T4.7|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.7%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.7
   kalshi_rules: If the Unemployment rate is exactly 4.7% in Jul 2026, then the market resolves to Yes.
@@ -5684,6 +6272,10 @@ KXECONSTATU3-26JUL-T4.7|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.7%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.7
   kalshi_rules: If the Unemployment rate is exactly 4.7% in Jul 2026, then the market resolves to Yes.
@@ -5721,6 +6313,10 @@ KXECONSTATU3-26JUL-T4.7|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.7%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.7
   kalshi_rules: If the Unemployment rate is exactly 4.7% in Jul 2026, then the market resolves to Yes.
@@ -5758,6 +6354,10 @@ KXECONSTATU3-26JUL-T4.7|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.7%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.7
   kalshi_rules: If the Unemployment rate is exactly 4.7% in Jul 2026, then the market resolves to Yes.
@@ -5795,6 +6395,10 @@ KXECONSTATU3-26JUL-T4.7|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.7%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.7
   kalshi_rules: If the Unemployment rate is exactly 4.7% in Jul 2026, then the market resolves to Yes.
@@ -5832,6 +6436,10 @@ KXECONSTATU3-26JUL-T4.7|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.7%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.7
   kalshi_rules: If the Unemployment rate is exactly 4.7% in Jul 2026, then the market resolves to Yes.
@@ -5869,6 +6477,10 @@ KXECONSTATU3-26JUL-T4.7|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.7%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.7
   kalshi_rules: If the Unemployment rate is exactly 4.7% in Jul 2026, then the market resolves to Yes.
@@ -5906,6 +6518,10 @@ KXECONSTATU3-26JUL-T4.7|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.7%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.7
   kalshi_rules: If the Unemployment rate is exactly 4.7% in Jul 2026, then the market resolves to Yes.
@@ -5943,6 +6559,10 @@ KXECONSTATU3-26JUL-T4.7|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.7%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.7
   kalshi_rules: If the Unemployment rate is exactly 4.7% in Jul 2026, then the market resolves to Yes.
@@ -5980,6 +6600,10 @@ KXECONSTATU3-26JUL-T4.8|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.8%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.8
   kalshi_rules: If the Unemployment rate is exactly 4.8% in Jul 2026, then the market resolves to Yes.
@@ -6017,6 +6641,10 @@ KXECONSTATU3-26JUL-T4.8|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.8%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.8
   kalshi_rules: If the Unemployment rate is exactly 4.8% in Jul 2026, then the market resolves to Yes.
@@ -6054,6 +6682,10 @@ KXECONSTATU3-26JUL-T4.8|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.8%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.8
   kalshi_rules: If the Unemployment rate is exactly 4.8% in Jul 2026, then the market resolves to Yes.
@@ -6091,6 +6723,10 @@ KXECONSTATU3-26JUL-T4.8|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.8%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.8
   kalshi_rules: If the Unemployment rate is exactly 4.8% in Jul 2026, then the market resolves to Yes.
@@ -6128,6 +6764,10 @@ KXECONSTATU3-26JUL-T4.8|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.8%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.8
   kalshi_rules: If the Unemployment rate is exactly 4.8% in Jul 2026, then the market resolves to Yes.
@@ -6165,6 +6805,10 @@ KXECONSTATU3-26JUL-T4.8|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.8%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.8
   kalshi_rules: If the Unemployment rate is exactly 4.8% in Jul 2026, then the market resolves to Yes.
@@ -6202,6 +6846,10 @@ KXECONSTATU3-26JUL-T4.8|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.8%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.8
   kalshi_rules: If the Unemployment rate is exactly 4.8% in Jul 2026, then the market resolves to Yes.
@@ -6239,6 +6887,10 @@ KXECONSTATU3-26JUL-T4.8|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.8%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.8
   kalshi_rules: If the Unemployment rate is exactly 4.8% in Jul 2026, then the market resolves to Yes.
@@ -6276,6 +6928,10 @@ KXECONSTATU3-26JUL-T4.8|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.8%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.8
   kalshi_rules: If the Unemployment rate is exactly 4.8% in Jul 2026, then the market resolves to Yes.
@@ -6313,6 +6969,10 @@ KXECONSTATU3-26JUL-T4.9|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.9%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.9
   kalshi_rules: If the Unemployment rate is exactly 4.9% in Jul 2026, then the market resolves to Yes.
@@ -6350,6 +7010,10 @@ KXECONSTATU3-26JUL-T4.9|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.9%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.9
   kalshi_rules: If the Unemployment rate is exactly 4.9% in Jul 2026, then the market resolves to Yes.
@@ -6387,6 +7051,10 @@ KXECONSTATU3-26JUL-T4.9|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.9%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.9
   kalshi_rules: If the Unemployment rate is exactly 4.9% in Jul 2026, then the market resolves to Yes.
@@ -6424,6 +7092,10 @@ KXECONSTATU3-26JUL-T4.9|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.9%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.9
   kalshi_rules: If the Unemployment rate is exactly 4.9% in Jul 2026, then the market resolves to Yes.
@@ -6461,6 +7133,10 @@ KXECONSTATU3-26JUL-T4.9|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.9%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.9
   kalshi_rules: If the Unemployment rate is exactly 4.9% in Jul 2026, then the market resolves to Yes.
@@ -6498,6 +7174,10 @@ KXECONSTATU3-26JUL-T4.9|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.9%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.9
   kalshi_rules: If the Unemployment rate is exactly 4.9% in Jul 2026, then the market resolves to Yes.
@@ -6535,6 +7215,10 @@ KXECONSTATU3-26JUL-T4.9|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.9%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.9
   kalshi_rules: If the Unemployment rate is exactly 4.9% in Jul 2026, then the market resolves to Yes.
@@ -6572,6 +7256,10 @@ KXECONSTATU3-26JUL-T4.9|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.9%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.9
   kalshi_rules: If the Unemployment rate is exactly 4.9% in Jul 2026, then the market resolves to Yes.
@@ -6609,6 +7297,10 @@ KXECONSTATU3-26JUL-T4.9|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 4.9%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T4.9
   kalshi_rules: If the Unemployment rate is exactly 4.9% in Jul 2026, then the market resolves to Yes.
@@ -6646,6 +7338,10 @@ KXECONSTATU3-26JUL-T5.0|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.0%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.0
   kalshi_rules: If the Unemployment rate is exactly 5.0% in Jul 2026, then the market resolves to Yes.
@@ -6683,6 +7379,10 @@ KXECONSTATU3-26JUL-T5.0|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.0%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.0
   kalshi_rules: If the Unemployment rate is exactly 5.0% in Jul 2026, then the market resolves to Yes.
@@ -6720,6 +7420,10 @@ KXECONSTATU3-26JUL-T5.0|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.0%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.0
   kalshi_rules: If the Unemployment rate is exactly 5.0% in Jul 2026, then the market resolves to Yes.
@@ -6757,6 +7461,10 @@ KXECONSTATU3-26JUL-T5.0|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.0%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.0
   kalshi_rules: If the Unemployment rate is exactly 5.0% in Jul 2026, then the market resolves to Yes.
@@ -6794,6 +7502,10 @@ KXECONSTATU3-26JUL-T5.0|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.0%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.0
   kalshi_rules: If the Unemployment rate is exactly 5.0% in Jul 2026, then the market resolves to Yes.
@@ -6831,6 +7543,10 @@ KXECONSTATU3-26JUL-T5.0|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.0%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.0
   kalshi_rules: If the Unemployment rate is exactly 5.0% in Jul 2026, then the market resolves to Yes.
@@ -6868,6 +7584,10 @@ KXECONSTATU3-26JUL-T5.0|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.0%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.0
   kalshi_rules: If the Unemployment rate is exactly 5.0% in Jul 2026, then the market resolves to Yes.
@@ -6905,6 +7625,10 @@ KXECONSTATU3-26JUL-T5.0|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.0%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.0
   kalshi_rules: If the Unemployment rate is exactly 5.0% in Jul 2026, then the market resolves to Yes.
@@ -6942,6 +7666,10 @@ KXECONSTATU3-26JUL-T5.0|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.0%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.0
   kalshi_rules: If the Unemployment rate is exactly 5.0% in Jul 2026, then the market resolves to Yes.
@@ -6979,6 +7707,10 @@ KXECONSTATU3-26JUL-T5.1|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.1%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.1
   kalshi_rules: If the Unemployment rate is exactly 5.1% in Jul 2026, then the market resolves to Yes.
@@ -7016,6 +7748,10 @@ KXECONSTATU3-26JUL-T5.1|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.1%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.1
   kalshi_rules: If the Unemployment rate is exactly 5.1% in Jul 2026, then the market resolves to Yes.
@@ -7053,6 +7789,10 @@ KXECONSTATU3-26JUL-T5.1|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.1%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.1
   kalshi_rules: If the Unemployment rate is exactly 5.1% in Jul 2026, then the market resolves to Yes.
@@ -7090,6 +7830,10 @@ KXECONSTATU3-26JUL-T5.1|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.1%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.1
   kalshi_rules: If the Unemployment rate is exactly 5.1% in Jul 2026, then the market resolves to Yes.
@@ -7127,6 +7871,10 @@ KXECONSTATU3-26JUL-T5.1|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.1%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.1
   kalshi_rules: If the Unemployment rate is exactly 5.1% in Jul 2026, then the market resolves to Yes.
@@ -7164,6 +7912,10 @@ KXECONSTATU3-26JUL-T5.1|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.1%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.1
   kalshi_rules: If the Unemployment rate is exactly 5.1% in Jul 2026, then the market resolves to Yes.
@@ -7201,6 +7953,10 @@ KXECONSTATU3-26JUL-T5.1|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.1%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.1
   kalshi_rules: If the Unemployment rate is exactly 5.1% in Jul 2026, then the market resolves to Yes.
@@ -7238,6 +7994,10 @@ KXECONSTATU3-26JUL-T5.1|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.1%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.1
   kalshi_rules: If the Unemployment rate is exactly 5.1% in Jul 2026, then the market resolves to Yes.
@@ -7275,6 +8035,10 @@ KXECONSTATU3-26JUL-T5.1|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.1%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.1
   kalshi_rules: If the Unemployment rate is exactly 5.1% in Jul 2026, then the market resolves to Yes.
@@ -7312,6 +8076,10 @@ KXECONSTATU3-26JUL-T5.2|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.2%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.2
   kalshi_rules: If the Unemployment rate is exactly 5.2% in Jul 2026, then the market resolves to Yes.
@@ -7349,6 +8117,10 @@ KXECONSTATU3-26JUL-T5.2|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.2%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.2
   kalshi_rules: If the Unemployment rate is exactly 5.2% in Jul 2026, then the market resolves to Yes.
@@ -7386,6 +8158,10 @@ KXECONSTATU3-26JUL-T5.2|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.2%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.2
   kalshi_rules: If the Unemployment rate is exactly 5.2% in Jul 2026, then the market resolves to Yes.
@@ -7423,6 +8199,10 @@ KXECONSTATU3-26JUL-T5.2|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.2%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.2
   kalshi_rules: If the Unemployment rate is exactly 5.2% in Jul 2026, then the market resolves to Yes.
@@ -7460,6 +8240,10 @@ KXECONSTATU3-26JUL-T5.2|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.2%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.2
   kalshi_rules: If the Unemployment rate is exactly 5.2% in Jul 2026, then the market resolves to Yes.
@@ -7497,6 +8281,10 @@ KXECONSTATU3-26JUL-T5.2|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.2%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.2
   kalshi_rules: If the Unemployment rate is exactly 5.2% in Jul 2026, then the market resolves to Yes.
@@ -7534,6 +8322,10 @@ KXECONSTATU3-26JUL-T5.2|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.2%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.2
   kalshi_rules: If the Unemployment rate is exactly 5.2% in Jul 2026, then the market resolves to Yes.
@@ -7571,6 +8363,10 @@ KXECONSTATU3-26JUL-T5.2|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.2%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.2
   kalshi_rules: If the Unemployment rate is exactly 5.2% in Jul 2026, then the market resolves to Yes.
@@ -7608,6 +8404,10 @@ KXECONSTATU3-26JUL-T5.2|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.2%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.2
   kalshi_rules: If the Unemployment rate is exactly 5.2% in Jul 2026, then the market resolves to Yes.
@@ -7645,6 +8445,10 @@ KXECONSTATU3-26JUL-T5.3|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.3%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.3
   kalshi_rules: If the Unemployment rate is exactly 5.3% in Jul 2026, then the market resolves to Yes.
@@ -7682,6 +8486,10 @@ KXECONSTATU3-26JUL-T5.3|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.3%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.3
   kalshi_rules: If the Unemployment rate is exactly 5.3% in Jul 2026, then the market resolves to Yes.
@@ -7719,6 +8527,10 @@ KXECONSTATU3-26JUL-T5.3|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.3%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.3
   kalshi_rules: If the Unemployment rate is exactly 5.3% in Jul 2026, then the market resolves to Yes.
@@ -7756,6 +8568,10 @@ KXECONSTATU3-26JUL-T5.3|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.3%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.3
   kalshi_rules: If the Unemployment rate is exactly 5.3% in Jul 2026, then the market resolves to Yes.
@@ -7793,6 +8609,10 @@ KXECONSTATU3-26JUL-T5.3|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.3%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.3
   kalshi_rules: If the Unemployment rate is exactly 5.3% in Jul 2026, then the market resolves to Yes.
@@ -7830,6 +8650,10 @@ KXECONSTATU3-26JUL-T5.3|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.3%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.3
   kalshi_rules: If the Unemployment rate is exactly 5.3% in Jul 2026, then the market resolves to Yes.
@@ -7867,6 +8691,10 @@ KXECONSTATU3-26JUL-T5.3|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.3%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.3
   kalshi_rules: If the Unemployment rate is exactly 5.3% in Jul 2026, then the market resolves to Yes.
@@ -7904,6 +8732,10 @@ KXECONSTATU3-26JUL-T5.3|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.3%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.3
   kalshi_rules: If the Unemployment rate is exactly 5.3% in Jul 2026, then the market resolves to Yes.
@@ -7941,6 +8773,10 @@ KXECONSTATU3-26JUL-T5.3|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.3%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.3
   kalshi_rules: If the Unemployment rate is exactly 5.3% in Jul 2026, then the market resolves to Yes.
@@ -7978,6 +8814,10 @@ KXECONSTATU3-26JUL-T5.4|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.4%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.4
   kalshi_rules: If the Unemployment rate is exactly 5.4% in Jul 2026, then the market resolves to Yes.
@@ -8015,6 +8855,10 @@ KXECONSTATU3-26JUL-T5.4|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.4%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.4
   kalshi_rules: If the Unemployment rate is exactly 5.4% in Jul 2026, then the market resolves to Yes.
@@ -8052,6 +8896,10 @@ KXECONSTATU3-26JUL-T5.4|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.4%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.4
   kalshi_rules: If the Unemployment rate is exactly 5.4% in Jul 2026, then the market resolves to Yes.
@@ -8089,6 +8937,10 @@ KXECONSTATU3-26JUL-T5.4|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.4%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.4
   kalshi_rules: If the Unemployment rate is exactly 5.4% in Jul 2026, then the market resolves to Yes.
@@ -8126,6 +8978,10 @@ KXECONSTATU3-26JUL-T5.4|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.4%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.4
   kalshi_rules: If the Unemployment rate is exactly 5.4% in Jul 2026, then the market resolves to Yes.
@@ -8163,6 +9019,10 @@ KXECONSTATU3-26JUL-T5.4|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.4%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.4
   kalshi_rules: If the Unemployment rate is exactly 5.4% in Jul 2026, then the market resolves to Yes.
@@ -8200,6 +9060,10 @@ KXECONSTATU3-26JUL-T5.4|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.4%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.4
   kalshi_rules: If the Unemployment rate is exactly 5.4% in Jul 2026, then the market resolves to Yes.
@@ -8237,6 +9101,10 @@ KXECONSTATU3-26JUL-T5.4|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.4%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.4
   kalshi_rules: If the Unemployment rate is exactly 5.4% in Jul 2026, then the market resolves to Yes.
@@ -8274,6 +9142,10 @@ KXECONSTATU3-26JUL-T5.4|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.4%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.4
   kalshi_rules: If the Unemployment rate is exactly 5.4% in Jul 2026, then the market resolves to Yes.
@@ -8311,6 +9183,10 @@ KXECONSTATU3-26JUL-T5.5|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.5%
+    vs P ('=', 4.6)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.5
   kalshi_rules: If the Unemployment rate is exactly 5.5% in Jul 2026, then the market resolves to Yes.
@@ -8348,6 +9224,10 @@ KXECONSTATU3-26JUL-T5.5|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.5%
+    vs P ('=', 4.2)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.5
   kalshi_rules: If the Unemployment rate is exactly 5.5% in Jul 2026, then the market resolves to Yes.
@@ -8385,6 +9265,10 @@ KXECONSTATU3-26JUL-T5.5|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.5%
+    vs P ('=', 4.4)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.5
   kalshi_rules: If the Unemployment rate is exactly 5.5% in Jul 2026, then the market resolves to Yes.
@@ -8422,6 +9306,10 @@ KXECONSTATU3-26JUL-T5.5|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.5%
+    vs P ('=', 4.3)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.5
   kalshi_rules: If the Unemployment rate is exactly 5.5% in Jul 2026, then the market resolves to Yes.
@@ -8459,6 +9347,10 @@ KXECONSTATU3-26JUL-T5.5|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.5%
+    vs P ('=', 4.1)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.5
   kalshi_rules: If the Unemployment rate is exactly 5.5% in Jul 2026, then the market resolves to Yes.
@@ -8496,6 +9388,10 @@ KXECONSTATU3-26JUL-T5.5|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.5%
+    vs P ('>=', 4.7)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.5
   kalshi_rules: If the Unemployment rate is exactly 5.5% in Jul 2026, then the market resolves to Yes.
@@ -8533,6 +9429,10 @@ KXECONSTATU3-26JUL-T5.5|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8c
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.5%
+    vs P ('=', 4.0)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.5
   kalshi_rules: If the Unemployment rate is exactly 5.5% in Jul 2026, then the market resolves to Yes.
@@ -8570,6 +9470,10 @@ KXECONSTATU3-26JUL-T5.5|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f2
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.5%
+    vs P ('<=', 3.9)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.5
   kalshi_rules: If the Unemployment rate is exactly 5.5% in Jul 2026, then the market resolves to Yes.
@@ -8607,6 +9511,10 @@ KXECONSTATU3-26JUL-T5.5|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: exact values differ (pair exists only via the year-token strike artifact); K exactly 5.5%
+    vs P ('=', 4.5)
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXECONSTATU3-26JUL-T5.5
   kalshi_rules: If the Unemployment rate is exactly 5.5% in Jul 2026, then the market resolves to Yes.
@@ -8644,6 +9552,10 @@ KXGDP-26JUL30-T1.0|0x2fbd2dd1e58234aaa3d9ad3ad8637fdbdcdca5cef384e7dba27f652afd2
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T1.0
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -8684,6 +9596,10 @@ KXGDP-26JUL30-T1.0|0x40df085761181d25bcdd5715a743ab1b06323b0f68683d3bd2fe7d5fa11
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T1.0
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -8724,6 +9640,10 @@ KXGDP-26JUL30-T1.5|0x40df085761181d25bcdd5715a743ab1b06323b0f68683d3bd2fe7d5fa11
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T1.5
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -8764,6 +9684,10 @@ KXGDP-26JUL30-T1.5|0xcb0820efdbc7813d883c71a348ca8109cc6d5b74feb928ba3992bf41ba4
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T1.5
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -8804,6 +9728,10 @@ KXGDP-26JUL30-T2.0|0x2a48c165b2f8792429afe26c4ef2ec2af68889c77c4c9e2627ffac7ef41
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T2.0
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -8844,6 +9772,10 @@ KXGDP-26JUL30-T2.0|0x2fbd2dd1e58234aaa3d9ad3ad8637fdbdcdca5cef384e7dba27f652afd2
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T2.0
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -8884,6 +9816,10 @@ KXGDP-26JUL30-T2.0|0x40df085761181d25bcdd5715a743ab1b06323b0f68683d3bd2fe7d5fa11
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T2.0
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -8924,6 +9860,10 @@ KXGDP-26JUL30-T2.0|0x4e8bd7c295b79258d3581e8fef733cf7990883127d10e5a41805b4a1365
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T2.0
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -8964,6 +9904,10 @@ KXGDP-26JUL30-T2.0|0x88cf368125d325223b6f21c2b004448d9f9c22d101cd9aaadaa13164779
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T2.0
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -9004,6 +9948,10 @@ KXGDP-26JUL30-T2.0|0xa3a8bbabfa3069a5301ecbdcf5defcdff10b6c2dc7ad2a58b2805cc90f0
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T2.0
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -9044,6 +9992,10 @@ KXGDP-26JUL30-T2.0|0xcb0820efdbc7813d883c71a348ca8109cc6d5b74feb928ba3992bf41ba4
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T2.0
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -9084,6 +10036,10 @@ KXGDP-26JUL30-T2.5|0x88cf368125d325223b6f21c2b004448d9f9c22d101cd9aaadaa13164779
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T2.5
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -9124,6 +10080,10 @@ KXGDP-26JUL30-T2.5|0xa3a8bbabfa3069a5301ecbdcf5defcdff10b6c2dc7ad2a58b2805cc90f0
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T2.5
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -9164,6 +10124,10 @@ KXGDP-26JUL30-T3.0|0x4e8bd7c295b79258d3581e8fef733cf7990883127d10e5a41805b4a1365
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T3.0
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -9204,6 +10168,10 @@ KXGDP-26JUL30-T3.0|0x88cf368125d325223b6f21c2b004448d9f9c22d101cd9aaadaa13164779
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T3.0
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -9244,6 +10212,10 @@ KXGDP-26JUL30-T3.5|0x2a48c165b2f8792429afe26c4ef2ec2af68889c77c4c9e2627ffac7ef41
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T3.5
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -9284,6 +10256,10 @@ KXGDP-26JUL30-T3.5|0x4e8bd7c295b79258d3581e8fef733cf7990883127d10e5a41805b4a1365
   block_reason: concept=gdp gap=0.6d strike-match
   concept: gdp
   date_gap_days: 0.58
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: Kalshi ''more than X'' threshold vs PM range/one-sided bucket — boundary print
+    settles them differently'
+  draft_verdict: different
   kalshi_date: '2026-07-30T14:00:00+00:00'
   kalshi_id: KXGDP-26JUL30-T3.5
   kalshi_rules: If real GDP (as measured by the BEA’s seasonally adjusted and annualized Advance Estimate)
@@ -9324,6 +10300,10 @@ KXRECSSNBER-26|0xfdc73f10edf0266756686f35b5712cffa828b0940fc015e0426c76c934c2105
   block_reason: concept=recession gap=0.6d strike-match
   concept: recession
   date_gap_days: 0.62
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'items 1+4: Kalshi window covers 2025 OR 2026 technical recession; PM is by-end-2026 with
+    its own multi-condition definition'
+  draft_verdict: different
   kalshi_date: '2027-01-31T15:00:00+00:00'
   kalshi_id: KXRECSSNBER-26
   kalshi_rules: If there are two consecutive quarters of negative GDP growth in 2025 or 2026, according
@@ -9356,6 +10336,10 @@ KXU3-26JUL-T3.9|0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f26af0f87e
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'exact complements: K ''above 3.9%'' == NOT P ''<= 3.9%''; same SA U-3, BLS Employment Situation.
+    inverted: true'
+  draft_verdict: same
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXU3-26JUL-T3.9
   kalshi_rules: If the seasonally adjusted unemployment rate (U-3) reported by the Bureau of Labor Statistics
@@ -9394,6 +10378,9 @@ KXU3-26JUL-T4.0|0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8cd1879674
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: threshold vs exact bucket'
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXU3-26JUL-T4.0
   kalshi_rules: If the seasonally adjusted unemployment rate (U-3) reported by the Bureau of Labor Statistics
@@ -9432,6 +10419,9 @@ KXU3-26JUL-T4.1|0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff6e9fcf40
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: threshold vs exact bucket'
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXU3-26JUL-T4.1
   kalshi_rules: If the seasonally adjusted unemployment rate (U-3) reported by the Bureau of Labor Statistics
@@ -9470,6 +10460,9 @@ KXU3-26JUL-T4.2|0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba292cc96a5
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: threshold vs exact bucket'
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXU3-26JUL-T4.2
   kalshi_rules: If the seasonally adjusted unemployment rate (U-3) reported by the Bureau of Labor Statistics
@@ -9508,6 +10501,9 @@ KXU3-26JUL-T4.3|0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990f89f9019
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: threshold vs exact bucket'
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXU3-26JUL-T4.3
   kalshi_rules: If the seasonally adjusted unemployment rate (U-3) reported by the Bureau of Labor Statistics
@@ -9546,6 +10542,9 @@ KXU3-26JUL-T4.4|0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284cf27b6f8f
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: threshold vs exact bucket'
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXU3-26JUL-T4.4
   kalshi_rules: If the seasonally adjusted unemployment rate (U-3) reported by the Bureau of Labor Statistics
@@ -9584,6 +10583,9 @@ KXU3-26JUL-T4.5|0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06a95efdaa
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: threshold vs exact bucket'
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXU3-26JUL-T4.5
   kalshi_rules: If the seasonally adjusted unemployment rate (U-3) reported by the Bureau of Labor Statistics
@@ -9622,6 +10624,9 @@ KXU3-26JUL-T4.6|0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60ca9604460
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2: threshold vs exact bucket'
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXU3-26JUL-T4.6
   kalshi_rules: If the seasonally adjusted unemployment rate (U-3) reported by the Bureau of Labor Statistics
@@ -9660,6 +10665,9 @@ KXU3-26JUL-T4.7|0x964fbf21fcd664109e7968ceca19a2a7951991241866abb1bcb33a80f76b5d
   block_reason: concept=unemployment gap=0.2d strike-match
   concept: unemployment
   date_gap_days: 0.23
+  draft_by: claude-fable-5 draft 2026-07-13 (pattern-level; human adjudication pending)
+  draft_note: 'item 2 boundary: K ''above X'' excludes exactly X; P ''>= X'' includes it'
+  draft_verdict: different
   kalshi_date: '2026-08-07T14:00:00+00:00'
   kalshi_id: KXU3-26JUL-T4.7
   kalshi_rules: If the seasonally adjusted unemployment rate (U-3) reported by the Bureau of Labor Statistics

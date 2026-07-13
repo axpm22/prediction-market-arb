@@ -52,7 +52,11 @@ def concepts_of(text: str, concepts: dict) -> set[str]:
 
 
 def extract_strikes(text: str) -> set[Decimal]:
-    return {Decimal(m.replace(",", "")) for m in _NUM.findall(text)}
+    # bare 4-digit years are not strikes: "in Jul 2026" paired every K exact
+    # market with every PM bucket (207 spurious pairs, 2026-07-13)
+    return {Decimal(m.replace(",", "")) for m in _NUM.findall(text)
+            if not ("." not in m and "," not in m and len(m) == 4
+                    and 1900 <= int(m) <= 2100)}
 
 
 def _iso(s: str | None) -> datetime | None:

@@ -134,3 +134,13 @@ def test_disjoint_country_entities_never_pair():
     entities = {"china": [["china"]], "south_korea": [["korea"]]}
     cands = block_candidates(CFG, k, p, concepts, entities)
     assert [c["pm_id"] for c in cands] == ["0xcn"]  # Korea pair rejected
+
+
+def test_extract_strikes_ignores_year_tokens():
+    # 'in Jul 2026' made 2026 a shared strike and paired every Kalshi exact
+    # market with every PM bucket — 207 spurious candidates in one run
+    s = extract_strikes("Will the July 2026 unemployment rate be 4.6%?")
+    assert s == {Decimal("4.6")}
+    # non-year 4-digit values with decimals/commas stay strikes
+    assert Decimal("100000") in extract_strikes("reach $100,000 by 2026")
+    assert Decimal("2026.5") in extract_strikes("above 2026.5 points")
