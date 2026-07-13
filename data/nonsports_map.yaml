@@ -1,0 +1,76 @@
+# Human-adjudicated cross-venue pairs (rule 11 trusted path for MATCHING
+# only — cross-venue positions stay REVIEW until the §18.2 gate).
+# inverted: kalshi YES settles identically to polymarket NO.
+# Append-only; corrections are new entries with a note.
+- kalshi: KXCPICORE-26JUL-T0.0
+  polymarket: '0xd46a37b0de386fb56b804ab8ff86d0cb287228556ccc1a985875926ef59441bc'
+  event_key: nonsports:map:kxcpicore-26jul-t0.0
+  inverted: true
+  concept: cpi
+  note: 'exact complements: K ''above 0.0%'' == NOT P ''<= 0.0%''; same core CPI MoM, SA, BLS single decimal.
+    inverted: true'
+  adjudicated: '2026-07-13'
+- kalshi: KXECONSTATU3-26JUL-T4.0
+  polymarket: '0xaf8f8240a378d544e534a7f758617863f67c80cc847d1114d07d8cd187967425'
+  event_key: nonsports:map:kxeconstatu3-26jul-t4.0
+  inverted: false
+  concept: unemployment
+  note: 'both resolve YES iff U-3 prints exactly 4.0% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adju'
+  adjudicated: '2026-07-13'
+- kalshi: KXECONSTATU3-26JUL-T4.1
+  polymarket: '0x8ad42f13a4ed410e1244bc45a3f33fd19f212bec44b47906ca9fff6e9fcf40cb'
+  event_key: nonsports:map:kxeconstatu3-26jul-t4.1
+  inverted: false
+  concept: unemployment
+  note: 'both resolve YES iff U-3 prints exactly 4.1% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adju'
+  adjudicated: '2026-07-13'
+- kalshi: KXECONSTATU3-26JUL-T4.2
+  polymarket: '0x6a1866c096710b270ada2b422523efa159f6e2857a07444965bba292cc96a57e'
+  event_key: nonsports:map:kxeconstatu3-26jul-t4.2
+  inverted: false
+  concept: unemployment
+  note: 'both resolve YES iff U-3 prints exactly 4.2% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adju'
+  adjudicated: '2026-07-13'
+- kalshi: KXECONSTATU3-26JUL-T4.3
+  polymarket: '0x781b1f0ba112bbbaab511db1360f825c25d0cb3c9d14940735c990f89f9019de'
+  event_key: nonsports:map:kxeconstatu3-26jul-t4.3
+  inverted: false
+  concept: unemployment
+  note: 'both resolve YES iff U-3 prints exactly 4.3% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adju'
+  adjudicated: '2026-07-13'
+- kalshi: KXECONSTATU3-26JUL-T4.4
+  polymarket: '0x6a325e3d16bd0384279065c251fccabe0ec8376e9147249a27284cf27b6f8fe3'
+  event_key: nonsports:map:kxeconstatu3-26jul-t4.4
+  inverted: false
+  concept: unemployment
+  note: 'both resolve YES iff U-3 prints exactly 4.4% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adju'
+  adjudicated: '2026-07-13'
+- kalshi: KXECONSTATU3-26JUL-T4.5
+  polymarket: '0xf7cafcc208409beebaec52a0723756e402c6bdcb151f53c6194a06a95efdaa60'
+  event_key: nonsports:map:kxeconstatu3-26jul-t4.5
+  inverted: false
+  concept: unemployment
+  note: 'both resolve YES iff U-3 prints exactly 4.5% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adju'
+  adjudicated: '2026-07-13'
+- kalshi: KXECONSTATU3-26JUL-T4.6
+  polymarket: '0x0aad85ecbe0206ef9865b335611d08ae8d268200cf59846560c60ca9604460fb'
+  event_key: nonsports:map:kxeconstatu3-26jul-t4.6
+  inverted: false
+  concept: unemployment
+  note: 'both resolve YES iff U-3 prints exactly 4.6% (SA single decimal, BLS). NOTE: verify K contract
+    specifies seasonally adju'
+  adjudicated: '2026-07-13'
+- kalshi: KXU3-26JUL-T3.9
+  polymarket: '0xe8ee4e5ead3949113ad3483cdc0fca586a15c98def08574e3918f26af0f87e98'
+  event_key: nonsports:map:kxu3-26jul-t3.9
+  inverted: true
+  concept: unemployment
+  note: 'exact complements: K ''above 3.9%'' == NOT P ''<= 3.9%''; same SA U-3, BLS Employment Situation.
+    inverted: true'
+  adjudicated: '2026-07-13'
