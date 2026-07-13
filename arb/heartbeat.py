@@ -103,7 +103,7 @@ def lane_interval(cfg, name: str) -> float:
     unlisted runs at the watch cadence."""
     if name == "live":
         return float(cfg["live_lane"]["cadence_secs"])
-    if name in ("negrisk", "political", "nonsports"):
+    if name in ("negrisk", "political", "nonsports", "mapped"):
         return float(cfg["nonsports"]["watch_interval_secs"])
     if name == "verify":
         return float(cfg["verify"]["poll_secs"])

@@ -332,6 +332,15 @@ def cmd_nonsports(cfg, store, args):
     return 0
 
 
+def cmd_mapped(cfg, store, args):
+    """Mapped-pair cross-venue lane over data/nonsports_map.yaml."""
+    from arb.nonsports.mapped import run_mapped
+    s = run_mapped(cfg, store)
+    console.print(f"mapped: {s['pairs']} pairs, {s['quotes']} quotes, "
+                  f"{s['opps']} flags, {s['errors']} errors")
+    return 0
+
+
 def cmd_verify(cfg, store, args):
     from arb.lanes.verify import run_once
     n = run_once(cfg, store)

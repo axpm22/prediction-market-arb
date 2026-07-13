@@ -213,9 +213,11 @@ validation:
                # See PREREGISTRATION.md.
 supervisor:
   processes: { watch: true, live: true,    # add lanes deliberately, one at a time
-               negrisk: true, political: true }   # non-sports pivot (plan Phase 2)
+               negrisk: true, political: true,    # non-sports pivot (plan Phase 2)
+               mapped: true }                     # adjudicated cross-venue pairs
   commands:  { watch: "watch --once", live: "live --once",
-               negrisk: "negrisk-scan --once", political: "political --once" }
+               negrisk: "negrisk-scan --once", political: "political --once",
+               mapped: "mapped --once" }
   max_child_runtime_secs: { default: 600, settle: 1800, live: 120 }
                                     # per-process; settle+reconcile runs long;
                                     #   a live cycle past 120s is force-restarted

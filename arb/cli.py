@@ -63,7 +63,7 @@ def main(argv=None):
     p_regrade = sub.add_parser("regrade", help="re-score consensus vs venue mids (read-only)")
     p_regrade.add_argument("--regrade-db", metavar="PATH", default=None)
     sub.add_parser("supervisor", help="own all loops; the only sanctioned way to run them")
-    for lane in ("negrisk-scan", "verify", "hot", "btc", "political"):
+    for lane in ("negrisk-scan", "verify", "hot", "btc", "political", "mapped"):
         lp = sub.add_parser(lane, help=f"optional {lane} lane (supervisor-owned)")
         lp.add_argument("--once", action="store_true")
     p_ns = sub.add_parser("nonsports", help="blocking-key matcher -> candidates "
