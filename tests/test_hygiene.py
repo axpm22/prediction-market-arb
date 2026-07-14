@@ -42,6 +42,13 @@ def test_log_sinks_redact_query_strings():
         "https://api.the-odds-api.com/v4/sports/?apiKey=SECRET")
 
 
+def test_regrade_never_touches_the_odds_api():
+    # rule 2: arb regrade reads ONLY the local DB + the keyless MLB Stats API
+    text = (ARB / "regrade.py").read_text()
+    assert "oddsapi" not in text
+    assert "INSERT" not in text.upper()
+
+
 def test_no_hardcoded_schedule_times_or_windows():
     # rule 4 (review 2026-07-10): shape/canary fire times and the two 6h match/
     # settle windows moved to config.yaml; literals must not reappear in code

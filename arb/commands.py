@@ -240,6 +240,41 @@ def cmd_check_invariants(cfg, store, args):
     return 0  # silent when clean
 
 
+_REGRADE_BASES = (("as_stored", "mean_diff"), ("closing", "mean_diff"), ("ev_subset", "win_rate"))
+
+
+def cmd_regrade(cfg, store, args):
+    """§18.3 `arb regrade`: read-only paired-Brier re-scoring vs venue mids.
+    Reads only the local DB + the keyless MLB Stats API — NEVER the live Odds
+    API (rule 2) and NEVER writes any table (rule 9 ethos)."""
+    from datetime import datetime, timezone
+
+    from arb.regrade import run, write_report
+    db_path = getattr(args, "regrade_db", None) or args.db
+    regrade_store = store if db_path == args.db else Store(db_path)
+    result = run(cfg, regrade_store)
+    for bucket in ("median", "anchor"):
+        table = Table(title=f"regrade — {bucket}")
+        for col in ("basis", "n_events", "n_pairs", "value", "95% CI"):
+            table.add_column(col)
+        for basis, label in _REGRADE_BASES:
+            c = result["buckets"][bucket][basis]
+            if c["insufficient"]:
+                table.add_row(basis, str(c["n_events"]), str(c["n_pairs"]),
+                             f"INSUFFICIENT n={c['n_events']}", "—")
+            else:
+                table.add_row(basis, str(c["n_events"]), str(c["n_pairs"]),
+                             f"{label}={c['mean']}", f"[{c['ci_low']}, {c['ci_high']}]")
+        console.print(table)
+        excl = result["exclusions"][bucket]
+        console.print(f"[dim]excluded: no-final={excl['no_final']}, "
+                      f"out-of-tolerance={excl['out_of_tolerance']}[/]")
+    today = datetime.now(timezone.utc).date().isoformat()
+    path = write_report(result, today)
+    console.print(f"wrote {path}")
+    return 0
+
+
 def cmd_political(cfg, store, args):
     """POLITICAL lane: Polymarket-only intra-market YES+NO<1 (§12)."""
     import json as _json

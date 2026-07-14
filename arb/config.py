@@ -64,6 +64,8 @@ SCHEMA = {
     "ev": {"e_min": NUM, "clv_window_mins": NUM, "kelly_fraction": NUM,
            "edge_suspect_above": NUM, "max_edge": NUM, "require_exact_match": LIST,
            "enforce_depth_floor": BOOL, "reject_one_sided_books": BOOL},
+    "regrade": {"match_tolerance_secs": NUM, "bootstrap_n": NUM,
+                "bootstrap_seed": NUM, "min_events": NUM},
     "scan_times": LIST, "daily_report_time": STR, "settle_time": STR,
     "archive_time": STR, "archive_after_days": NUM,
     "settle_days_from": NUM, "settle_tripwire_secs": NUM,

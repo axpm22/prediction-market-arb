@@ -75,6 +75,11 @@ ev:
   require_exact_match: [tennis, mma]  # golf removed — not a supported sport anywhere in the system
   enforce_depth_floor: true
   reject_one_sided_books: true
+regrade:                             # §18.3 arb regrade: read-only paired-Brier re-scoring
+  match_tolerance_secs: 90           # as-stored: max |consensus.computed_at - quote.fetched_at|
+  bootstrap_n: 2000                  # cluster-bootstrap resamples (event_key clusters)
+  bootstrap_seed: 20260714           # pinned before any data was scored (pre-registered honesty)
+  min_events: 50                     # below this per (method,basis) cell -> INSUFFICIENT, no claim
 scan_times: ["06:15", "10:30", "13:30", "18:30"]
                                     # v3.4: retimed so the 3h freshness windows cover modal
                                     #   MLB starts (13:05-13:40, 18:40-19:10 ET); the old
