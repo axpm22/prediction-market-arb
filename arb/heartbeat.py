@@ -98,6 +98,16 @@ def initial_last_fired(cfg, now_ny: datetime) -> dict:
     return marks
 
 
+def initial_next_run(cfg, now_mono: float) -> dict[str, float]:
+    """Boot-time schedule: lanes start stagger_secs apart instead of fetching
+    in lockstep — five simultaneous venue fan-outs quadrupled Kalshi latency
+    (350ms -> 1.4s, 2026-07-12/14)."""
+    stagger = float(cfg["supervisor"]["stagger_secs"])
+    return {name: now_mono + i * stagger
+            for i, (name, enabled) in
+            enumerate(cfg["supervisor"]["processes"].items()) if enabled}
+
+
 def lane_interval(cfg, name: str) -> float:
     """Each lane's cadence knob (values live in config, rule 4); anything
     unlisted runs at the watch cadence."""
@@ -138,7 +148,7 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
     started: dict[str, float] = {}
     # suppress the boot-time burst: slots long past are pre-marked as fired (H9)
     last_fired: dict[str, str] = initial_last_fired(cfg, datetime.now(NY))
-    next_run: dict[str, float] = {}
+    next_run: dict[str, float] = initial_next_run(cfg, time.monotonic())
     scheduled: list[subprocess.Popen] = []  # one-shot clock children, reaped each tick
 
     def _spawn(*cmd):

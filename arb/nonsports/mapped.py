@@ -140,12 +140,17 @@ def detect_pair(cfg, entry, quotes: list[Quote]) -> list[Opportunity]:
     for side in ("YES", "NO"):
         a, b = best.get(("kalshi", side)), best.get(("polymarket", side))
         if a and b and a.bid is not None and b.bid is not None:
+            spread_a, spread_b = a.cost - a.bid, b.cost - b.bid
+            if max(spread_a, spread_b) >= cfg["zombie_spread_min"]:
+                continue  # a near-empty book makes any "mid" fiction, not signal
             mid_a, mid_b = (a.cost + a.bid) / 2, (b.cost + b.bid) / 2
             if abs(mid_a - mid_b) >= cfg["divergence_threshold"]:
                 opps.append(Opportunity(
                     kind="DIVERGENCE", category="nonsports", event=event,
                     legs=[a, b], edge=q6(abs(mid_a - mid_b)), stakes=[],
-                    status="REVIEW", notes=f"mapped-pair {side} mids"))
+                    status="REVIEW",
+                    notes=f"mapped-pair {side} mids; spreads "
+                          f"k={q6(spread_a)} pm={q6(spread_b)}"))
                 break  # one divergence signal per pair per poll is enough
     return opps
 

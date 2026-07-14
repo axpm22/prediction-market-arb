@@ -99,3 +99,71 @@ def test_no_lock_no_bet_but_quotes_still_persist(monkeypatch, tmp_path):
     s = mapped.run_mapped(CFG, store, now=NOW)
     assert s["quotes"] == 4
     assert not store.query("SELECT 1 FROM flat_bets")
+
+
+def test_wide_spread_book_never_emits_divergence(monkeypatch, tmp_path):
+    # a 20-point "divergence" against a near-empty book is fiction — suppress
+    # when either side's spread crosses zombie_spread_min
+    fake_get, _ = _fake_pm(monkeypatch)
+    monkeypatch.setattr(mapped, "get_json", fake_get)
+
+    def wide_post(url, cfg, payload, deadline=None):
+        return [{"asset_id": "tY",
+                 "asks": [{"price": "0.97", "size": "5"}],
+                 "bids": [{"price": "0.02", "size": "5"}]},   # spread 0.95
+                {"asset_id": "tN",
+                 "asks": [{"price": "0.98", "size": "5"}],
+                 "bids": [{"price": "0.03", "size": "5"}]}]
+    monkeypatch.setattr(mapped, "post_json", wide_post)
+    qs = mapped.pm_pair_quotes(CFG, ENTRY_INV, NOW)
+    k = [mapped._quote(CFG, ENTRY_INV, "kalshi", s, s, Decimal("0.50"),
+                       Decimal("0.48"), Decimal(100), "econ", NOW, "K1")
+         for s in ("YES", "NO")]
+    opps = mapped.detect_pair(CFG, ENTRY_INV, k + qs)
+    assert not [o for o in opps if o.kind == "DIVERGENCE"]
+
+
+def test_supervisor_stagger_offsets_lane_starts():
+    from arb.heartbeat import initial_next_run
+    nr = initial_next_run(CFG, 1000.0)
+    enabled = [k for k, v in CFG["supervisor"]["processes"].items() if v]
+    assert set(nr) == set(enabled)
+    offsets = sorted(nr[k] - 1000.0 for k in nr)
+    step = float(CFG["supervisor"]["stagger_secs"])
+    assert offsets == [i * step for i in range(len(enabled))]
+    assert step > 0  # lockstep fan-out is the bug this exists to prevent
+
+
+def test_tickets_rank_by_persistence_and_close_on_lifetime_end(monkeypatch, tmp_path):
+    from datetime import timedelta
+
+    from arb.tickets import open_locked_positions
+    store = Store(tmp_path / "t.sqlite")
+
+    def router_get(url, cfg, deadline=None):
+        if "/markets/KXU3" in url:
+            return {"market": {"status": "open",
+                               "yes_ask_dollars": "0.44", "yes_bid_dollars": "0.41",
+                               "no_ask_dollars": "0.59", "no_bid_dollars": "0.56",
+                               "yes_ask_size_fp": "100", "yes_bid_size_fp": "100"}}
+        return [{"closed": False, "clobTokenIds": json.dumps(["tY", "tN"])}]
+
+    _, fake_post = _fake_pm(monkeypatch)
+    monkeypatch.setattr(mapped, "get_json", router_get)
+    monkeypatch.setattr(mapped, "post_json", fake_post)
+    monkeypatch.setattr(mapped, "load_map", lambda path=None: [ENTRY_INV])
+    mapped.run_mapped(CFG, store, now=NOW)
+    mapped.run_mapped(CFG, store, now=NOW + timedelta(minutes=5))  # re-sighted
+    ts = open_locked_positions(CFG, store)
+    assert len(ts) == 1
+    t = ts[0]
+    assert t["sightings"] == 2          # booking + one absorb
+    assert t["kind"] == "XSPREAD" and t["trusted"] is False
+    venues = {lg["venue"] for lg in t["legs"]}
+    assert venues == {"kalshi", "polymarket"}
+    assert all(lg.get("venue_market_id") for lg in t["legs"])
+    # lifetime end removes the ticket
+    bid = store.query("SELECT id FROM flat_bets ORDER BY id DESC LIMIT 1")[0]["id"]
+    store.insert("bet_events", {"bet_id": bid, "kind": "lifetime_closed",
+                                "payload_json": "{}"})
+    assert open_locked_positions(CFG, store) == []

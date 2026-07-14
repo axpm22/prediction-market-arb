@@ -332,6 +332,30 @@ def cmd_nonsports(cfg, store, args):
     return 0
 
 
+def cmd_tickets(cfg, store, args):
+    """Open locked flags as explicit MANUAL order tickets, persistence-ranked.
+    Read-only; rule 1 forbids this codebase from placing anything."""
+    from arb.tickets import open_locked_positions
+    console.print("[bold yellow]PAPER INSTRUMENT — tickets are instructions "
+                  "for a HUMAN; nothing here places orders (rule 1)[/]")
+    ts = open_locked_positions(cfg, store)
+    if not ts:
+        console.print("no open locked positions")
+        return 0
+    for t in ts:
+        console.print(f"\n[bold]{t['kind']}[/] {t['event_key']} — edge "
+                      f"{t['edge_points']}pts, seen [bold]{t['sightings']}x[/] "
+                      f"(first {t['first_seen'][:16]}, last {t['last_seen'][:16]}) "
+                      f"lane={t['lane']} trusted={t['trusted']}")
+        for lg in t["legs"]:
+            console.print(f"   BUY {lg.get('venue_side', lg['side'])} @ "
+                          f"{lg['cost']} on {lg['venue']} "
+                          f"[dim]{lg.get('venue_market_id', '?')}[/] "
+                          f"(fee {lg.get('fee_cost')}, depth "
+                          f"{lg.get('depth_usd', '?')})")
+    return 0
+
+
 def cmd_mapped(cfg, store, args):
     """Mapped-pair cross-venue lane over data/nonsports_map.yaml."""
     from arb.nonsports.mapped import run_mapped

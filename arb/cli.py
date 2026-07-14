@@ -83,6 +83,8 @@ def main(argv=None):
     sub.add_parser("dashboard", help="read-only local panel on dashboard.host:port (§14.3)")
     sub.add_parser("canary", help="inject the monthly synthetic fixture through the live pipeline")
     sub.add_parser("shape-check", help="weekly live response schema validation vs fixtures")
+    sub.add_parser("tickets", help="open locked flags as MANUAL order tickets, "
+                                   "persistence-ranked (read-only, rule 1)")
     sub.add_parser("backup", help="sqlite VACUUM INTO db_backup.dest; prune to keep_last")
     sub.add_parser("archive", help="move quotes older than archive_after_days to data/archive/")
 

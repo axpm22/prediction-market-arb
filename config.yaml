@@ -223,6 +223,8 @@ supervisor:
                                     #   a live cycle past 120s is force-restarted
   schedule_catchup_grace_mins: 30   # on (re)start, only fire scheduled slots missed within
                                     #   this window; older slots are marked done, not burst-fired (H9)
+  stagger_secs: 15                  # boot offset between lanes — lockstep fan-out
+                                    #   quadrupled kalshi latency (2026-07-14)
   shape_time: "05:00"               # weekly (Monday) shape-check fire time
 data_stale_alarm_secs: 900
 heartbeat_stale_polls: 3            # supervisor beat older than this many watch
