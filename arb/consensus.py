@@ -123,3 +123,43 @@ def compute_consensus(cfg, rows: list[dict], computed_at: str
                 "n_books": len(ps), "dispersion": q6(Decimal(iqr)),
                 "computed_at": computed_at})
     return cons_rows, book_rows
+
+
+def compute_anchor_consensus(cfg, rows: list[dict], computed_at: str
+                             ) -> tuple[list[dict], list[dict]]:
+    """Single-anchor-book consensus (§18.3 Part A): `consensus_anchor.book`'s own
+    de-vigged odds recorded as their own consensus definition, method=anchor:<method>.
+    Reuses the median path's event-key canonicalization so rows JOIN venue quotes
+    identically; no floor/outlier logic applies — n_books=1 by construction."""
+    method = cfg["devig_method"]
+    anchor_book = cfg["consensus_anchor"]["book"]
+    rows = [r for r in rows if r["book"] == anchor_book]
+    aliases = load_aliases()
+    dh_order = _doubleheader_order(cfg, rows, aliases)
+    by_market: dict[tuple, list[dict]] = {}
+    for r in rows:
+        ek = _event_key(cfg, r["sport_key"], r["home"], r["away"],
+                        r["commence_time"], aliases, dh_order)
+        by_market.setdefault((ek, r["market"], r["line"]), []).append(r)
+
+    book_rows, cons_rows = [], []
+    for (event_key, market, line), outs in by_market.items():
+        if len(outs) < 2:
+            continue  # cannot de-vig a one-sided listing
+        try:
+            probs = devig([o["odds"] for o in outs], method)
+        except ValueError as e:
+            log.warning("anchor consensus: dropping %s on %s: %s",
+                        anchor_book, event_key, e)
+            continue
+        market_type = "TOTAL" if market == "totals" else "WINNER"
+        for o, p in zip(outs, probs):
+            book_rows.append({
+                "event_key": event_key, "market_type": market_type, "line": line,
+                "outcome": o["outcome"], "book": anchor_book, "raw_odds": o["odds"],
+                "p_devig": p, "method": f"anchor:{method}", "computed_at": computed_at})
+            cons_rows.append({
+                "event_key": event_key, "market_type": market_type, "line": line,
+                "outcome": o["outcome"], "p_hat": q6(p), "method": f"anchor:{method}",
+                "n_books": 1, "dispersion": q6(Decimal(0)), "computed_at": computed_at})
+    return cons_rows, book_rows

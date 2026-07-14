@@ -1,0 +1,45 @@
+{
+ "_SYNTHETIC": "hand-built eu-region h2h fixture for the consensus_anchor path (Part A of prompts/PROMPT_REGRADE_ANCHOR.md) — NOT a recorded live response. Shape matches the real oddsapi_h2h.json fixture: one pinnacle book (the anchor) plus one other eu book that must be discarded by the filter.",
+ "events": [
+  {
+   "id": "anchor-test-event-1",
+   "sport_key": "baseball_mlb",
+   "sport_title": "MLB",
+   "commence_time": "2026-07-08T19:46:00Z",
+   "home_team": "San Francisco Giants",
+   "away_team": "Toronto Blue Jays",
+   "bookmakers": [
+    {
+     "key": "pinnacle",
+     "title": "Pinnacle",
+     "last_update": "2026-07-08T20:08:13Z",
+     "markets": [
+      {
+       "key": "h2h",
+       "last_update": "2026-07-08T20:08:13Z",
+       "outcomes": [
+        {"name": "San Francisco Giants", "price": 11.5},
+        {"name": "Toronto Blue Jays", "price": 1.032}
+       ]
+      }
+     ]
+    },
+    {
+     "key": "onexbet",
+     "title": "1xBet",
+     "last_update": "2026-07-08T20:07:05Z",
+     "markets": [
+      {
+       "key": "h2h",
+       "last_update": "2026-07-08T20:07:05Z",
+       "outcomes": [
+        {"name": "San Francisco Giants", "price": 11.0},
+        {"name": "Toronto Blue Jays", "price": 1.05}
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

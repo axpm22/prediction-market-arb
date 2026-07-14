@@ -78,6 +78,15 @@ def fetch_odds(cfg, sport_key: str) -> list[dict]:
     return parse_events(events, sport_key)
 
 
+def fetch_anchor_odds(cfg, sport_key: str) -> list[dict]:
+    """§18.3 Part A: the single-sharp-anchor eu call. Rides `_get` so credit
+    logging/warn/abort applies identically to the main fetch (rule 2)."""
+    ca = cfg["consensus_anchor"]
+    events, _ = _get(cfg, f"/sports/{sport_key}/odds/", {
+        "regions": ca["region"], "markets": ca["markets"], "oddsFormat": "decimal"})
+    return parse_events(events, sport_key)
+
+
 def fetch_scores(cfg, sport_key: str) -> list[dict]:
     scores, _ = _get(cfg, f"/sports/{sport_key}/scores/",
                      {"daysFrom": int(cfg["settle_days_from"])})

@@ -4,7 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from arb.config import load
-from arb.consensus import compute_consensus
+from arb.consensus import compute_anchor_consensus, compute_consensus
 from arb.venues.oddsapi import parse_events
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -64,3 +64,36 @@ def test_consensus_skips_book_with_malformed_odds():
     assert cons, "good books must still produce consensus"
     assert all(c["n_books"] == 3 for c in cons)          # bad book dropped
     assert not [b for b in books if b["book"] == "bad"]  # and not persisted
+
+
+def test_anchor_consensus_keeps_only_configured_book():
+    # Part A: eu fixture has pinnacle (the anchor) + onexbet (a soft book) —
+    # only pinnacle may survive the filter.
+    events = json.loads((ROOT / "tests/fixtures/oddsapi_h2h_anchor.json").read_text())["events"]
+    rows = parse_events(events, "baseball_mlb")
+    cons, books = compute_anchor_consensus(CFG, rows, "2026-07-08T20:10:00Z")
+    assert {b["book"] for b in books} == {"pinnacle"}
+    assert all(c["method"] == "anchor:power" for c in cons)
+    assert all(b["method"] == "anchor:power" for b in books)
+    ev0 = [c for c in cons if c["event_key"] == "baseball_mlb:2026-07-08:bluejays:giants"]
+    assert len(ev0) == 2  # both h2h outcomes, single-book de-vig
+    assert all(c["n_books"] == 1 for c in ev0)
+    tor = [c for c in ev0 if c["outcome"] == "Toronto Blue Jays"][0]
+    assert Decimal("0.9") < tor["p_hat"] < Decimal("1")  # TOR huge favourite, vig-free
+
+
+def test_anchor_consensus_doubleheader_does_not_blend():
+    def _books(commence, fav):
+        comp = 1 / (1 - 1 / fav)
+        return [{"sport_key": "baseball_mlb", "home": "New York Mets",
+                 "away": "Kansas City Royals", "commence_time": commence,
+                 "book": bk, "market": "h2h", "line": None, "outcome": o, "odds": od}
+                for bk, o, od in (("pinnacle", "New York Mets", fav),
+                                  ("pinnacle", "Kansas City Royals", comp))]
+    rows = (_books("2026-07-08T17:00:00Z", Decimal("1.5"))
+            + _books("2026-07-08T20:00:00Z", Decimal("3.0")))
+    cons, _ = compute_anchor_consensus(CFG, rows, "2026-07-08T12:00:00Z")
+    keys = {c["event_key"] for c in cons}
+    assert "baseball_mlb:2026-07-08:mets:royals:dh1" in keys
+    assert "baseball_mlb:2026-07-08:mets:royals:dh2" in keys
+    assert "baseball_mlb:2026-07-08:mets:royals" not in keys

@@ -158,7 +158,7 @@ def cmd_scan(cfg, store, args):
     command besides settle scores; no-op without a key or when disabled."""
     from datetime import datetime, timezone
 
-    from arb.consensus import compute_consensus
+    from arb.consensus import compute_anchor_consensus, compute_consensus
     from arb.venues import oddsapi
     if not cfg["consensus_enabled"]:
         console.print("[dim]consensus disabled; scan is a no-op[/]")
@@ -169,6 +169,8 @@ def cmd_scan(cfg, store, args):
         return 0
     now = datetime.now(timezone.utc).isoformat()
     total_c, total_b, aborted = 0, 0, False
+    # credit math (§18.3 Part A, not asserted live): us h2h+totals (2) + eu h2h
+    # anchor (1) = 3 credits x sports x 4 scans/day ~= 360/month for one sport
     try:
         for sport_key in cfg["consensus_sports"]:
             rows = oddsapi.fetch_odds(cfg, str(sport_key))
@@ -177,6 +179,13 @@ def cmd_scan(cfg, store, args):
             store.insert_many("consensus_books", books)
             total_c += len(cons)
             total_b += len(books)
+            if cfg["consensus_anchor"]["enabled"]:
+                anchor_rows = oddsapi.fetch_anchor_odds(cfg, str(sport_key))
+                acons, abooks = compute_anchor_consensus(cfg, anchor_rows, now)
+                store.insert_many("consensus", acons)
+                store.insert_many("consensus_books", abooks)
+                total_c += len(acons)
+                total_b += len(abooks)
     except oddsapi.CreditsLow as e:
         # rule 2 abort, gracefully: the credits row must land on exactly the
         # path where credits matter most (M4)

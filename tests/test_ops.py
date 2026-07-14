@@ -274,3 +274,38 @@ def test_cmd_scan_aborts_gracefully_on_credits_low(cfg, tmp_path, monkeypatch):
     assert cmd_scan(cfg, store, SimpleNamespace()) == 1
     row = store.query("SELECT detail FROM annotations WHERE kind='oddsapi-credits'")
     assert row and row[0]["detail"] == "49"
+
+
+def test_cmd_scan_anchor_disabled_makes_zero_anchor_calls(cfg, tmp_path, monkeypatch):
+    # Part A, rule 2: consensus_anchor.enabled=false (the shipped default) must
+    # never construct the extra eu anchor call.
+    from arb.commands import cmd_scan
+    from arb.store import Store
+    import arb.venues.oddsapi as oa
+
+    calls = []
+    monkeypatch.setattr(oa, "fetch_odds", lambda c, s: [])
+    monkeypatch.setattr(oa, "fetch_anchor_odds", lambda c, s: calls.append(s) or [])
+    monkeypatch.setattr(oa, "api_key", lambda: "k")
+    assert cfg["consensus_anchor"]["enabled"] is False
+    store = Store(tmp_path / "c.sqlite")
+    from types import SimpleNamespace
+    cmd_scan(cfg, store, SimpleNamespace())
+    assert calls == []
+
+
+def test_cmd_scan_anchor_enabled_fetches_once_per_sport(cfg, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from arb.commands import cmd_scan
+    from arb.store import Store
+    import arb.venues.oddsapi as oa
+
+    calls = []
+    monkeypatch.setattr(oa, "fetch_odds", lambda c, s: [])
+    monkeypatch.setattr(oa, "fetch_anchor_odds", lambda c, s: calls.append(s) or [])
+    monkeypatch.setattr(oa, "api_key", lambda: "k")
+    cfg2 = dict(cfg, consensus_anchor=dict(cfg["consensus_anchor"], enabled=True))
+    store = Store(tmp_path / "c2.sqlite")
+    cmd_scan(cfg2, store, SimpleNamespace())
+    assert calls == list(cfg["consensus_sports"])
