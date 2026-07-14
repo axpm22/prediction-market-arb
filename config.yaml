@@ -27,7 +27,7 @@ consensus_outlier_points: 0.10      # optional outlier drop: book >10pts from cr
 devig_method: power                 # coin-flip default (n=30 bake-off is noise); re-run at n>=200
 sharp_books: [lowvig, betonlineag]  # betus removed — soft book, not sharp
 weight_sharp_books: false           # measurement-parallel until it beats plain median on CLV
-consensus_anchor: { enabled: false, book: pinnacle, region: eu, markets: h2h }
+consensus_anchor: { enabled: true, book: pinnacle, region: eu, markets: h2h }
                                     # single sharp anchor experiment (§18.3); h2h ONLY:
                                     #   420 credits/mo; h2h+totals = 540 > 500 budget (§6.4)
 min_executable_usd: 50              # the only global per-leg depth floor

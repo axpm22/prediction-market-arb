@@ -277,8 +277,9 @@ def test_cmd_scan_aborts_gracefully_on_credits_low(cfg, tmp_path, monkeypatch):
 
 
 def test_cmd_scan_anchor_disabled_makes_zero_anchor_calls(cfg, tmp_path, monkeypatch):
-    # Part A, rule 2: consensus_anchor.enabled=false (the shipped default) must
-    # never construct the extra eu anchor call.
+    # Part A, rule 2: consensus_anchor.enabled=false must never construct the
+    # extra eu anchor call (Part C flipped the shipped default to true once
+    # regrade existed to score it, so this test pins its own disabled config).
     from arb.commands import cmd_scan
     from arb.store import Store
     import arb.venues.oddsapi as oa
@@ -287,10 +288,10 @@ def test_cmd_scan_anchor_disabled_makes_zero_anchor_calls(cfg, tmp_path, monkeyp
     monkeypatch.setattr(oa, "fetch_odds", lambda c, s: [])
     monkeypatch.setattr(oa, "fetch_anchor_odds", lambda c, s: calls.append(s) or [])
     monkeypatch.setattr(oa, "api_key", lambda: "k")
-    assert cfg["consensus_anchor"]["enabled"] is False
+    cfg2 = dict(cfg, consensus_anchor=dict(cfg["consensus_anchor"], enabled=False))
     store = Store(tmp_path / "c.sqlite")
     from types import SimpleNamespace
-    cmd_scan(cfg, store, SimpleNamespace())
+    cmd_scan(cfg2, store, SimpleNamespace())
     assert calls == []
 
 
