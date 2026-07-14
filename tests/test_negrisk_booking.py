@@ -119,8 +119,10 @@ def test_negrisk_scan_persists_quotes_even_for_one_sided_events(tmp_path, monkey
                        "groupItemTitle": "o0", "volume24hr": 1}]}
     books = {"y1": {"asks": [{"price": "0.40", "size": "10"}], "bids": []},
              "n1": {"asks": [{"price": "0.65", "size": "10"}], "bids": []}}
+    import arb.nonsports.kalshi_events as ke
     monkeypatch.setattr(pm, "fetch_negrisk_events", lambda cfg, tags: [ev])
     monkeypatch.setattr(pm, "fetch_books", lambda cfg, tokens: books)
+    monkeypatch.setattr(ke, "scan_kalshi_events", lambda cfg, now: ([], [], 0))
     store = Store(tmp_path / "q.sqlite")
     cmd_negrisk_scan(CFG, store, SimpleNamespace(once=True))
     # yes_bid is None (one-sided) -> group unscannable, but the YES/NO asks
@@ -161,8 +163,10 @@ def test_negrisk_scan_lots_skipped_events(tmp_path, monkeypatch):
     big = {"id": "BIG", "negRisk": True, "_tag": "politics", "title": "big",
            "markets": [{"clobTokenIds": json.dumps([f"y{i}", f"n{i}"])}
                        for i in range(31)]}  # > max_outcomes 30
+    import arb.nonsports.kalshi_events as ke
     monkeypatch.setattr(pm, "fetch_negrisk_events", lambda cfg, tags: [big])
     monkeypatch.setattr(pm, "fetch_books", lambda cfg, tokens: {})
+    monkeypatch.setattr(ke, "scan_kalshi_events", lambda cfg, now: ([], [], 0))
     store = Store(tmp_path / "l.sqlite")
     cmd_negrisk_scan(CFG, store, SimpleNamespace(once=True))
     lot = store.query("SELECT reason, event_key FROM left_on_table")

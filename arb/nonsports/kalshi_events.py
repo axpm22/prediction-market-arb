@@ -1,61 +1,52 @@
 """Kalshi mutually-exclusive event baskets (negrisk.kalshi_events — declared
 in config since v3.5, implemented 2026-07-14 to close the venue imbalance:
-three lanes scanned Polymarket wholesale while Kalshi's ~3k non-sports series
-were only touched via 9 mapped pairs).
+three lanes scanned Polymarket wholesale while Kalshi's non-sports surface
+was only touched via 9 mapped pairs).
 
-Discovery: the global open-markets listing (verified 2026-07-14,
-data/verified_facts.md) -> keep markets whose series belongs to a non-sports
-catalog category -> group by event_ticker -> groups of 3..max_outcomes
-two-sided markets -> /events/{ticker} supplies the mutually_exclusive flag
-(exhaustiveness proof condition a) -> negrisk.scan_group does the math.
-Every observed book persists (rule 7) whether or not a basket flags."""
+Discovery: the events listing (verified 2026-07-14, data/verified_facts.md)
+— `GET /events?status=open&with_nested_markets=true` carries the
+`mutually_exclusive` flag (exhaustiveness proof condition a), `category`,
+and nested markets directly, so basket scanning costs the pagination alone.
+(First attempt used the global /markets listing; its first 2,000 rows were
+99.8% sports parlays — recorded and replaced same day.) Every observed
+two-sided book persists (rule 7) whether or not a basket flags."""
 from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from urllib.parse import quote
 
 from arb.logutil import get_logger
 from arb.negrisk import quote_rows, scan_group
 from arb.venues.base import Deadline, get_json
-from arb.venues.kalshi import BASE, fetch_event
+from arb.venues.kalshi import BASE
 
 log = get_logger("arb.kalshi_events", "logs/scan.log")
 
 _CAT_FEE = {"Politics": "politics", "Economics": "econ",
-            "Climate and Weather": "weather"}
+            "Climate and Weather": "weather", "World": "geopolitics"}
 
 
-def _series_categories(cfg, deadline) -> dict[str, str]:
-    out = {}
-    for cat in cfg["nonsports"]["kalshi_categories"]:
-        data = get_json(f"{BASE}/series?category={quote(str(cat))}", cfg,
-                        deadline=deadline)
-        for s in data.get("series", []):
-            out[s["ticker"]] = _CAT_FEE.get(str(cat), "politics")
-    return out
-
-
-def _open_markets(cfg, deadline) -> list[dict]:
-    markets, cursor, pages = [], "", 0
+def _open_events(cfg, deadline) -> list[dict]:
+    events, cursor, pages = [], "", 0
     cap = int(cfg["negrisk"]["scan_pages"])
     while pages < cap:
         if deadline.expired():
-            log.warning("kalshi ME discovery truncated by deadline at page %s", pages)
+            log.warning("kalshi events discovery truncated by deadline at page %s",
+                        pages)
             break
-        url = f"{BASE}/markets?status=open&limit=200"
+        url = f"{BASE}/events?status=open&limit=200&with_nested_markets=true"
         if cursor:
             url += f"&cursor={cursor}"
         data = get_json(url, cfg, deadline=deadline)
-        markets.extend(data.get("markets", []))
+        events.extend(data.get("events", []))
         cursor = data.get("cursor") or ""
         pages += 1
         if not cursor:
             break
     else:
         if cursor:
-            log.warning("kalshi ME discovery pagination cap hit; coverage truncated")
-    return markets
+            log.warning("kalshi events pagination cap hit; coverage truncated")
+    return events
 
 
 def _dollars(m, key) -> Decimal | None:
@@ -66,9 +57,9 @@ def _dollars(m, key) -> Decimal | None:
     return d if 0 < d < 1 else None  # sentinel 0/1 prices are not quotes
 
 
-def _outcomes(group: list[dict]) -> list[dict] | None:
+def _outcomes(markets: list[dict]) -> list[dict] | None:
     outs = []
-    for m in group:
+    for m in markets:
         ya, yb = _dollars(m, "yes_ask_dollars"), _dollars(m, "yes_bid_dollars")
         na, nb = _dollars(m, "no_ask_dollars"), _dollars(m, "no_bid_dollars")
         if ya is None or yb is None:
@@ -85,42 +76,34 @@ def _outcomes(group: list[dict]) -> list[dict] | None:
 
 
 def scan_kalshi_events(cfg, now: datetime) -> tuple[list[dict], list[dict], int]:
-    """-> (quote_rows, baskets, n_groups_checked)."""
+    """-> (quote_rows, baskets, n_groups_scanned)."""
     deadline = Deadline(cfg["execution"]["venue_deadline_secs"])
-    series_cat = _series_categories(cfg, deadline)
-    groups: dict[str, list[dict]] = {}
-    for m in _open_markets(cfg, deadline):
-        et = m.get("event_ticker") or ""
-        if series_cat.get(et.split("-")[0]) is None:
-            continue  # not a non-sports series
-        groups.setdefault(et, []).append(m)
-    cands = {et: ms for et, ms in groups.items()
-             if 3 <= len(ms) <= int(cfg["negrisk"]["max_outcomes"])}
-    # largest groups first — where exhaustive baskets live
-    ordered = sorted(cands.items(), key=lambda kv: -len(kv[1]))
+    wanted = {str(c) for c in cfg["nonsports"]["kalshi_categories"]}
+    cands = []
+    for e in _open_events(cfg, deadline):
+        markets = e.get("markets") or []
+        if e.get("category") in wanted \
+                and 3 <= len(markets) <= int(cfg["negrisk"]["max_outcomes"]):
+            cands.append(e)
+    # largest groups first — where exhaustive baskets live; the cap bounds
+    # quote volume per poll, not API calls (markets ride the events pages)
+    cands.sort(key=lambda e: -len(e["markets"]))
     cap = int(cfg["negrisk"]["kalshi_event_checks"])
-    quotes, baskets, checked = [], [], 0
-    for et, ms in ordered[:cap]:
-        if deadline.expired():
-            log.warning("kalshi ME scan truncated by deadline at %s groups", checked)
-            break
-        outs = _outcomes(ms)
-        cat = series_cat[et.split("-")[0]]
-        event_key = f"nonsports:kalshi:{et}"
+    quotes, baskets, scanned = [], [], 0
+    for e in cands[:cap]:
+        outs = _outcomes(e["markets"])
         if outs is None:
             continue  # one-sided books; nothing two-sided to persist coherently
+        et = e.get("event_ticker", "")
+        cat = _CAT_FEE.get(str(e.get("category")), "politics")
+        event_key = f"nonsports:kalshi:{et}"
         quotes.extend(quote_rows(cfg, "kalshi", cat, event_key, outs, now))
-        try:
-            me = bool(fetch_event(cfg, et).get("mutually_exclusive"))
-        except Exception as e:  # noqa: BLE001 — one event fetch never kills the scan
-            log.warning("kalshi event %s fetch failed: %s", et, e)
-            continue
-        checked += 1
-        bs = scan_group(cfg, "kalshi", cat, event_key,
-                        ms[0].get("title", et), outs, venue_flag=me)
+        bs = scan_group(cfg, "kalshi", cat, event_key, e.get("title", et), outs,
+                        venue_flag=bool(e.get("mutually_exclusive")))
         exp = min((m.get("expected_expiration_time") or m.get("close_time") or ""
-                   for m in ms), default="") or None
+                   for m in e["markets"]), default="") or None
         for b in bs:
             b["resolution_date"] = exp  # D2 horizon gate input
         baskets.extend(bs)
-    return quotes, baskets, checked
+        scanned += 1
+    return quotes, baskets, scanned

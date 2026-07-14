@@ -28,20 +28,19 @@ def _fakes(monkeypatch, mutually_exclusive=True):
     # geopolitics vector): NO asks 0.64x3 = 1.92 + ~0.048 fees = 1.968 < 2
     group = [_mkt(f"KXWHO-26AUG-C{i}", "KXWHO-26AUG", "0.3405", "0.3375",
                   "0.64", "0.6375", f"o{i}") for i in range(3)]
-    stray = [_mkt("KXMLBGAME-X", "KXMLBGAME-X", "0.5", "0.48", "0.52", "0.5", "x")]
+    events = [{"event_ticker": "KXWHO-26AUG", "category": "Politics",
+               "title": "Who wins?", "mutually_exclusive": mutually_exclusive,
+               "markets": group},
+              {"event_ticker": "KXMLB-X", "category": "Sports", "title": "x",
+               "mutually_exclusive": True,
+               "markets": [_mkt(f"KXMLB-X-{i}", "KXMLB-X", "0.5", "0.48",
+                                "0.52", "0.5", "x") for i in range(3)]}]
 
     def fake_get(url, cfg, deadline=None):
-        if "/series?" in url:
-            if "Politics" in url:
-                return {"series": [{"ticker": "KXWHO", "title": "Who"}]}
-            return {"series": []}
-        if "/markets?" in url:
-            return {"markets": group + stray, "cursor": ""}
-        raise AssertionError(url)
+        assert "/events?" in url and "with_nested_markets=true" in url
+        return {"events": events, "cursor": ""}
 
     monkeypatch.setattr(ke, "get_json", fake_get)
-    monkeypatch.setattr(ke, "fetch_event",
-                        lambda cfg, et: {"mutually_exclusive": mutually_exclusive})
 
 
 def test_me_group_baskets_and_persists_quotes(monkeypatch):
