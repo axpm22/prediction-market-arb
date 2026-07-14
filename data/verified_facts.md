@@ -24,3 +24,4 @@ All verified live **2026-07-08** against production endpoints; fixtures recorded
 | Polymarket NegRiskAdapter NO-basket conversion (addendum discovery #3) | **NOT VERIFIED** — on-chain adapter mechanics not verifiable from public HTTP GETs alone; NO-basket `lockup_days` stays at resolution horizon (conservative) until verified | — |
 | Kalshi candlestick history (markout backfill) | **NOT PROBED** — optional optimization; markouts run from stored quotes first | — |
 | Withdrawal/gas fee cells (addendum §2) | **NOT VERIFIED** — `[VERIFY]` placeholders remain in projections layer; projections label them | — |
+| Kalshi global open-markets listing | **VERIFIED live 2026-07-14.** `GET /trade-api/v2/markets?status=open&limit=200` works WITHOUT `series_ticker` — returns 200 markets + cursor for pagination (global discovery primitive for the Kalshi ME-events scan). Same fields as the per-series form | — |
