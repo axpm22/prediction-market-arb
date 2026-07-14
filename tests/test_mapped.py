@@ -167,3 +167,26 @@ def test_tickets_rank_by_persistence_and_close_on_lifetime_end(monkeypatch, tmp_
     store.insert("bet_events", {"bet_id": bid, "kind": "lifetime_closed",
                                 "payload_json": "{}"})
     assert open_locked_positions(CFG, store) == []
+
+
+def test_settlement_mismatch_permanently_bans_a_mapped_pair(monkeypatch, tmp_path):
+    # rule 11: "a settlement mismatch ... permanently bans the pair" — the
+    # lane must stop touching a pair whose bet ever mismatch-annotated
+    store = Store(tmp_path / "b.sqlite")
+    bid = store.insert("flat_bets", {"kind": "XSPREAD",
+                                     "event_key": ENTRY_INV["event_key"],
+                                     "legs_json": "[]", "stake_usd": "1",
+                                     "status": "OPEN"})
+    store.insert("annotations", {"target_kind": "bet", "target_id": str(bid),
+                                 "kind": "settlement_mismatch", "detail": "x",
+                                 "created_at": NOW.isoformat()})
+    calls = {"n": 0}
+
+    def counting_get(url, cfg, deadline=None):
+        calls["n"] += 1
+        return {}
+    monkeypatch.setattr(mapped, "get_json", counting_get)
+    monkeypatch.setattr(mapped, "post_json", counting_get)
+    monkeypatch.setattr(mapped, "load_map", lambda path=None: [ENTRY_INV])
+    s = mapped.run_mapped(CFG, store, now=NOW)
+    assert s["banned"] == 1 and calls["n"] == 0  # never fetched again

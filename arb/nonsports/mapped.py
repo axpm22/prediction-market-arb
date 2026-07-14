@@ -155,13 +155,29 @@ def detect_pair(cfg, entry, quotes: list[Quote]) -> list[Opportunity]:
     return opps
 
 
+def _pair_banned(store, event_key: str) -> bool:
+    """Rule 11: a settlement mismatch permanently bans the matched pair. The
+    mismatch annotation targets the bet; the ban keys off the pair's
+    event_key and is append-only by construction (annotations never delete)."""
+    return bool(store.query(
+        """SELECT 1 FROM annotations a JOIN flat_bets fb
+             ON fb.id = CAST(a.target_id AS INTEGER)
+           WHERE a.target_kind='bet' AND a.kind='settlement_mismatch'
+             AND fb.event_key = ? LIMIT 1""", (event_key,)))
+
+
 def run_mapped(cfg, store, now: datetime | None = None) -> dict:
     from arb.cycle import persist_poll
     from arb.tracker import process_poll
     now = now or datetime.now(timezone.utc)
     entries = load_map()
-    all_quotes, all_opps, errors = [], [], 0
+    all_quotes, all_opps, errors, banned = [], [], 0, 0
     for entry in entries:
+        if _pair_banned(store, entry["event_key"]):
+            banned += 1
+            log.warning("mapped pair %s BANNED by settlement mismatch; skipped "
+                        "permanently (rule 11)", entry["kalshi"])
+            continue
         try:
             qs = kalshi_pair_quotes(cfg, entry, now) \
                 + pm_pair_quotes(cfg, entry, now)
@@ -180,6 +196,6 @@ def run_mapped(cfg, store, now: datetime | None = None) -> dict:
     process_poll(cfg, store, poll_id, "mapped", all_opps,
                  {"kalshi": {"ok": True}}, now=now)
     s = {"pairs": len(entries), "quotes": len(all_quotes),
-         "opps": len(all_opps), "errors": errors}
+         "opps": len(all_opps), "errors": errors, "banned": banned}
     log.info("mapped lane: %s", s)
     return s

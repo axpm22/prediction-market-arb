@@ -63,3 +63,37 @@ def test_without_venue_flag_basket_stays_unproven(monkeypatch):
     no = [b for b in baskets if b["side"] == "NO"]
     assert no and no[0]["proof_status"] == "unproven-exhaustive"
     assert no[0]["status"] == "REVIEW"
+
+
+def test_one_sided_group_still_persists_observed_sides(monkeypatch):
+    # rule 7: persistence never depends on scannability — the first version
+    # dropped one-sided groups' books entirely (review 2026-07-14)
+    # events with one outcome missing its yes_bid
+    group = [_mkt(f"KXWHO-26AUG-C{i}", "KXWHO-26AUG", "0.3405", "0.3375",
+                  "0.64", "0.6375", f"o{i}") for i in range(3)]
+    group[0] = dict(group[0], yes_bid_dollars=None)
+    events = [{"event_ticker": "KXWHO-26AUG", "category": "Politics",
+               "title": "t", "mutually_exclusive": True, "markets": group}]
+    monkeypatch.setattr(ke, "get_json",
+                        lambda url, cfg, deadline=None: {"events": events,
+                                                         "cursor": ""})
+    quotes, baskets, scanned = ke.scan_kalshi_events(CFG, NOW)
+    # 3 outcomes: o0 has YES ask + NO sides (yes_bid missing), others full
+    assert len(quotes) == 6  # every side WITH an ask persists
+    no = [b for b in baskets if b["side"] == "NO"]
+    assert no and no[0]["proof_status"] == "unproven-exhaustive"
+
+
+def test_cap_bounds_scanning_never_persistence(monkeypatch):
+    group_of = lambda et: [_mkt(f"{et}-C{i}", et, "0.3405", "0.3375", "0.64",
+                                "0.6375", f"o{i}") for i in range(3)]
+    events = [{"event_ticker": f"KXG{j}", "category": "Politics", "title": "t",
+               "mutually_exclusive": True, "markets": group_of(f"KXG{j}")}
+              for j in range(3)]
+    monkeypatch.setattr(ke, "get_json",
+                        lambda url, cfg, deadline=None: {"events": events,
+                                                         "cursor": ""})
+    cfg = {**CFG, "negrisk": {**CFG["negrisk"], "kalshi_event_checks": 1}}
+    quotes, baskets, scanned = ke.scan_kalshi_events(cfg, NOW)
+    assert scanned == 1                       # cap bit the scan...
+    assert len(quotes) == 3 * 6               # ...but every book persisted

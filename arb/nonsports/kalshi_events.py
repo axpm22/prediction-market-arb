@@ -57,19 +57,21 @@ def _dollars(m, key) -> Decimal | None:
     return d if 0 < d < 1 else None  # sentinel 0/1 prices are not quotes
 
 
-def _outcomes(markets: list[dict]) -> list[dict] | None:
+def _outcomes(markets: list[dict]) -> list[dict]:
+    """Permissive: one-sided outcomes keep their observed sides (rule 7 —
+    persistence never depends on scannability; the exhaustiveness proof
+    handles one-sidedness downstream with an unproven verdict, never a crash)."""
     outs = []
     for m in markets:
-        ya, yb = _dollars(m, "yes_ask_dollars"), _dollars(m, "yes_bid_dollars")
-        na, nb = _dollars(m, "no_ask_dollars"), _dollars(m, "no_bid_dollars")
-        if ya is None or yb is None:
-            return None  # one-sided outcome: group fails proof condition (c)
+        ya = _dollars(m, "yes_ask_dollars")
         size = m.get("yes_ask_size_fp")
         outs.append({"label": m.get("yes_sub_title") or m.get("subtitle")
                      or m.get("ticker", ""),
-                     "yes_ask": ya, "yes_bid": yb, "no_ask": na, "no_bid": nb,
+                     "yes_ask": ya, "yes_bid": _dollars(m, "yes_bid_dollars"),
+                     "no_ask": _dollars(m, "no_ask_dollars"),
+                     "no_bid": _dollars(m, "no_bid_dollars"),
                      "depth_usd": Decimal(str(size)) * ya
-                     if size is not None else None,
+                     if size is not None and ya is not None else None,
                      "volume_24h": Decimal(str(m["volume_24h_fp"]))
                      if m.get("volume_24h_fp") is not None else None})
     return outs
@@ -90,14 +92,15 @@ def scan_kalshi_events(cfg, now: datetime) -> tuple[list[dict], list[dict], int]
     cands.sort(key=lambda e: -len(e["markets"]))
     cap = int(cfg["negrisk"]["kalshi_event_checks"])
     quotes, baskets, scanned = [], [], 0
-    for e in cands[:cap]:
+    for i, e in enumerate(cands):
         outs = _outcomes(e["markets"])
-        if outs is None:
-            continue  # one-sided books; nothing two-sided to persist coherently
         et = e.get("event_ticker", "")
         cat = _CAT_FEE.get(str(e.get("category")), "politics")
         event_key = f"nonsports:kalshi:{et}"
+        # rule 7: every observed book persists, capped or not, scannable or not
         quotes.extend(quote_rows(cfg, "kalshi", cat, event_key, outs, now))
+        if i >= cap:
+            continue  # cap bounds basket-scan volume, never persistence
         bs = scan_group(cfg, "kalshi", cat, event_key, e.get("title", et), outs,
                         venue_flag=bool(e.get("mutually_exclusive")))
         exp = min((m.get("expected_expiration_time") or m.get("close_time") or ""
