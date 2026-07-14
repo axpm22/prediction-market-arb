@@ -85,6 +85,7 @@ SCHEMA = {
                   "doubleheader_cluster_tol_secs": NUM},
     "odds_api": {"region": STR, "warn_below_credits": NUM, "abort_below_credits": NUM},
     "negrisk": {"enabled": BOOL, "min_edge": NUM, "scan_no_side": BOOL, "kalshi_events": BOOL,
+                "kalshi_event_checks": NUM,
                 "require_exhaustive_exclusive": BOOL,
                 "exhaustive_proof": {"require_venue_flag": BOOL, "mids_sum_min": NUM,
                                      "mids_sum_max": NUM, "max_half_spread_sum": NUM,

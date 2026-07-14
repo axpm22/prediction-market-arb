@@ -97,6 +97,14 @@ def cmd_negrisk_scan(cfg, store, args):
             b["resolution_date"] = e.get("endDate")  # D2 horizon gate input
         all_opps.extend(opps)
 
+    if cfg["negrisk"]["kalshi_events"]:
+        from arb.nonsports.kalshi_events import scan_kalshi_events
+        k_quotes, k_baskets, n_checked = scan_kalshi_events(cfg, now)
+        all_quotes.extend(k_quotes)
+        all_opps.extend(k_baskets)
+        console.print(f"[dim]kalshi ME: {n_checked} event groups checked, "
+                      f"{len(k_baskets)} baskets, {len(k_quotes)} quotes[/]")
+
     poll_id = store.insert("polls", {
         "started_at": now.isoformat(), "kind": "negrisk",
         "n_quotes": len(all_quotes), "n_opps": len(all_opps)})

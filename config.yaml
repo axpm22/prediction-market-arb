@@ -138,6 +138,7 @@ negrisk:
                                     #   into the headline; loader enforces the inequality
   scan_no_side: true                # also flag sum(NO asks) < N-1 baskets
   kalshi_events: true               # also scan Kalshi event_ticker groups of mutually exclusive markets
+  kalshi_event_checks: 40           # /events/{ticker} lookups per scan, largest groups first
   require_exhaustive_exclusive: true  # enforced by the §8.4 proof below, never assumed
   exhaustive_proof:
     require_venue_flag: true          # Polymarket negRisk flag / Kalshi event mutually_exclusive (verify per rule 3)
