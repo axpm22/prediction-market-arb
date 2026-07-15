@@ -6,7 +6,7 @@
       "runtimeExecutable": ".venv/bin/python",
       "runtimeArgs": ["-m", "arb", "dashboard"],
       "port": 8722,
-      "autoPort": false
+      "autoPort": true
     }
   ]
 }

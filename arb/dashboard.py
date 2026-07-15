@@ -156,8 +156,12 @@ def make_handler(cfg, db_path):
 
 
 def serve(cfg, db_path: str) -> None:
+    import os
     host = str(cfg["dashboard"]["host"])
-    port = int(cfg["dashboard"]["port"])
+    # PORT env overrides the config value: preview harnesses assign a free
+    # port when the configured one is taken (host stays config-pinned —
+    # never bound beyond localhost regardless)
+    port = int(os.environ.get("PORT") or cfg["dashboard"]["port"])
     httpd = ThreadingHTTPServer((host, port), make_handler(cfg, db_path))
     log.info("dashboard on http://%s:%d (read-only)", host, port)
     print(f"dashboard: http://{host}:{port}")
