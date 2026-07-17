@@ -188,6 +188,9 @@ nonsports:
   match_date_window_days: 3         # blocking stage: resolution dates within this
   max_candidates: 400               # per matcher run, closest-date first
   max_series_fetch: 150             # kalshi series whose open markets get pulled
+  series_fetch_workers: 8           # thread-pool width for the per-series market GETs
+                                    #   (I/O-bound fan-out; 150 sequential GETs blew the
+                                    #   240s match deadline — truncation observed 2026-07)
   match_deadline_secs: 240          # wall-clock budget for one matcher run
                                     #   (batch command, not a poll)
   candidate_threshold: 85

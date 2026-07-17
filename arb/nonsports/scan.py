@@ -34,14 +34,30 @@ def _kalshi_side(cfg, concepts, deadline) -> list[dict]:
         log.warning("kalshi concept-hit series %s exceed max_series_fetch %s; "
                     "truncating (extend the cap or the concept map)",
                     len(hits), cap)
+    # Pure I/O fan-out over the capped hits: base.py keeps one Session per
+    # THREAD (H7) and Deadline reads are monotonic/thread-safe; _request trims
+    # each call's timeout to remaining(). Deadline is checked before
+    # SUBMITTING each batch; in-flight calls finish. Alternative single-stream
+    # design (global /markets?status=open listing, verified 2026-07-14) is a
+    # coverage-semantics change, deliberately not this.
+    from concurrent.futures import ThreadPoolExecutor
+    workers = int(cfg["nonsports"]["series_fetch_workers"])
     markets: list[dict] = []
-    for st in hits[:cap]:
-        if deadline.expired():
-            log.warning("nonsports match deadline hit mid-kalshi; partial surface")
-            break
-        markets.extend(get_json(
+
+    def _fetch(st):
+        return get_json(
             f"{KBASE}/markets?series_ticker={st}&status=open&limit=200", cfg,
-            deadline=deadline).get("markets", []))
+            deadline=deadline).get("markets", [])
+
+    hits = hits[:cap]
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for i in range(0, len(hits), workers):
+            if deadline.expired():
+                log.warning("nonsports match deadline hit mid-kalshi; "
+                            "partial surface")
+                break
+            for res in ex.map(_fetch, hits[i:i + workers]):  # submission order
+                markets.extend(res)
     return kalshi_rows(markets, titles)
 
 

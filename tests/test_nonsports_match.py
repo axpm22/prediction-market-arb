@@ -163,3 +163,35 @@ def test_shape_relation_decides_every_first_eval_false_positive():
     assert shape_relation("is exactly 4.2% in Jul", "4.2% be 4.2%?") == "identical"
     # unparsable propositions stay unknown (conservative downstream)
     assert shape_relation("something odd", "no numbers") == "unknown"
+
+
+def test_kalshi_series_fetch_is_parallel_and_deterministic(monkeypatch):
+    # scan.py made up to max_series_fetch SEQUENTIAL market GETs inside a 240s
+    # deadline (truncation observed). Pure I/O fan-out; base.py keeps one
+    # Session per thread (H7) for exactly this shape.
+    import time
+
+    from arb.nonsports import scan
+    from arb.venues.base import Deadline
+    n = 20
+
+    def fake_get(url, cfg, deadline=None):
+        if "/series?" in url:
+            return {"series": [{"ticker": f"S{i}", "title": "US unemployment"}
+                               for i in range(n)]}
+        time.sleep(0.05)
+        st = url.split("series_ticker=")[1].split("&")[0]
+        return {"markets": [{"ticker": f"{st}-26AUG-T5",
+                             "event_ticker": f"{st}-26AUG",
+                             "title": f"unemployment above 5% ({st})",
+                             "close_time": "2026-08-01T00:00:00Z"}]}
+
+    monkeypatch.setattr(scan, "get_json", fake_get)
+    cfg = {**CFG, "nonsports": {**CFG["nonsports"],
+                                "kalshi_categories": ["Economics"]}}
+    t0 = time.monotonic()
+    rows = scan._kalshi_side(cfg, CONCEPTS, Deadline(60))
+    wall = time.monotonic() - t0
+    assert wall < 0.5 * (n * 0.05)  # well under the sequential lower bound
+    # rows identical to the sequential implementation, submission order kept
+    assert [r["id"] for r in rows] == [f"S{i}-26AUG-T5" for i in range(n)]
