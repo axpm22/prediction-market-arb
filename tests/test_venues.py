@@ -180,6 +180,75 @@ def test_sx_ladder_units_are_contracts():
         one.depth_usd.quantize(Decimal("0.01"))
 
 
+# ---------- TLS block cache (ANJ regulator block, non-retryable SSL) ----------
+
+def _fake_ssl_session(calls, ssl_hosts=("polymarket",)):
+    import requests
+
+    class Resp:
+        status_code = 200
+
+        def json(self):
+            return {"ok": True}
+
+    class FakeSession:
+        def request(self, method, url, **kw):
+            calls.append(url)
+            if any(h in url for h in ssl_hosts):
+                raise requests.exceptions.SSLError(
+                    "certificate verify failed: hostname mismatch CN=*.anj.fr")
+            return Resp()
+
+    return FakeSession()
+
+
+def test_sslerror_is_non_retryable(monkeypatch):
+    import pytest
+
+    import arb.venues.base as base
+    calls, sleeps = [], []
+    monkeypatch.setattr(base, "_tls_block", {})
+    monkeypatch.setattr(base, "_session", lambda: _fake_ssl_session(calls))
+    monkeypatch.setattr(base.time, "sleep", lambda s: sleeps.append(s))
+    with pytest.raises(base.VenueError):
+        base.get_json("https://clob.polymarket.com/books", CFG)
+    assert calls == ["https://clob.polymarket.com/books"]  # exactly ONE attempt
+    assert sleeps == []                                     # no backoff ladder
+
+
+def test_tls_block_short_circuits_same_host_only(monkeypatch):
+    import pytest
+
+    import arb.venues.base as base
+    calls = []
+    monkeypatch.setattr(base, "_tls_block", {})
+    monkeypatch.setattr(base, "_session", lambda: _fake_ssl_session(calls))
+    with pytest.raises(base.VenueError):
+        base.get_json("https://clob.polymarket.com/books", CFG)
+    n = len(calls)
+    with pytest.raises(base.VenueError):
+        base.post_json("https://clob.polymarket.com/books", CFG, {})
+    assert len(calls) == n  # blocked host: session never touched
+    # other hosts unaffected
+    assert base.get_json("https://api.elections.kalshi.com/x", CFG) == {"ok": True}
+
+
+def test_tls_block_is_cache_not_ban(monkeypatch):
+    import pytest
+
+    import arb.venues.base as base
+    calls = []
+    monkeypatch.setattr(base, "_tls_block", {})
+    monkeypatch.setattr(base, "_session", lambda: _fake_ssl_session(calls))
+    with pytest.raises(base.VenueError):
+        base.get_json("https://clob.polymarket.com/books", CFG)
+    # expire the window: the host must be probed again, no restart needed
+    base._tls_block["clob.polymarket.com"] = base.time.monotonic() - 1
+    with pytest.raises(base.VenueError):
+        base.get_json("https://clob.polymarket.com/books", CFG)
+    assert len(calls) == 2
+
+
 def test_oddsapi_http_error_never_leaks_the_key(monkeypatch):
     # M3: requests embeds the full URL incl. apiKey in HTTPError; an uncaught
     # traceback bypasses the log redaction entirely

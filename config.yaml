@@ -127,6 +127,8 @@ execution:
   venue_deadline_secs: 30           # per-VENUE wall-clock budget across all its paginated
                                     # requests (H7); on expiry the venue returns partial + ok:false
   venue_max_retries: 2              # 429/5xx backoff with jitter, then poll partial for venue
+  tls_block_cache_secs: 300         # ANJ-block fast-fail: SSL cert failure blocks the host this
+                                    # long (cache, not ban — re-probed after, no restart to recover)
   min_adj_edge_points: 0.002        # NB: "points" = probability FRACTION (0.002 = 0.2pts),
                                     #   never percentage points — unit bug = 100x error
   line_velocity_points_per_sec: { default: 0.001, baseball_mlb: 0.0008,

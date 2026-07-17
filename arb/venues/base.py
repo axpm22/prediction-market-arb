@@ -13,6 +13,14 @@ from arb.logutil import get_logger
 
 log = get_logger("arb.venues", "logs/scan.log")
 
+# Non-retryable TLS failures (ANJ regulator DNS poisoning serves a mismatched
+# cert, first seen 2026-07-16): a cert error cannot succeed on retry, so the
+# host fast-fails for execution.tls_block_cache_secs. Cache, not ban — the
+# host is re-probed after the window, so recovery needs no restart. Lock
+# because Phase 6 fans get_json out across threads.
+_tls_block: dict = {}  # host -> monotonic expiry
+_tls_lock = threading.Lock()
+
 # One requests.Session per THREAD (H7): the fetch fan-out makes dozens of
 # sequential GETs per venue; without a Session each paid a fresh TCP+TLS
 # handshake. Sessions are not thread-safe to share, so keep one per thread.
@@ -66,6 +74,14 @@ def is_live(start_utc, now=None) -> bool:
 
 
 def _request(method: str, url: str, cfg, deadline=None, **kw):
+    from urllib.parse import urlsplit
+    host = urlsplit(url).hostname or url
+    with _tls_lock:
+        expiry = _tls_block.get(host)
+        if expiry is not None and time.monotonic() < expiry:
+            raise VenueError(f"{host} TLS-blocked (fast-fail cache)")
+        if expiry is not None:
+            del _tls_block[host]  # window over: probe again
     timeout = float(cfg["execution"]["venue_fetch_timeout_secs"])
     retries = int(cfg["execution"]["venue_max_retries"])
     last = None
@@ -85,6 +101,15 @@ def _request(method: str, url: str, cfg, deadline=None, **kw):
                                  "endpoint drift? stop and report (rule 3)")
             else:
                 return resp.json()
+        except requests.exceptions.SSLError as e:
+            # cert mismatch never heals on retry: block the host, one log
+            # line per host per window (logged only here, at block set)
+            with _tls_lock:
+                _tls_block[host] = time.monotonic() + \
+                    float(cfg["execution"]["tls_block_cache_secs"])
+            log.warning("%s: non-retryable TLS failure — venue blocked? "
+                        "(regulator/MITM): %s", host, e)
+            raise VenueError(f"TLS failure from {host}: {e}") from e
         except (requests.RequestException, ValueError) as e:
             last = e
         if attempt < retries and (deadline is None or not deadline.expired()):
