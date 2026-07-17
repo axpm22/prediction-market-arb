@@ -115,14 +115,17 @@ def system_verdict(shape: str, ai: dict | None) -> tuple[str, Decimal, str]:
     return verdict, ai["confidence"], f"shape:{shape} + measurand: {ai['reason']}"
 
 
-def _cached(store, pair_key: str, model: str) -> bool:
-    return bool(store.query(
-        "SELECT 1 FROM verdicts WHERE pair_key=? AND rules_sha=? AND model=? "
-        "LIMIT 1", (pair_key, _RULES_SHA, model)))
+def _cached_keys(store, model: str) -> set:
+    # one SELECT for the whole run, not one per candidate (13.8 GB live DB)
+    return {r["pair_key"] for r in store.query(
+        "SELECT pair_key FROM verdicts WHERE rules_sha=? AND model=?",
+        (_RULES_SHA, model))}
 
 
 def _spent_today(store, now: datetime) -> int:
-    return store.query("SELECT COUNT(*) c FROM verdicts WHERE created_at >= ?",
+    # shape verdicts are free and unlimited; the cap is Anthropic spend
+    return store.query("SELECT COUNT(*) c FROM verdicts WHERE created_at >= ? "
+                       "AND CAST(cost_usd AS REAL) > 0",
                        (now.date().isoformat(),))[0]["c"]
 
 
@@ -141,24 +144,28 @@ def run_ai(cfg, store, mode: str = "eval", client=None,
     # eval scores curated pairs; live extends to the unverdicted frontier;
     # sweep classifies everything uncached (second-opinion / pre-compute) —
     # verdicts are cached either way, so no call is ever repeated
+    cached = _cached_keys(store, str(aicfg["model"]))
     todo = [c for c in cands.values()
             if (("verdict" in c) if mode == "eval" else
                 ("verdict" not in c) if mode == "live" else True)
-            and not _cached(store, c["pair_id"], str(aicfg["model"]))]
+            and c["pair_id"] not in cached]
     budget = int(aicfg["max_new_pairs_per_day"]) - _spent_today(store, now)
-    classified, budget_exhausted = 0, False
+    classified, api_calls, budget_exhausted = 0, 0, False
     if client is None and todo and budget > 0:
         client = _client()
     errors = 0
     for c in todo:
-        if classified >= budget:
-            budget_exhausted = True
-            break
         shape = shape_relation(
             f"{c.get('kalshi_text', '')} {c.get('kalshi_rules', '')}",
             c.get("pm_text", ""))
         ai = None
         if shape in ("identical", "inverted"):  # only then is the API needed
+            if api_calls >= budget:
+                # budget gates API spend only; shape-decided pairs below
+                # keep classifying for free
+                budget_exhausted = True
+                continue
+            api_calls += 1  # count the attempt: the spend cap is conservative
             try:
                 ai = classify_pair(client, str(aicfg["model"]), c,
                                    int(aicfg["max_rules_chars"]))
@@ -185,8 +192,8 @@ def run_ai(cfg, store, mode: str = "eval", client=None,
         path.write_text(yaml.safe_dump(cands, sort_keys=True, width=100,
                                        allow_unicode=True))
     s = {"status": "ok", "mode": mode, "classified": classified,
-         "budget_exhausted": budget_exhausted, "errors": errors,
-         "cached_or_done": len(cands)}
+         "api_calls": api_calls, "budget_exhausted": budget_exhausted,
+         "errors": errors, "cached_or_done": len(cands)}
     log.info("ai matcher: %s", s)
     return s
 
@@ -196,8 +203,13 @@ def evaluate(cfg, store, candidates_path: str | Path = CANDIDATES_PATH) -> dict:
     the §18.5 number the pre-registered bar judges."""
     aicfg = cfg["ai_matcher"]
     cands = yaml.safe_load(Path(candidates_path).read_text()) or {}
-    human = {k: v["verdict"] for k, v in cands.items()
-             if v.get("verdict") in ("same", "different")}
+    # any human same-* verdict (same, same-inverted) is truth 'same' — the AI
+    # side already normalizes via startswith('same'); dropping same-inverted
+    # silently shrank the §18.5 denominator
+    human = {k: ("same" if v["verdict"].startswith("same") else "different")
+             for k, v in cands.items()
+             if isinstance(v.get("verdict"), str)
+             and (v["verdict"].startswith("same") or v["verdict"] == "different")}
     tp = fp = fn = tn = 0
     n = 0
     for row in store.query(

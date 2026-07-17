@@ -176,8 +176,9 @@ ai_matcher:
   enabled: false                    # enable after ground-truth set exists (§18.5)
   model: claude-haiku-4-5
   min_confidence: 0.85
-  max_new_pairs_per_day: 900        # covers three 257-pair sweeps/day (prompt-v2
-                                    #   dev iteration + model comparison, ~$0.40 each)
+  max_new_pairs_per_day: 900        # API-classified pairs only (shape verdicts are free
+                                    #   and unlimited; the cap is Anthropic spend) — covers
+                                    #   three 257-pair sweeps/day (~$0.40 each)
   max_rules_chars: 8000
   paper_fill: true
   paper_stake_usd: 1

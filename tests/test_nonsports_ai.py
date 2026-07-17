@@ -90,14 +90,59 @@ def test_eval_mode_scores_only_curated_pairs_and_caches(tmp_path):
     assert m["precision"] == 1.0 and m["false_positives"] == 0
 
 
-def test_per_day_budget_caps_calls(tmp_path):
+def test_per_day_budget_caps_api_calls_not_shape_verdicts(tmp_path):
+    # 4b: 248 free code-decided verdicts were burning API budget. The cap is
+    # Anthropic spend: only pairs that actually call the API count.
     cfg = {**CFG, "ai_matcher": {**CFG["ai_matcher"], "max_new_pairs_per_day": 1}}
     store = Store(tmp_path / "c.sqlite")
-    path = _cands(tmp_path, [PAIR_SAME, PAIR_DIFF])
+    # sorted order: K1 (needs API), K2 (shape-decided, free), K3 (needs API)
+    path = _cands(tmp_path, [PAIR_SAME, PAIR_DIFF, PAIR_NEW])
     fc = FakeClient()
-    s = ai.run_ai(cfg, store, mode="eval", client=fc,
+    s = ai.run_ai(cfg, store, mode="sweep", client=fc,
                   candidates_path=path, now=NOW)
-    assert fc.calls == 1 and s["budget_exhausted"] is True
+    assert fc.calls == 1 and s["budget_exhausted"] is True  # K3 skipped
+    rows = {r["pair_key"] for r in store.query("SELECT pair_key FROM verdicts")}
+    assert rows == {"K1|P1", "K2|P2"}  # free shape verdict still inserted
+
+
+def test_spent_today_counts_only_api_spend(tmp_path):
+    store = Store(tmp_path / "sp.sqlite")
+    common = {"created_at": NOW.isoformat(), "verdict": "different",
+              "confidence": "1", "rules_sha": ai._RULES_SHA,
+              "model": str(CFG["ai_matcher"]["model"])}
+    store.insert("verdicts", {**common, "pair_key": "F1", "cost_usd": "0"})
+    store.insert("verdicts", {**common, "pair_key": "F2", "cost_usd": "0.000540"})
+    assert ai._spent_today(store, NOW) == 1
+
+
+def test_evaluate_accepts_inverted_human_verdicts(tmp_path):
+    # 4a: a human 'same-inverted' verdict silently vanished from the §18.5
+    # denominator; it must score as truth 'same'.
+    store = Store(tmp_path / "e.sqlite")
+    inv = {**PAIR_SAME, "pair_id": "K4|P4", "verdict": "same-inverted"}
+    path = _cands(tmp_path, [inv])
+    store.insert("verdicts", {
+        "created_at": NOW.isoformat(), "pair_key": "K4|P4",
+        "verdict": "same-inverted", "confidence": "0.97",
+        "rules_sha": ai._RULES_SHA, "model": str(CFG["ai_matcher"]["model"]),
+        "cost_usd": "0.000540"})
+    m = ai.evaluate(CFG, store, candidates_path=path)
+    assert m["n_scored"] == 1 and m["true_positives"] == 1
+
+
+def test_cache_lookup_is_one_query_not_per_pair(tmp_path):
+    # 4c: one SELECT per candidate into a 13.8 GB DB (~257 round trips/run)
+    store = Store(tmp_path / "q.sqlite")
+    path = _cands(tmp_path, [PAIR_SAME, PAIR_DIFF, PAIR_NEW])
+    fc = FakeClient()
+    ai.run_ai(CFG, store, mode="sweep", client=fc, candidates_path=path, now=NOW)
+    seen = []
+    orig = store.query
+    store.query = lambda sql, params=(): (seen.append(sql), orig(sql, params))[1]
+    s = ai.run_ai(CFG, store, mode="sweep", client=fc,
+                  candidates_path=path, now=NOW)
+    assert s["classified"] == 0  # same todo selection: everything cached
+    assert sum("verdicts" in q and "pair_key" in q for q in seen) == 1
 
 
 def test_ai_never_touches_human_verdict_fields(tmp_path):
