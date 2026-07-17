@@ -10,3 +10,5 @@ reports/daily/*.csv
 backups/
 .locks/
 .claude/settings.local.json
+.DS_Store
+data/archive/
