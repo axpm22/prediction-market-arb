@@ -176,6 +176,29 @@ def test_backup_is_idempotent_same_day(cfg, tmp_path):
     assert cmd_backup(c, store, None) == 0
 
 
+def test_pytest_logging_stays_out_of_repo_logs():
+    # logs/supervisor.log 2026-07-17 16:33/16:36: TEST runs wrote fake
+    # "supervisor up" events into production forensics. conftest sets
+    # ARB_LOG_DIR before any arb import; get_logger must honor it.
+    import os
+
+    import arb.heartbeat  # noqa: F401 — module-level logger under the redirect
+    from arb.logutil import get_logger
+    root = Path(os.environ["ARB_LOG_DIR"])
+    repo_logs = ROOT / "logs"
+    before = {p: (p.stat().st_mtime_ns, p.stat().st_size)
+              for p in repo_logs.rglob("*")} if repo_logs.exists() else {}
+    log = get_logger("arb.test_redirect_probe", "logs/redirect_probe.log")
+    log.info("redirect probe")
+    for h in log.handlers:
+        h.flush()
+    out = root / "logs" / "redirect_probe.log"
+    assert out.exists() and "redirect probe" in out.read_text()
+    after = {p: (p.stat().st_mtime_ns, p.stat().st_size)
+             for p in repo_logs.rglob("*")} if repo_logs.exists() else {}
+    assert after == before  # production logs untouched
+
+
 def test_backup_truncates_wal(cfg, tmp_path, capsys):
     # 15.2 GB WAL on the live box (2026-07-17): checkpoints never completed.
     # cmd_backup must run PRAGMA wal_checkpoint(TRUNCATE) after the backup

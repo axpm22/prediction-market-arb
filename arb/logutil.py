@@ -52,9 +52,17 @@ def get_logger(name: str, logfile: str | Path | None = None,
     if logfile:
         key = str(logfile)
         if key not in _file_handlers:
-            Path(logfile).parent.mkdir(parents=True, exist_ok=True)
+            # ARB_LOG_DIR reroots relative logfile paths (read at handler-
+            # creation time). Test plumbing: tests/conftest.py sets it so
+            # pytest never appends into production logs/. Default unchanged.
+            import os
+            root = os.environ.get("ARB_LOG_DIR")
+            path = Path(logfile)
+            if root and not path.is_absolute():
+                path = Path(root) / path
+            path.parent.mkdir(parents=True, exist_ok=True)
             _file_handlers[key] = _decorate(TimedRotatingFileHandler(
-                logfile, when="midnight",
+                path, when="midnight",
                 backupCount=retention_days if retention_days is not None
                 else RETENTION_DAYS))
         logger.addHandler(_file_handlers[key])
