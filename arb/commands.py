@@ -553,6 +553,13 @@ def cmd_backup(cfg, store, args):
     store.conn.execute("VACUUM INTO ?", (str(tmp),))
     tmp.replace(out)  # VACUUM INTO refuses an existing target; §14.1 idempotency
     console.print(f"backup written: {out} ({out.stat().st_size} bytes)")
+    # 04:10 is the quiet window: force the WAL down (15.2 GB on 2026-07-17 —
+    # long-lived readers starve auto-checkpoint). Busy/partial is a WARNING,
+    # never a failure; tonight's slot or the next will win.
+    busy, log_frames, ckpt = store.conn.execute(
+        "PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+    msg = f"wal_checkpoint(TRUNCATE): busy={busy} log={log_frames} checkpointed={ckpt}"
+    console.print(("WARNING partial " if busy else "") + msg)
     pruned = _prune_backups(dest, cfg["db_backup"].get("keep_last"))
     if pruned:
         console.print(f"pruned {len(pruned)} old backup(s) beyond keep_last")

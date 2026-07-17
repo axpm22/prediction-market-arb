@@ -127,7 +127,13 @@ def make_handler(cfg, db_path):
             try:
                 if self.path == "/api/state":
                     from arb.store import Store
-                    body = json.dumps(state(cfg, Store(db_path)), default=str).encode()
+                    # close per request: an unclosed reader lingering on GC's
+                    # schedule pins the WAL and starves auto-checkpoint
+                    st = Store(db_path)
+                    try:
+                        body = json.dumps(state(cfg, st), default=str).encode()
+                    finally:
+                        st.close()
                     ctype = "application/json"
                 elif self.path == "/":
                     body = PAGE.read_bytes()

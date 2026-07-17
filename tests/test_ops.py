@@ -176,6 +176,29 @@ def test_backup_is_idempotent_same_day(cfg, tmp_path):
     assert cmd_backup(c, store, None) == 0
 
 
+def test_backup_truncates_wal(cfg, tmp_path, capsys):
+    # 15.2 GB WAL on the live box (2026-07-17): checkpoints never completed.
+    # cmd_backup must run PRAGMA wal_checkpoint(TRUNCATE) after the backup
+    # and log the (busy, log, checkpointed) triple.
+    import sqlite3
+
+    from arb.commands import cmd_backup
+    db = tmp_path / "b.sqlite"
+    store = Store(db)
+    for i in range(200):
+        store.insert("polls", {"started_at": f"2026-07-17T00:00:{i % 60:02d}",
+                               "kind": "watch", "n_quotes": 0, "n_opps": 0})
+    # a second reader held open across writes starves auto-checkpoint; close it
+    reader = sqlite3.connect(db)
+    reader.execute("SELECT COUNT(*) FROM polls").fetchall()
+    reader.close()
+    assert (tmp_path / "b.sqlite-wal").stat().st_size > 0
+    c = {**cfg, "db_backup": {**cfg["db_backup"], "dest": str(tmp_path / "bk")}}
+    assert cmd_backup(c, store, None) == 0
+    assert (tmp_path / "b.sqlite-wal").stat().st_size == 0
+    assert "wal_checkpoint" in capsys.readouterr().out
+
+
 def test_supervisor_children_inherit_db_and_config(cfg, tmp_path, monkeypatch):
     # children spawned as `python -m arb <cmd>` read the DEFAULT db/config —
     # a supervisor on a non-default DB silently split data across two databases
