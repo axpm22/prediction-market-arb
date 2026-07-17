@@ -123,6 +123,84 @@ def test_wide_spread_book_never_emits_divergence(monkeypatch, tmp_path):
     assert not [o for o in opps if o.kind == "DIVERGENCE"]
 
 
+_ENTRIES3 = [{"kalshi": f"KX{i}", "polymarket": f"0xc{i}",
+              "event_key": f"nonsports:map:kx{i}", "inverted": False,
+              "concept": "unemployment"} for i in range(3)]
+
+
+def _router3(fail_gamma_for=()):
+    def router_get(url, cfg, deadline=None):
+        if "/markets/KX" in url:
+            return {"market": {"status": "open",
+                               "yes_ask_dollars": "0.44", "yes_bid_dollars": "0.41",
+                               "no_ask_dollars": "0.59", "no_bid_dollars": "0.56",
+                               "yes_ask_size_fp": "100", "yes_bid_size_fp": "100"}}
+        cid = url.split("condition_ids=")[1]
+        if cid in fail_gamma_for:
+            raise RuntimeError("gamma down for this pair")
+        return [{"closed": False,
+                 "clobTokenIds": json.dumps([f"tY{cid[-1]}", f"tN{cid[-1]}"])}]
+    return router_get
+
+
+def _books_post(posts):
+    def recording_post(url, cfg, payload, deadline=None):
+        posts.append(payload)
+        return [{"asset_id": p["token_id"],
+                 "asks": [{"price": "0.52" if p["token_id"].startswith("tY")
+                           else "0.50", "size": "80"}],
+                 "bids": [{"price": "0.49" if p["token_id"].startswith("tY")
+                           else "0.47", "size": "80"}]}
+                for p in payload]
+    return recording_post
+
+
+def test_run_mapped_issues_one_books_post_with_all_tokens(monkeypatch, tmp_path):
+    # 9 pairs => 18 sequential requests per poll; POST /books is the verified
+    # batch endpoint (§6) and must be called ONCE with the token union
+    store = Store(tmp_path / "b1.sqlite")
+    posts = []
+    monkeypatch.setattr(mapped, "get_json", _router3())
+    monkeypatch.setattr(mapped, "post_json", _books_post(posts))
+    monkeypatch.setattr(mapped, "load_map", lambda path=None: list(_ENTRIES3))
+    s = mapped.run_mapped(CFG, store, now=NOW)
+    assert len(posts) == 1
+    assert {p["token_id"] for p in posts[0]} == \
+        {f"t{sd}{i}" for sd in "YN" for i in "012"}
+    assert s["pairs"] == 3 and s["quotes"] == 12 and s["errors"] == 0
+    # golden: per-pair quotes identical to the per-pair implementation
+    for i in range(3):
+        rows = store.query(
+            "SELECT side, cost, bid FROM quotes WHERE event_key=? AND venue=?",
+            (f"nonsports:map:kx{i}", "polymarket"))
+        assert {(r["side"], r["cost"], r["bid"]) for r in rows} == \
+            {("YES", "0.520000", "0.490000"), ("NO", "0.500000", "0.470000")}
+
+
+def test_gamma_failure_poisons_only_its_pair(monkeypatch, tmp_path):
+    store = Store(tmp_path / "b2.sqlite")
+    posts = []
+    monkeypatch.setattr(mapped, "get_json", _router3(fail_gamma_for={"0xc1"}))
+    monkeypatch.setattr(mapped, "post_json", _books_post(posts))
+    monkeypatch.setattr(mapped, "load_map", lambda path=None: list(_ENTRIES3))
+    s = mapped.run_mapped(CFG, store, now=NOW)
+    assert s["errors"] == 1 and s["quotes"] == 8  # pair 1 poisoned, others whole
+    assert len(posts) == 1 and len(posts[0]) == 4
+
+
+def test_books_failure_errors_all_pairs(monkeypatch, tmp_path):
+    # the books fetch is ONE request now: its failure is every pair's failure
+    store = Store(tmp_path / "b3.sqlite")
+
+    def failing_post(url, cfg, payload, deadline=None):
+        raise RuntimeError("clob down")
+    monkeypatch.setattr(mapped, "get_json", _router3())
+    monkeypatch.setattr(mapped, "post_json", failing_post)
+    monkeypatch.setattr(mapped, "load_map", lambda path=None: list(_ENTRIES3))
+    s = mapped.run_mapped(CFG, store, now=NOW)
+    assert s["errors"] == 3 and s["quotes"] == 0
+
+
 def test_supervisor_stagger_offsets_lane_starts():
     from arb.heartbeat import initial_next_run
     nr = initial_next_run(CFG, 1000.0)

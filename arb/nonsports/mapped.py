@@ -81,16 +81,34 @@ def kalshi_pair_quotes(cfg, entry, now) -> list[Quote]:
     return out
 
 
-def pm_pair_quotes(cfg, entry, now) -> list[Quote]:
+def pm_pair_tokens(cfg, entry) -> list:
+    """The pair's two CLOB token ids, [] if closed/malformed. Per-pair GET:
+    batching condition_ids via a comma-list is unverified in
+    data/verified_facts.md and PM is ANJ-blocked (2026-07-17) so it cannot be
+    verified live (rule 3) — probe when the block lifts, then collapse."""
     mkts = get_json(f"{GAMMA}/markets?condition_ids={entry['polymarket']}", cfg)
     if not mkts or mkts[0].get("closed"):
         return []
     tokens = json.loads(mkts[0].get("clobTokenIds") or "[]")
-    if len(tokens) != 2:
-        return []
-    books = {b["asset_id"]: b for b in post_json(
+    return tokens if len(tokens) == 2 else []
+
+
+def fetch_books(cfg, tokens) -> dict:
+    """One POST /books for any number of tokens (the verified batch quote
+    endpoint, §6) -> {asset_id: book}."""
+    return {b["asset_id"]: b for b in post_json(
         f"{CLOB}/books", cfg, [{"token_id": t} for t in tokens])
         if b and b.get("asset_id")}
+
+
+def pm_pair_quotes(cfg, entry, now) -> list[Quote]:
+    tokens = pm_pair_tokens(cfg, entry)
+    if not tokens:
+        return []
+    return pm_quotes_from_books(cfg, entry, tokens, fetch_books(cfg, tokens), now)
+
+
+def pm_quotes_from_books(cfg, entry, tokens, books, now) -> list[Quote]:
     cat = _fee_category(entry.get("concept", ""))
     inverted = bool(entry.get("inverted"))
     out = []
@@ -172,6 +190,7 @@ def run_mapped(cfg, store, now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     entries = load_map()
     all_quotes, all_opps, errors, banned = [], [], 0, 0
+    pending = []  # (entry, kalshi_quotes, tokens): books fetched once below
     for entry in entries:
         if _pair_banned(store, entry["event_key"]):
             banned += 1
@@ -179,12 +198,23 @@ def run_mapped(cfg, store, now: datetime | None = None) -> dict:
                         "permanently (rule 11)", entry["kalshi"])
             continue
         try:
-            qs = kalshi_pair_quotes(cfg, entry, now) \
-                + pm_pair_quotes(cfg, entry, now)
+            pending.append((entry, kalshi_pair_quotes(cfg, entry, now),
+                            pm_pair_tokens(cfg, entry)))
         except Exception as e:  # noqa: BLE001 — a venue outage is data
             log.warning("mapped pair %s fetch failed: %s", entry["kalshi"], e)
             errors += 1
-            continue
+    all_tokens = [t for _, _, toks in pending for t in toks]
+    books = {}
+    if all_tokens:
+        try:
+            books = fetch_books(cfg, all_tokens)
+        except Exception as e:  # noqa: BLE001 — it is ONE request now
+            log.warning("mapped lane: batched CLOB books call failed — all %s "
+                        "pairs errored this poll: %s", len(pending), e)
+            errors += len(pending)
+            pending = []
+    for entry, kq, tokens in pending:
+        qs = kq + pm_quotes_from_books(cfg, entry, tokens, books, now)
         all_quotes.extend(qs)
         all_opps.extend(detect_pair(cfg, entry, qs))
     poll_id = persist_poll(cfg, store, "mapped", all_quotes,
