@@ -13,6 +13,18 @@ from arb.models import Event, Opportunity, Quote, q6
 from arb.venues.fees import leg_fee_cost
 
 
+def _best(book: dict | None) -> tuple[Decimal, Decimal | None, Decimal] | None:
+    """(best ask, best bid, depth_usd at best ask) of one CLOB book; None when
+    there are no asks. The ONE place best-of-book is computed for this lane."""
+    if not book or not book.get("asks"):
+        return None
+    ask = min(Decimal(a["price"]) for a in book["asks"])
+    bid = max((Decimal(b["price"]) for b in book.get("bids") or []),
+              default=None)
+    size = [a for a in book["asks"] if Decimal(a["price"]) == ask][0]["size"]
+    return ask, bid, Decimal(size) * ask
+
+
 def book_quote_rows(cfg, market: dict, books: dict, now,
                     category: str = "politics") -> list[dict]:
     """Every observed side of a scanned binary market as a quotes row (rule 7)
@@ -23,13 +35,10 @@ def book_quote_rows(cfg, market: dict, books: dict, now,
     event_key = f"nonsports:pm:{market.get('conditionId') or market.get('id')}"
     rows = []
     for token, side in zip(tokens, ("YES", "NO")):
-        book = books.get(token)
-        if not book or not book.get("asks"):
+        best = _best(books.get(token))
+        if best is None:
             continue
-        ask = min(Decimal(a["price"]) for a in book["asks"])
-        bid = max((Decimal(b["price"]) for b in book.get("bids") or []),
-                  default=None)
-        size = [a for a in book["asks"] if Decimal(a["price"]) == ask][0]["size"]
+        ask, bid, depth = best
         rows.append({
             "fetched_at": now.isoformat(), "event_key": event_key,
             "category": "nonsports", "sport": "politics", "venue": "polymarket",
@@ -37,7 +46,7 @@ def book_quote_rows(cfg, market: dict, books: dict, now,
             "outcome": market.get("question", "")[:80], "side": side,
             "raw_price": ask, "cost": ask,
             "fee_cost": leg_fee_cost(cfg, "polymarket", category, ask),
-            "depth_usd": Decimal(size) * ask, "ladder_json": None,
+            "depth_usd": depth, "ladder_json": None,
             "live": False, "bid": bid,
             "volume_24h": Decimal(str(market.get("volume24hr") or 0)),
             "start_utc": None, "start_grade": "absent",
@@ -54,21 +63,19 @@ def scan_market(cfg, market: dict, books: dict, category: str = "politics"
     legs = []
     now = datetime.now(timezone.utc)
     for token, side in zip(tokens, ("YES", "NO")):
-        book = books.get(token)
-        if not book or not book.get("asks"):
+        best = _best(books.get(token))
+        if best is None:
             return None
-        ask = min(Decimal(a["price"]) for a in book["asks"])
-        bids = book.get("bids") or []
-        size = [a for a in book["asks"] if Decimal(a["price"]) == ask][0]["size"]
+        ask, bid, depth = best
         legs.append(Quote(
             event_key=f"nonsports:pm:{market.get('conditionId', market.get('id'))}",
             venue="polymarket", book="polymarket", market_type="WINNER", line=None,
             outcome_label=market.get("question", "")[:80], side=side,
             venue_side=side, raw_price=ask, cost=ask,
             fee_cost=leg_fee_cost(cfg, "polymarket", category, ask),
-            depth_usd=Decimal(size) * ask, ladder_json=None, live=False,
+            depth_usd=depth, ladder_json=None, live=False,
             fetched_at=now, category="nonsports", sport="politics",
-            bid=max((Decimal(b["price"]) for b in bids), default=None),
+            bid=bid,
             volume_24h=Decimal(str(market.get("volume24hr") or 0)),
             venue_market_id=f"{market.get('conditionId', market.get('id'))}:{token}"))
     s = sum(leg.effective_cost for leg in legs)
