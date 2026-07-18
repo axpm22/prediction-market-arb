@@ -15,6 +15,69 @@ log = get_logger("arb.dashboard", "logs/scan.log")
 PAGE = Path(__file__).parent / "dashboard.html"
 
 
+def _tail_errors(limit: int = 30) -> list[dict]:
+    """Last WARNING/ERROR lines from today's live logs, newest first. Reads
+    only the final 64 KiB of each file (scan.log runs to MBs). Honors
+    ARB_LOG_DIR like logutil so tests never touch production logs."""
+    import os
+    root = Path(os.environ.get("ARB_LOG_DIR") or ".")
+    out = []
+    for name in ("supervisor.log", "scan.log", "regrade.log", "unmatched.log"):
+        p = root / "logs" / name
+        if not p.exists():
+            continue
+        with p.open("rb") as f:
+            f.seek(max(0, p.stat().st_size - 65536))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+        for ln in lines:
+            parts = ln.split(" ", 4)  # date time LEVEL logger msg
+            if len(parts) == 5 and parts[2] in ("WARNING", "ERROR", "CRITICAL"):
+                try:
+                    # asctime is LOCAL time; emit aware UTC ISO for the client
+                    at = datetime.strptime(
+                        f"{parts[0]} {parts[1].split(',')[0]}",
+                        "%Y-%m-%d %H:%M:%S").astimezone(timezone.utc).isoformat()
+                except ValueError:
+                    continue
+                out.append({"at": at, "level": parts[2], "source": parts[3],
+                            "msg": parts[4][:300], "file": name})
+    out.sort(key=lambda e: e["at"], reverse=True)
+    return out[:limit]
+
+
+def _lane_timing(cfg, store, day_start: str) -> list[dict]:
+    """Per-lane cadence: configured interval vs last poll actually persisted."""
+    from arb.heartbeat import lane_interval
+    last = {r["kind"]: dict(r) for r in store.query(
+        """SELECT kind, MAX(started_at) last_poll, COUNT(*) polls_today,
+                  COALESCE(SUM(n_quotes),0) quotes_today
+           FROM polls WHERE started_at >= ? GROUP BY kind""", (day_start,))}
+    lanes = [k for k, v in cfg["supervisor"]["processes"].items() if v]
+    lanes += [k for k in last if k not in lanes]
+    return [{"name": k, "interval_secs": lane_interval(cfg, k),
+             "last_poll": (last.get(k) or {}).get("last_poll"),
+             "polls_today": (last.get(k) or {}).get("polls_today", 0),
+             "quotes_today": (last.get(k) or {}).get("quotes_today", 0)}
+            for k in lanes]
+
+
+def _daily_schedule(cfg, now) -> list[dict]:
+    """Supervisor-owned daily slots with seconds until next firing."""
+    from zoneinfo import ZoneInfo
+
+    from arb.heartbeat import _schedule
+    local = now.astimezone(ZoneInfo(str(cfg["timezone"])))
+    out = []
+    for key, hhmm in _schedule(cfg):
+        h, m = map(int, hhmm.split(":"))
+        slot = local.replace(hour=h, minute=m, second=0, microsecond=0)
+        if slot <= local:
+            slot += timedelta(days=1)
+        out.append({"key": key, "at": hhmm,
+                    "due_in_secs": int((slot - local).total_seconds())})
+    return sorted(out, key=lambda s: s["due_in_secs"])
+
+
 def state(cfg, store) -> dict:
     from arb import report as rpt
     now = datetime.now(timezone.utc)
@@ -43,7 +106,7 @@ def state(cfg, store) -> dict:
 
     open_bets = store.query(
         """SELECT fb.id, fb.kind, fb.event_key, fb.venue_pair, fb.edge_points,
-                  fb.lane, fb.created_at,
+                  fb.lane, fb.created_at, fb.stake_usd, fb.status,
                   EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id=fb.id
                           AND be.kind='confirmed') confirmed
            FROM flat_bets fb
@@ -89,6 +152,9 @@ def state(cfg, store) -> dict:
     return {
         "generated_at": now.isoformat(timespec="seconds"),
         "day": day,
+        "lanes": _lane_timing(cfg, store, start),
+        "errors": _tail_errors(),
+        "schedule": _daily_schedule(cfg, now),
         "supervisor": "ALIVE" if (fresh or lock_alive) else ("STALE" if beats else "DEAD"),
         "beats": beats,
         "head_sha": beats[0]["head_sha"] if beats else None,

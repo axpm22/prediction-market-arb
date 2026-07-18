@@ -68,6 +68,13 @@
   .lane-review{color:var(--warn)} .lane-clean{color:var(--ok)} .lane-invalid{color:var(--bad)}
   .st-OK{color:var(--ok)} .st-REVIEW{color:var(--warn)}
   .empty{color:var(--faint);padding:10px 0;font-size:12.5px}
+  .lvl{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10.5px;
+    letter-spacing:.08em;border:1px solid var(--edge2)}
+  .lvl-WARNING{color:var(--warn)} .lvl-ERROR,.lvl-CRITICAL{color:var(--bad);
+    border-color:var(--bad)}
+  .gap-ok{color:var(--ok)} .gap-warn{color:var(--warn)} .gap-bad{color:var(--bad)}
+  #errsec table td{border-top-color:var(--edge)}
+  .msg{max-width:640px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   footer{margin-top:44px;color:var(--faint);font-size:12px;
     border-top:1px solid var(--edge);padding-top:12px;line-height:1.7}
   footer b{color:var(--dim)}
@@ -92,7 +99,27 @@
 
   <div class="tiles" id="tiles"></div>
 
+  <section id="errsec" hidden>
+    <h2>Errors &amp; warnings — recent</h2>
+    <div class="hint">Everything at WARNING or above from the live logs, newest first.
+      The ANJ block on Polymarket shows here as one fast-fail line per host per poll.</div>
+    <div id="errors"></div>
+  </section>
+
   <div class="grid">
+    <section>
+      <h2>Lane timing</h2>
+      <div class="hint">Configured cadence vs the last poll each lane actually persisted.
+        A lane running late is the instrument censoring itself.</div>
+      <div id="lanes"></div>
+    </section>
+
+    <section>
+      <h2>Daily schedule</h2>
+      <div class="hint">Supervisor-owned slots (config timezone), next firing first.</div>
+      <div id="schedule"></div>
+    </section>
+
     <section>
       <h2>Today’s ledger <span id="day"></span></h2>
       <div class="hint">Every flag books $1 on paper. “review” is quarantine, not error —
@@ -182,7 +209,7 @@ function table(head, rows, emptyMsg){
 async function refresh(){
   try{
     const s = await (await fetch('/api/state')).json();
-    $('updated').textContent = `head ${s.head_sha||'?'} · refreshed ${ago(s.generated_at)} · auto 30s`;
+    $('updated').textContent = `head ${s.head_sha||'?'} · refreshed ${ago(s.generated_at)} · auto 15s`;
     const supCls = s.supervisor==='ALIVE'?'ok':(s.supervisor==='STALE'?'warn':'bad');
     const dataCls = s.data_age_secs==null?'bad':(s.data_stale?'bad':'ok');
     const dataTxt = s.data_age_secs==null?'no quotes':`${Math.round(s.data_age_secs)}s old`;
@@ -192,12 +219,38 @@ async function refresh(){
     const feeTxt = s.stale_fees.length?`stale: ${s.stale_fees.join(', ')}`:'dated & fresh';
     const crCls = s.odds_api_credits==null?'warn':(s.odds_api_credits<100?'bad':'ok');
     const crTxt = s.odds_api_credits==null?'no scan yet':`${s.odds_api_credits} left`;
+    const recentErrs = (s.errors||[]).filter(e =>
+      (Date.now() - new Date(e.at).getTime()) < 1800e3);
+    const errCls = recentErrs.some(e=>e.level!=='WARNING')?'bad'
+      :(recentErrs.length?'warn':'ok');
     $('lamps').innerHTML =
       lamp('SUPERVISOR', supCls, s.supervisor) +
       lamp('DATA', dataCls, dataTxt) +
+      lamp('ERRORS', errCls, recentErrs.length?`${recentErrs.length} in 30m`:'quiet') +
       lamp('BACKUP', bkCls, bkTxt) +
       lamp('FEE FACTS', feeCls, feeTxt) +
       lamp('ODDS CREDITS', crCls, crTxt);
+    $('errsec').hidden = !(s.errors||[]).length;
+    $('errors').innerHTML = table(
+      [{t:'when',r:1},{t:'level'},{t:'source'},{t:'message'},{t:'log'}],
+      (s.errors||[]).map(e=>[{t:ago(e.at),r:1},
+        {t:e.level,c:'lvl lvl-'+e.level},{t:e.source},{t:e.msg,c:'msg'},{t:e.file}]),
+      'no warnings in the live logs');
+    const gapCls = ln => {
+      if(!ln.last_poll) return 'gap-bad';
+      const g = (Date.now() - new Date(ln.last_poll).getTime())/1000;
+      return g < 2*ln.interval_secs ? 'gap-ok' : (g < 5*ln.interval_secs ? 'gap-warn' : 'gap-bad');
+    };
+    $('lanes').innerHTML = table(
+      [{t:'lane'},{t:'every',r:1},{t:'last poll',r:1},{t:'polls today',r:1},{t:'quotes',r:1}],
+      (s.lanes||[]).map(ln=>[{t:ln.name},{t:`${ln.interval_secs}s`,r:1},
+        {t:ln.last_poll?ago(ln.last_poll):'never today',r:1,c:gapCls(ln)},
+        {t:fmt(ln.polls_today),r:1},{t:fmt(ln.quotes_today),r:1}]),
+      'no polls persisted yet today');
+    const dur = t => t>=5400?`${(t/3600).toFixed(1)}h`:(t>=90?`${Math.round(t/60)}m`:`${t}s`);
+    $('schedule').innerHTML = table(
+      [{t:'slot'},{t:'at',r:1},{t:'due in',r:1}],
+      (s.schedule||[]).map(sl=>[{t:sl.key},{t:sl.at,r:1},{t:dur(sl.due_in_secs),r:1}]));
     $('headline').textContent = `$${s.headline_pnl}`;
     $('hl-n').textContent = `${s.headline_n} settled bet${s.headline_n===1?'':'s'}`;
     $('gates').textContent =
@@ -219,9 +272,11 @@ async function refresh(){
         {t:'$'+a.settled_pnl,r:1},{t:a.pending,r:1},{t:a.missed,r:1}]),
       'no bets booked today');
     $('open').innerHTML = table(
-      [{t:'kind'},{t:'event'},{t:'pair'},{t:'edge',r:1},{t:'lane'},{t:'age',r:1},{t:'conf.',r:1}],
+      [{t:'kind'},{t:'event'},{t:'pair'},{t:'stake',r:1},{t:'edge',r:1},{t:'status'},
+       {t:'lane'},{t:'age',r:1},{t:'conf.',r:1}],
       s.open_bets.map(b=>[{t:b.kind},{t:evName(b.event_key),c:'ell'},{t:b.venue_pair},
-        {t:b.edge_points,r:1},{t:b.lane,c:'lane-'+b.lane},{t:ago(b.created_at),r:1},
+        {t:'$'+b.stake_usd,r:1},{t:b.edge_points,r:1},{t:b.status,c:'st-'+b.status},
+        {t:b.lane,c:'lane-'+b.lane},{t:ago(b.created_at),r:1},
         {t:b.confirmed?'✓':'…',r:1}]),
       'no open positions');
     $('lot').innerHTML = table(
@@ -260,7 +315,7 @@ async function refresh(){
   }
 }
 refresh();
-setInterval(refresh, 30000);
+setInterval(refresh, 15000);
 </script>
 </body>
 </html>
