@@ -80,6 +80,11 @@ def main(argv=None):
     p_live.add_argument("--once", action="store_true")
     p_live.add_argument("--dry-run", action="store_true")
     sub.add_parser("leadlag", help="lead-lag study over stored quotes (read-time)")
+    p_replay = sub.add_parser("replay", help="re-run detect() over stored quotes; "
+                                             "diff vs what was flagged (read-only)")
+    p_replay.add_argument("--from", dest="from_date", required=True, metavar="DATE")
+    p_replay.add_argument("--to", dest="to_date", default=None, metavar="DATE")
+    p_replay.add_argument("--kind", choices=("watch", "live"), default="watch")
     sub.add_parser("dashboard", help="read-only local panel on dashboard.host:port (§14.3)")
     sub.add_parser("canary", help="inject the monthly synthetic fixture through the live pipeline")
     sub.add_parser("shape-check", help="weekly live response schema validation vs fixtures")

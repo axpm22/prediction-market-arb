@@ -643,3 +643,26 @@ def cmd_shape_check(cfg, store, args):
         return 1
     console.print("[green]shape-check: all venue schemas match fixtures[/]")
     return 0
+
+
+def cmd_replay(cfg, store, args):
+    """Offline policy replay over stored quotes (PROMPT_REPLAY). Opens its own
+    read-only handle: nothing here touches the DB the supervisor is writing."""
+    from arb.replay import open_ro, replay
+    s = replay(cfg, open_ro(store.path), args.from_date, args.to_date, args.kind)
+    console.print(f"[dim]replay {args.from_date}..{args.to_date or args.from_date} "
+                  f"kind={args.kind} — read-only, nothing written. Sports "
+                  f"ARB/XSPREAD/DIVERGENCE detect path only: negRisk and political "
+                  f"lanes read raw books, not quote rows, and are NOT replayed.[/]")
+    table = Table(title=f"replay — {s.polls} polls, {s.quotes} quotes, "
+                        f"edge sum {s.edge_total}")
+    for col in ("bucket", "key", "n"):
+        table.add_column(col)
+    for day, n in sorted(s.days.items()):
+        table.add_row("day", day, str(n))
+    for (kind, status), n in sorted(s.opps.items()):
+        table.add_row("opp", f"{kind}/{status}", str(n))
+    for reason, n in sorted(s.rejects.items(), key=lambda kv: -kv[1]):
+        table.add_row("reject", reason, str(n))
+    console.print(table)
+    return 0
