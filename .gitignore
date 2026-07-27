@@ -7,6 +7,7 @@ data/*.sqlite*
 logs/
 # daily report .md files are committed (versioned evidence, SPEC §13.3); CSVs ignored
 reports/daily/*.csv
+reports/replay/          # replay panel output, regenerable
 backups/
 .locks/
 .claude/settings.local.json

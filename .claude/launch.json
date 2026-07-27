@@ -4,8 +4,27 @@
     {
       "name": "dashboard",
       "runtimeExecutable": ".venv/bin/python",
-      "runtimeArgs": ["-m", "arb", "dashboard"],
+      "runtimeArgs": [
+        "-m",
+        "arb",
+        "dashboard"
+      ],
       "port": 8722,
+      "autoPort": true
+    },
+    {
+      "name": "replay-panel",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8733",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "reports/replay"
+      ],
+      "port": 8733,
       "autoPort": true
     }
   ]
