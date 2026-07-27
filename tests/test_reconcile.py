@@ -139,3 +139,28 @@ def test_reconcile_does_not_give_up_inside_the_lag(cfg, tmp_path, monkeypatch):
     monkeypatch.setattr(R, "RESOLVERS", {"polymarket": lambda c, l: None})
     R.reconcile(cfg, store, now=NOW)  # inside PM's 48h lag: stays provisional
     assert _reconciled_verdicts(store, bid) == []
+
+
+def test_polymarket_resolver_asks_gamma_for_CLOSED_markets(cfg, monkeypatch):
+    """Gamma's /markets?condition_ids= defaults to closed=false, so it filters
+    out precisely the resolved markets this resolver exists to read. Observed
+    2026-07-27: the same condition_id returns 0 rows without `closed=true` and
+    1 row with it — which is why 41 Polymarket legs across 49 kalshi:polymarket
+    pairs never graded, and why the L2 settlement-agreement audit had no input.
+    """
+    import arb.venues.base as base
+    seen = {}
+
+    def fake_get_json(url, cfg, **kw):
+        seen["url"] = url
+        if "closed=true" not in url:
+            return []          # what gamma actually does without the flag
+        return [{"closed": True,
+                 "outcomePrices": '["1", "0"]',
+                 "outcomes": '["Mets", "Phillies"]',
+                 "clobTokenIds": '["tokA", "tokB"]'}]
+
+    monkeypatch.setattr(base, "get_json", fake_get_json)
+    leg = {"venue": "polymarket", "venue_market_id": "0xabc:tokA", "venue_side": "YES"}
+    assert R._polymarket(cfg, leg) == "WON"
+    assert "closed=true" in seen["url"]

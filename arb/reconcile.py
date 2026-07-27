@@ -37,8 +37,16 @@ def _polymarket(cfg, leg: dict):
     condition_id = vmid.split(":")[0]
     if not condition_id.startswith("0x"):
         return None
+    # `closed=true` is load-bearing, not a filter for tidiness: gamma defaults
+    # this endpoint to closed=false, so without it the query returns 0 rows for
+    # exactly the RESOLVED markets this resolver exists to read (verified
+    # 2026-07-27 — same condition_id, 0 rows without, 1 row with). Every
+    # Polymarket leg silently stayed unresolved, which starved the cross-venue
+    # settlement-agreement audit of its only input. An open market still
+    # returns 0 rows here, so the None-until-final contract is unchanged.
     markets = get_json(
-        f"https://gamma-api.polymarket.com/markets?condition_ids={condition_id}", cfg)
+        f"https://gamma-api.polymarket.com/markets?condition_ids={condition_id}"
+        f"&closed=true", cfg)
     if not markets or not markets[0].get("closed"):
         return None
     m = markets[0]
