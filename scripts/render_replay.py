@@ -74,6 +74,65 @@ def _bar(mix: dict) -> str:
     return f'<div class="bar">{seg}</div>'
 
 
+def _pnl_section(p: dict | None) -> str:
+    """Paper P&L from the ledger. Deliberately leads with the preregistered
+    clean-lane number, and puts the big review-lane figure behind its caveat."""
+    if not p:
+        return ""
+    rows = p["rows"]
+    tot = {k: sum(float(r[k]) for r in rows) for k in ("stake", "opt", "conf")}
+    tot_missed = sum(r["missed"] for r in rows)
+    tot_open = sum(r["open"] for r in rows)
+    review = [r for r in rows if r["lane"] != "clean"]
+    rev_conf = sum(float(r["conf"]) for r in review)
+    rev_stake = sum(float(r["stake"]) for r in review)
+
+    out = [f"""<h2>Paper P&amp;L — from the ledger, not from replay</h2>
+<p class="sub">Replay is detection-only and cannot produce P&amp;L; these come from
+<code>flat_bets</code> + <code>bet_events</code> via <code>metrics.py</code>, the same
+path <code>arb report</code> uses. Every stake is $1 of paper money. No order was ever
+placed — rule 1.</p>
+<div class="cards">
+<div class="card"><div class="n">${float(p['headline']):+.4f}</div>
+<div class="k">headline: settled, clean lane ({p['headline_n']} bets)</div></div>
+<div class="card"><div class="n">${rev_conf:+.2f}</div>
+<div class="k">review lane, confirmed basis (not bankable)</div></div>
+<div class="card"><div class="n">{tot_missed}</div>
+<div class="k">flagged but never filled ($0 each)</div></div>
+<div class="card"><div class="n">${tot['stake']:.0f}</div>
+<div class="k">total paper stake, {p['first_bet']}–{p['last_bet']}</div></div>
+</div>
+<div class="note"><b>Read the small number, not the big one.</b> The headline
+(${float(p['headline']):+.4f} over {p['headline_n']} bets) is the preregistered figure:
+settled, trusted, sports, pregame, clean lane. Everything else here is
+<code>lane=review</code> — overwhelmingly XSPREAD, which is cross-venue and
+REVIEW-only <em>forever</em> by rule 6, because differing settlement rules between
+venues are the main source of fake arbs. ${rev_conf:+.2f} on ${rev_stake:.0f} staked is a
+~{100 * rev_conf / rev_stake if rev_stake else 0:.0f}% return over about three weeks; a
+genuine locked arb does not pay that. Treat it as the quantity this instrument exists
+to <em>doubt</em>, not as foregone profit. {tot_missed} of the flags never got a confirm
+event at all — the bet was never made, and enters at $0.</div>
+<div class="scroll"><table><thead><tr><th class='l'>lane</th><th class='l'>kind</th>
+<th>bets</th><th>stake</th><th>optimistic</th><th>confirmed</th><th>missed</th>
+<th>open</th><th>excluded</th></tr></thead><tbody>"""]
+    for r in rows:
+        clean = r["lane"] == "clean"
+        out.append(
+            f'<tr><td class="l">{"<b>" + r["lane"] + "</b>" if clean else r["lane"]}</td>'
+            f'<td class="l">{r["kind"]}</td><td>{r["n"]}</td>'
+            f'<td>${float(r["stake"]):.0f}</td><td>${float(r["opt"]):+.4f}</td>'
+            f'<td>${float(r["conf"]):+.4f}</td>'
+            f'<td class="{"zero" if not r["missed"] else ""}">{r["missed"]}</td>'
+            f'<td class="{"zero" if not r["open"] else ""}">{r["open"]}</td>'
+            f'<td class="{"zero" if not r["excluded"] else ""}">{r["excluded"]}</td></tr>')
+    out.append(f'<tr><td class="l"><b>all</b></td><td class="l"></td>'
+               f'<td>{sum(r["n"] for r in rows)}</td><td>${tot["stake"]:.0f}</td>'
+               f'<td>${tot["opt"]:+.4f}</td><td>${tot["conf"]:+.4f}</td>'
+               f'<td>{tot_missed}</td><td>{tot_open}</td><td>0</td></tr>')
+    out.append("</tbody></table></div>")
+    return "".join(out)
+
+
 def render(d: dict) -> str:
     rows = d["rows"]
     watch = [r for r in rows if r["kind"] == "watch"]
@@ -110,6 +169,7 @@ Generated {d['generated_at'][:19]}Z.</p>
  f'{tot_new} flags the current code would newly make and {tot_gone} it no longer makes. A difference means THE CODE OR CONFIG CHANGED — the stored history is immutable.'}
 </div>""")
 
+    body.append(_pnl_section(d.get("pnl")))
     body.append("<h2>Per day and lane</h2><div class=\"scroll\"><table><thead><tr>"
                 "<th class='l'>day</th><th>lane</th><th>polls</th><th>quotes</th>"
                 "<th>ARB</th><th>XSPREAD</th><th>divergence</th><th>in-play</th>"

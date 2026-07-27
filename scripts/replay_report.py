@@ -42,6 +42,61 @@ def venue_mix(con, where: str, params=()) -> dict:
     return out
 
 
+class ReadOnlyStore:
+    """The `.query` surface metrics.py/report.py use, over a mode=ro handle.
+    They only ever SELECT; this makes that structural rather than a promise."""
+
+    def __init__(self, path):
+        self.conn = open_ro(path)
+
+    def query(self, sql, params=()):
+        return self.conn.execute(sql, params).fetchall()
+
+
+def pnl() -> dict:
+    """Paper P&L straight out of the ledger — NOT from replay. Replay is
+    detection-only; P&L needs flat_bets + bet_events, which it never touches."""
+    from collections import defaultdict
+    from decimal import Decimal
+
+    from arb import metrics, report
+
+    cfg = load(ROOT / "config.yaml")
+    st = ReadOnlyStore(HOT)
+    head_total, head_n = report.headline(cfg, st)
+    rows = [dict(r) for r in st.query("SELECT * FROM flat_bets ORDER BY id")]
+    settled = {r[0] for r in st.query(
+        "SELECT DISTINCT bet_id FROM bet_events WHERE kind = 'settled'")}
+
+    agg: dict = defaultdict(lambda: {"n": 0, "stake": Decimal(0), "opt": Decimal(0),
+                                     "conf": Decimal(0), "missed": 0, "open": 0,
+                                     "excluded": 0})
+    for r in rows:
+        a = agg[(r["lane"], r["kind"])]
+        a["n"] += 1
+        a["stake"] += Decimal(str(r["stake_usd"]))
+        if r["id"] not in settled:
+            a["open"] += 1
+            continue
+        if metrics._annotated(st, r["id"]):
+            a["excluded"] += 1        # invariant 5: never enters a P&L cell
+            continue
+        opt = metrics.bet_pnl_optimistic(st, r)
+        if opt is not None:
+            a["opt"] += opt
+        confirmed, c = metrics.bet_confirmed(st, r)
+        if not confirmed:
+            a["missed"] += 1          # never actually filled -> $0, and counted
+        elif c is not None:
+            a["conf"] += c
+    return {"headline": str(head_total), "headline_n": head_n,
+            "rows": [{"lane": lane, "kind": kind, **{k: (str(v) if isinstance(v, Decimal)
+                                                     else v) for k, v in a.items()}}
+                     for (lane, kind), a in sorted(agg.items())],
+            "first_bet": rows[0]["created_at"][:10] if rows else None,
+            "last_bet": rows[-1]["created_at"][:10] if rows else None}
+
+
 def main(from_date: str, to_date: str) -> dict:
     cfg = load(ROOT / "config.yaml")
     con = open_ro(HOT)
@@ -68,7 +123,7 @@ def main(from_date: str, to_date: str) -> dict:
         arch.close()
         print(f"archive {a.name}: venue mix scanned in {time.time() - t:.1f}s", flush=True)
 
-    return {"rows": rows, "mix": dict(sorted(mix.items())),
+    return {"rows": rows, "mix": dict(sorted(mix.items())), "pnl": pnl(),
             "from": from_date, "to": to_date,
             "archive_horizon": (date.today()
                                 - timedelta(days=int(cfg["archive_after_days"]))).isoformat(),
@@ -80,8 +135,10 @@ def main(from_date: str, to_date: str) -> dict:
 if __name__ == "__main__":
     from render_replay import render  # noqa: E402  (sibling module)
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    if sys.argv[1:2] == ["--render"]:  # re-render the last run; no DB access
+    if sys.argv[1:2] == ["--render"]:  # reuse cached replay rows; P&L is cheap
         data = json.loads((OUT.parent / "data.json").read_text())
+        data["pnl"] = pnl()
+        (OUT.parent / "data.json").write_text(json.dumps(data, indent=1))
     else:
         a = sys.argv[1] if len(sys.argv) > 1 else "2026-07-20"
         b = sys.argv[2] if len(sys.argv) > 2 else date.today().isoformat()
