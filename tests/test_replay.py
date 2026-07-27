@@ -135,3 +135,55 @@ def test_cmd_replay_runs_read_only(tmp_path, capsys):
     assert cmd_replay(CFG, Store(path), args) == 0
     out = capsys.readouterr().out
     assert "read-only" in out and "negRisk" in out   # scope stated in the header
+
+
+# --------------------------------------------- R3: diff vs what was stored then
+
+def _legs(started):
+    return [_q(outcome_label="mets", cost=Decimal("0.47"), raw_price=Decimal("0.47"),
+               fee_cost=Decimal("0"), bid=Decimal("0.46"), fetched_at=started,
+               start_utc=GAME),
+            _q(outcome_label="royals", cost=Decimal("0.51"), raw_price=Decimal("0.51"),
+               fee_cost=Decimal("0"), bid=Decimal("0.50"), fetched_at=started,
+               start_utc=GAME)]
+
+
+def _opp_row(poll_id, fp, edge):
+    return {"poll_id": poll_id, "fingerprint": fp, "position_key": "", "kind": "ARB",
+            "category": "sports", "event_key": EK, "edge": edge, "status": "OK",
+            "legs_json": "[]", "notes": ""}
+
+
+def test_diff_splits_both_replay_only_and_stored_only(tmp_path):
+    from arb.models import fingerprint
+    path = tmp_path / "t.sqlite"
+    store = Store(path)
+    polls = []
+    for started in (P1, P1 + timedelta(minutes=5)):
+        pid = store.insert("polls", {"started_at": started.isoformat(), "kind": "watch",
+                                     "n_quotes": 2, "n_opps": 0})
+        store.insert_many("quotes", [_quote_row(q, pid) for q in _legs(started)])
+        polls.append(pid)
+    arb_fp = fingerprint(EK, "ARB", _legs(P1))
+    # poll 1 flagged the same ARB (both) plus one flag the current code no longer
+    # makes (stored-only); poll 2 stored nothing, so its ARB is replay-only
+    store.insert_many("opportunities", [_opp_row(polls[0], arb_fp, "0.02"),
+                                        _opp_row(polls[0], "deadbeef", "0.09")])
+    store.close()
+
+    s = replay(CFG, open_ro(path), "2026-07-25", kind="watch")
+    assert (s.both, s.stored_only, s.replay_only) == (1, 1, 1)
+    assert ("stored-only", "deadbeef", EK, "0.09") in s.examples
+    assert ("replay-only", arb_fp, EK, "0.020000") in s.examples  # q6 at the boundary
+
+
+def test_cmd_replay_warns_past_the_archive_horizon(tmp_path, capsys):
+    from types import SimpleNamespace
+
+    from arb.commands import cmd_replay
+    path = _seed(tmp_path / "t.sqlite")
+    args = SimpleNamespace(from_date="2020-01-01", to_date="2020-01-01", kind="watch")
+    assert cmd_replay(CFG, Store(path), args) == 0
+    # quotes past archive_after_days live in data/archive/: a quiet window there
+    # must never read as a replayed one
+    assert "data/archive/" in capsys.readouterr().out

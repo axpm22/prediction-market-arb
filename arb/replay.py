@@ -25,6 +25,7 @@ from arb.models import Event, Quote
 
 NY = ZoneInfo("America/New_York")
 KIND_MODE = {"watch": "pregame", "live": "live"}
+MAX_EXAMPLES = 20  # display cap on diff examples; counts are always complete
 
 
 def _dec(v) -> Decimal | None:
@@ -87,6 +88,10 @@ class ReplaySummary:
     rejects: Counter = field(default_factory=Counter)   # reason -> n
     edge_total: Decimal = Decimal(0)
     days: Counter = field(default_factory=Counter)      # NY date -> polls replayed
+    both: int = 0            # fingerprint flagged then AND now
+    replay_only: int = 0     # current code/config would newly flag it
+    stored_only: int = 0     # current code/config no longer flags it
+    examples: list = field(default_factory=list)        # (set, fp, event_key, edge)
 
 
 def open_ro(path) -> sqlite3.Connection:
@@ -131,4 +136,26 @@ def replay(cfg, con, from_date: str, to_date: str | None = None,
             s.edge_total += o.edge
         for r in rejects:
             s.rejects[r["reason"]] += 1
+        _diff_poll(con, poll["id"], opps, s)
     return s
+
+
+def _diff_poll(con, poll_id: int, opps: list, s: ReplaySummary) -> None:
+    """Replayed fingerprints vs the ones persisted for this poll. A difference
+    means THE CODE OR CONFIG CHANGED — the stored history is immutable and is
+    never the thing that moved."""
+    stored = {r["fingerprint"]: r for r in con.execute(
+        "SELECT fingerprint, event_key, edge FROM opportunities WHERE poll_id = ?",
+        (poll_id,)).fetchall()}
+    replayed = {o.fingerprint: o for o in opps}
+    s.both += len(stored.keys() & replayed.keys())
+    for fp in sorted(replayed.keys() - stored.keys()):
+        s.replay_only += 1
+        o = replayed[fp]
+        if len(s.examples) < MAX_EXAMPLES:
+            s.examples.append(("replay-only", fp, o.event.event_key, str(o.edge)))
+    for fp in sorted(stored.keys() - replayed.keys()):
+        s.stored_only += 1
+        r = stored[fp]
+        if len(s.examples) < MAX_EXAMPLES:
+            s.examples.append(("stored-only", fp, r["event_key"], r["edge"]))

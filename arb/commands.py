@@ -2,7 +2,7 @@
 arrive in their SPEC §16 phases and are absent until then."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from rich.console import Console
 from rich.table import Table
@@ -654,6 +654,11 @@ def cmd_replay(cfg, store, args):
                   f"kind={args.kind} — read-only, nothing written. Sports "
                   f"ARB/XSPREAD/DIVERGENCE detect path only: negRisk and political "
                   f"lanes read raw books, not quote rows, and are NOT replayed.[/]")
+    horizon = date.today() - timedelta(days=int(cfg["archive_after_days"]))
+    if date.fromisoformat(args.from_date) < horizon:
+        console.print(f"[yellow]WARNING[/]: quotes before {horizon} have moved to "
+                      f"data/archive/ (archive_after_days) — this replay under-counts "
+                      f"that window; a quiet day there is not a replayed day")
     table = Table(title=f"replay — {s.polls} polls, {s.quotes} quotes, "
                         f"edge sum {s.edge_total}")
     for col in ("bucket", "key", "n"):
@@ -664,5 +669,20 @@ def cmd_replay(cfg, store, args):
         table.add_row("opp", f"{kind}/{status}", str(n))
     for reason, n in sorted(s.rejects.items(), key=lambda kv: -kv[1]):
         table.add_row("reject", reason, str(n))
+    for label, n in (("both", s.both), ("replay-only", s.replay_only),
+                     ("stored-only", s.stored_only)):
+        table.add_row("diff", label, str(n))
     console.print(table)
+    if s.examples:
+        console.print("[yellow]diff examples — a difference means THE CODE OR CONFIG "
+                      "CHANGED, not that history changed:[/]")
+        ex = Table()
+        for col in ("set", "fingerprint", "event_key", "edge"):
+            ex.add_column(col)
+        for row in s.examples:
+            ex.add_row(*row)
+        console.print(ex)
+        if s.replay_only + s.stored_only > len(s.examples):
+            console.print(f"[dim]... {s.replay_only + s.stored_only - len(s.examples)} "
+                          f"further differences not shown (counts above are complete)[/]")
     return 0
