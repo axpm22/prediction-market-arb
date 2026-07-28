@@ -142,13 +142,26 @@ def _horizon_observations(cfg, hist, dropped: dict | None = None) -> list[dict]:
 
 
 def l8_calibration(cfg, con, hist) -> LaneResult:
-    """L8 — after-fee calibration gap on the full Kalshi settled history.
+    """L8 — after-fee EXECUTABLE edge across the Kalshi settled history.
+
+    Read the name with care. Measurement rule 1 requires executable prices, so
+    this prices at the ASK, which means the estimate bundles three things:
+    true calibration error, the half-spread we cross, and the taker fee. It
+    cannot isolate a calibration gap — that would need mid prices, which rule 1
+    bans outright. What it measures is what a TAKER actually earns.
+
+    That distinction is not academic. At 35k candles every band came back <= 0
+    with favourites worst (-0.0949 in [0.70,0.90)), which reads as a
+    favourite-longshot bias only if you squint at one end. Both ends negative
+    is the signature of paying spread+fee on every trade, not of a directional
+    mispricing. Rule 18 already says a taker-style result bounds taker
+    implementations only; this lane is the reason that rule exists.
     Primary cell is pre-registered (`bench.primary_band`): the longshot band,
     where the favorite-longshot literature puts the effect. Every other band is
     exploratory (rule 12) and printed as detail, never promoted to the headline.
     """
     r = LaneResult(lane="L8", name="calibration harvests",
-                   primary=f"after-fee edge (freq - all-in cost) in band "
+                   primary=f"after-fee TAKER edge (freq - ask - fee) in band "
                            f"{cfg['bench']['primary_band']}, unit = market",
                    unit="market")
     if hist is None:
