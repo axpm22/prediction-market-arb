@@ -752,3 +752,29 @@ def cmd_bench(cfg, store, args):
     # reflow it to the terminal, breaking every column alignment
     print(bench.render(results, int(cfg["bench"]["n_min_units"])))
     return 0
+
+
+def cmd_projection(cfg, store, args):
+    """Read-time capacity projection (PROMPT_PROJECTION). Changes nothing: not
+    detection, not sizing, not the §18.4 gate. It answers one question — which
+    ceiling actually binds — so the ladder-sizing decision can be made on a
+    measured multiplier instead of an assumed one."""
+    from arb.projection import projection_frame
+    f = projection_frame(cfg, store, args.from_date, args.to_date)
+    console.print(f"[dim]projection {args.from_date}..{args.to_date or args.from_date} — "
+                  f"read-only; {f['n_flags']} deduped locked flags, "
+                  f"{f['n_projected']} sizeable[/]")
+    t = Table(title="capacity ceilings (projection, no fill claimed)")
+    for c in ("ceiling", "total stake", "total P&L", "vs touch"):
+        t.add_column(c)
+    base = float(f["pnl"]["touch"]) or 1.0
+    for k in ("bankroll", "touch", "ladder", "zero_edge"):
+        t.add_row(k, f"${float(f['stake'][k]):,.0f}", f"${float(f['pnl'][k]):,.2f}",
+                  f"{float(f['pnl'][k]) / base:.2f}x")
+    console.print(t)
+    b = Table(title="binding constraint")
+    b.add_column("constraint"); b.add_column("positions")
+    for k, v in sorted(f["binders"].items(), key=lambda x: -x[1]):
+        b.add_row(k, str(v))
+    console.print(b)
+    return 0
