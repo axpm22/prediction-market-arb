@@ -148,3 +148,29 @@ def test_match_suspect_group_logs_tagged_divergence():
     assert div[0].status == "REVIEW"
     # the suspect reject stays on the audit trail
     assert any(r["reason"] == "match-suspect-price" for r in rejects)
+
+
+def test_far_from_start_demotes_to_review():
+    """Measured 2026-07-28: legs flagged >48h before first pitch sit on books
+    with a median 24h volume of 3 (vs 211,365 within 6h), and half have zero
+    volume outright. Those are early lines nobody is trading, and they were the
+    single largest source of flags in the ledger — 89 of 125. The zombie guard
+    misses them because it also demands a >=90c spread, which catches only 0.8%
+    of zero-volume quotes. Demote, never drop: rule 7 keeps the row and REVIEW
+    keeps it out of the headline."""
+    far = NOW + timedelta(hours=70)
+    g = group([q("kalshi", "mets", cost="0.47", start=far),
+               q("polymarket", "royals", cost="0.49", start=far)], start=far)
+    opps, _ = detect(CFG, [g], now=NOW)
+    locked = [o for o in opps if o.kind in ("ARB", "XSPREAD")]
+    assert locked, "a covering pair should still be flagged"
+    assert locked[0].status == "REVIEW"
+    assert "lead" in locked[0].notes
+
+
+def test_near_start_is_not_demoted_for_lead():
+    g = group([q("kalshi", "mets", cost="0.47"), q("polymarket", "royals", cost="0.49")])
+    opps, _ = detect(CFG, [g], now=NOW)
+    locked = [o for o in opps if o.kind in ("ARB", "XSPREAD")]
+    assert locked
+    assert "lead" not in locked[0].notes

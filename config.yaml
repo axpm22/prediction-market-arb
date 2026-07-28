@@ -253,6 +253,12 @@ dashboard: { host: 127.0.0.1, port: 8722 }       # read-only local panel (§14.3
                                                  #   never bound beyond localhost
 tape_check: { enabled: true, window_secs: 60 }   # fill tape_confirmed only if venue printed a trade
                                     #   at-or-through the fill price in-window (verify endpoints, rule 3)
+max_lead_hours: 12                  # a covering pair flagged further than this before the
+                                    #   event starts is REVIEW-only. Measured 2026-07-28:
+                                    #   legs flagged >48h out have a median 24h volume of 3
+                                    #   vs 211,365 within 6h, and half are zero — early lines
+                                    #   nobody trades. 89 of 125 ledger flags were this class.
+                                    #   Demote, never drop (rule 7 keeps the row).
 zombie_spread_min: 0.90             # volume_24h==0 AND (ask-bid)>=this -> zombie tag, non-actionable
 risk_free_rate: { value: 0.043, source_url: "TODO-13wk-T-bill", confirmed_on: 2026-07-07 }
                                     # dated fact like fees [VERIFY at build] (v3.5)

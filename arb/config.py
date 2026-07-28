@@ -128,7 +128,7 @@ SCHEMA = {
     "canary": {"enabled": BOOL, "day_of_month": NUM, "time": STR},
     "dashboard": {"host": STR, "port": NUM},
     "tape_check": {"enabled": BOOL, "window_secs": NUM},
-    "zombie_spread_min": NUM,
+    "zombie_spread_min": NUM, "max_lead_hours": NUM,
     "risk_free_rate": {"value": NUM, "source_url": STR, "confirmed_on": DATE},
     "deployment": {"annualized_hurdle": NUM, "xspread_autobook": BOOL,
                    "auto_book_min_net_edge": STR, "leg_failure_suspend_rate": NUM,

@@ -68,6 +68,17 @@ def _locked_opp(cfg, g, legs, now, mode="pregame") -> tuple[Opportunity | None, 
     if any(q.depth_usd is None or q.depth_usd < cfg["min_executable_usd"] for q in legs):
         status = "REVIEW"
         notes.append("thin-depth")
+    # Far-from-start covering pairs sit on books nobody is trading: measured
+    # 2026-07-28, legs flagged >48h out carry a median 24h volume of 3 against
+    # 211,365 within 6h, and half are zero. The zombie guard cannot see them
+    # because it also requires a >=90c spread, which only 0.8% of zero-volume
+    # quotes have. Demote rather than reject — rule 7 keeps the row, and the
+    # edge may be real on a book that thickens closer to the event.
+    if g.event.start_utc is not None:
+        lead_h = (g.event.start_utc - now).total_seconds() / 3600
+        if lead_h > float(cfg["max_lead_hours"]):
+            status = "REVIEW"
+            notes.append(f"lead={lead_h:.0f}h")
     stake = Decimal(1)
     stakes = [q6(stake * q.effective_cost / s) for q in legs]
     return Opportunity(kind=kind, category="sports", event=g.event, legs=list(legs),
