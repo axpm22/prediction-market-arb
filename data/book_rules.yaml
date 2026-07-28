@@ -23,6 +23,15 @@
 #
 # Once a book's five dimensions are filled, L3 can diff it against the venue
 # settlement matrix (data/settlement_matrix.yaml) and start counting mismatches.
+#
+# FIRST CELL FILLED, AND IT ALREADY SHOWS A MISMATCH (2026-07-27).
+# Pinnacle voids a tennis match that does not complete. Both venues pay the
+# advancing player once play has started (Kalshi: "after a ball has been
+# played"; Polymarket: "if the match begins but is not completed... resolve to
+# the player who advances"). A Pinnacle<->venue pair on a tennis match is
+# therefore NOT a covered position when a player retires: the book refunds
+# while the venue pays the other side. That is fake-arb class 4, confirmed from
+# primary sources rather than assumed.
 
 dimensions:
   overtime:
@@ -51,4 +60,15 @@ books:
   betonlineag: { events_in_feed: 263, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
   betrivers:   { events_in_feed: 251, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
   betus:       { events_in_feed: 246, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
-  pinnacle:    { events_in_feed: 172, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
+  pinnacle:
+    events_in_feed: 172
+    overtime: null
+    # "If a tennis match is not completed because of a player retirement or
+    # disqualification, all bets on the match will be considered void. Such bets
+    # will be cancelled and funds refunded." Set bets already graded stand.
+    tennis_retirement: void_all
+    void_postponement: null
+    three_way: null
+    dnp: null
+    source_url: "https://help.future.pinnacle.com/en/support/solutions/articles/11000057351-how-does-pinnacle-grade-tennis-matches-in-the-event-of-retirement-or-disqualification-"
+    checked_on: 2026-07-27

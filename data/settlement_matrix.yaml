@@ -16,8 +16,22 @@ soccer:
   penalties:       { status: AMBER, citation: "TODO" }
   abandonment:     { status: AMBER, citation: "TODO" }
 tennis:
-  retirement:      { status: AMBER, citation: "TODO" }
-  walkover:        { status: AMBER, citation: "TODO" }
+  # Both venues verified from PRIMARY sources 2026-07-27 and they AGREE: play
+  # having started, the advancing player is paid. Kalshi market rules_primary:
+  # "wins the ... match after a ball has been played, then the market resolves
+  # to Yes". Polymarket gamma description: "If the match begins but is not
+  # completed, and one player advances due to the opponent's retirement,
+  # default, or disqualification, this market will resolve to the player who
+  # advances." Held at AMBER rather than flipped GREEN on purpose: GREEN is
+  # permissive (it feeds sport_all_green -> the trusted gate) and wants an
+  # operator sign-off, not an agent's reading. The evidence is here for it.
+  retirement:      { status: AMBER, citation: "AGREE (evidenced, awaiting operator sign-off): Kalshi rules_primary 'after a ball has been played'; PM gamma description 'resolve to the player who advances'. NB the BOOK side diverges — Pinnacle voids (data/book_rules.yaml)" }
+  # The venues DIVERGE here, so this is restrictive, not permissive, and is set
+  # without waiting for sign-off. Kalshi resolves a pre-match cancellation to
+  # "a fair price in accordance with the rules"; Polymarket resolves a walkover
+  # to a hard 50-50. A cross-venue pair struck before a walkover is not covered:
+  # the two legs settle on different numbers.
+  walkover:        { status: RED, citation: "DIVERGE (primary, 2026-07-27): Kalshi rules_secondary resolves pre-match injury/walkover/forfeiture to 'a fair price in accordance with the rules'; Polymarket gamma description resolves a walkover to 50-50. Different settlement values for the same event." }
 mma:
   no_contest:      { status: AMBER, citation: "TODO: real Kalshi-vs-Polymarket cancellation divergence found in V2 parity check" }
   card_change:     { status: AMBER, citation: "TODO" }
