@@ -308,3 +308,23 @@ def test_l11_ignores_a_degenerate_size_distribution():
     same = [(100, "0.50", "yes")] * 30
     con = _tape(_hist([]), [("A", "e1", "Sports", same)])
     assert l11_prints(CFG, None, con).n == 0
+
+
+def test_null_is_tested_before_signal():
+    """An effect can exclude zero and still be too small to act on. L11 measured
+    -0.0038/dollar with CI [-0.0073, -0.0002]: real, and entirely inside the 1c
+    band. Calling that SIGNAL would rank it beside a live edge."""
+    d = Decimal
+    assert verdict_for(CFG, d("-0.0038"), d("-0.0073"), d("-0.0002"), 100) == "NULL"
+    # outside the band and excluding zero is still a SIGNAL
+    assert verdict_for(CFG, d("-0.05"), d("-0.08"), d("-0.02"), 100) == "SIGNAL"
+
+
+def test_non_money_lanes_opt_out_of_the_economic_floor():
+    """L1's primary is a prevalence, not money per dollar. Judging 0.5%
+    prevalence against a 1c-per-dollar band would retire the lane using a
+    scale that does not apply to it."""
+    d = Decimal
+    assert verdict_for(CFG, d("0.005"), d("0.0043"), d("0.0057"), 100) == "NULL"
+    assert verdict_for(CFG, d("0.005"), d("0.0043"), d("0.0057"), 100,
+                       null_band=d(0)) == "SIGNAL"

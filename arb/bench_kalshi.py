@@ -196,7 +196,7 @@ def l8_calibration(cfg, con, hist) -> LaneResult:
                        f"{dropped['too_short']} shorter-lived than the "
                        f"T-{cfg['bench']['horizon_hours']}h horizon, "
                        f"{dropped['no_executable_ask']} with no two-sided book there")
-    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n)
+    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n, r.null_band)
     return r
 
 
@@ -249,5 +249,5 @@ def l6_tail(cfg, con, hist) -> LaneResult:
                   "NOT separated here (STRATEGIES.md L6 requires separate arms)")
     else:
         r.note = f"no market ever offered an executable ask >= {band}"
-    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n)
+    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n, r.null_band)
     return r

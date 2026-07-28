@@ -31,7 +31,8 @@ def l1_coherence(cfg, con, hist) -> LaneResult:
     that opens and closes between two polls is invisible to us, and no amount
     of stored data fixes that."""
     r = LaneResult(lane="L1", name="intra-venue coherence", unit="poll",
-                   primary="prevalence of executable same-venue ARB per poll")
+                   primary="prevalence of executable same-venue ARB per poll",
+                   null_band=Decimal(0))   # a prevalence, not an edge per dollar
     polls = con.execute("SELECT COUNT(*) n FROM polls").fetchone()["n"]
     hit = con.execute(
         "SELECT COUNT(DISTINCT poll_id) n FROM opportunities WHERE kind='ARB'"
@@ -48,7 +49,7 @@ def l1_coherence(cfg, con, hist) -> LaneResult:
                     f"{ok} of those flags cleared every guard (status OK)")
     r.note = ("censored lower bound — cron cadence cannot see a violation that "
               "opens and closes between polls; prevalence, never lifetime")
-    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n)
+    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n, r.null_band)
     return r
 
 
@@ -66,7 +67,8 @@ def l2_pm_pm(cfg, con, hist) -> LaneResult:
     complementary: both won or both lost means the two venues graded the same
     world differently, which is fake-arb class 4 and the highest-severity one."""
     r = LaneResult(lane="L2", name="cross-venue settlement mismatch", unit="audited pair",
-                   primary="pooled settlement-mismatch rate on cross-venue pairs")
+                   primary="pooled settlement-mismatch rate on cross-venue pairs",
+                   null_band=Decimal(0))   # a rate, and a LOW one is the good news
     # The audit source is the RECONCILED event, not the settled one: locked
     # constructs settle as LOCKED_AT_ENTRY (P&L is known at entry and does not
     # depend on the outcome), so the settled payload never records how each
@@ -133,7 +135,7 @@ def l2_pm_pm(cfg, con, hist) -> LaneResult:
         r.lo, r.hi = wilson(bad, pairs, float(cfg["bench"]["ci_z"]))
     r.note = ("pooled by design; per venue-pair x market-type cells can never "
               "reach power at rule-11 throttled pair counts")
-    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n)
+    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n, r.null_band)
     return r
 
 
@@ -176,7 +178,7 @@ def l4_value(cfg, con, hist) -> LaneResult:
     r.note = ("composition is whatever the ledger settled — overwhelmingly REVIEW-lane "
               "cross-venue pairs, NOT the pinned-benchmark universe L4 pre-registers; "
               "read as a ledger health check until the benchmark book list is verified in-feed")
-    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n)
+    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n, r.null_band)
     return r
 
 
@@ -251,7 +253,8 @@ def l5_staleness(cfg, con, hist) -> LaneResult:
     at cron cadence, which the leadlag module's tie_epsilon already encodes."""
     r = LaneResult(lane="L5", name="pre-match staleness", unit="matched move",
                    primary="|p_lead - 0.5|: magnitude of identifiable first-mover "
-                           "asymmetry between venues")
+                           "asymmetry between venues",
+                   null_band=Decimal(0))   # a probability excess, not money
 
     class _S:                                  # leadlag wants a Store-like reader
         path = None
@@ -310,7 +313,7 @@ def l5_staleness(cfg, con, hist) -> LaneResult:
               f"inside one poll cycle — at cron cadence the fetch ORDER stamps the "
               f"earlier time, not market leadership, so the tie mass is censoring, "
               f"not evidence of simultaneity")
-    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n)
+    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n, r.null_band)
     return r
 
 
@@ -335,7 +338,8 @@ def l9_anj(cfg, con, hist) -> LaneResult:
     Signed as a cost: negative means ANJ charges more vig than the reference."""
     b = cfg["bench"]
     r = LaneResult(lane="L9", name="ANJ overround telemetry", unit="event x book",
-                   primary="sharp-minus-ANJ overround (negative = extra ANJ vig)")
+                   primary="sharp-minus-ANJ overround (negative = extra ANJ vig)",
+                   null_band=Decimal(0))   # overround points, not edge per dollar
     from pathlib import Path
     path = Path(str(b["anj_probe_file"]))
     if not path.exists():
@@ -368,7 +372,7 @@ def l9_anj(cfg, con, hist) -> LaneResult:
                     f"regions={probe.get('regions')} credits={probe.get('credits_spent')}")
     r.note = ("descriptive telemetry, not an edge: this lane exists to calibrate how "
               "big a divergence must be, and France is data-only in this stack (§0)")
-    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n)
+    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n, r.null_band)
     return r
 
 

@@ -64,7 +64,7 @@ def l7_maker(cfg, con, hist) -> LaneResult:
               "this is a lower bound, not the bracket STRATEGIES.md L7 specifies")
     r.detail.append(f"{r.n} conservative fills across {nc} events; "
                     f"maker fee charged at 25% of taker (B0)")
-    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n)
+    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n, r.null_band)
     return r
 
 
@@ -143,5 +143,5 @@ def l11_prints(cfg, con, hist) -> LaneResult:
     r.note = ("follower entry approximates the post-print touch with the next print — "
               "generous to the strategy, so a negative result is safe and a positive "
               "one is an upper bound")
-    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n)
+    r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n, r.null_band)
     return r

@@ -53,6 +53,8 @@ class LaneResult:
     verdict: str = "BLOCKED"
     credits: int = 0                # Odds API credits/month (B1 line item)
     note: str = ""
+    null_band: Decimal | None = None   # economic floor for THIS lane's units;
+                                       #   None = use the config default
     detail: list[str] = field(default_factory=list)   # exploratory, rule 12
 
     @property
@@ -104,17 +106,27 @@ def rule_of_three(n: int) -> Decimal:
 
 
 def verdict_for(cfg, est: Decimal | None, lo: Decimal | None,
-                hi: Decimal | None, n: int) -> str:
-    """The ladder in the module docstring. `null_band` is the effect size below
-    which a lane is not worth running even if real — so a CI wholly inside it
-    is a decisive negative, not an inconclusive one."""
+                hi: Decimal | None, n: int, null_band=None) -> str:
+    """The ladder in the module docstring.
+
+    NULL is tested BEFORE signal, and that order is the whole point: a CI that
+    excludes zero but lies wholly inside the band describes an effect that is
+    real and too small to act on. Ranking that as SIGNAL would promote 0.38c
+    per dollar — L11's measured markout — to the same tier as a live edge.
+    Testing NULL first can only demote, never manufacture, a positive.
+
+    `null_band` is denominated in the LANE'S OWN units. The config default is
+    money per dollar staked, which is meaningless for a prevalence (L1) or a
+    first-mover excess (L5); those lanes pass 0, so zero-exclusion alone
+    decides them and they can never be called economically negligible on a
+    scale that does not apply to them."""
     if est is None or lo is None or hi is None or n <= 0:
         return "BLOCKED"
-    band = float(cfg["bench"]["null_band"])
-    if float(lo) > 0 or float(hi) < 0:
-        return "SIGNAL"
+    band = float(cfg["bench"]["null_band"] if null_band is None else null_band)
     if max(abs(float(lo)), abs(float(hi))) <= band:
         return "NULL"
+    if float(lo) > 0 or float(hi) < 0:
+        return "SIGNAL"
     return "UNDERPOWERED"
 
 

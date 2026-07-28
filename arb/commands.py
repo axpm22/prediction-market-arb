@@ -693,6 +693,7 @@ def cmd_bench(cfg, store, args):
     the ledger; the Kalshi corpus is a separate cache file, so nothing here can
     reach flat_bets (rule 9). Credits are spent only under --probe-anj."""
     import json
+    import sqlite3
     from pathlib import Path
 
     from arb import bench, kalshi_history
@@ -731,8 +732,14 @@ def cmd_bench(cfg, store, args):
         # gives us a consistent snapshot alongside the running pull. The bench
         # issues no INSERT/UPDATE anywhere, so the handle stays read-only in
         # practice — this is a cache file, never the ledger (rule 9).
-        hist.execute(f"ATTACH DATABASE '{tape_path}' AS tape")
-    elif hist is not None:
+        try:
+            hist.execute(f"ATTACH DATABASE '{tape_path}' AS tape")
+        except sqlite3.OperationalError as e:
+            # a concurrent tape pull can hold the file; L11 degrades to BLOCKED
+            # rather than taking the other ten lanes down with it
+            console.print(f"[yellow]tape unavailable[/] ({e}) — L11 will report BLOCKED")
+            tape_path = None
+    if hist is not None and not (tape_path and tape_path.exists()):
         hist.execute("ATTACH DATABASE ':memory:' AS tape")
         hist.execute("CREATE TABLE tape.hist_trades "
                      "(ticker TEXT, n INTEGER, trades_json TEXT, pulled_at TEXT)")
