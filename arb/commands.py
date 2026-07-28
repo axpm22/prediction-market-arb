@@ -795,17 +795,19 @@ def cmd_banksim(cfg, store, args):
     console.print(f"[dim]banksim {args.hours:.0f}h window to {end:%Y-%m-%d %H:%M}Z — "
                   f"{res['n_positions']} locked positions "
                   f"({res['arrivals_per_day']}/day), "
-                  f"{res['n_confirmed']} survived a re-quote[/]")
+                  f"{res['n_confirmed']} survived a re-quote; "
+                  f"{res['n_adds']} qualifying scale-in adds[/]")
     t = Table(title="what each pot would have caught")
-    for c in ("bankroll", "taken", "missed (capital)", "$/day", "utilisation",
-              "peak deployed", "imputed depth", "confirmed-only $"):
+    for c in ("bankroll", "taken", "missed (cap)", "$/day", "util", "peak",
+              "imputed", "confirmed $", "+scale-in $", "adds"):
         t.add_column(c)
     for b in banks:
         r = res["bankrolls"][str(b)]
         t.add_row(f"${b:,}", str(r["taken"]), str(r["missed_capital"]),
                   f"{r['pnl_per_day']:.3f}", f"{r['utilisation']:.0%}",
                   f"${r['peak_deployed']:,.0f}", f"{r['imputed_share']:.0%}",
-                  f"${r['pnl_confirmed_only']:.2f}")
+                  f"${r['pnl_confirmed_only']:.2f}", f"${r['pnl_scaled']:.2f}",
+                  str(r["adds_taken"]))
     console.print(t)
     if args.out:
         banksim.append_snapshot(args.out, res)

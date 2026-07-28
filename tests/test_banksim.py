@@ -61,3 +61,72 @@ def test_bigger_bankroll_never_earns_less():
     small = simulate(pos, Decimal(100), Decimal(1))["pnl"]
     big = simulate(pos, Decimal(1000), Decimal(1))["pnl"]
     assert big >= small
+
+
+# --- scale-in ---------------------------------------------------------------
+
+class _FakeStore:
+    """Minimal Store-like reader returning canned later sightings."""
+    def __init__(self, rows): self.rows = rows
+    def query(self, sql, params=()):
+        return [{"started_at": t, "edge": e} for t, e in self.rows]
+
+
+def _pos(edge="0.01", hold_h=48):
+    return Position(key="pk", entry=T0, exit=T0 + timedelta(hours=hold_h),
+                    edge=Decimal(edge), cap_usd=Decimal("100"), cap_imputed=False,
+                    confirmed=True)
+
+
+def _cfg(**over):
+    from arb.config import load
+    from pathlib import Path
+    c = load(Path(__file__).resolve().parent.parent / "config.yaml")
+    c["scale_in"] = {**c["scale_in"], **over}
+    return c
+
+
+def test_a_frozen_edge_is_never_added_to():
+    """54% of arbs visible 5+ polls never change their edge across dozens of
+    consecutive polls — that is a venue serving a cached price. Adding to it
+    re-buys a ghost."""
+    from arb.banksim import scale_in_tranches
+    same = [( (T0 + timedelta(hours=i)).isoformat(), "0.01") for i in range(1, 6)]
+    tr = scale_in_tranches(_cfg(), _FakeStore(same), [_pos("0.01")])
+    assert len(tr) == 1, "persistence alone must not trigger an add"
+
+
+def test_present_but_not_better_is_not_added_to():
+    from arb.banksim import scale_in_tranches
+    rows = [((T0 + timedelta(hours=1)).isoformat(), "0.011")]   # only 1.1x
+    tr = scale_in_tranches(_cfg(min_edge_widening=Decimal("1.2")),
+                           _FakeStore(rows), [_pos("0.01")])
+    assert len(tr) == 1
+
+
+def test_a_widening_edge_is_added_to():
+    from arb.banksim import scale_in_tranches
+    rows = [((T0 + timedelta(hours=1)).isoformat(), "0.05")]    # 5x
+    tr = scale_in_tranches(_cfg(), _FakeStore(rows), [_pos("0.01")])
+    assert len(tr) == 2
+    assert tr[1].n == 1 and tr[1].edge == Decimal("0.05")
+
+
+def test_adds_stop_at_max_tranches():
+    from arb.banksim import scale_in_tranches
+    rows = [((T0 + timedelta(hours=i)).isoformat(), str(0.01 * (i + 2)))
+            for i in range(1, 8)]
+    tr = scale_in_tranches(_cfg(max_tranches=3), _FakeStore(rows), [_pos("0.01")])
+    assert len(tr) == 3
+
+
+def test_total_exposure_per_position_key_is_capped():
+    """tracker.max_reappearances is 10; without a per-position cap one stale
+    arb could take ten tranches of the whole bankroll."""
+    from arb.banksim import Tranche
+    tr = [Tranche("same", T0 + timedelta(hours=i), T0 + timedelta(hours=99),
+                  Decimal("0.05"), Decimal("1000"), False, True, i)
+          for i in range(4)]
+    r = simulate(tr, Decimal(1000), Decimal(1), max_position_frac=Decimal("0.5"))
+    assert r["deployed"] <= Decimal("500")
+    assert r["capped_by_position"] >= 1

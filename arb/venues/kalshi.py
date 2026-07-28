@@ -131,18 +131,3 @@ def fetch_orderbook(cfg, ticker: str) -> dict:
     """orderbook_fp: per-side BID levels [price_dollars, contracts]; the ask of one
     side derives as 1 - best opposite bid (verified vs market object 2026-07-08)."""
     return get_json(f"{BASE}/markets/{ticker}/orderbook", cfg).get("orderbook_fp", {})
-
-
-def fetch_event(cfg, event_ticker: str) -> dict:
-    """Event object; `mutually_exclusive` feeds the negRisk proof condition (a)."""
-    return get_json(f"{BASE}/events/{event_ticker}", cfg).get("event", {})
-
-
-def fetch_trades(cfg, ticker: str, limit: int = 100) -> list[dict]:
-    return get_json(f"{BASE}/markets/trades?ticker={ticker}&limit={limit}", cfg).get("trades", [])
-
-
-def refresh_series_cache(cfg) -> None:
-    data = get_json(f"{BASE}/series?category=Sports", cfg)
-    SERIES_CACHE.parent.mkdir(exist_ok=True)
-    SERIES_CACHE.write_text(json.dumps(data, indent=1))

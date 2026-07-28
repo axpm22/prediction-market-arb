@@ -95,9 +95,3 @@ def fetch_regions_odds(cfg, sport_key: str, regions: str, markets: str) -> list[
     events, _ = _get(cfg, f"/sports/{sport_key}/odds/", {
         "regions": regions, "markets": markets, "oddsFormat": "decimal"})
     return events
-
-
-def fetch_scores(cfg, sport_key: str) -> list[dict]:
-    scores, _ = _get(cfg, f"/sports/{sport_key}/scores/",
-                     {"daysFrom": int(cfg["settle_days_from"])})
-    return scores

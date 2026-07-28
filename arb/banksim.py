@@ -30,6 +30,21 @@ DEFAULT_BANKROLLS = (250, 500, 1000)
 
 
 @dataclass
+class Tranche:
+    """One deployment of capital. A locked pair re-flagged later at a BETTER
+    price is not an averaging problem — it is a second, independent covering
+    pair at the new prices, so each tranche stands alone."""
+    key: str                # position_key: all tranches of one position share it
+    entry: datetime
+    exit: datetime
+    edge: Decimal
+    cap_usd: Decimal
+    cap_imputed: bool
+    confirmed: bool
+    n: int = 0              # 0 = first sighting, 1+ = a scale-in add
+
+
+@dataclass
 class Position:
     key: str
     entry: datetime
@@ -93,15 +108,59 @@ def positions(cfg, store, start: str, end: str) -> list[Position]:
     return out
 
 
-def simulate(pos: list[Position], bankroll: Decimal, per_frac: Decimal,
-             require_confirmed: bool = False, window_end=None) -> dict:
+def scale_in_tranches(cfg, store, pos: list[Position]) -> list[Tranche]:
+    """Expand each position into its initial entry plus any qualifying adds.
+
+    An arb re-appearing is NOT by itself a reason to add. 54% of arbs visible
+    for 5+ polls never change their edge at all across dozens or hundreds of
+    consecutive polls, which is a venue serving a cached price, not a standing
+    offer. So an add requires the edge to have MOVED and to have WIDENED past
+    `min_edge_widening` — the same lesson as big edges and long persistence,
+    which both turned out to be staleness signatures rather than opportunity."""
+    sc = cfg["scale_in"]
+    out: list[Tranche] = []
+    for p in pos:
+        out.append(Tranche(p.key, p.entry, p.exit, p.edge, p.cap_usd,
+                           p.cap_imputed, p.confirmed, 0))
+        if not sc["enabled"]:
+            continue
+        rows = store.query(
+            "SELECT p.started_at, o.edge FROM opportunities o JOIN polls p ON p.id=o.poll_id "
+            "WHERE o.position_key=? AND p.started_at > ? ORDER BY p.started_at",
+            (p.key, p.entry.isoformat()))
+        seen_edges = {p.edge}
+        adds = 0
+        for r in rows:
+            if adds >= int(sc["max_tranches"]) - 1:
+                break
+            edge = Decimal(str(r["edge"]))
+            if sc["require_edge_moved"] and edge in seen_edges:
+                continue                      # frozen edge => frozen book
+            seen_edges.add(edge)
+            if edge < p.edge * Decimal(str(sc["min_edge_widening"])):
+                continue                      # present, but not better
+            at = datetime.fromisoformat(r["started_at"])
+            if at >= p.exit:
+                break
+            adds += 1
+            out.append(Tranche(p.key, at, p.exit, edge, p.cap_usd,
+                               p.cap_imputed, p.confirmed, adds))
+    return out
+
+
+def simulate(pos, bankroll: Decimal, per_frac: Decimal,
+             require_confirmed: bool = False, window_end=None,
+             max_position_frac=None) -> dict:
     """Walk arrivals in time order. Capital is released the moment a prior
     position's event settles, BEFORE the new arrival is sized — releasing after
     understates what the pot can do (it made a first cut of this look 4x worse
     than reality)."""
     free = Decimal(bankroll)
     open_: list[tuple[datetime, Decimal]] = []
-    out = {"taken": 0, "missed_capital": 0, "skipped_unconfirmed": 0,
+    per_key: dict[str, Decimal] = {}
+    key_cap = Decimal(bankroll) * Decimal(str(max_position_frac or 1))
+    out = {"taken": 0, "adds": 0, "missed_capital": 0, "skipped_unconfirmed": 0,
+           "capped_by_position": 0,
            "pnl": Decimal(0), "deployed": Decimal(0), "imputed_share": 0.0,
            "capital_seconds": Decimal(0), "peak_deployed": Decimal(0)}
     imputed = 0
@@ -112,13 +171,16 @@ def simulate(pos: list[Position], bankroll: Decimal, per_frac: Decimal,
         if require_confirmed and not p.confirmed:
             out["skipped_unconfirmed"] += 1
             continue
-        size = min(Decimal(bankroll) * per_frac, p.cap_usd, free)
+        room = key_cap - per_key.get(p.key, Decimal(0))
+        size = min(Decimal(bankroll) * per_frac, p.cap_usd, free, room)
         if size <= Decimal("0.01"):
-            out["missed_capital"] += 1
+            out["capped_by_position" if room <= Decimal("0.01") else "missed_capital"] += 1
             continue
+        per_key[p.key] = per_key.get(p.key, Decimal(0)) + size
         free -= size
         open_.append((p.exit, size))
         out["taken"] += 1
+        out["adds"] += 1 if getattr(p, "n", 0) else 0
         out["deployed"] += size
         out["pnl"] += size * p.edge
         # clamp to the window: a position entered near the end stays locked for
@@ -136,15 +198,24 @@ def simulate(pos: list[Position], bankroll: Decimal, per_frac: Decimal,
 def run(cfg, store, start: datetime, end: datetime,
         bankrolls=DEFAULT_BANKROLLS, per_frac=Decimal("0.25")) -> dict:
     pos = positions(cfg, store, start.isoformat(), end.isoformat())
+    tranches = scale_in_tranches(cfg, store, pos)
     window_secs = Decimal(max((end - start).total_seconds(), 1))
     res = {"start": start.isoformat(), "end": end.isoformat(),
            "n_positions": len(pos),
            "n_confirmed": sum(1 for p in pos if p.confirmed),
            "arrivals_per_day": round(len(pos) / (float(window_secs) / 86400), 2)
            if window_secs else 0,
-           "bankrolls": {}}
+           "n_tranches": len(tranches),
+           "n_adds": sum(1 for t in tranches if t.n), "bankrolls": {}}
     for b in bankrolls:
-        r = simulate(pos, Decimal(b), per_frac, window_end=end)
+        frac = cfg["scale_in"]["max_position_frac"]
+        r = simulate(pos, Decimal(b), per_frac, window_end=end, max_position_frac=frac)
+        # same pot, but allowed to add to arbs still there and BETTER
+        rs = simulate(tranches, Decimal(b), per_frac, window_end=end,
+                      max_position_frac=frac)
+        r["pnl_scaled"] = float(rs["pnl"])
+        r["adds_taken"] = rs["adds"]
+        r["capped_by_position"] = rs["capped_by_position"]
         r["utilisation"] = round(float(r["capital_seconds"] / (Decimal(b) * window_secs)), 3)
         r["pnl_per_day"] = float(q6(r["pnl"] / (window_secs / 86400)))
         # what the same pot earns if it only funds flags that survived a re-quote

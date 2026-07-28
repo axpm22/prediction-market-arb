@@ -349,3 +349,13 @@ bench:                              # STRATEGIES.md lane bench: measure every su
     L9: 8
     L10: 0
     L11: 0
+
+scale_in:                             # add to a live arb that is still there and BETTER
+  enabled: true
+  min_edge_widening: 1.2              # only add at >=1.2x the first-seen edge. Adding on mere
+                                      #   persistence re-buys a ghost: 54% of arbs visible >=5
+                                      #   polls never change their edge at all (stale quote)
+  require_edge_moved: true            # a frozen edge is a frozen book, not a standing invitation
+  max_tranches: 3                     # per position_key, NOT per flag — tracker.max_reappearances
+                                      #   is 10, which would let one stale arb eat the bankroll
+  max_position_frac: 0.5              # all tranches of one position_key, as a share of bankroll

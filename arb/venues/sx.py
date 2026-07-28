@@ -132,10 +132,3 @@ def fetch_markets(cfg) -> list[Quote]:
     if deadline.expired():  # truncated -> partial, never a full-coverage poll
         raise PartialFetch(quotes)
     return quotes
-
-
-def fetch_market_status(cfg, market_hashes: list[str]) -> list[dict]:
-    """GET /markets/find — settled-status semantics UNVERIFIED (verified_facts.md);
-    reconcile treats anything but a verified settled status as None."""
-    hashes = ",".join(market_hashes)
-    return get_json(f"{BASE}/markets/find?marketHashes={hashes}", cfg).get("data", [])

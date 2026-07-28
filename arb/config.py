@@ -158,6 +158,8 @@ SCHEMA = {
               "anj_probe_region": STR, "anj_probe_markets": STR,
               "anj_probe_file": STR, "anj_probe_sport": STR,
               "credits_per_month": MAP(NUM)},
+    "scale_in": {"enabled": BOOL, "min_edge_widening": NUM, "require_edge_moved": BOOL,
+                 "max_tranches": NUM, "max_position_frac": NUM},
     "exit": {"enabled": BOOL, "policies": LIST, "capture_fraction": NUM,
              "trail_fraction": NUM, "min_peak_edge_fraction": NUM, "exit_price_basis": STR,
              "promote_requires": {"min_n": NUM, "ci_excludes_zero": BOOL,

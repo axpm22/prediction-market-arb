@@ -147,38 +147,3 @@ def pnl_markout(cfg, bet: dict, marks: list[dict]) -> Decimal | None:
         drift = Decimal(str(leg_marks[0]["mark_cost"])) - Decimal(leg["mid0"])
         total += min(Decimal(0), drift) * contracts
     return q6(total)
-
-
-def exit_policy_pnls(cfg, bet: dict, quote_series: list[dict],
-                     category: str = "sports") -> dict:
-    """§10.8 SELL engine, read-time. quote_series: [{bid, at, mid?}] ascending.
-    Sell basis binding: exit_value = bid − taker fee on the exit trade. (H10
-    dropped the never-computed "hold" key — hold-to-resolution pays P0, which
-    bet_pnl_optimistic already computes; a perpetually-None column is dead.)"""
-    legs = json.loads(bet["legs_json"])
-    if len(legs) != 1:
-        return {"take_profit": None, "trailing": None}
-    leg = legs[0]
-    c = Decimal(leg["cost"]) + Decimal(leg.get("fee_cost") or 0)
-    stake = Decimal(str(bet.get("stake_usd") or 1))
-    contracts = stake / c
-    flagged = Decimal(str(bet["edge_points"]))
-    ex = cfg["exit"]
-    out = {"take_profit": None, "trailing": None}
-    peak = None
-    armed = False
-    for pt in quote_series:
-        bid = Decimal(str(pt["bid"]))
-        exit_value = bid - leg_fee_cost(cfg, leg["venue"], category, bid)
-        gain = exit_value - c
-        if out["take_profit"] is None and gain >= ex["capture_fraction"] * flagged:
-            out["take_profit"] = q6(contracts * gain)
-        mid = Decimal(str(pt.get("mid", bid)))
-        unrealized = contracts * (mid - c)
-        peak = unrealized if peak is None else max(peak, unrealized)
-        if not armed and peak >= ex["min_peak_edge_fraction"] * flagged * contracts:
-            armed = True
-        if armed and out["trailing"] is None and peak > 0 \
-                and unrealized <= peak * (1 - ex["trail_fraction"]):
-            out["trailing"] = q6(contracts * gain)
-    return out
