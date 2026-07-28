@@ -1,0 +1,54 @@
+# Book settlement-rules library — STRATEGIES.md L3 prerequisite.
+#
+# L3's unique deliverable is the settlement-rule MISMATCH rate between book
+# conventions and PM/Kalshi contracts. That rate cannot be computed from any
+# feed: no odds API publishes how a book grades a retirement or a suspended
+# game. It has to be read out of each book's own rulebook by hand.
+#
+# This file is the scaffold, NOT the answer. Every cell below is deliberately
+# `null`. They are not filled with plausible-looking defaults on purpose — a
+# guessed settlement convention would produce a mismatch rate that looks like a
+# measurement and is actually fiction, which is fake-arb class 4 (the highest
+# severity in the taxonomy) manufactured by our own instrument.
+#
+# The book list is not aspirational either: these are the ten books actually
+# present in our stored `consensus_books` rows as of 2026-07-27, with the event
+# counts we have for each. Filling a book we never see buys nothing.
+#
+# HOW TO FILL A CELL
+#   value:      the convention, as one of the enum values listed per dimension
+#   source_url: link to the book's own rules page stating it
+#   checked_on: ISO date you read it
+# A cell without a source_url stays UNVERIFIED and the bench will not count it.
+#
+# Once a book's five dimensions are filled, L3 can diff it against the venue
+# settlement matrix (data/settlement_matrix.yaml) and start counting mismatches.
+
+dimensions:
+  overtime:
+    question: "Does the moneyline include overtime / extra time?"
+    values: [includes_ot, excludes_ot, sport_dependent]
+  tennis_retirement:
+    question: "Player retires mid-match — how is the moneyline graded?"
+    values: [void_all, first_ball_counts, one_set_counts, advancing_player_wins]
+  void_postponement:
+    question: "Game postponed or suspended past the scheduled day."
+    values: [void_refund, hold_until_played, hold_n_days, action_if_resumed]
+  three_way:
+    question: "Is the headline market 2-way (draw void) or 3-way (draw loses)?"
+    values: [two_way_draw_void, three_way, sport_dependent]
+  dnp:
+    question: "Player-prop DNP / scratch handling."
+    values: [void_refund, action, void_if_no_minutes]
+
+books:
+  fanduel:     { events_in_feed: 265, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
+  draftkings:  { events_in_feed: 264, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
+  betmgm:      { events_in_feed: 264, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
+  mybookieag:  { events_in_feed: 264, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
+  bovada:      { events_in_feed: 263, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
+  lowvig:      { events_in_feed: 263, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
+  betonlineag: { events_in_feed: 263, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
+  betrivers:   { events_in_feed: 251, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
+  betus:       { events_in_feed: 246, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }
+  pinnacle:    { events_in_feed: 172, overtime: null, tennis_retirement: null, void_postponement: null, three_way: null, dnp: null, source_url: null, checked_on: null }

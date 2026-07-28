@@ -300,3 +300,52 @@ exit:                               # SELL engine (§10.8): read-time counterfac
   min_peak_edge_fraction: 0.5       # P2 arms only after peak >= 50% of flagged edge
   exit_price_basis: bid_minus_fee   # sells cross the spread AND pay the taker fee
   promote_requires: { min_n: 100, ci_excludes_zero: true, replication_month: true }
+
+bench:                              # STRATEGIES.md lane bench: measure every surviving
+                                    #   lane on data we hold, then rank (§4 queue, empirical)
+  db: data/kalshi_history.sqlite    # retrospective Kalshi corpus; NEVER the ledger DB (rule 9)
+  request_pace_secs: 0.35           # bulk backfill against a free public endpoint: stay far
+                                    #   under the assumed 20 req/s; get_json backs off on 429
+  max_event_pages: 60               # settled-EVENT pages walked for the series->category map
+  max_market_pages: 20              # settled-MARKET pages per series (1000/page)
+  max_series_per_category: 25        # stratified cap — a global top-N collapses into sports
+  max_candle_markets: 40000          # one request each; the corpus's whole cost is here
+  max_candle_per_series: 400         # sample WITHIN series: a global volume sort fills the
+                                    #   budget with 15-minute crypto and leaves L8 no
+                                    #   long-horizon, non-crypto cell to measure
+  tape_db: data/kalshi_tape.sqlite   # separate file: one writer per SQLite DB, and the
+                                    #   candle pull holds the corpus write lock
+  max_trade_markets: 2500           # L11 tape: one request each, run alongside candles
+  large_print_percentile: 90        # a 'large' print is this percentile WITHIN its market
+  markout_trades_ahead: 10          # follower markout horizon, in prints
+  min_volume_fp: 100                # never-traded markets carry no price to calibrate
+  candle_period_mins: 60
+  max_candle_periods: 5000          # venue cap: >5000 periods per request answers 400
+                                    #   (verified 2026-07-27); older history is truncated, not lost
+  horizon_hours: 24                 # T-delta snapshot: last executable ask this long pre-close
+                                    #   (rule 11 unit rule: ONE observation per market)
+  price_bands: [0.0, 0.10, 0.30, 0.50, 0.70, 0.90, 1.0]   # coarse, pre-registered (rule 12)
+  primary_band: [0.0, 0.10]         # L8 primary cell: the longshot band, where the
+                                    #   favorite-longshot literature puts the effect
+  max_spread: 0.10                  # an ask with no bid within this is a quoted price,
+                                    #   not an executable one (fake-arb class 3/8)
+  tail_band: 0.97                   # L6 cohort entry: traded at or above this
+  n_min_units: 600                  # decision-grade standard (600 effective events)
+  null_band: 0.01                   # |effect| CI inside this => decisive NULL, lane is dead
+  ci_z: 1.96
+  anj_probe_file: data/anj_probe.json   # cached L9 probe; absent => lane BLOCKED
+  anj_probe_sport: baseball_mlb     # one in-season sport; the probe is descriptive telemetry
+  anj_probe_region: fr              # L9: winamax/betclic/unibet/pmu/netbet (verified in docs)
+  anj_probe_markets: h2h
+  credits_per_month:                # B1 line items; a lane without one does not run
+    L1: 0
+    L2: 0
+    L3: 60
+    L4: 120
+    L5: 90
+    L6: 0
+    L7: 0
+    L8: 0
+    L9: 8
+    L10: 0
+    L11: 0

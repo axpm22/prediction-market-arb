@@ -72,6 +72,7 @@ their heartbeats so a stale process is visible in `arb status` instantly.
 | `negrisk-scan` | Polymarket negRisk basket scan (both sides, exhaustiveness proof) |
 | `political` | Polymarket-only intra-market YES+NO<1 lane |
 | `verify` | 10s flash re-quote of fresh locked flags (vanish rate + paper fill oracle) |
+| `bench [--pull] [--probe-anj] [--only L6,L8]` | score and rank every `STRATEGIES.md` lane on the data we hold; `--pull` refreshes the keyless Kalshi settled corpus (0 credits), `--probe-anj` spends ~2 credits on the L9 overround probe |
 | `dashboard` | read-only instrument panel on `http://127.0.0.1:8722` (config `dashboard.*`) |
 | `canary` | synthetic fixture through the full pipeline; P&L must match to the cent |
 | `shape-check` | live response schema vs recorded fixtures |

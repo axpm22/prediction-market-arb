@@ -87,6 +87,16 @@ def fetch_anchor_odds(cfg, sport_key: str) -> list[dict]:
     return parse_events(events, sport_key)
 
 
+def fetch_regions_odds(cfg, sport_key: str, regions: str, markets: str) -> list[dict]:
+    """Arbitrary-region pull for the bench's L9 ANJ probe. Rides `_get`, so the
+    credit header is logged and the warn/abort floors apply (rule 2). Cost is
+    1 credit x markets x regions, so `regions='fr,eu'` is 2 credits per market
+    — deliberately an opt-in command, never part of a loop."""
+    events, _ = _get(cfg, f"/sports/{sport_key}/odds/", {
+        "regions": regions, "markets": markets, "oddsFormat": "decimal"})
+    return events
+
+
 def fetch_scores(cfg, sport_key: str) -> list[dict]:
     scores, _ = _get(cfg, f"/sports/{sport_key}/scores/",
                      {"daysFrom": int(cfg["settle_days_from"])})

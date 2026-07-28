@@ -686,3 +686,62 @@ def cmd_replay(cfg, store, args):
             console.print(f"[dim]... {s.replay_only + s.stored_only - len(s.examples)} "
                           f"further differences not shown (counts above are complete)[/]")
     return 0
+
+
+def cmd_bench(cfg, store, args):
+    """Score and rank every STRATEGIES.md lane (PROMPT_BENCH). Read-only over
+    the ledger; the Kalshi corpus is a separate cache file, so nothing here can
+    reach flat_bets (rule 9). Credits are spent only under --probe-anj."""
+    import json
+    from pathlib import Path
+
+    from arb import bench, kalshi_history
+    from arb.replay import open_ro
+
+    hist_path = Path(str(cfg["bench"]["db"]))
+    if args.pull:
+        console.print("[dim]pulling Kalshi settled corpus — keyless public GETs, "
+                      "0 Odds API credits (rule 2)[/]")
+        stats = kalshi_history.pull(cfg, kalshi_history.open_db(hist_path))
+        console.print(f"[dim]corpus: {stats}[/]")
+    if args.probe_anj:
+        from datetime import datetime, timezone
+
+        from arb.venues import oddsapi
+        regions = f"{cfg['bench']['anj_probe_region']},{cfg['consensus_anchor']['region']}"
+        sport = str(cfg["bench"]["anj_probe_sport"])
+        markets = str(cfg["bench"]["anj_probe_markets"])
+        console.print(f"[yellow]spending Odds API credits[/]: {sport} regions={regions} "
+                      f"markets={markets} (1 credit x markets x regions)")
+        events = oddsapi.fetch_regions_odds(cfg, sport, regions, markets)
+        Path(str(cfg["bench"]["anj_probe_file"])).write_text(json.dumps({
+            "sport": sport, "regions": regions, "markets": markets,
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "credits_spent": len(regions.split(",")) * len(markets.split(",")),
+            "credits_remaining": oddsapi.LAST_REMAINING, "events": events}))
+        console.print(f"[dim]probe cached; credits remaining "
+                      f"{oddsapi.LAST_REMAINING}[/]")
+
+    hist = kalshi_history.open_ro(hist_path) if hist_path.exists() else None
+    tape_path = Path(str(cfg["bench"]["tape_db"]))
+    if hist is not None and tape_path.exists():
+        # Tape lives in its own file (one writer per SQLite DB). Attached
+        # read-WRITE deliberately: a WAL database under an active writer cannot
+        # be opened mode=ro (the -shm file needs write access), and WAL already
+        # gives us a consistent snapshot alongside the running pull. The bench
+        # issues no INSERT/UPDATE anywhere, so the handle stays read-only in
+        # practice — this is a cache file, never the ledger (rule 9).
+        hist.execute(f"ATTACH DATABASE '{tape_path}' AS tape")
+    elif hist is not None:
+        hist.execute("ATTACH DATABASE ':memory:' AS tape")
+        hist.execute("CREATE TABLE tape.hist_trades "
+                     "(ticker TEXT, n INTEGER, trades_json TEXT, pulled_at TEXT)")
+    if hist is None:
+        console.print("[yellow]no Kalshi corpus[/]: L6/L8/L7 will report BLOCKED — "
+                      "run `arb bench --pull` first (keyless, 0 credits)")
+    only = args.only.split(",") if args.only else None
+    results = bench.run(cfg, open_ro(store.path), hist, only)
+    # plain print: the bench renders a fixed-width table and rich would
+    # reflow it to the terminal, breaking every column alignment
+    print(bench.render(results, int(cfg["bench"]["n_min_units"])))
+    return 0

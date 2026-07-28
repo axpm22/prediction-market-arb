@@ -85,6 +85,14 @@ def main(argv=None):
     p_replay.add_argument("--from", dest="from_date", required=True, metavar="DATE")
     p_replay.add_argument("--to", dest="to_date", default=None, metavar="DATE")
     p_replay.add_argument("--kind", choices=("watch", "live"), default="watch")
+    p_bench = sub.add_parser("bench", help="score and rank every STRATEGIES.md lane on "
+                                           "the data we hold (read-only)")
+    p_bench.add_argument("--pull", action="store_true",
+                         help="refresh the Kalshi settled corpus first (keyless, 0 credits)")
+    p_bench.add_argument("--probe-anj", action="store_true",
+                         help="spend ~2 Odds API credits on the L9 fr+eu overround probe")
+    p_bench.add_argument("--only", default=None, metavar="L1,L8",
+                         help="score just these lanes")
     sub.add_parser("dashboard", help="read-only local panel on dashboard.host:port (§14.3)")
     sub.add_parser("canary", help="inject the monthly synthetic fixture through the live pipeline")
     sub.add_parser("shape-check", help="weekly live response schema validation vs fixtures")
