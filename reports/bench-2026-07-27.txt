@@ -1,17 +1,18 @@
+WARNING: db_backup.dest is on the same volume as the DB — a disk failure loses 
 both (SPEC §13.3)
  #  lane name                             unit             n   estimate                 95% CI      z  cr/mo  verdict
 ---------------------------------------------------------------------------------------------------------------------
- 1  L1   intra-venue coherence            poll         41516    +0.0050     [+0.0043, +0.0057]    7.3      0  SIGNAL favourable
- 2  L9   ANJ overround telemetry          event x book     392    -0.0346     [-0.0425, -0.0267]    4.4      8  SIGNAL adverse
- 3  L7   maker bounds (Kalshi)            fill-hour    13180    -0.0140     [-0.0232, -0.0049]    1.5      0  SIGNAL adverse
- 4  L4   settlement-graded value          settled bet     107    +0.1940     [-0.1431, +0.5311]    0.6    120  UNDERPOWERED
- 5  L6   near-certainty tail rate         market         393    +0.0044     [-0.0226, +0.0132]    0.2      0  UNDERPOWERED
- 6  L8   calibration harvests             market         465    -0.0101     [-0.0257, +0.0275]    0.4      0  UNDERPOWERED
- 7  L2   cross-venue settlement mismatch  audited pair       0          -                      -    0.0      0  BLOCKED
- 8  L10  dispute case-log                 -                0          -                      -    0.0      0  BLOCKED
- 9  L11  large-print markout              -                0          -                      -    0.0      0  BLOCKED
-10  L3   PM<->book forensics              -                0          -                      -    0.0     60  BLOCKED
-11  L5   pre-match staleness              -                0          -                      -    0.0     90  BLOCKED
+ 1  L1   intra-venue coherence            poll         43364    +0.0047     [+0.0041, +0.0054]    7.3      0  SIGNAL favourable
+ 2  L5   pre-match staleness              matched move   17916    +0.1872     [+0.1505, +0.2247]    5.0     90  SIGNAL favourable
+ 3  L7   maker bounds (Kalshi)            fill-hour   103879    -0.0164     [-0.0201, -0.0127]    4.4      0  SIGNAL adverse
+ 4  L9   ANJ overround telemetry          event x book     392    -0.0346     [-0.0425, -0.0267]    4.4      8  SIGNAL adverse
+ 5  L8   calibration harvests             market        6212    -0.0254     [-0.0308, -0.0181]    4.0      0  SIGNAL adverse
+ 6  L6   near-certainty tail rate         market        4043    +0.0020     [-0.0044, +0.0066]    0.4      0  NULL
+ 7  L11  large-print markout              print       250432    -0.0024     [-0.0032, -0.0017]    3.2      0  NULL
+ 8  L4   settlement-graded value          settled bet     111    +0.1889     [-0.1361, +0.5138]    0.6    120  UNDERPOWERED
+ 9  L2   cross-venue settlement mismatch  audited pair      41    +0.0000     [+0.0000, +0.0732]    0.0      0  UNDERPOWERED
+10  L10  dispute case-log                 -                0          -                      -    0.0      0  BLOCKED
+11  L3   PM<->book forensics              book x rule       1          -                      -    0.0     60  BLOCKED
 
 decision-grade standard: 600 independent units per lane
 rank = verdict, then favourable-before-adverse, then z/(1+credits/100)  [decisiveness per credit]
@@ -20,7 +21,19 @@ estimate is signed: POSITIVE = money in our favour, NEGATIVE = a measured cost
 L1 — intra-venue coherence
      primary: prevalence of executable same-venue ARB per poll
      note:    censored lower bound — cron cadence cannot see a violation that opens and closes between polls; prevalence, never lifetime
-     206 polls of 41516 carried >=1 same-venue ARB; 54 of those flags cleared every guard (status OK)
+     206 polls of 43364 carried >=1 same-venue ARB; 54 of those flags cleared every guard (status OK)
+
+L5 — pre-match staleness
+     primary: |p_lead - 0.5|: magnitude of identifiable first-mover asymmetry between venues
+     note:    kalshi:polymarket, leader=polymarket, median lead 35.1s. 8991 of 17916 matched moves are TIES inside one poll cycle — at cron cadence the fetch ORDER stamps the earlier time, not market leadership, so the tie mass is censoring, not evidence of simultaneity
+     kalshi:polymarket: matched=17916 ties=8991 events=63 p_lead=0.3128 CI[0.2753,0.3495] leader=polymarket median_lead=35.08s
+     excluded for no bid (mid undefined): 6.41%
+     venue<->book arm remains BLOCKED: sub-poll sampling absent, Odds API historical is paid-plan-only at 10 credits/region/market
+
+L7 — maker bounds (Kalshi)
+     primary: conservative-fill maker markout per contract, unit = fill-hour
+     note:    one-sided: the optimistic fill-at-touch leg needs per-trade tape (keyless /markets/trades, ~1 request per market) — until it exists this is a lower bound, not the bracket STRATEGIES.md L7 specifies
+     103879 conservative fills across 6363 events; maker fee charged at 25% of taker (B0)
 
 L9 — ANJ overround telemetry
      primary: sharp-minus-ANJ overround (negative = extra ANJ vig)
@@ -28,55 +41,51 @@ L9 — ANJ overround telemetry
      ANJ books n=71 mean overround 1.0749; reference n=321 mean 1.0404
      probe: baseball_mlb 2026-07-27T20:34:05.238263+00:00 regions=fr,eu credits=2
 
-L7 — maker bounds (Kalshi)
-     primary: conservative-fill maker markout per contract, unit = fill-hour
-     note:    one-sided: the optimistic fill-at-touch leg needs per-trade tape (keyless /markets/trades, ~1 request per market) — until it exists this is a lower bound, not the bracket STRATEGIES.md L7 specifies
-     13180 conservative fills across 858 events; maker fee charged at 25% of taker (B0)
-
-L4 — settlement-graded value
-     primary: pooled after-fee return per dollar staked
-     note:    composition is whatever the ledger settled — overwhelmingly REVIEW-lane cross-venue pairs, NOT the pinned-benchmark universe L4 pre-registers; read as a ledger health check until the benchmark book list is verified in-feed
-     107 settled bets of the 600 the pre-registered primary needs (18% of decision-grade)
+L8 — calibration harvests
+     primary: after-fee TAKER edge (freq - ask - fee) in band [Decimal('0.0'), Decimal('0.10')], unit = market
+     note:    2132 independent events behind 6212 markets; exploration sample — rule 12 confirms out-of-sample only
+     corpus: 23301 of 41015 settled markets kept (57%) — dropped 13679 shorter-lived than the T-24h horizon, 4035 with no two-sided book there
+     band [0.00,0.10): n= 6212 clusters= 2132 won=0.0224 edge=-0.0254 CI[-0.0308,-0.0181]   <- PRIMARY
+     band [0.10,0.30): n= 4143 clusters= 2343 won=0.1822 edge=-0.0110 CI[-0.0261,+0.0051]
+     band [0.30,0.50): n= 4686 clusters= 3212 won=0.3974 edge=-0.0100 CI[-0.0269,+0.0069]
+     band [0.50,0.70): n= 3871 clusters= 2773 won=0.5430 edge=-0.0459 CI[-0.0644,-0.0273]   <- exploratory, CI excludes 0
+     band [0.70,0.90): n= 2288 clusters= 1404 won=0.7015 edge=-0.0951 CI[-0.1195,-0.0717]   <- exploratory, CI excludes 0
+     band [0.90,1.00): n= 2101 clusters=  867 won=0.9296 edge=-0.0406 CI[-0.0595,-0.0253]   <- exploratory, CI excludes 0
+     3 exploratory band(s) cleared an uncorrected CI. With 6 bands searched the family-wise error is ~26% — these are hypotheses for the prospective confirmation sample, NOT results
 
 L6 — near-certainty tail rate
      primary: after-fee edge of the executable >=0.97 cohort, unit = market
      note:    mixed-source cohort: named-source and UMA-style resolutions are NOT separated here (STRATEGIES.md L6 requires separate arms)
-     cohort n=393 markets / 239 events; tail events (bought >=0.97, settled NO) = 6
-     P(tail) = 0.01527, 95% upper bound 0.04224
+     cohort n=4043 markets / 2214 events; tail events (bought >=0.97, settled NO) = 71
+     P(tail) = 0.01756, 95% upper bound 0.02399
 
-L8 — calibration harvests
-     primary: after-fee edge (freq - all-in cost) in band [Decimal('0.0'), Decimal('0.10')], unit = market
-     note:    174 independent events behind 465 markets; exploration sample — rule 12 confirms out-of-sample only
-     corpus: 1539 of 3560 settled markets kept (43%) — dropped 1793 shorter-lived than the T-24h horizon, 228 with no two-sided book there
-     band [0.00,0.10): n=  465 clusters=  174 won=0.0280 edge=-0.0101 CI[-0.0257,+0.0275]   <- PRIMARY
-     band [0.10,0.30): n=  202 clusters=  134 won=0.2277 edge=+0.0405 CI[-0.0192,+0.1224]
-     band [0.30,0.50): n=  186 clusters=  128 won=0.4570 edge=+0.0546 CI[-0.0329,+0.1371]
-     band [0.50,0.70): n=  211 clusters=  146 won=0.5355 edge=-0.0571 CI[-0.1391,+0.0206]
-     band [0.70,0.90): n=  163 clusters=  113 won=0.7178 edge=-0.0828 CI[-0.1729,-0.0089]   <- exploratory, CI excludes 0
-     band [0.90,1.00): n=  312 clusters=  176 won=0.9647 edge=-0.0149 CI[-0.0520,+0.0047]
-     1 exploratory band(s) cleared an uncorrected CI. With 6 bands searched the family-wise error is ~26% — these are hypotheses for the prospective confirmation sample, NOT results
+L11 — large-print markout
+     primary: after-fee follower markout per contract on large prints
+     note:    follower entry approximates the post-print touch with the next print — generous to the strategy, so a negative result is safe and a positive one is an upper bound
+     250432 large prints (>= p90 of size within their own market) across 2302 events, tape for 2500 markets
+     follower entered at the next print, marked out 10 prints later, taker fee charged at entry
+
+L4 — settlement-graded value
+     primary: pooled after-fee return per dollar staked
+     note:    composition is whatever the ledger settled — overwhelmingly REVIEW-lane cross-venue pairs, NOT the pinned-benchmark universe L4 pre-registers; read as a ledger health check until the benchmark book list is verified in-feed
+     111 settled bets of the 600 the pre-registered primary needs (18% of decision-grade)
 
 L2 — cross-venue settlement mismatch
      primary: pooled settlement-mismatch rate on cross-venue pairs
-     note:    NOT a sample-size problem: of the cross-venue pairs the reconciler has touched, none has a verdict from BOTH venues, so the settlement-agreement audit has zero input. The lane is blocked on the reconciler, not on time.
-     divergence observations available for the analysis arm: 32843
-     cross-venue pairs reconciled: 102 — both legs graded 0, one leg only 58, neither 44
+     note:    pooled by design; per venue-pair x market-type cells can never reach power at rule-11 throttled pair counts
+     divergence observations available for the analysis arm: 36805
+     cross-venue pairs reconciled: 79 — both legs graded 41, one leg only 24, neither 14
      same-venue control pairs with both legs graded: 2
+     0/41 mismatches; rule-of-three upper bound 0.0732
 
 L10 — dispute case-log
      primary: price path through a dispute window
      note:    no dispute-detection feed exists; this is a passive case-series that accrues only when a market we already persist enters a dispute.
 
-L11 — large-print markout
-     primary: markout from the post-print touch, Kalshi tape
-     note:    needs per-trade tape (keyless GET /markets/trades, ~1 request per market on top of the candle pull). The `markouts` table is bet-level, not tape, so it cannot stand in.
-
 L3 — PM<->book forensics
      primary: pooled settlement-mismatch rate vs book conventions
-     note:    prerequisite missing: the versioned book-rules library (OT/extra-time, tennis retirement, void/postponement, 3-way vs 2-way) exists in no feed and not in this repo. STRATEGIES.md L3 calls the deliverable vaporware without it, and building it is hand work, not code.
-     consensus rows already stored for the staleness arm: 5484
-
-L5 — pre-match staleness
-     primary: pre-match lag distribution
-     note:    prerequisite missing: the per-game burst collector. Level snapshots hours apart cannot identify a lag; Odds API historical 5-min snapshots are paid-plan-only at 10 credits/region/market.
+     note:    BLOCKED on hand work, not on code or data volume: 49 of 50 rule cells are unread. Each needs one look at the book's own rulebook (data/book_rules.yaml states the enum per dimension). Cells are left null on purpose — a guessed convention would fabricate the very mismatch class this lane measures.
+     rules library: 1/50 cells verified (10 books in our feed x 5 dimensions: overtime, tennis_retirement, void_postponement, three_way, dnp)
+     consensus rows already stored for the staleness arm: 5630
+     unfilled books: betmgm, betonlineag, betrivers, betus, bovada, draftkings, fanduel, lowvig, mybookieag
 
