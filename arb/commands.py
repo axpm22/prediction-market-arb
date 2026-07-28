@@ -778,3 +778,36 @@ def cmd_projection(cfg, store, args):
         b.add_row(k, str(v))
     console.print(b)
     return 0
+
+
+def cmd_banksim(cfg, store, args):
+    """Bankroll-constrained paper book (PROMPT_BANKSIM). Read-only over the
+    ledger; the whole point is separating "we could not afford it" from "it was
+    not worth it", which the flat $1 ledger cannot express."""
+    from datetime import timedelta
+    from decimal import Decimal
+
+    from arb import banksim
+    end = banksim.now_utc()
+    start = end - timedelta(hours=args.hours)
+    banks = [int(b) for b in args.bankrolls.split(",")]
+    res = banksim.run(cfg, store, start, end, banks, Decimal("0.25"))
+    console.print(f"[dim]banksim {args.hours:.0f}h window to {end:%Y-%m-%d %H:%M}Z — "
+                  f"{res['n_positions']} locked positions "
+                  f"({res['arrivals_per_day']}/day), "
+                  f"{res['n_confirmed']} survived a re-quote[/]")
+    t = Table(title="what each pot would have caught")
+    for c in ("bankroll", "taken", "missed (capital)", "$/day", "utilisation",
+              "peak deployed", "imputed depth", "confirmed-only $"):
+        t.add_column(c)
+    for b in banks:
+        r = res["bankrolls"][str(b)]
+        t.add_row(f"${b:,}", str(r["taken"]), str(r["missed_capital"]),
+                  f"{r['pnl_per_day']:.3f}", f"{r['utilisation']:.0%}",
+                  f"${r['peak_deployed']:,.0f}", f"{r['imputed_share']:.0%}",
+                  f"${r['pnl_confirmed_only']:.2f}")
+    console.print(t)
+    if args.out:
+        banksim.append_snapshot(args.out, res)
+        console.print(f"[dim]appended to {args.out}[/]")
+    return 0

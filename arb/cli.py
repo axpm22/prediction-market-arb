@@ -97,6 +97,13 @@ def main(argv=None):
                                                 "locked flag WOULD support at each ceiling")
     p_proj.add_argument("--from", dest="from_date", required=True, metavar="DATE")
     p_proj.add_argument("--to", dest="to_date", default=None, metavar="DATE")
+    p_bs = sub.add_parser("banksim", help="bankroll-constrained paper book: what a "
+                                          "fixed pot would have caught (read-only)")
+    p_bs.add_argument("--hours", type=float, default=24.0,
+                      help="window ending now, in hours")
+    p_bs.add_argument("--bankrolls", default="250,500,1000")
+    p_bs.add_argument("--out", default=None, metavar="PATH",
+                      help="append the snapshot as JSONL")
     sub.add_parser("dashboard", help="read-only local panel on dashboard.host:port (§14.3)")
     sub.add_parser("canary", help="inject the monthly synthetic fixture through the live pipeline")
     sub.add_parser("shape-check", help="weekly live response schema validation vs fixtures")
