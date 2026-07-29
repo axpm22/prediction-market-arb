@@ -93,7 +93,22 @@ def test_tracker_vector_10_7(cfg, tmp_path):
     closed = store.query(
         "SELECT kind FROM bet_events WHERE bet_id=? AND kind='lifetime_closed'",
         (ev_bet["id"],))
-    assert closed, "EV bet absent one completed poll must lifetime-close"
+    # SPEC §10 amended 2026-07-29: closure needs dead_checks CONSECUTIVE misses,
+    # not one. One absence records a sighting_missed and nothing else.
+    assert not closed, "one absence must not close a lifetime (amended rule)"
+    assert store.query(
+        "SELECT 1 FROM bet_events WHERE bet_id=? AND kind='sighting_missed'",
+        (ev_bet["id"],)), "the absence must still be recorded"
+    for k in range(2, int(cfg["tracker"]["dead_checks"]) + 1):
+        tk = NOW + timedelta(seconds=60 * k)
+        pk = store.insert("polls", {"started_at": tk.isoformat(), "kind": "watch",
+                                    "n_quotes": 2, "n_opps": 1})
+        process_poll(cfg, store, pk, "watch",
+                     [arb_opp(cfg, "0.475", "0.495", fetched=tk)], VENUE_OK, now=tk)
+    closed = store.query(
+        "SELECT kind FROM bet_events WHERE bet_id=? AND kind='lifetime_closed'",
+        (ev_bet["id"],))
+    assert closed, "EV bet absent dead_checks consecutive polls must lifetime-close"
 
     # poll3: EV reappears @0.49 -> NEW row with reappearance_of
     t3 = NOW + timedelta(seconds=120)
@@ -212,3 +227,83 @@ def test_duplicate_fingerprint_books_once_per_poll(cfg, tmp_path):
     opp = ev_opp(cfg, "0.50")
     process_poll(cfg, store, p, "watch", [opp, opp], VENUE_OK, now=NOW)
     assert store.query("SELECT COUNT(*) c FROM flat_bets WHERE kind='EV'")[0]["c"] == 1
+
+
+def _poll(store, kind, when):
+    return store.insert("polls", {"started_at": when.isoformat(), "kind": kind,
+                                  "n_quotes": 2, "n_opps": 1})
+
+
+def _events(store, bet_id, kind):
+    return store.query("SELECT * FROM bet_events WHERE bet_id=? AND kind=? ORDER BY id",
+                       (bet_id, kind))
+
+
+def test_one_missed_sighting_does_not_close_the_lifetime(cfg, tmp_path):
+    """Measured 2026-07-29: 15 of 103 watch-lane closures (14.6%) re-minted a new
+    flat_bets row for the same fingerprint within ~2 polls. One absence is noise,
+    not death."""
+    store = Store(tmp_path / "t.sqlite")
+    opp = arb_opp(cfg, "0.47", "0.49")
+    process_poll(cfg, store, _poll(store, "watch", NOW), "watch", [opp], VENUE_OK, now=NOW)
+    bet_id = store.query("SELECT id FROM flat_bets")[0]["id"]
+
+    t1 = NOW + timedelta(seconds=60)
+    process_poll(cfg, store, _poll(store, "watch", t1), "watch", [], VENUE_OK, now=t1)
+
+    assert _events(store, bet_id, "lifetime_closed") == []
+    assert len(_events(store, bet_id, "sighting_missed")) == 1
+
+
+def test_dead_checks_consecutive_misses_close_the_lifetime(cfg, tmp_path):
+    store = Store(tmp_path / "t.sqlite")
+    opp = arb_opp(cfg, "0.47", "0.49")
+    process_poll(cfg, store, _poll(store, "watch", NOW), "watch", [opp], VENUE_OK, now=NOW)
+    bet_id = store.query("SELECT id FROM flat_bets")[0]["id"]
+
+    for i in range(1, int(cfg["tracker"]["dead_checks"]) + 1):
+        t = NOW + timedelta(seconds=60 * i)
+        process_poll(cfg, store, _poll(store, "watch", t), "watch", [], VENUE_OK, now=t)
+
+    closed = _events(store, bet_id, "lifetime_closed")
+    assert len(closed) == 1
+    assert json.loads(closed[0]["payload_json"])["reason"] == "absent-n-polls"
+    assert json.loads(closed[0]["payload_json"])["misses"] == 3
+
+
+def test_reappearance_resets_the_miss_counter(cfg, tmp_path):
+    """bet_events is append-only (rule 9), so 'consecutive' must be DERIVED from
+    a recovery marker, not stored as a counter."""
+    store = Store(tmp_path / "t.sqlite")
+    opp = arb_opp(cfg, "0.47", "0.49")
+    process_poll(cfg, store, _poll(store, "watch", NOW), "watch", [opp], VENUE_OK, now=NOW)
+    bet_id = store.query("SELECT id FROM flat_bets")[0]["id"]
+
+    # miss, miss, SEEN, miss, miss -> still open (never 3 in a row)
+    for i, sightings in enumerate(([], [], [opp], [], []), start=1):
+        t = NOW + timedelta(seconds=60 * i)
+        process_poll(cfg, store, _poll(store, "watch", t), "watch", sightings,
+                     VENUE_OK, now=t)
+
+    assert _events(store, bet_id, "lifetime_closed") == []
+    assert len(_events(store, bet_id, "sighting_seen")) == 1
+    # and no second flat_bets row was minted for the reappearance
+    assert len(store.query("SELECT id FROM flat_bets")) == 1
+
+
+def test_venue_gap_carry_is_bounded(cfg, tmp_path):
+    """bet 126 was carried open 300 polls by a chronically-down sx. The carry is
+    a grace period, not an indefinite hold."""
+    store = Store(tmp_path / "t.sqlite")
+    opp = arb_opp(cfg, "0.47", "0.49")
+    process_poll(cfg, store, _poll(store, "watch", NOW), "watch", [opp], VENUE_OK, now=NOW)
+    bet_id = store.query("SELECT id FROM flat_bets")[0]["id"]
+
+    down = {**VENUE_OK, "kalshi": {"ok": False, "n": 0, "latency_ms": 1.0}}
+    for i in range(1, int(cfg["tracker"]["dead_checks"]) + 1):
+        t = NOW + timedelta(seconds=60 * i)
+        process_poll(cfg, store, _poll(store, "watch", t), "watch", [], down, now=t)
+
+    closed = _events(store, bet_id, "lifetime_closed")
+    assert len(closed) == 1
+    assert json.loads(closed[0]["payload_json"])["reason"] == "venue-gap-timeout"

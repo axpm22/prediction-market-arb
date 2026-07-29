@@ -83,6 +83,18 @@ def _active_bets(store, poll_kind: str):
         (poll_kind,))
 
 
+def _consecutive_misses(store, bet_id: int) -> int:
+    """Misses since the last recovery. bet_events is append-only (rule 9), so
+    'consecutive' is DERIVED: count sighting_missed rows newer than the newest
+    sighting_seen. No column is ever updated."""
+    return store.query(
+        """SELECT COUNT(*) c FROM bet_events
+           WHERE bet_id=? AND kind='sighting_missed'
+             AND id > COALESCE((SELECT MAX(id) FROM bet_events
+                                WHERE bet_id=? AND kind='sighting_seen'), 0)""",
+        (bet_id, bet_id))[0]["c"]
+
+
 def _lot(store, poll_id, cand, reason):
     store.insert("left_on_table", {
         "poll_id": poll_id, "fingerprint": cand["fingerprint"], "kind": cand["kind"],
@@ -153,6 +165,12 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
     for bet in active:
         if bet["fingerprint"] in sighted:
             cand = sighted[bet["fingerprint"]]
+            if _consecutive_misses(store, bet["id"]):
+                # recovery marker: resets the derived miss counter (Task 1)
+                store.insert("bet_events", {
+                    "bet_id": bet["id"], "created_at": now.isoformat(),
+                    "kind": "sighting_seen",
+                    "payload_json": json.dumps({"poll_id": poll_id})})
             has_confirm = store.query(
                 "SELECT 1 FROM bet_events WHERE bet_id=? AND kind='confirmed'",
                 (bet["id"],))
@@ -181,17 +199,25 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
         else:
             leg_venues = {leg["venue"] for leg in json.loads(bet["legs_json"])}
             gap = [v for v in leg_venues if not venue_status.get(v, {}).get("ok")]
+            store.insert("bet_events", {
+                "bet_id": bet["id"], "created_at": now.isoformat(),
+                "kind": "sighting_missed",
+                "payload_json": json.dumps({"poll_id": poll_id, "venue_gap": gap})})
             if gap:
                 store.insert("annotations", {
                     "created_at": now.isoformat(), "target_kind": "poll",
                     "target_id": str(poll_id), "kind": "venue-fetch-gap",
                     "detail": f"bet {bet['id']} carried; venues down: {gap}"})
-            else:
+            misses = _consecutive_misses(store, bet["id"])
+            if misses >= int(cfg["tracker"]["dead_checks"]):
+                # a bounded grace period, not an indefinite hold: a chronically
+                # down venue carried bet 126 for 300 polls (2026-07-28)
                 store.insert("bet_events", {
                     "bet_id": bet["id"], "created_at": now.isoformat(),
                     "kind": "lifetime_closed",
-                    "payload_json": json.dumps({"reason": "absent-one-poll",
-                                                "poll_id": poll_id})})
+                    "payload_json": json.dumps({
+                        "reason": "venue-gap-timeout" if gap else "absent-n-polls",
+                        "misses": misses, "poll_id": poll_id})})
 
     # 2) bet creation for new sightings
     booked_fps: set = set()  # belt: never book the same fingerprint twice in one poll (H10)

@@ -119,7 +119,15 @@ settle_days_from: 3                 # Odds API scores max lookback
 settle_tripwire_secs: 60            # instant-settle = knowable at placement
 tracker:
   terminal_mute_grace_mins: 180
-  max_reappearances: 10             # observability bound, logs only
+  max_reappearances: 10             # NOT observability — this SUPPRESSES booking (see
+                                    #   reappearance_cap(); scaled by cadence)
+  dead_checks: 3                    # consecutive missed sightings before a lifetime closes.
+                                    #   Measured 2026-07-29 against the production DB: of 103
+                                    #   watch-lane closures, 15 (14.6%) re-minted a new
+                                    #   flat_bets row for the same fingerprint within ~2 polls
+                                    #   — bookkeeping deaths, not edges closing.
+                                    #   Also bounds the venue-fetch-gap carry (bet 126 was
+                                    #   carried 300 polls by a chronically-down sx).
 mlbstats_enabled: true
 auto_fill: false                    # permanently false; flat_bets is the executor
 trusted_pairs: []                   # empty until the §18.2 gate clears — weeks by construction
