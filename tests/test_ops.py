@@ -379,3 +379,23 @@ def test_cmd_scan_anchor_enabled_fetches_once_per_sport(cfg, tmp_path, monkeypat
     store = Store(tmp_path / "c2.sqlite")
     cmd_scan(cfg2, store, SimpleNamespace())
     assert calls == list(cfg["consensus_sports"])
+
+
+def test_verify_lane_is_supervised(cfg):
+    """verify is implemented (cmd_verify), registered in the CLI, and has a
+    cadence branch in heartbeat - but was never in supervisor.processes, so the
+    branch was unreachable and the lane never ran: ONE annotation in the
+    production DB, from 2026-07-08. It is the only sub-cadence arb-lifetime
+    measurement in the repo and costs zero Odds API credits."""
+    from arb.heartbeat import lane_interval
+    procs = cfg["supervisor"]["processes"]
+    assert procs.get("verify") is True
+    assert cfg["supervisor"]["commands"]["verify"] == "verify --once"
+    assert lane_interval(cfg, "verify") == float(cfg["verify"]["poll_secs"])
+
+
+def test_every_supervised_process_has_a_command(cfg):
+    """A process enabled with no command entry KeyErrors the supervisor loop."""
+    for name, on in cfg["supervisor"]["processes"].items():
+        if on:
+            assert name in cfg["supervisor"]["commands"], name

@@ -261,11 +261,16 @@ validation:
 supervisor:
   processes: { watch: true, live: true,    # add lanes deliberately, one at a time
                negrisk: true, political: true,    # non-sports pivot (plan Phase 2)
-               mapped: true }                     # adjudicated cross-venue pairs
+               mapped: true,                      # adjudicated cross-venue pairs
+               verify: true }                     # 10s re-quote of fresh locked flags.
+                                                  #   Implemented since Phase 7 and never
+                                                  #   run: 1 annotation in 21 days. Keyless
+                                                  #   Kalshi/PM reads only (rule 2 safe).
   commands:  { watch: "watch --once", live: "live --once",
                negrisk: "negrisk-scan --once", political: "political --once",
-               mapped: "mapped --once" }
-  max_child_runtime_secs: { default: 600, settle: 1800, live: 120 }
+               mapped: "mapped --once", verify: "verify --once" }
+  max_child_runtime_secs: { default: 600, settle: 1800, live: 120, verify: 30 }
+                                    #   verify polls at 10s — a 30s child is already hung
                                     # per-process; settle+reconcile runs long;
                                     #   a live cycle past 120s is force-restarted
   schedule_catchup_grace_mins: 30   # on (re)start, only fire scheduled slots missed within
