@@ -307,3 +307,42 @@ def test_venue_gap_carry_is_bounded(cfg, tmp_path):
     closed = _events(store, bet_id, "lifetime_closed")
     assert len(closed) == 1
     assert json.loads(closed[0]["payload_json"])["reason"] == "venue-gap-timeout"
+
+
+def test_reappearance_cap_scales_with_cadence(cfg):
+    """The cap is a rows/24h rate. Tripling the poll rate triples row production;
+    an unscaled cap would start suppressing flags with no code change."""
+    from arb.tracker import reappearance_cap
+    c = {**cfg, "watch_interval_secs": 60}
+    assert reappearance_cap(c) == 10
+    assert reappearance_cap({**c, "watch_interval_secs": 20}) == 30
+    assert reappearance_cap({**c, "watch_interval_secs": 120}) == 5
+    # never zero: a pathological interval must not suppress every flag
+    assert reappearance_cap({**c, "watch_interval_secs": 100000}) == 1
+
+
+def test_reappearance_storm_suppresses_booking(cfg, tmp_path):
+    """Pins the behaviour the config comment used to deny: this is a booking kill,
+    not a log line. 73 storm annotations exist in production."""
+    from arb.tracker import reappearance_cap
+    store = Store(tmp_path / "t.sqlite")
+    opp = arb_opp(cfg, "0.47", "0.49")
+    rounds = 12
+    fp = None
+    for i in range(rounds):
+        t = NOW + timedelta(seconds=60 * i)
+        process_poll(cfg, store, _poll(store, "watch", t), "watch", [opp], VENUE_OK, now=t)
+        rows = store.query("SELECT id, fingerprint FROM flat_bets ORDER BY id")
+        fp = rows[-1]["fingerprint"]
+        # force a fresh lifetime each round so the next poll books a new row
+        store.insert("bet_events", {
+            "bet_id": rows[-1]["id"], "created_at": t.isoformat(),
+            "kind": "lifetime_closed",
+            "payload_json": json.dumps({"reason": "test-forced"})})
+
+    booked = store.query("SELECT COUNT(*) c FROM flat_bets WHERE fingerprint=?",
+                         (fp,))[0]["c"]
+    assert booked == reappearance_cap(cfg)
+    assert store.query(
+        "SELECT COUNT(*) c FROM left_on_table WHERE reason='reappearance-storm'"
+    )[0]["c"] == rounds - reappearance_cap(cfg)

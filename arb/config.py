@@ -70,7 +70,7 @@ SCHEMA = {
     "archive_time": STR, "archive_after_days": NUM,
     "settle_days_from": NUM, "settle_tripwire_secs": NUM,
     "tracker": {"terminal_mute_grace_mins": NUM, "max_reappearances": NUM,
-                "dead_checks": NUM},
+                "dead_checks": NUM, "reappearance_ref_interval_secs": NUM},
     "mlbstats_enabled": BOOL, "auto_fill": BOOL, "trusted_pairs": LIST,
     "fuzzy_match_threshold": NUM, "fee_stale_days": NUM,
     "kalshi": {"fee_rate": NUM, "maker_fee_rate": NUM, "source_url": STR, "confirmed_on": DATE},

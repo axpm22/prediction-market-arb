@@ -95,6 +95,16 @@ def _consecutive_misses(store, bet_id: int) -> int:
         (bet_id, bet_id))[0]["c"]
 
 
+def reappearance_cap(cfg) -> int:
+    """max_reappearances is a rows-per-24h RATE, not a count, and rows scale with
+    poll rate. Scale the cap by the configured cadence so a cadence change cannot
+    silently start suppressing flags. NB this cap SUPPRESSES BOOKING (H6) — it is
+    not an observability counter, whatever the old config comment said."""
+    ref = float(cfg["tracker"]["reappearance_ref_interval_secs"])
+    interval = float(cfg["watch_interval_secs"])
+    return max(1, round(int(cfg["tracker"]["max_reappearances"]) * ref / interval))
+
+
 def _lot(store, poll_id, cand, reason):
     store.insert("left_on_table", {
         "poll_id": poll_id, "fingerprint": cand["fingerprint"], "kind": cand["kind"],
@@ -287,7 +297,7 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
         n24 = store.query(
             "SELECT COUNT(*) c FROM flat_bets WHERE fingerprint=? AND created_at > ?",
             (cand["fingerprint"], (now - timedelta(hours=24)).isoformat()))[0]["c"]
-        cap = int(cfg["tracker"]["max_reappearances"])
+        cap = reappearance_cap(cfg)
         if n24 >= cap:
             # storm: do NOT book unbounded rows (H6). LOT it and write the
             # reappearance-storm annotation invariant 4 checks for (detail carries

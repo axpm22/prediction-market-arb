@@ -128,6 +128,11 @@ tracker:
                                     #   — bookkeeping deaths, not edges closing.
                                     #   Also bounds the venue-fetch-gap carry (bet 126 was
                                     #   carried 300 polls by a chronically-down sx).
+  reappearance_ref_interval_secs: 60   # max_reappearances is a rows-per-24h RATE, and rows
+                                       #   scale with poll rate. The cap is defined at this
+                                       #   reference cadence and scaled by the configured one,
+                                       #   so dropping watch_interval_secs cannot silently
+                                       #   start suppressing flags.
 mlbstats_enabled: true
 auto_fill: false                    # permanently false; flat_bets is the executor
 trusted_pairs: []                   # empty until the §18.2 gate clears — weeks by construction
