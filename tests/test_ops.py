@@ -301,6 +301,29 @@ def test_redacting_filter_handles_single_dict_arg(caplog):
     assert not any("secret" in r.getMessage() for r in caplog.records)  # redacted
 
 
+def test_redacting_filter_keeps_numeric_args_formattable(caplog):
+    """The filter used to str() every arg, so any '%d'/'%f' in the codebase
+    raised TypeError at emit time — a crash inside the logging call, not a log
+    line. Observed live 2026-07-29 on matching.py's start-unknown counter;
+    settlement.py and reconcile.py have the same shape on money paths."""
+    import logging
+
+    from arb.logutil import get_logger
+    lg = get_logger("arb.test_numeric")
+    with caplog.at_level(logging.INFO, logger="arb.test_numeric"):
+        lg.info("dropped %d rows in %.1f s for bet %d", 22, 1.5, 7)
+    assert any(r.getMessage() == "dropped 22 rows in 1.5 s for bet 7"
+               for r in caplog.records)
+    # strings are still scrubbed
+    with caplog.at_level(logging.INFO, logger="arb.test_numeric"):
+        lg.info("url %s", "https://x.test/v4?apiKey=hunter2")
+    assert not any("hunter2" in r.getMessage() for r in caplog.records)
+    # bool is an int subclass but formats as True/False under %s — keep it a str
+    with caplog.at_level(logging.INFO, logger="arb.test_numeric"):
+        lg.info("ok %s", True)
+    assert any(r.getMessage() == "ok True" for r in caplog.records)
+
+
 def test_cmd_scan_aborts_gracefully_on_credits_low(cfg, tmp_path, monkeypatch):
     # M4: CreditsLow used to propagate as a raw traceback and skip the
     # oddsapi-credits annotation exactly when the count mattered most

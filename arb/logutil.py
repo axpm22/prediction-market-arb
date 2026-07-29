@@ -15,6 +15,15 @@ def redact(text: str) -> str:
     return _QS.sub("?<redacted>", text)
 
 
+def _scrub(a):
+    """Numbers pass through UNCONVERTED: str()ing them turns every '%d'/'%f' in
+    the codebase into a TypeError at emit time, which is a crash in the logging
+    call rather than a log line (observed live 2026-07-29 on matching.py's
+    start-unknown counter). An int/float cannot carry a query-string secret, so
+    there is nothing to redact."""
+    return a if isinstance(a, (int, float)) and not isinstance(a, bool) else redact(str(a))
+
+
 class _RedactingFilter(logging.Filter):
     def filter(self, record):
         record.msg = redact(str(record.msg))
@@ -23,7 +32,7 @@ class _RedactingFilter(logging.Filter):
             # dict); tuple() over it would yield its KEYS and break %-format
             record.args = (redact(str(record.args)),) \
                 if isinstance(record.args, dict) \
-                else tuple(redact(str(a)) for a in record.args)
+                else tuple(_scrub(a) for a in record.args)
         return True
 
 
