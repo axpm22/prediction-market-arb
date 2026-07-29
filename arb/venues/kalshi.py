@@ -25,10 +25,32 @@ BASE = "https://api.elections.kalshi.com/trade-api/v2"
 NY = ZoneInfo("America/New_York")
 SERIES_CACHE = Path("data/kalshi_series.json")
 
-# series scanned per canonical sport: (series_ticker, market_type)
+# Series scanned per canonical sport: (series_ticker, market_type). Only FULL-GAME
+# winner/total series belong here — they are the only ones whose settlement basis
+# matches Polymarket's moneyline/totals. Deliberately excluded: KXMLBF5 (first 5
+# innings), KX*1H*/KX*[1-4]Q* (period markets), KX*SPREAD (handicap). Pairing any
+# of those against a full-game leg manufactures a fake arb.
+# Series verified open or seasonally-dormant-but-real on 2026-07-29 (see the
+# survey row in data/verified_facts.md).
 SPORT_SERIES = {
     "baseball_mlb": [("KXMLBGAME", "WINNER"), ("KXMLBTOTAL", "TOTAL")],
-    "basketball_nba": [("KXNBA", "WINNER"), ("KXNBATOTAL", "TOTAL")],
+    # KXNBA is the CHAMPIONSHIP-futures series (KXNBA-27-WAS, no date in ticker);
+    # the game series is KXNBAGAME (last settled KXNBAGAME-26JUN13NYKSAS).
+    "basketball_nba": [("KXNBAGAME", "WINNER"), ("KXNBATOTAL", "TOTAL")],
+    "basketball_wnba": [("KXWNBAGAME", "WINNER"), ("KXWNBATOTAL", "TOTAL")],
+    "tennis": [("KXATPMATCH", "WINNER"), ("KXWTAMATCH", "WINNER")],
+    "mma": [("KXUFCFIGHT", "WINNER")],
+    "americanfootball_nfl": [("KXNFLGAME", "WINNER"), ("KXNFLTOTAL", "TOTAL")],
+    "icehockey_nhl": [("KXNHLGAME", "WINNER"), ("KXNHLTOTAL", "TOTAL")],
+    # Soccer is one canonical sport spanning many competitions. The European
+    # league series are dormant until mid-August and wake up on their own.
+    "soccer": [("KXUCLGAME", "WINNER"), ("KXMLSGAME", "WINNER"),
+               ("KXLIGAMXGAME", "WINNER"), ("KXBRASILEIROGAME", "WINNER"),
+               ("KXCLUBFGAME", "WINNER"), ("KXEPLGAME", "WINNER"),
+               ("KXLALIGAGAME", "WINNER"), ("KXSERIEAGAME", "WINNER"),
+               ("KXBUNDESLIGAGAME", "WINNER"), ("KXLIGUE1GAME", "WINNER")],
+    "cricket": [("KXODIMATCH", "WINNER"), ("KXHUNDREDMATCH", "WINNER"),
+                ("KXT20MATCH", "WINNER")],
 }
 
 _MONTHS = {m: i + 1 for i, m in enumerate(
@@ -50,10 +72,27 @@ def parse_start(ticker: str) -> datetime | None:
     return local.astimezone(timezone.utc)
 
 
+# Five title grammars ship across the sports series (surveyed 2026-07-29). All of
+# them wrap the same "<away> vs <home>" core, so strip the wrapper, then split.
+_LEAD = re.compile(r"^Will\s+.+?\s+win\s+the\s+", re.I)      # NFL/NCAAF/ATP/WTA/UFC
+_TAIL = re.compile(
+    r"\s+(?:Winner|Total\s+Runs|Total\s+Points)\b.*$"        # MLB/NBA/soccer
+    r"|\s+(?:men's|women's)\s+.*$"                           # WNBA/cricket
+    r"|\s+(?:Pro|professional|college)\s+.*$"                # NFL/UFC/NCAAF
+    r"|:\s*.*$",                                             # "...: <outcome>"
+    re.I)
+_VS = re.compile(r"\s+vs\.?\s+", re.I)
+# One-on-one sports: the pair identity comes from the two competitors' full
+# names, not from the title. See _combat_names_by_event.
+COMBAT_SPORTS = {"tennis", "mma"}
+
+
 def _teams_from_title(title: str) -> tuple[str, str]:
-    base = re.sub(r"\s+(Winner|Total Runs|Total Points)\?*$", "", title.strip())
-    parts = base.split(" vs ")
-    if len(parts) == 2:
+    """(away, home). An uncovered grammar returns ('', '') — never a half-parsed
+    team: matching requires an alias hit and must not be handed a wrapper (§8.1)."""
+    base = _TAIL.sub("", _LEAD.sub("", title.strip())).strip().rstrip("?").strip()
+    parts = _VS.split(base)
+    if len(parts) == 2 and all(p.strip() for p in parts):
         return parts[0].strip(), parts[1].strip()
     return "", ""
 
@@ -64,14 +103,34 @@ def _empty_book(m: dict) -> bool:
             and Decimal(m.get("liquidity_dollars") or "0") == 0)
 
 
+def _combat_names_by_event(markets: list[dict]) -> dict[str, tuple[str, str]]:
+    """Tennis/MMA titles carry surnames only ('Humbert vs Shelton'), and
+    normalize_team's surname+initial rule needs two tokens — so a title-derived
+    name never matches Polymarket's full names. Each event's two markets do
+    carry the full names in yes_sub_title; join them. Order is irrelevant:
+    matching keys the pair as a frozenset (§8.1)."""
+    by_event: dict[str, list[str]] = {}
+    for m in markets:
+        sub = (m.get("yes_sub_title") or "").strip()
+        if sub and m.get("event_ticker"):
+            by_event.setdefault(m["event_ticker"], []).append(sub)
+    # exactly two distinct competitors, or we do not claim to know the pair
+    return {ev: (names[0], names[1]) for ev, names in by_event.items()
+            if len(names) == 2 and names[0] != names[1]}
+
+
 def parse_markets(cfg, markets: list[dict], sport: str, market_type: str) -> list[Quote]:
     quotes: list[Quote] = []
     now = datetime.now(timezone.utc)
+    combat = _combat_names_by_event(markets) if sport in COMBAT_SPORTS else {}
     for m in markets:
         if _empty_book(m):
             continue
         start = parse_start(m["ticker"])
-        away, home = _teams_from_title(m.get("title", ""))
+        # NB: default None, never ("", "") — a non-empty tuple is truthy and
+        # would swallow the title fallback for every non-combat sport
+        away, home = combat.get(m.get("event_ticker", "")) \
+            or _teams_from_title(m.get("title", ""))
         vol = Decimal(m["volume_24h_fp"]) if m.get("volume_24h_fp") is not None else None
         if market_type == "TOTAL":
             line = str(Decimal(str(m["floor_strike"]))) if m.get("floor_strike") is not None else None

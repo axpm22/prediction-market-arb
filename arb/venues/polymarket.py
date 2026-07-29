@@ -19,7 +19,9 @@ log = get_logger("arb.polymarket", "logs/scan.log")
 GAMMA = "https://gamma-api.polymarket.com"
 CLOB = "https://clob.polymarket.com"
 SPORT_TAGS = {"baseball_mlb": "mlb", "basketball_nba": "nba", "soccer": "soccer",
-              "tennis": "tennis", "mma": "ufc"}
+              "tennis": "tennis", "mma": "ufc", "basketball_wnba": "wnba",
+              "americanfootball_nfl": "nfl", "icehockey_nhl": "nhl",
+              "cricket": "cricket"}
 IN_SCOPE_TYPES = {"moneyline": "WINNER", "totals": "TOTAL"}
 BOOKS_CHUNK = 100
 

@@ -16,7 +16,13 @@ settle_doubleheader_window_hours: 6 # same-pair finals ambiguity window (settle,
 match_suspect_prob_diff: 0.15       # same outcome priced >15pts apart = matching error
 capital_charge_annual: 0.05         # locks below T-bill-ish carry are 'uneconomic'
 sport_typical_duration_hours: { baseball_mlb: 3.5, basketball_nba: 2.5,
-                                soccer: 2.0, tennis: 2.5, mma: 1.0 }
+                                soccer: 2.0, tennis: 2.5, mma: 1.0,
+                                basketball_wnba: 2.5, americanfootball_nfl: 3.5,
+                                icehockey_nhl: 2.5, cricket: 8.0 }
+                                # cricket spans ODI (~8h), T20 (~3.5h) and The
+                                #   Hundred (~2.5h) in ONE canonical sport; 8.0 is
+                                #   the conservative end — it only lengthens the
+                                #   banksim lockup, never shortens it
 venue_settlement_lag_hours: { kalshi: 24, polymarket: 48, sx: 24 }  # verify empirically
 reconcile_give_up_days: 14          # past lag+this, an unresolved leg records
                                     #   UNRESOLVABLE and is never re-fetched (D5)
@@ -46,7 +52,23 @@ micro:                              # thin-book EV lane, SUBORDINATE to ev_enabl
 max_days_to_settlement: 14          # booking gate for resolution-settled bets; farther -> left_on_table
 nonsports_max_days: 7               # resolution-settled non-sports only; locked-at-entry intra-market
                                     #   arbs (political lane) are EXEMPT — political markets run months
-sports: [baseball_mlb, basketball_nba, soccer, tennis, mma]   # add americanfootball_nfl by 2026-09-01 — activity gating is blind to sports missing here
+sports: [baseball_mlb, basketball_nba, basketball_wnba, americanfootball_nfl,
+         icehockey_nhl, soccer, tennis, mma, cricket]
+                                    # activity gating is blind to sports missing here.
+                                    # Expanded 2026-07-29 from the both-venue survey.
+                                    # Cost measured before the change: kalshi 0.7s ->
+                                    #   2.6s for 25 series (all single-page, no 429);
+                                    #   polymarket unchanged at ~12s (soccer's 26
+                                    #   /books chunks dominate and every tag fans out
+                                    #   in parallel). Venues fetch concurrently, so
+                                    #   the poll is still polymarket-bound. Adding a
+                                    #   sport is ~free until a tag needs >10 gamma
+                                    #   pages or kalshi starts answering 429.
+                                    # MATCHING readiness differs per sport — see
+                                    #   data/aliases.json; a sport with no alias
+                                    #   entries persists quotes (rule 7) but produces
+                                    #   no cross-venue pairs. Not a silent failure:
+                                    #   every miss logs to logs/unmatched.log.
 unreliable_start_venues: { polymarket: [tennis] }
 activity_lookahead_hours: 48        # sport ACTIVE iff a venue lists a fixture in window
 consensus_sports: [baseball_mlb]    # add tournament keys only while they run
@@ -280,7 +302,9 @@ live_lane:                          # in-play paper lane (prompts/PROMPT_LIVE_LE
   cadence_secs: 20                  # live cycle target; achieved cadence printed per cycle
   shortlist_max_events: 12          # the shortlist, not the board
   max_game_hours: { baseball_mlb: 5.0, basketball_nba: 3.5, soccer: 3.0,
-                    tennis: 5.0, mma: 2.0 }   # past this cap an event leaves the shortlist
+                    tennis: 5.0, mma: 2.0, basketball_wnba: 3.5,
+                    americanfootball_nfl: 4.5, icehockey_nhl: 4.0,
+                    cricket: 10.0 }   # past this cap an event leaves the shortlist
   max_actionable_skew_secs: 3       # tighter than pregame (10s) — in-play moves faster
   line_velocity_points_per_sec: { default: 0.003, baseball_mlb: 0.002,
                                   basketball_nba: 0.004 }

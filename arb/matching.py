@@ -22,7 +22,14 @@ EVENT_KEY_ALIASES_PATH = Path("data/event_key_aliases.json")
 
 # WINNER markets with a genuine two-outcome space (complement map legal).
 # Soccer NEVER: NO(A) = {B ∪ draw} (§7.1).
-STRICT_BINARY_WINNER_SPORTS = {"baseball_mlb", "basketball_nba", "tennis", "mma"}
+# Deliberately EXCLUDED when the sports list grew (2026-07-29):
+#   americanfootball_nfl — a regular-season game can end tied, so NO(A) = {B ∪ tie}
+#   cricket              — Test draws and ODI ties are live outcomes
+#   icehockey_nhl        — a shootout always produces a winner, but whether Kalshi
+#                          settles on the post-shootout result is UNVERIFIED (no
+#                          open NHL market until October). Verify, then add.
+STRICT_BINARY_WINNER_SPORTS = {"baseball_mlb", "basketball_nba", "tennis", "mma",
+                               "basketball_wnba"}
 LAST_TOKEN_FALLBACK_SPORTS = {"baseball_mlb", "basketball_nba"}
 
 

@@ -61,6 +61,112 @@ def test_kalshi_totals_ladder_line_is_string():
     assert no.cost == Decimal("0.4400") and no.outcome_label == "OVER"
 
 
+def test_kalshi_teams_parse_across_every_series_title_format():
+    """Five distinct title grammars ship across the sports series (2026-07-29).
+    Every expected pair below was read off the recorded fixture by hand."""
+    from arb.venues.kalshi import _teams_from_title
+    cases = [
+        # "<A> vs <B> Winner?" — MLB, and the soccer game series
+        ("Boston vs Los Angeles D Winner?", ("Boston", "Los Angeles D")),
+        ("Portland vs Seattle Winner?", ("Portland", "Seattle")),
+        # "Will <winner> win the <A> vs <B> <descriptor>?" — NFL, NCAAF
+        ("Will Seattle win the Dallas vs Seattle Pro Football game?",
+         ("Dallas", "Seattle")),
+        ("Will Notre Dame win the Michigan St. vs Notre Dame college football game?",
+         ("Michigan St.", "Notre Dame")),
+        # "Will <player> win the <A> vs <B>: <round> match?" — ATP/WTA
+        ("Will Ben Shelton win the Humbert vs Shelton: Round Of 16 match?",
+         ("Humbert", "Shelton")),
+        # "... professional MMA fight?" — UFC
+        ("Will Mark Vologdin win the Nikolic vs Vologdin professional MMA fight?",
+         ("Nikolic", "Vologdin")),
+        # "<A> vs <B> <gendered> <descriptor>: <outcome>" — WNBA, cricket
+        ("Indiana vs Portland women's Pro Basketball game: Portland wins?",
+         ("Indiana", "Portland")),
+        ("New York vs Las Vegas women's Pro Basketball game: Over 187.5 points?",
+         ("New York", "Las Vegas")),
+        ("Gloucestershire vs Surrey men's cricket match: Surrey wins?",
+         ("Gloucestershire", "Surrey")),
+    ]
+    for title, expected in cases:
+        assert _teams_from_title(title) == expected, title
+
+
+def test_kalshi_teams_never_guess_on_an_unknown_grammar():
+    """A title the grammar does not cover yields ('', '') — start_grade/matching
+    treat that as unmatched. Never a half-parsed team (§8.1: no forced match)."""
+    from arb.venues.kalshi import _teams_from_title
+    assert _teams_from_title("Pro Basketball Conference to Win the Championship") == ("", "")
+    assert _teams_from_title("Who wins the AL East?") == ("", "")
+
+
+def test_kalshi_parses_tennis_mma_wnba_fixtures():
+    """Live-recorded fixtures for the series added 2026-07-29."""
+    from arb.venues.kalshi import parse_markets
+    tennis = parse_markets(CFG, _fx("kalshi_markets_tennis.json")["markets"],
+                           sport="tennis", market_type="WINNER")
+    q = [x for x in tennis if x.venue_market_id == "KXATPMATCH-26JUL30HUMSHE-SHE"
+         and x.side == "YES"][0]
+    assert q.outcome_label == "Ben Shelton"      # full name -> normalize_team's
+    # combat sports pair on the event's two full names, not the title surnames
+    assert {q.away, q.home} == {"Ugo Humbert", "Ben Shelton"}
+    # These series carry a DATE-ONLY ticker (26JUL30, no HHMM) -> start-unknown.
+    # occurrence_datetime is NOT a fallback: on the MLB fixtures it reads
+    # start+3h (the expected END, verified_facts / bug D1), so using it here
+    # would invent a start three hours late. Absent stays absent.
+    assert q.start_utc is None and q.start_grade == "absent"
+
+    mma = parse_markets(CFG, _fx("kalshi_markets_mma.json")["markets"],
+                        sport="mma", market_type="WINNER")
+    m = [x for x in mma if x.venue_market_id == "KXUFCFIGHT-26AUG01NIKVOL-VOL"
+         and x.side == "YES"][0]
+    assert m.outcome_label == "Mark Vologdin"
+    assert {m.away, m.home} == {"Borislav Nikolic", "Mark Vologdin"}
+
+    wnba = parse_markets(CFG, _fx("kalshi_markets_wnba.json")["markets"],
+                         sport="basketball_wnba", market_type="WINNER")
+    w = [x for x in wnba if x.venue_market_id == "KXWNBAGAME-26JUL31INDPDX-PDX"
+         and x.side == "YES"][0]
+    assert (w.away, w.home) == ("Indiana", "Portland")
+    assert w.outcome_label == "Portland"
+
+
+def test_kalshi_combat_sports_pair_on_full_names_not_title_surnames():
+    """Tennis/MMA titles carry SURNAMES ('Humbert vs Shelton'), which
+    normalize_team rejects — its surname+initial rule needs two tokens. The two
+    full names live in the event's two yes_sub_titles. Without this, every
+    tennis and MMA quote is unmatched and no cross-venue pair can ever form."""
+    from arb.matching import load_aliases, normalize_team
+    from arb.venues.kalshi import parse_markets
+    aliases = load_aliases()
+    quotes = parse_markets(CFG, _fx("kalshi_markets_tennis.json")["markets"],
+                           sport="tennis", market_type="WINNER")
+    q = [x for x in quotes
+         if x.venue_market_id == "KXATPMATCH-26JUL30HUMSHE-SHE"][0]
+    assert {q.away, q.home} == {"Ugo Humbert", "Ben Shelton"}
+    # both sides now survive normalization -> a pair key can form. Which name
+    # lands in away vs home is fixture order and carries no meaning: matching
+    # keys the pair as frozenset((a, b)) (§8.1).
+    assert {normalize_team("tennis", q.away, aliases),
+            normalize_team("tennis", q.home, aliases)} == {"humbert u", "shelton b"}
+
+    mma = parse_markets(CFG, _fx("kalshi_markets_mma.json")["markets"],
+                        sport="mma", market_type="WINNER")
+    m = [x for x in mma if x.venue_market_id == "KXUFCFIGHT-26AUG01NIKVOL-VOL"][0]
+    assert {m.away, m.home} == {"Borislav Nikolic", "Mark Vologdin"}
+
+
+def test_kalshi_team_sports_still_take_teams_from_the_title():
+    """The full-name join is combat-sports only: a WNBA yes_sub_title is one
+    team, and using it for both sides would collapse away==home."""
+    from arb.venues.kalshi import parse_markets
+    quotes = parse_markets(CFG, _fx("kalshi_markets_wnba.json")["markets"],
+                           sport="basketball_wnba", market_type="WINNER")
+    q = [x for x in quotes
+         if x.venue_market_id == "KXWNBAGAME-26JUL31INDPDX-PDX"][0]
+    assert (q.away, q.home) == ("Indiana", "Portland")
+
+
 def test_kalshi_empty_book_trap():
     from arb.venues.kalshi import parse_markets
     row = dict(_fx("kalshi_markets_winner.json")["markets"][0],

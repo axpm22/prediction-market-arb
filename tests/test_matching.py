@@ -118,6 +118,42 @@ def test_complement_map_strict_binary_only():
     assert (m.outcome_label, m.side) == ("UNDER", "YES")
 
 
+def test_expanded_sports_normalize_across_the_venues_naming_conventions():
+    """Kalshi quotes the city, Polymarket the mascot. Both must land on one
+    canonical name or the pair never forms. Strings taken from live responses
+    2026-07-29, not invented."""
+    # WNBA
+    assert normalize_team("basketball_wnba", "Indiana", ALIASES) == "fever"
+    assert normalize_team("basketball_wnba", "Indiana Fever", ALIASES) == "fever"
+    assert normalize_team("basketball_wnba", "PortlandFire", ALIASES) == "fire"  # PM quirk
+    assert normalize_team("basketball_wnba", "Portland", ALIASES) == "fire"
+    # NFL — Kalshi disambiguates co-tenants with a suffix letter
+    assert normalize_team("americanfootball_nfl", "Dallas", ALIASES) == "cowboys"
+    assert normalize_team("americanfootball_nfl", "Cowboys", ALIASES) == "cowboys"
+    assert normalize_team("americanfootball_nfl", "Los Angeles C", ALIASES) == "chargers"
+    assert normalize_team("americanfootball_nfl", "Los Angeles R", ALIASES) == "rams"
+    assert normalize_team("americanfootball_nfl", "New York G", ALIASES) == "giants"
+    assert normalize_team("americanfootball_nfl", "New York J", ALIASES) == "jets"
+    # tennis/mma need no table — surname+initial rule handles full names
+    assert normalize_team("tennis", "Ben Shelton", ALIASES) == "shelton b"
+    assert normalize_team("mma", "Mark Vologdin", ALIASES) == "vologdin m"
+    # sports with no table yet stay unmatched rather than guessing
+    assert normalize_team("icehockey_nhl", "Boston Bruins", ALIASES) is None
+
+
+def test_draw_capable_sports_never_complement_map():
+    """A tie/draw makes NO(A) = {B ∪ tie}. Mapping it books the draw hole as
+    free money — the same trap soccer is already excluded for."""
+    for sport, a, b in (("americanfootball_nfl", "cowboys", "seahawks"),  # NFL ties
+                        ("cricket", "surrey", "gloucestershire"),         # draws/ties
+                        ("icehockey_nhl", "bruins", "rangers")):          # unverified
+        no = q("kalshi", a, b, a, side="NO", sport=sport)
+        assert complement_map(no, other_outcome=b) is no, sport
+    # WNBA has no tie state -> mapping is legal
+    w = q("kalshi", "Indiana", "Portland", "fever", side="NO", sport="basketball_wnba")
+    assert complement_map(w, other_outcome="fire").side == "YES"
+
+
 def test_line_key_never_float():
     # a line parsed from a JSON number and from a string produce identical keys
     assert line_key(8.5) == line_key("8.5") == "8.5"
