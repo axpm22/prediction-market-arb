@@ -314,6 +314,9 @@ def cmd_live(cfg, store, args):
         console.print("[yellow]live_lane disabled (kill gate?) — no-op[/]")
         return 0
     s = run_live_cycle(cfg, store, dry_run=args.dry_run)
+    if s["skipped"]:
+        console.print("[dim]live: empty shortlist — nothing in play, no fetch[/]")
+        return 0
     console.print(f"live cycle: shortlist={len(s['shortlist'])} events, "
                   f"identities={s['identities']}, requoted={s['requoted']} "
                   f"(coverage {s['coverage']:.0%}), flags={s['flags']}, "

@@ -154,6 +154,22 @@ def run_live_cycle(cfg, store, now: datetime | None = None,
     t0 = time.monotonic()
     now = now or datetime.now(timezone.utc)
     events = shortlist(cfg, store, now)
+    if not events:
+        # nothing in play: shortlist() is pure SQL over stored quotes, so this
+        # costs no request and should persist no poll. 35,134 of 35,211 live
+        # polls carry n_opps=0 (2026-07-29).
+        #
+        # The lane MUST still beat. beat() normally rides inside persist_poll
+        # (cycle.py:100), so returning early would leave heartbeat.stale_lanes
+        # seeing neither a poll nor a beat and alarming every quiet night.
+        # A poll row means "did work"; a heartbeat means "ran". This ran.
+        if not dry_run:
+            from arb.cli import head_sha
+            from arb.heartbeat import beat
+            beat(store, "live", head_sha())
+        return {"shortlist": [], "identities": 0, "requoted": 0, "coverage": 0.0,
+                "flags": 0, "rejects": 0, "skipped": True,
+                "cycle_secs": round(time.monotonic() - t0, 2)}
     idents = identities(store, [e["event_key"] for e in events])
     by_venue: dict[str, list[dict]] = {}
     for i in idents:
@@ -194,7 +210,8 @@ def run_live_cycle(cfg, store, now: datetime | None = None,
     summary = {"shortlist": [e["event_key"] for e in events],
                "identities": len(idents), "requoted": len(quotes),
                "coverage": round(coverage, 4), "flags": len(opps),
-               "rejects": len(rejects), "cycle_secs": round(elapsed, 2)}
+               "rejects": len(rejects), "cycle_secs": round(elapsed, 2),
+               "skipped": False}   # always present: cmd_live reads it directly
     if dry_run:
         return summary
     poll_id = persist_poll(cfg, store, "live", quotes, status, groups, opps, rejects,

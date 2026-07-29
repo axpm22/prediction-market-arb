@@ -101,3 +101,64 @@ def test_shortlist_day_window_is_time_precise(tmp_path):
     store.insert("quotes", {**common,
                             "fetched_at": (now - timedelta(hours=23)).isoformat()})
     assert [e["event_key"] for e in shortlist(CFG, store, now)] == ["e"]
+
+
+def test_empty_shortlist_persists_nothing_and_fetches_nothing(tmp_path, monkeypatch):
+    """live runs 35,211 polls - more processes than every other lane combined -
+    for 76 flags; 35,134 of those polls carry n_opps=0. shortlist() is pure SQL
+    over stored quotes, so an empty result is known before any request."""
+    from arb.lanes import live as L
+    from arb.store import Store
+    store = Store(tmp_path / "t.sqlite")
+    now = datetime(2026, 7, 8, 12, 0, tzinfo=timezone.utc)
+
+    def boom(*a, **kw):
+        raise AssertionError("no network with an empty shortlist")
+
+    monkeypatch.setattr(L, "shortlist", lambda cfg, store, now: [])
+    for venue in L.REQUOTERS:
+        monkeypatch.setitem(L.REQUOTERS, venue, boom)
+
+    s = L.run_live_cycle(CFG, store, now=now)
+
+    assert s["skipped"] is True
+    assert s["shortlist"] == [] and s["flags"] == 0 and s["requoted"] == 0
+    assert store.query("SELECT id FROM polls") == []
+    for key in ("identities", "coverage", "rejects", "cycle_secs"):
+        assert key in s, key
+
+
+def test_live_cycle_reports_skipped_false_on_the_normal_path(tmp_path, monkeypatch):
+    """cmd_live reads s['skipped'] directly, so the key must always be present."""
+    from arb.lanes import live as L
+    from arb.store import Store
+    store = Store(tmp_path / "t.sqlite")
+    now = datetime(2026, 7, 8, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(L, "shortlist",
+                        lambda cfg, store, now: [{"event_key": "e"}])
+    monkeypatch.setattr(L, "identities", lambda store, keys: [])
+    s = L.run_live_cycle(CFG, store, now=now)
+    assert s["skipped"] is False
+
+
+def test_skipped_live_cycle_still_heartbeats(tmp_path, monkeypatch):
+    """beat() normally rides inside persist_poll (cycle.py:100). Skipping the
+    poll must NOT skip the beat, or heartbeat.stale_lanes sees neither a poll
+    nor a heartbeat and alarms every quiet night. A poll row means "did work";
+    a heartbeat means "ran"."""
+    from datetime import timedelta
+
+    from arb.heartbeat import stale_lanes
+    from arb.lanes import live as L
+    from arb.store import Store
+    store = Store(tmp_path / "t.sqlite")
+    now = datetime(2026, 7, 8, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(L, "shortlist", lambda cfg, store, now: [])
+
+    L.run_live_cycle(CFG, store, now=now)
+    beats = store.query("SELECT process FROM heartbeats WHERE process='live'")
+    assert beats, "a skipped cycle must still record that the lane ran"
+    assert store.query("SELECT id FROM polls") == []
+    # and the silence alarm stays quiet a moment later
+    assert "live" not in dict(stale_lanes(
+        CFG, store, datetime.now(timezone.utc) + timedelta(seconds=1)))
