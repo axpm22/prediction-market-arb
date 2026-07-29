@@ -160,7 +160,11 @@ execution:
   min_ladder_fraction: 0.5          # capacity says UNKNOWN below this
   max_actionable_skew_secs: 10
   venue_fetch_timeout_secs: 15      # per-REQUEST timeout (one GET/POST)
-  venue_deadline_secs: 30           # per-VENUE wall-clock budget across all its paginated
+  # 150s, not 30s: with 9 sports a Kalshi fetch is ~18 paginated calls and PM ~19,
+  # and global pacing at max_requests_per_sec serialises them, so a single venue
+  # fetch needs >=9s of pacing alone before contention. At 30s every watch fetch
+  # timed out and the lane wrote 0 quotes for ~2h (observed 2026-07-29).
+  venue_deadline_secs: 150          # per-VENUE wall-clock budget across all its paginated
                                     # requests (H7); on expiry the venue returns partial + ok:false
   max_requests_per_sec: 2.0         # GLOBAL across every lane and one-off pull, enforced
                                     #   cross-process via flock (.locks/request_pace). The
