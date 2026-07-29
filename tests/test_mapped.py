@@ -268,3 +268,53 @@ def test_settlement_mismatch_permanently_bans_a_mapped_pair(monkeypatch, tmp_pat
     monkeypatch.setattr(mapped, "load_map", lambda path=None: [ENTRY_INV])
     s = mapped.run_mapped(CFG, store, now=NOW)
     assert s["banned"] == 1 and calls["n"] == 0  # never fetched again
+
+
+def test_mapped_runs_the_tracker_exactly_once_per_poll(tmp_path, monkeypatch):
+    """A confirm is a SECOND sighting on a LATER poll. mapped called process_poll
+    twice on one poll_id, so the bet booked by the first pass was seen as
+    active-and-sighted by the second and got a confirmed event with zero elapsed
+    time — confirmed_at PRECEDING created_at (bets 46, 52, 73, 94 in production).
+
+    Counting the calls reproduces the defect deterministically without having to
+    construct an Opportunity that actually books."""
+    import arb.tracker
+    from arb.nonsports import mapped as M
+    store = Store(tmp_path / "t.sqlite")
+
+    calls = []
+    real = arb.tracker.process_poll
+
+    def counting(cfg_, store_, poll_id, poll_kind, opps, venue_status, now=None):
+        calls.append((poll_id, dict(venue_status)))
+        return real(cfg_, store_, poll_id, poll_kind, opps, venue_status, now=now)
+
+    monkeypatch.setattr(arb.tracker, "process_poll", counting)
+
+    entry = {"event_key": "nonsports:test:pair", "kalshi": "KXTEST",
+             "polymarket": "0xtest"}
+    monkeypatch.setattr(M, "load_map", lambda: [entry])
+    monkeypatch.setattr(M, "kalshi_pair_quotes", lambda cfg_, e, now: [])
+    monkeypatch.setattr(M, "pm_pair_tokens", lambda cfg_, e: [])
+    monkeypatch.setattr(M, "detect_pair", lambda cfg_, e, qs: [])
+
+    M.run_mapped(CFG, store, now=NOW)
+
+    assert len(calls) == 1, f"process_poll ran {len(calls)}x on one poll"
+    # the surviving call must carry BOTH venues: the deleted second call passed
+    # kalshi-only, so PM-legged mapped bets were carried by the venue-gap rule
+    # instead of ever closing
+    assert set(calls[0][1]) == {"kalshi", "polymarket"}
+    assert len(store.query("SELECT id FROM polls")) == 1
+
+
+def test_mapped_ledger_has_no_same_poll_confirms(tmp_path, monkeypatch):
+    """The observable consequence, asserted directly against the ledger."""
+    from arb.nonsports import mapped as M
+    store = Store(tmp_path / "t.sqlite")
+    monkeypatch.setattr(M, "load_map", lambda: [])
+    M.run_mapped(CFG, store, now=NOW)
+    assert store.query(
+        """SELECT be.id FROM bet_events be JOIN flat_bets fb ON fb.id = be.bet_id
+           WHERE be.kind='confirmed'
+             AND json_extract(be.payload_json, '$.poll_id') = fb.poll_id""") == []

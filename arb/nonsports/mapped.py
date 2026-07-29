@@ -186,7 +186,6 @@ def _pair_banned(store, event_key: str) -> bool:
 
 def run_mapped(cfg, store, now: datetime | None = None) -> dict:
     from arb.cycle import persist_poll
-    from arb.tracker import process_poll
     now = now or datetime.now(timezone.utc)
     entries = load_map()
     all_quotes, all_opps, errors, banned = [], [], 0, 0
@@ -223,8 +222,9 @@ def run_mapped(cfg, store, now: datetime | None = None) -> dict:
                             "polymarket": {"ok": errors == 0, "n": 0,
                                            "latency_ms": 0}},
                            [], all_opps, [], started=now)
-    process_poll(cfg, store, poll_id, "mapped", all_opps,
-                 {"kalshi": {"ok": True}}, now=now)
+    # NB: persist_poll already runs the tracker for this poll (cycle.py:91). A
+    # second pass here saw the bet the first pass had just booked as
+    # active-and-sighted and wrote a `confirmed` event with zero elapsed time.
     s = {"pairs": len(entries), "quotes": len(all_quotes),
          "opps": len(all_opps), "errors": errors, "banned": banned}
     log.info("mapped lane: %s", s)
