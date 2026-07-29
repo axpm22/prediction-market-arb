@@ -20,6 +20,35 @@ log = get_logger("arb.sx", "logs/scan.log")
 
 BASE = "https://api.sx.bet"
 SPORT_IDS = {"basketball_nba": 1, "baseball_mlb": 3, "soccer": 5, "tennis": 6, "mma": 7}
+
+# An SX sportId is a BROAD CATEGORY, not a canonical sport. Verified live
+# 2026-07-29: sportId 1 (Basketball) had exactly one active league — WNBA — so
+# every SX basketball quote was filed as basketball_nba and could never match
+# the Kalshi/PM WNBA legs. sportId 3 (Baseball) carries MLB, NPB and KBO
+# (fixture sx_leagues.json), all previously labelled baseball_mlb.
+# Keyed on the league `label`; an unlisted league keeps the sportId's default,
+# so a new league is mislabelled-as-before rather than dropped.
+LEAGUE_SPORT = {"wnba": "basketball_wnba", "nba": "basketball_nba",
+                "mlb": "baseball_mlb", "npb": "baseball_npb",
+                "kbo league": "baseball_kbo"}
+
+
+def league_sport(label: str, default: str) -> str:
+    """Canonical sport for one SX league. See LEAGUE_SPORT."""
+    return LEAGUE_SPORT.get((label or "").strip().lower(), default)
+
+
+def sport_ids_to_fetch(cfg) -> list[int]:
+    """Distinct sportIds covering the configured sports. basketball_nba and
+    basketball_wnba share sportId 1 — iterating cfg['sports'] would fetch it
+    twice and double every quote."""
+    seen, out = set(), []
+    for sport in cfg["sports"]:
+        sid = SPORT_IDS.get(sport)
+        if sid is not None and sid not in seen:
+            seen.add(sid)
+            out.append(sid)
+    return out
 TYPE_MONEYLINE, TYPE_TOTALS = 226, 28  # 342 spread: ignore
 E20 = Decimal(10) ** 20
 E6 = Decimal(10) ** 6
@@ -81,18 +110,26 @@ def quotes_from_orders(cfg, market: dict, orders: list[dict], sport: str) -> lis
     return quotes
 
 
-def _fetch_sport(cfg, sport: str, deadline: Deadline) -> list[Quote]:
-    """One sport's leagues -> paginated markets -> chunked orders. Checks the
-    per-venue deadline between every paginated/chunk request (H7)."""
+def _fetch_sport(cfg, sport_id: int, deadline: Deadline) -> list[Quote]:
+    """One sportId's leagues -> paginated markets -> chunked orders. Checks the
+    per-venue deadline between every paginated/chunk request (H7). Each LEAGUE
+    carries its own canonical sport (see LEAGUE_SPORT) — the sportId alone is
+    too coarse — and leagues outside cfg['sports'] are skipped."""
     quotes: list[Quote] = []
-    sport_id = SPORT_IDS.get(sport)
-    if sport_id is None or deadline.expired():
+    if deadline.expired():
         return quotes
+    default = next((s for s, i in SPORT_IDS.items() if i == sport_id), None)
+    if default is None:
+        return quotes
+    wanted = set(cfg["sports"])
     leagues = get_json(f"{BASE}/leagues/active?sportId={sport_id}", cfg,
                        deadline=deadline).get("data", [])
     for lg in leagues:
         if deadline.expired():
             return quotes
+        sport = league_sport(lg.get("label", ""), default)
+        if sport not in wanted:
+            continue
         markets, next_key = [], ""
         for _ in range(10):
             if deadline.expired():
@@ -125,7 +162,7 @@ def fetch_markets(cfg) -> list[Quote]:
     # per-sport fan-out in parallel (H7): venue time ~ slowest single sport, not
     # the serial sum. Thread-local Sessions (base.py) keep this connection-safe.
     deadline = Deadline(cfg["execution"]["venue_deadline_secs"])
-    sports = list(cfg["sports"])
+    sports = sport_ids_to_fetch(cfg)   # distinct sportIds, never one per sport
     with ThreadPoolExecutor(max_workers=max(1, len(sports))) as pool:
         per_sport = list(pool.map(lambda s: _fetch_sport(cfg, s, deadline), sports))
     quotes = [q for sub in per_sport for q in sub]

@@ -51,6 +51,11 @@ SPORT_SERIES = {
                ("KXBUNDESLIGAGAME", "WINNER"), ("KXLIGUE1GAME", "WINNER")],
     "cricket": [("KXODIMATCH", "WINNER"), ("KXHUNDREDMATCH", "WINNER"),
                 ("KXT20MATCH", "WINNER")],
+    # Thin on every venue (24h volume in the low thousands), but SX carries both
+    # as leagues under its Baseball sportId, so they need to exist as canonical
+    # sports or those legs land in baseball_mlb (see sx.LEAGUE_SPORT).
+    "baseball_npb": [("KXNPBGAME", "WINNER")],
+    "baseball_kbo": [("KXKBOGAME", "WINNER")],
 }
 
 _MONTHS = {m: i + 1 for i, m in enumerate(

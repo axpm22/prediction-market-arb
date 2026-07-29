@@ -18,7 +18,8 @@ capital_charge_annual: 0.05         # locks below T-bill-ish carry are 'uneconom
 sport_typical_duration_hours: { baseball_mlb: 3.5, basketball_nba: 2.5,
                                 soccer: 2.0, tennis: 2.5, mma: 1.0,
                                 basketball_wnba: 2.5, americanfootball_nfl: 3.5,
-                                icehockey_nhl: 2.5, cricket: 8.0 }
+                                icehockey_nhl: 2.5, cricket: 8.0,
+                                baseball_npb: 3.5, baseball_kbo: 3.5 }
                                 # cricket spans ODI (~8h), T20 (~3.5h) and The
                                 #   Hundred (~2.5h) in ONE canonical sport; 8.0 is
                                 #   the conservative end — it only lengthens the
@@ -53,7 +54,7 @@ max_days_to_settlement: 14          # booking gate for resolution-settled bets; 
 nonsports_max_days: 7               # resolution-settled non-sports only; locked-at-entry intra-market
                                     #   arbs (political lane) are EXEMPT — political markets run months
 sports: [baseball_mlb, basketball_nba, basketball_wnba, americanfootball_nfl,
-         icehockey_nhl, soccer, tennis, mma, cricket]
+         icehockey_nhl, soccer, tennis, mma, cricket, baseball_npb, baseball_kbo]
                                     # activity gating is blind to sports missing here.
                                     # Expanded 2026-07-29 from the both-venue survey.
                                     # Cost measured before the change: kalshi 0.7s ->

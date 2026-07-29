@@ -127,6 +127,11 @@ def test_expanded_sports_normalize_across_the_venues_naming_conventions():
     assert normalize_team("basketball_wnba", "Indiana Fever", ALIASES) == "fever"
     assert normalize_team("basketball_wnba", "PortlandFire", ALIASES) == "fire"  # PM quirk
     assert normalize_team("basketball_wnba", "Portland", ALIASES) == "fire"
+    # SX suffixes women's teams with " W" (live 2026-07-29). Explicit keys, not
+    # a strip rule: normalize_team requires an alias hit and never guesses (§8.1)
+    assert normalize_team("basketball_wnba", "Dallas Wings W", ALIASES) == "wings"
+    assert normalize_team("basketball_wnba", "Golden State Valkyries W",
+                          ALIASES) == "valkyries"
     # NFL — Kalshi disambiguates co-tenants with a suffix letter
     assert normalize_team("americanfootball_nfl", "Dallas", ALIASES) == "cowboys"
     assert normalize_team("americanfootball_nfl", "Cowboys", ALIASES) == "cowboys"

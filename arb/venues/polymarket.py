@@ -22,7 +22,7 @@ CLOB = "https://clob.polymarket.com"
 SPORT_TAGS = {"baseball_mlb": "mlb", "basketball_nba": "nba", "soccer": "soccer",
               "tennis": "tennis", "mma": "ufc", "basketball_wnba": "wnba",
               "americanfootball_nfl": "nfl", "icehockey_nhl": "nhl",
-              "cricket": "cricket"}
+              "cricket": "cricket", "baseball_npb": "npb", "baseball_kbo": "kbo"}
 IN_SCOPE_TYPES = {"moneyline": "WINNER", "totals": "TOTAL"}
 BOOKS_CHUNK = 100
 

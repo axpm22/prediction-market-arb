@@ -419,3 +419,30 @@ def test_oddsapi_http_error_never_leaks_the_key(monkeypatch):
         oa._get(CFG, "/x", {})
     assert "SEKRET" not in str(ei.value)
     assert "<redacted>" in str(ei.value)
+
+
+def test_sx_league_label_decides_the_canonical_sport():
+    """SX sportId is a BROAD category, not a canonical sport: id 1 is Basketball
+    and on 2026-07-29 its only active league was WNBA, so every SX basketball
+    quote was filed as basketball_nba and could never match the Kalshi/PM WNBA
+    legs. Likewise id 3 (Baseball) carries MLB, NPB and KBO leagues, all of
+    which were labelled baseball_mlb (fixture sx_leagues.json)."""
+    from arb.venues.sx import league_sport
+    assert league_sport("WNBA", "basketball_nba") == "basketball_wnba"
+    assert league_sport("NBA", "basketball_nba") == "basketball_nba"
+    assert league_sport("NPB", "baseball_mlb") == "baseball_npb"
+    assert league_sport("KBO League", "baseball_mlb") == "baseball_kbo"
+    assert league_sport("MLB", "baseball_mlb") == "baseball_mlb"
+    # an unrecognised league keeps the sportId's default rather than being dropped
+    assert league_sport("Some New Cup", "soccer") == "soccer"
+    assert league_sport("Champions League_UEFA", "soccer") == "soccer"
+
+
+def test_sx_fetches_each_sport_id_once():
+    """basketball_nba and basketball_wnba share sportId 1. Iterating cfg['sports']
+    would fetch that id twice and double every quote."""
+    from arb.venues.sx import SPORT_IDS, sport_ids_to_fetch
+    c = {**CFG, "sports": ["basketball_nba", "basketball_wnba", "baseball_mlb"]}
+    ids = sport_ids_to_fetch(c)
+    assert sorted(ids) == sorted({SPORT_IDS["basketball_nba"], SPORT_IDS["baseball_mlb"]})
+    assert len(ids) == len(set(ids)), "a sportId must never be fetched twice"
