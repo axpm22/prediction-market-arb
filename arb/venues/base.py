@@ -3,9 +3,12 @@ exponential backoff with jitter on 429/5xx, at most venue_max_retries retries.
 Only public unauthenticated GETs/POSTs (rule 1)."""
 from __future__ import annotations
 
+import fcntl
+import os
 import random
 import threading
 import time
+from pathlib import Path
 
 import requests
 
@@ -73,6 +76,55 @@ def is_live(start_utc, now=None) -> bool:
     return start_utc <= (now or datetime.now(timezone.utc))
 
 
+# Cross-PROCESS request pacing. The rate limit is per IP, not per process, and
+# the supervisor runs each lane as its own one-shot child, so an in-process
+# token bucket coordinates nothing — six lanes each politely pacing themselves
+# still burst six-way at the venue. Measured 2026-07-29: a bare loop at ~3 req/s
+# took a 429 within two calls, while a paced client held ~2.3 req/s across
+# 47,000 requests with 3 total 429s.
+#
+# One file, one flock, one timestamp. A caller holds the lock across its wait so
+# every other process queues behind it — that serialisation IS the pacing. The
+# lock is released by the OS if a holder dies, so a crashed lane cannot wedge
+# the fleet.
+PACE_FILE = Path(".locks/request_pace")
+
+
+def _pace_global(cfg) -> None:
+    # Rule 2: tests never make live venue calls, so pacing there is pure
+    # flakiness — it sleeps real seconds and is indistinguishable from the
+    # retry backoff ladder that timing tests assert on. Same env-var plumbing
+    # convention as ARB_LOG_DIR in tests/conftest.py.
+    if os.environ.get("ARB_PACE_DISABLED"):
+        return
+    # missing key => disabled, never a crash: pacing is a courtesy to the venue,
+    # and a partial cfg must not take a fetch down with it
+    rate = float(cfg.get("execution", {}).get("max_requests_per_sec", 0) or 0)
+    if rate <= 0:
+        return
+    gap = 1.0 / rate
+    try:
+        PACE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(PACE_FILE, "a+") as fh:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            try:
+                fh.seek(0)
+                last = float(fh.read().strip() or 0.0)
+                now = time.time()
+                wait = last + gap - now
+                if wait > 0:
+                    time.sleep(wait)
+                    now = last + gap
+                fh.seek(0)
+                fh.truncate()
+                fh.write(repr(now))
+                fh.flush()
+            finally:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError as e:
+        log.warning("request pacing unavailable (%s) — proceeding unpaced", e)
+
+
 def _request(method: str, url: str, cfg, deadline=None, **kw):
     from urllib.parse import urlsplit
     host = urlsplit(url).hostname or url
@@ -86,6 +138,7 @@ def _request(method: str, url: str, cfg, deadline=None, **kw):
     retries = int(cfg["execution"]["venue_max_retries"])
     last = None
     for attempt in range(retries + 1):
+        _pace_global(cfg)      # every outbound venue call, retries included
         if deadline is not None:
             remaining = deadline.remaining()
             if remaining <= 0:

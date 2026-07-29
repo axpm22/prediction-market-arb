@@ -83,7 +83,7 @@ SCHEMA = {
                   "arb_size_safety_frac": NUM, "min_ladder_fraction": NUM,
                   "max_actionable_skew_secs": NUM, "venue_fetch_timeout_secs": NUM,
                   "venue_deadline_secs": NUM,
-                  "venue_max_retries": NUM, "tls_block_cache_secs": NUM,
+                  "venue_max_retries": NUM, "max_requests_per_sec": NUM, "tls_block_cache_secs": NUM,
                   "min_adj_edge_points": NUM,
                   "line_velocity_points_per_sec": MAP(NUM),
                   "doubleheader_cluster_tol_secs": NUM},

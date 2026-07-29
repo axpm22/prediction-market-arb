@@ -162,6 +162,12 @@ execution:
   venue_fetch_timeout_secs: 15      # per-REQUEST timeout (one GET/POST)
   venue_deadline_secs: 30           # per-VENUE wall-clock budget across all its paginated
                                     # requests (H7); on expiry the venue returns partial + ok:false
+  max_requests_per_sec: 2.0         # GLOBAL across every lane and one-off pull, enforced
+                                    #   cross-process via flock (.locks/request_pace). The
+                                    #   limit is per IP: measured 2026-07-29, a bare loop at
+                                    #   ~3 req/s took a 429 within two calls, while 2.3 req/s
+                                    #   sustained 47,000 requests with 3 total 429s.
+                                    #   0 disables (tests, offline replay).
   venue_max_retries: 2              # 429/5xx backoff with jitter, then poll partial for venue
   tls_block_cache_secs: 300         # ANJ-block fast-fail: SSL cert failure blocks the host this
                                     # long (cache, not ban — re-probed after, no restart to recover)
