@@ -202,14 +202,22 @@ def test_books_failure_errors_all_pairs(monkeypatch, tmp_path):
 
 
 def test_supervisor_stagger_offsets_lane_starts():
-    from arb.heartbeat import initial_next_run
+    """Lockstep fan-out is the bug this exists to prevent. The FLAT ladder it
+    used to assert (i * stagger_secs) was itself an aliasing bug: 5 lanes x 15s
+    = 60s = watch_interval_secs put lane 5 in exact lockstep with lane 1, and
+    Task 4 made it 6 lanes. Offsets now spread inside each lane's OWN period,
+    which is what actually guarantees separation."""
+    from arb.heartbeat import initial_next_run, lane_interval
     nr = initial_next_run(CFG, 1000.0)
     enabled = [k for k, v in CFG["supervisor"]["processes"].items() if v]
     assert set(nr) == set(enabled)
-    offsets = sorted(nr[k] - 1000.0 for k in nr)
-    step = float(CFG["supervisor"]["stagger_secs"])
-    assert offsets == [i * step for i in range(len(enabled))]
-    assert step > 0  # lockstep fan-out is the bug this exists to prevent
+    offsets = {k: nr[k] - 1000.0 for k in nr}
+    # one lane starts immediately; none is delayed past its own cadence
+    assert min(offsets.values()) == 0.0
+    for name, off in offsets.items():
+        assert 0 <= off < lane_interval(CFG, name), name
+    # and no two lanes share a start instant
+    assert len(set(offsets.values())) == len(enabled), offsets
 
 
 def test_tickets_rank_by_persistence_and_close_on_lifetime_end(monkeypatch, tmp_path):

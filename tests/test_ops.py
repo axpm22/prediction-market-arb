@@ -399,3 +399,47 @@ def test_every_supervised_process_has_a_command(cfg):
     for name, on in cfg["supervisor"]["processes"].items():
         if on:
             assert name in cfg["supervisor"]["commands"], name
+
+
+def test_next_grid_run_is_strictly_future_and_drift_free():
+    """Anchoring to now+interval accumulates the supervisor's 2s tick overshoot;
+    an absolute grid cannot drift no matter how late the tick arrives."""
+    from arb.heartbeat import next_grid_run
+    assert next_grid_run(now=0.0, interval=60.0, offset=0.0) == 60.0
+    assert next_grid_run(now=59.9, interval=60.0, offset=0.0) == 60.0
+    assert next_grid_run(now=60.0, interval=60.0, offset=0.0) == 120.0
+    # a late tick still lands on the grid, it does not push the phase out
+    assert next_grid_run(now=119.5, interval=60.0, offset=0.0) == 120.0
+    assert next_grid_run(now=0.0, interval=60.0, offset=12.0) == 12.0
+    assert next_grid_run(now=12.0, interval=60.0, offset=12.0) == 72.0
+
+
+def test_lane_offsets_never_collide_within_a_period(cfg):
+    """stagger_secs 15 x 5 lanes = 60s = watch_interval_secs, so lane 5 booted in
+    exact lockstep with lane 1 (and Task 4 made it 6 lanes). Spread inside each
+    lane's own period instead."""
+    from arb.heartbeat import lane_interval, lane_offsets
+    offs = lane_offsets(cfg)
+    enabled = [n for n, on in cfg["supervisor"]["processes"].items() if on]
+    assert set(offs) == set(enabled)
+    for name in enabled:
+        assert 0 <= offs[name] < lane_interval(cfg, name)
+    assert len(set(offs.values())) == len(enabled), offs
+
+
+def test_watch_and_live_are_never_scheduled_simultaneously(cfg):
+    """live.cadence_secs 20 divides watch_interval_secs 60 exactly, so a shared
+    phase is permanent, not transient. Measured 2026-07-29: 355 of 1,078 watch
+    polls had a live poll start within 5s. Simulate an hour of grid slots."""
+    from arb.heartbeat import lane_interval, lane_offsets, next_grid_run
+    offs = lane_offsets(cfg)
+
+    def slots(name, horizon=3600.0):
+        interval, off, t, out = lane_interval(cfg, name), offs[name], 0.0, []
+        while t < horizon:
+            t = next_grid_run(t, interval, off)
+            out.append(round(t, 3))
+        return out
+
+    watch, live = set(slots("watch")), set(slots("live"))
+    assert not (watch & live), sorted(watch & live)[:5]

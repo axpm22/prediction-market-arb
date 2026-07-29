@@ -6,6 +6,7 @@ Heartbeat staleness alone never restarts a child — only the per-process runtim
 cap force-kills (V2 killed healthy children for three days)."""
 from __future__ import annotations
 
+import math
 import subprocess
 import sys
 import time
@@ -98,14 +99,41 @@ def initial_last_fired(cfg, now_ny: datetime) -> dict:
     return marks
 
 
+def lane_offsets(cfg) -> dict[str, float]:
+    """Phase offsets spread evenly INSIDE each lane's own period. A flat boot
+    stagger aliases — 5 lanes x stagger_secs 15 = 60s = watch_interval_secs, so
+    lane 5 landed on lane 1 — and it decayed anyway, because next_run was
+    anchored to the previous spawn rather than to a grid (measured 2026-07-29:
+    355 of 1,078 watch polls had a live poll start within 5s; live's 20s divides
+    watch's 60s exactly, so that phase collision is permanent, not transient)."""
+    enabled = [n for n, on in cfg["supervisor"]["processes"].items() if on]
+    n = max(1, len(enabled))
+    offsets = {}
+    want = float(cfg["supervisor"]["stagger_secs"])
+    for i, name in enumerate(enabled):
+        interval = lane_interval(cfg, name)
+        offsets[name] = interval * i / n
+        if interval / n < want:
+            log.warning("lane %s phase separation %.1fs < stagger_secs %s — "
+                        "cadence too fast for %d lanes on one IP",
+                        name, interval / n, want, n)
+    return offsets
+
+
+def next_grid_run(now: float, interval: float, offset: float) -> float:
+    """The next absolute-grid slot strictly after `now`. Phase is a property of
+    the grid, so a late supervisor tick can never push a lane out of alignment."""
+    return (math.floor((now - offset) / interval) + 1) * interval + offset
+
+
 def initial_next_run(cfg, now_mono: float) -> dict[str, float]:
-    """Boot-time schedule: lanes start stagger_secs apart instead of fetching
-    in lockstep — five simultaneous venue fan-outs quadrupled Kalshi latency
-    (350ms -> 1.4s, 2026-07-12/14)."""
-    stagger = float(cfg["supervisor"]["stagger_secs"])
-    return {name: now_mono + i * stagger
-            for i, (name, enabled) in
-            enumerate(cfg["supervisor"]["processes"].items()) if enabled}
+    """Boot-time schedule: now + each lane's phase offset, so the first lane
+    starts immediately and the rest are separated. NOT the next grid slot —
+    that is strictly future, which would idle a 300s lane for up to 300s after
+    boot and make `supervisor --once` spawn nothing at all. Lanes snap onto the
+    absolute grid at their first re-arm; monotonic time has an arbitrary origin,
+    so no grid phase is more correct than another."""
+    return {name: now_mono + off for name, off in lane_offsets(cfg).items()}
 
 
 def lane_interval(cfg, name: str) -> float:
@@ -149,6 +177,7 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
     # suppress the boot-time burst: slots long past are pre-marked as fired (H9)
     last_fired: dict[str, str] = initial_last_fired(cfg, datetime.now(NY))
     next_run: dict[str, float] = initial_next_run(cfg, time.monotonic())
+    offsets = lane_offsets(cfg)   # fixed phase plan; re-armed against the grid
     scheduled: list[subprocess.Popen] = []  # one-shot clock children, reaped each tick
 
     def _spawn(*cmd):
@@ -187,7 +216,10 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                     children[name] = subprocess.Popen(
                         [sys.executable, "-m", "arb", *flags, *cmd])
                     started[name] = now
-                    next_run[name] = now + lane_interval(cfg, name)
+                    # absolute grid, never now+interval: the loop's 2s tick
+                    # overshoots by 0-2s and that error used to accumulate
+                    next_run[name] = next_grid_run(
+                        now, lane_interval(cfg, name), offsets[name])
 
             # supervisor-owned clock (the `schedule` dependency is dropped); every
             # one-shot goes through _spawn so it is tracked and reaped (H9)
