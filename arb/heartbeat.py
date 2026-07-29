@@ -136,7 +136,7 @@ def initial_next_run(cfg, now_mono: float) -> dict[str, float]:
     return {name: now_mono + off for name, off in lane_offsets(cfg).items()}
 
 
-def lane_interval(cfg, name: str) -> float:
+def _base_lane_interval(cfg, name: str) -> float:
     """Each lane's cadence knob (values live in config, rule 4); anything
     unlisted runs at the watch cadence."""
     if name == "live":
@@ -146,6 +146,23 @@ def lane_interval(cfg, name: str) -> float:
     if name == "verify":
         return float(cfg["verify"]["poll_secs"])
     return float(cfg["watch_interval_secs"])
+
+
+def lane_interval(cfg, name: str, now_ny: datetime | None = None) -> float:
+    """Base cadence, optionally overridden by a time-of-day window. Callers that
+    pass no clock always get the base — every pre-existing call site does, and
+    lane_offsets/stale_lanes deliberately keep doing so: offsets are a fixed
+    phase plan, and a silence alarm must not tighten just because the hour
+    changed. Measured yield is strongly diurnal for watch (hr20: 482 flags/1k
+    polls vs 3 flags across 1,816 polls in hrs 04-08) and perfectly flat for
+    negrisk and mapped, which have no time-of-day at all."""
+    base = _base_lane_interval(cfg, name)
+    if now_ny is None:
+        return base
+    for start_h, end_h, secs in cfg["supervisor"]["cadence_windows"].get(name) or []:
+        if int(start_h) <= now_ny.hour < int(end_h):
+            return float(secs)
+    return base
 
 
 # supervisor process name -> polls.kind. verify writes annotations, not polls.
@@ -264,7 +281,7 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                     # absolute grid, never now+interval: the loop's 2s tick
                     # overshoots by 0-2s and that error used to accumulate
                     next_run[name] = next_grid_run(
-                        now, lane_interval(cfg, name), offsets[name])
+                        now, lane_interval(cfg, name, now_ny), offsets[name])
 
             # supervisor-owned clock (the `schedule` dependency is dropped); every
             # one-shot goes through _spawn so it is tracked and reaped (H9)

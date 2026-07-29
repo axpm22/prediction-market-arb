@@ -498,3 +498,32 @@ def test_stale_lanes_counts_a_heartbeat_as_liveness(cfg, tmp_path):
                                 "beat_at": (NOW - timedelta(seconds=5)).isoformat(),
                                 "head_sha": "abc", "pid": 1})
     assert "live" not in dict(stale_lanes(cfg, store, NOW))
+
+
+def test_cadence_windows_default_to_a_no_op(cfg):
+    """Ships as a mechanism. The numbers are a pre-registered policy decision."""
+    from arb.heartbeat import lane_interval
+    assert cfg["supervisor"]["cadence_windows"] == {}
+    evening = datetime(2026, 7, 28, 20, 0)
+    assert lane_interval(cfg, "watch", evening) == float(cfg["watch_interval_secs"])
+
+
+def test_cadence_window_overrides_inside_its_hours(cfg):
+    from arb.heartbeat import lane_interval
+    c = {**cfg, "supervisor": {**cfg["supervisor"],
+                               "cadence_windows": {"watch": [[19, 23, 20]]}}}
+    assert lane_interval(c, "watch", datetime(2026, 7, 28, 19, 0)) == 20.0
+    assert lane_interval(c, "watch", datetime(2026, 7, 28, 22, 59)) == 20.0
+    assert lane_interval(c, "watch", datetime(2026, 7, 28, 23, 0)) == 60.0
+    assert lane_interval(c, "watch", datetime(2026, 7, 28, 5, 0)) == 60.0
+    # a lane with no window is untouched
+    assert lane_interval(c, "mapped", datetime(2026, 7, 28, 20, 0)) == \
+        float(c["nonsports"]["watch_interval_secs"])
+
+
+def test_lane_interval_without_a_clock_returns_the_base_cadence(cfg):
+    """Every existing call site passes no clock and must keep the base cadence."""
+    from arb.heartbeat import lane_interval
+    c = {**cfg, "supervisor": {**cfg["supervisor"],
+                               "cadence_windows": {"watch": [[0, 24, 5]]}}}
+    assert lane_interval(c, "watch") == float(c["watch_interval_secs"])

@@ -279,6 +279,15 @@ supervisor:
   stagger_secs: 15                  # boot offset between lanes — lockstep fan-out
                                     #   quadrupled kalshi latency (2026-07-14)
   shape_time: "05:00"               # weekly (Monday) shape-check fire time
+  cadence_windows: {}               # optional per-lane time-of-day cadence, NY hours:
+                                    #   { watch: [[19, 23, 20]] } polls watch every 20s
+                                    #   from 19:00 to 22:59 and at watch_interval_secs
+                                    #   otherwise. Triples are [start_hr, end_hr, secs],
+                                    #   start inclusive, end exclusive; first match wins.
+                                    #   EMPTY BY DEFAULT — measured yield (hr20: 482 flags
+                                    #   /1k polls vs hrs 04-08: 3 flags in 1,816 polls) says
+                                    #   this should be used, but the numbers are a
+                                    #   pre-registered policy decision, not a code default.
 data_stale_alarm_secs: 900
 heartbeat_stale_polls: 3            # supervisor beat older than this many watch
                                     #   intervals reads STALE (status + dashboard)

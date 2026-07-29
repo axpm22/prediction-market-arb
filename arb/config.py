@@ -122,7 +122,7 @@ SCHEMA = {
     "supervisor": {"processes": MAP(BOOL), "commands": MAP(STR),
                    "max_child_runtime_secs": MAP(NUM),
                    "schedule_catchup_grace_mins": NUM, "stagger_secs": NUM,
-                   "shape_time": STR},
+                   "shape_time": STR, "cadence_windows": MAP(LIST)},
     "data_stale_alarm_secs": NUM, "heartbeat_stale_polls": NUM,
     "clock_skew_alarm_secs": NUM, "log_retention_days": NUM,
     "db_backup": {"time": STR, "dest": STR, "keep_last": NUM},
