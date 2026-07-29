@@ -443,3 +443,58 @@ def test_watch_and_live_are_never_scheduled_simultaneously(cfg):
 
     watch, live = set(slots("watch")), set(slots("live"))
     assert not (watch & live), sorted(watch & live)[:5]
+
+
+def test_stale_lanes_flags_a_silent_lane(cfg, tmp_path):
+    """negrisk and political were dark for 9.7 days and nothing said so: the
+    supervisor beat covers the supervisor, not each lane. Reproduced 2026-07-29
+    — max inter-poll gap for both lanes is 232.2 h."""
+    from arb.heartbeat import stale_lanes
+    from arb.store import Store
+    store = Store(tmp_path / "t.sqlite")
+    fresh = NOW - timedelta(seconds=30)
+    store.insert("polls", {"started_at": fresh.isoformat(), "kind": "watch",
+                           "n_quotes": 1, "n_opps": 0})
+    store.insert("polls", {"started_at": (NOW - timedelta(days=9)).isoformat(),
+                           "kind": "negrisk", "n_quotes": 1, "n_opps": 0})
+
+    stale = dict(stale_lanes(cfg, store, NOW))
+    assert "negrisk" in stale
+    assert stale["negrisk"] > 9 * 86400 - 60
+    assert "watch" not in stale
+
+
+def test_stale_lanes_ignores_lanes_that_never_ran(cfg, tmp_path):
+    """A lane with no polls at all is a cold start, not a silence: alarming on it
+    would fire on every fresh DB."""
+    from arb.heartbeat import stale_lanes
+    from arb.store import Store
+    assert stale_lanes(cfg, Store(tmp_path / "t.sqlite"), NOW) == []
+
+
+def test_stale_lanes_skips_lanes_that_write_no_poll_rows(cfg, tmp_path):
+    """verify writes annotations, not polls — it must never be reported silent."""
+    from arb.heartbeat import POLL_KIND, stale_lanes
+    from arb.store import Store
+    assert "verify" not in POLL_KIND
+    store = Store(tmp_path / "t.sqlite")
+    store.insert("polls", {"started_at": (NOW - timedelta(days=9)).isoformat(),
+                           "kind": "watch", "n_quotes": 1, "n_opps": 0})
+    assert "verify" not in dict(stale_lanes(cfg, store, NOW))
+
+
+def test_stale_lanes_counts_a_heartbeat_as_liveness(cfg, tmp_path):
+    """A lane that ran and correctly found nothing writes NO poll row — the live
+    lane skips its poll on an empty shortlist. Polls measure work, heartbeats
+    measure running; silence means neither. Without this, enabling the empty-
+    shortlist skip would make the alarm scream all night."""
+    from arb.heartbeat import stale_lanes
+    from arb.store import Store
+    store = Store(tmp_path / "t.sqlite")
+    store.insert("polls", {"started_at": (NOW - timedelta(hours=3)).isoformat(),
+                           "kind": "live", "n_quotes": 1, "n_opps": 0})
+    assert "live" in dict(stale_lanes(cfg, store, NOW))   # stale on polls alone
+    store.insert("heartbeats", {"process": "live",
+                                "beat_at": (NOW - timedelta(seconds=5)).isoformat(),
+                                "head_sha": "abc", "pid": 1})
+    assert "live" not in dict(stale_lanes(cfg, store, NOW))

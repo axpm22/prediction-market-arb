@@ -519,6 +519,13 @@ def cmd_status(cfg, store, args):
              AND NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id=fb.id
                              AND be.kind IN ('settled','void'))""")[0]["n"]
     console.print(f"open resolution-settled bets: {open_n}")
+    # per-lane silence: heartbeat_stale_polls covers the supervisor beat as a
+    # whole, so negrisk+political went dark for 9.7 days unreported
+    from arb.heartbeat import stale_lanes
+    for lane, age in stale_lanes(cfg, store, now):
+        # seconds below an hour: "0.0 h" reads as a bug, not an alarm
+        span = f"{age:.0f}s" if age < 3600 else f"{age / 3600:.1f} h"
+        console.print(f"[red]LANE SILENT[/] {lane}: no sign of life for {span}")
     return 0
 
 

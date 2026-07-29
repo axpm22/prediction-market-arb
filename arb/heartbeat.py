@@ -148,6 +148,45 @@ def lane_interval(cfg, name: str) -> float:
     return float(cfg["watch_interval_secs"])
 
 
+# supervisor process name -> polls.kind. verify writes annotations, not polls.
+POLL_KIND = {"watch": "watch", "live": "live", "negrisk": "negrisk",
+             "political": "political", "mapped": "mapped"}
+
+
+def stale_lanes(cfg, store, now_utc: datetime) -> list[tuple[str, float]]:
+    """Enabled lanes with no sign of life for heartbeat_stale_polls x their own
+    cadence. A lane that has NEVER run is a cold start, not a silence.
+
+    negrisk+political were dark 2026-07-17..25 unreported — reproduced
+    2026-07-29 as a 232.2 h max inter-poll gap on both, while watch, live and
+    mapped kept running and heartbeat_stale_polls (a whole-SUPERVISOR beat)
+    stayed green throughout.
+
+    Liveness is the newest of a poll row OR a heartbeat, because neither alone
+    covers every lane: negrisk and political write polls but never beat, and a
+    lane that ran and correctly found nothing to do writes no poll row at all
+    (the live lane skips its poll on an empty shortlist). Polls measure work;
+    heartbeats measure running. Silence means neither."""
+    mult = float(cfg["heartbeat_stale_polls"])
+    out = []
+    for name, on in cfg["supervisor"]["processes"].items():
+        kind = POLL_KIND.get(name)
+        if not on or kind is None:
+            continue
+        last = store.query(
+            """SELECT MAX(t) m FROM (
+                 SELECT MAX(started_at) t FROM polls WHERE kind=?
+                 UNION ALL
+                 SELECT MAX(beat_at) t FROM heartbeats WHERE process=?)""",
+            (kind, name))[0]["m"]
+        if last is None:
+            continue
+        age = (now_utc - datetime.fromisoformat(last)).total_seconds()
+        if age > mult * lane_interval(cfg, name):
+            out.append((name, age))
+    return out
+
+
 def _reap_finished(procs: list) -> list:
     """Return the still-running children; poll() reaps any that have exited, so
     one-shot scheduled children never linger as zombies (H9)."""
@@ -178,6 +217,12 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
     last_fired: dict[str, str] = initial_last_fired(cfg, datetime.now(NY))
     next_run: dict[str, float] = initial_next_run(cfg, time.monotonic())
     offsets = lane_offsets(cfg)   # fixed phase plan; re-armed against the grid
+    # read-only handle for the per-lane silence alarm; the lanes remain the sole
+    # writers (§13.3 one-writer-per-table). Checked at most once a minute, not
+    # on every 2s tick.
+    from arb.cli import DEFAULT_DB
+    from arb.store import Store
+    silence_store, next_silence_check = Store(db or DEFAULT_DB), 0.0
     scheduled: list[subprocess.Popen] = []  # one-shot clock children, reaped each tick
 
     def _spawn(*cmd):
@@ -241,6 +286,17 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                     now_ny.day == int(cfg["canary"]["day_of_month"]) and \
                     _due(last_fired, "canary", str(cfg["canary"]["time"]), now_ny):
                 _spawn("canary")
+
+            if now >= next_silence_check:
+                next_silence_check = now + 60.0
+                try:
+                    for lane, age in stale_lanes(cfg, silence_store,
+                                                 datetime.now(timezone.utc)):
+                        log.critical("lane %s silent for %.0fs (%.2f h) — no "
+                                     "poll rows and no heartbeat", lane, age,
+                                     age / 3600)
+                except Exception as e:  # noqa: BLE001 — an alarm must never kill the loop
+                    log.warning("stale-lane check failed: %s", e)
 
             if once:
                 for name, proc in children.items():
