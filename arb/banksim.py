@@ -42,6 +42,7 @@ class Tranche:
     cap_imputed: bool
     confirmed: bool
     n: int = 0              # 0 = first sighting, 1+ = a scale-in add
+    lane: str = ""          # inherited from the position it scales into
 
 
 @dataclass
@@ -55,6 +56,7 @@ class Position:
     confirmed: bool         # survived a re-quote (verify lane oracle)
     kind: str = ""
     venue_pair: str = ""
+    lane: str = ""          # 'clean' or 'review' — rule 6 never auto-fills review
 
 
 def _lockup(cfg, row) -> timedelta:
@@ -104,7 +106,8 @@ def positions(cfg, store, start: str, end: str) -> list[Position]:
             key=row["position_key"], entry=entry, exit=entry + _lockup(cfg, row),
             edge=edge, cap_usd=caps.get(row["position_key"], med),
             cap_imputed=row["position_key"] not in caps, confirmed=confirmed,
-            kind=row["kind"], venue_pair=row["venue_pair"] or ""))
+            kind=row["kind"], venue_pair=row["venue_pair"] or "",
+            lane=row["lane"] or ""))
     return out
 
 
@@ -121,7 +124,7 @@ def scale_in_tranches(cfg, store, pos: list[Position]) -> list[Tranche]:
     out: list[Tranche] = []
     for p in pos:
         out.append(Tranche(p.key, p.entry, p.exit, p.edge, p.cap_usd,
-                           p.cap_imputed, p.confirmed, 0))
+                           p.cap_imputed, p.confirmed, 0, p.lane))
         if not sc["enabled"]:
             continue
         rows = store.query(
@@ -144,7 +147,7 @@ def scale_in_tranches(cfg, store, pos: list[Position]) -> list[Tranche]:
                 break
             adds += 1
             out.append(Tranche(p.key, at, p.exit, edge, p.cap_usd,
-                               p.cap_imputed, p.confirmed, adds))
+                               p.cap_imputed, p.confirmed, adds, p.lane))
     return out
 
 
@@ -223,6 +226,15 @@ def run(cfg, store, start: datetime, end: datetime,
                       window_end=end)
         r["pnl_confirmed_only"] = float(rc["pnl"])
         r["taken_confirmed_only"] = rc["taken"]
+        # rule 6: cross-venue is REVIEW-only and never auto-filled, and the
+        # lead gate demotes stale far-from-start pairs into the same lane.
+        # A pot that only trades what the pipeline actually clears is the
+        # honest headline; everything above it assumes trading the quarantine.
+        cln = [t for t in tranches if t.lane == "clean"]
+        rl = simulate(cln, Decimal(b), per_frac, window_end=end,
+                      max_position_frac=frac)
+        r["pnl_clean_lane"] = float(rl["pnl"])
+        r["taken_clean_lane"] = rl["taken"]
         del r["capital_seconds"]
         r["pnl"] = float(r["pnl"])
         r["deployed"] = float(r["deployed"])

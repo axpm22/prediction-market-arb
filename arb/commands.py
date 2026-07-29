@@ -799,7 +799,7 @@ def cmd_banksim(cfg, store, args):
                   f"{res['n_adds']} qualifying scale-in adds[/]")
     t = Table(title="what each pot would have caught")
     for c in ("bankroll", "taken", "missed (cap)", "$/day", "util", "peak",
-              "imputed", "confirmed $", "+scale-in $", "adds"):
+              "imputed", "confirmed $", "+scale-in $", "clean-lane $"):
         t.add_column(c)
     for b in banks:
         r = res["bankrolls"][str(b)]
@@ -807,7 +807,7 @@ def cmd_banksim(cfg, store, args):
                   f"{r['pnl_per_day']:.3f}", f"{r['utilisation']:.0%}",
                   f"${r['peak_deployed']:,.0f}", f"{r['imputed_share']:.0%}",
                   f"${r['pnl_confirmed_only']:.2f}", f"${r['pnl_scaled']:.2f}",
-                  str(r["adds_taken"]))
+                  f"${r['pnl_clean_lane']:.2f} ({r['taken_clean_lane']})")
     console.print(t)
     if args.out:
         banksim.append_snapshot(args.out, res)
