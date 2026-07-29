@@ -5,6 +5,7 @@ MMA keys on tag_slug=ufc; canonical sport string stays mma."""
 from __future__ import annotations
 
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -75,6 +76,26 @@ def _teams_from_title(title: str) -> tuple[str, str]:
     return (parts[0].strip(), parts[1].strip()) if len(parts) == 2 else ("", "")
 
 
+YES_NO = ["Yes", "No"]
+_WIN_Q = re.compile(r"^Will\s+(?P<team>.+?)\s+win\b", re.I)
+_DRAW_Q = re.compile(r"\bend in a draw\b", re.I)
+
+
+def _proposition_outcome(question: str) -> str | None:
+    """A 3-way soccer game is priced as THREE Yes/No propositions, not as one
+    3-outcome market: 'Will <team> win on <date>?' and '<A> vs <B> end in a
+    draw?'. Return what the YES token pays on, or None if the grammar is
+    unrecognised (then the market is left alone rather than guessed at).
+
+    The date inside the question is NOT a start source — it disagrees with
+    gameStartTime on live data (question said 2026-03-07, gameStartTime
+    2026-08-08, recorded 2026-07-29). Only the team is read."""
+    if _DRAW_Q.search(question or ""):
+        return "DRAW"
+    m = _WIN_Q.match(question or "")
+    return m.group("team").strip() if m else None
+
+
 def quotes_from_event(cfg, event: dict, books: dict[str, dict], sport: str) -> list[Quote]:
     quotes: list[Quote] = []
     now = datetime.now(timezone.utc)
@@ -85,7 +106,11 @@ def quotes_from_event(cfg, event: dict, books: dict[str, dict], sport: str) -> l
             continue  # method-of-victory / go-the-distance etc. out of scope
         outcomes = json.loads(m["outcomes"])
         tokens = json.loads(m["clobTokenIds"])
-        if mtype == "WINNER" and len(outcomes) == 2:
+        # A Yes/No proposition names its subject in the QUESTION; its outcome
+        # list is literally ["Yes", "No"] and must never be read as the teams.
+        prop = _proposition_outcome(m.get("question", "")) \
+            if mtype == "WINNER" and outcomes == YES_NO else None
+        if prop is None and mtype == "WINNER" and len(outcomes) == 2:
             away, home = outcomes[0], outcomes[1]
         else:
             away, home = ev_away, ev_home
@@ -101,10 +126,18 @@ def quotes_from_event(cfg, event: dict, books: dict[str, dict], sport: str) -> l
             if not asks:
                 continue  # one-sided book: nothing executable to buy
             ask = Decimal(asks[0]["price"])
-            label = outcome.upper() if mtype == "TOTAL" else _strip_ufc_suffix(outcome)
+            if prop is not None:
+                # NO(team) in a 3-way is {other ∪ draw} — record it as the NO
+                # side of THIS outcome and let complement_map refuse the map
+                # (soccer is excluded from STRICT_BINARY_WINNER_SPORTS, §7.1)
+                label, side = prop, ("YES" if outcome == "Yes" else "NO")
+            else:
+                label = outcome.upper() if mtype == "TOTAL" \
+                    else _strip_ufc_suffix(outcome)
+                side = "YES"
             quotes.append(Quote(
                 event_key="", venue="polymarket", book="polymarket", market_type=mtype,
-                line=line, outcome_label=label, side="YES", venue_side="YES", raw_price=ask, cost=ask,
+                line=line, outcome_label=label, side=side, venue_side=side, raw_price=ask, cost=ask,
                 fee_cost=leg_fee_cost(cfg, "polymarket", "sports", ask),
                 depth_usd=Decimal(asks[0]["size"]) * ask,
                 ladder_json=json.dumps([[a["price"], a["size"]] for a in asks]),

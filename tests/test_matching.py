@@ -141,6 +141,29 @@ def test_expanded_sports_normalize_across_the_venues_naming_conventions():
     assert normalize_team("icehockey_nhl", "Boston Bruins", ALIASES) is None
 
 
+def test_soccer_aliases_cover_mls_only_and_stay_silent_elsewhere():
+    """Kalshi carries 192 distinct soccer clubs, Polymarket 483, and exactly 2
+    match as-written — so every pair needs an explicit entry. MLS is mapped
+    (30 clubs, both venues verified live 2026-07-29); the other competitions
+    deliberately resolve to None rather than guess."""
+    for kalshi_name, pm_name, canon in (
+            ("Portland", "Portland Timbers", "portland"),
+            ("New York RB", "New York Red Bulls", "redbulls"),
+            ("New York City", "New York City FC", "nycfc"),
+            ("Los Angeles F", "Los Angeles FC", "lafc"),
+            ("Los Angeles G", "Los Angeles Galaxy", "lagalaxy"),
+            ("Saint Louis", "St. Louis City SC", "stlouis"),
+            ("Montreal", "CF Montréal", "montreal")):        # accent survives
+        assert normalize_team("soccer", kalshi_name, ALIASES) == canon
+        assert normalize_team("soccer", pm_name, ALIASES) == canon
+    # the draw leg: Kalshi 'Tie', the Polymarket adapter emits 'DRAW'
+    assert normalize_team("soccer", "Tie", ALIASES) == "draw"
+    assert normalize_team("soccer", "DRAW", ALIASES) == "draw"
+    # unmapped competitions stay unmatched — never a last-token guess
+    assert normalize_team("soccer", "Manchester United", ALIASES) is None
+    assert normalize_team("soccer", "Ararat-Armenia", ALIASES) is None
+
+
 def test_draw_capable_sports_never_complement_map():
     """A tie/draw makes NO(A) = {B ∪ tie}. Mapping it books the draw hole as
     free money — the same trap soccer is already excluded for."""

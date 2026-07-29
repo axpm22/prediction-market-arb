@@ -231,6 +231,45 @@ def test_polymarket_prices_from_clob_never_gamma():
     assert all(x.venue_market_id.split(":")[1] in books for x in quotes)
 
 
+def test_polymarket_soccer_decomposes_three_way_propositions():
+    """Polymarket prices a 3-way soccer game as THREE Yes/No propositions
+    ('Will <team> win on <date>?', '<A> vs <B> end in a draw?'), not as one
+    3-outcome market. The old code read outcomes[0]/[1] as the teams, so every
+    soccer quote carried away='Yes', home='No' and could never match Kalshi."""
+    from arb.venues.polymarket import quotes_from_event
+    ev = [e for e in _fx("pm_gamma_soccer.json")
+          if e["title"].startswith("New England")][0]
+    books = {b["asset_id"]: b for b in _fx("pm_clob_books_soccer.json") if b}
+    quotes = quotes_from_event(CFG, ev, books, sport="soccer")
+    assert quotes, "no quotes parsed"
+    # teams come from the EVENT title, never from the Yes/No outcome list
+    assert all({q.away, q.home} == {"New England Revolution", "Houston Dynamo"}
+               for q in quotes)
+    assert {q.outcome_label for q in quotes} == {
+        "New England Revolution", "Houston Dynamo", "DRAW"}
+    # each proposition yields both sides; the No token is a NO, not a second YES
+    for label in ("New England Revolution", "DRAW"):
+        sides = {q.side for q in quotes if q.outcome_label == label}
+        assert sides == {"YES", "NO"}, label
+    assert all(q.side == q.venue_side for q in quotes)
+    # the stale date inside the question text is NEVER a start source
+    assert all(q.start_utc == datetime(2026, 8, 8, 20, 30, tzinfo=timezone.utc)
+               for q in quotes)
+
+
+def test_polymarket_soccer_no_side_never_complement_maps():
+    """NO(Team A) in a 3-way = {B ∪ draw}. Mapping it to YES(B) books the draw
+    hole as free money — the §7.1 trap soccer is excluded for."""
+    from arb.matching import complement_map
+    from arb.venues.polymarket import quotes_from_event
+    ev = [e for e in _fx("pm_gamma_soccer.json")
+          if e["title"].startswith("New England")][0]
+    books = {b["asset_id"]: b for b in _fx("pm_clob_books_soccer.json") if b}
+    no = [q for q in quotes_from_event(CFG, ev, books, sport="soccer")
+          if q.side == "NO" and q.outcome_label == "New England Revolution"][0]
+    assert complement_map(no, other_outcome="Houston Dynamo") is no
+
+
 # ---------- Odds API + MLB Stats ----------
 
 def test_oddsapi_parses_real_fixture():
