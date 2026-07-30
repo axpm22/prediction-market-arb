@@ -64,10 +64,17 @@ def extract_strikes(text: str) -> set[Decimal]:
 # (rule 11: the cache is append-only). v1->v2 on 2026-07-30: shape 'unknown'
 # stopped short-circuiting to 'different' and now consults the model, so every
 # v1 'unknown' verdict was recorded under a rule that no longer holds.
-SHAPE_VERSION = "shape-v2"
+# v2->v3 same day: the range regex learned '°', so temperature buckets that
+# were 'unknown' now parse and decide in code.
+SHAPE_VERSION = "shape-v3"
 
 _REL_RES = [
-    ("range", re.compile(r"(\d+(?:\.\d+)?)\s*%?\s*(?:–|-)\s*(\d+(?:\.\d+)?)\s*%")),
+    # The trailing unit is required — a bare "100-101" is as likely a date range
+    # or a ticker as a bucket. '°' joined '%' on 2026-07-30: weather is the
+    # densest surface carrying BOTH venues, and every temperature bucket was
+    # falling through to 'unknown' and buying an API call to reach a verdict
+    # code can settle (Kalshi writes "100-101°", Gamma "100-101°F").
+    ("range", re.compile(r"(\d+(?:\.\d+)?)\s*[%°]?\s*(?:–|-)\s*(\d+(?:\.\d+)?)\s*[%°]")),
     ("gte", re.compile(r"(?:≥\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%?\s*(?:\+|or more|or higher|or above))")),
     ("lte", re.compile(r"(?:≤\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%?\s*(?:or less|or lower|or below))")),
     ("gt", re.compile(r"(?:>|above|more than|exceed[s]?)\s*(\d+(?:\.\d+)?)")),

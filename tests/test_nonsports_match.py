@@ -215,3 +215,26 @@ def test_pm_side_paginates_on_its_own_config_key(monkeypatch):
     want = int(CFG["nonsports"]["gamma_scan_pages"])
     assert set(seen.values()) == {want}
     assert want * 100 > 1558  # covers the observed politics surface
+
+
+def test_degree_ranges_parse_so_temperature_buckets_decide_in_code():
+    """Live text, 2026-07-30. The range regex demanded a trailing '%', so every
+    temperature bucket was shape-'unknown' and cost an API call to reach
+    'needs-human'. Weather is the densest both-venue surface, and these are
+    decidable in code — same bucket is identical, any other pairing splits."""
+    from arb.nonsports.match import parse_relation, shape_relation
+    assert parse_relation("Will the high temp in Austin be 100-101° on Jul 30?") \
+        == ("range", Decimal("100"), Decimal("101"))
+    assert parse_relation("100-101°F Will the highest temperature be...") \
+        == ("range", Decimal("100"), Decimal("101"))
+    same = shape_relation("Will the high temp in Austin be 100-101° on Jul 30?",
+                          "100-101°F Will the highest temperature be...")
+    assert same == "identical"
+    # a bucket that does NOT line up must stay 'different', decided free
+    assert shape_relation("Will the high temp in Miami be 95-96° on Jul 31?",
+                          "94-95°F Will the highest temperature be...") == "different"
+    assert shape_relation("Will the high temp in Austin be <98° on Jul 30?",
+                          "98-99°F Will the highest temperature be...") == "different"
+    # percent ranges keep working
+    assert parse_relation("CPI between 0.2-0.3%") \
+        == ("range", Decimal("0.2"), Decimal("0.3"))
