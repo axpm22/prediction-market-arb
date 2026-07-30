@@ -823,3 +823,14 @@ def cmd_banksim(cfg, store, args):
         banksim.append_snapshot(args.out, res)
         console.print(f"[dim]appended to {args.out}[/]")
     return 0
+
+
+def cmd_covers(cfg, store, args):
+    """Cover-survival funnel (read-only): of the covers detected since --since,
+    how many cleared edge, spread, depth and lifetime. An empty last stage over
+    a full day is the decisive negative for the cross-venue thesis."""
+    import sqlite3
+    from arb import covers
+    con = sqlite3.connect(f"file:{store.path}?mode=ro", uri=True)
+    con.row_factory = sqlite3.Row
+    print(covers.render(covers.funnel(cfg, con, str(args.since))))

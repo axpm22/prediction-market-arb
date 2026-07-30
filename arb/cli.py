@@ -85,6 +85,10 @@ def main(argv=None):
     p_replay.add_argument("--from", dest="from_date", required=True, metavar="DATE")
     p_replay.add_argument("--to", dest="to_date", default=None, metavar="DATE")
     p_replay.add_argument("--kind", choices=("watch", "live"), default="watch")
+    p_cov = sub.add_parser("covers", help="cover-survival funnel over a window: "
+                                          "what WOULD have paid (read-only)")
+    p_cov.add_argument("--since", required=True, metavar="ISO",
+                       help="only polls started at/after this timestamp")
     p_bench = sub.add_parser("bench", help="score and rank every STRATEGIES.md lane on "
                                            "the data we hold (read-only)")
     p_bench.add_argument("--pull", action="store_true",
