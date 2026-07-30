@@ -23,7 +23,8 @@ from pathlib import Path
 import yaml
 
 from arb.logutil import get_logger
-from arb.nonsports.match import SHAPE_VERSION, shape_relation
+from arb.nonsports.match import (SHAPE_VERSION, load_sources, shape_relation,
+                                 source_conflict)
 from arb.nonsports.scan import CANDIDATES_PATH
 
 log = get_logger("arb.nonsports.ai", "logs/scan.log")
@@ -129,6 +130,18 @@ def system_verdict(shape: str, ai: dict | None) -> tuple[str, Decimal, str]:
     return verdict, ai["confidence"], f"shape:{shape} + measurand: {ai['reason']}"
 
 
+def _record(store, c, verdict, conf, reason, ai, model, now) -> None:
+    """One append-only verdict row plus the curator's convenience annotation.
+    Never touches a human `verdict` field (rule 11)."""
+    store.insert("verdicts", {
+        "created_at": now.isoformat(), "pair_key": c["pair_id"],
+        "verdict": verdict, "confidence": conf, "rules_sha": _RULES_SHA,
+        "model": model, "cost_usd": ai["cost_usd"] if ai else Decimal(0)})
+    c["ai_verdict"] = verdict
+    c["ai_confidence"] = float(conf)
+    c["ai_reason"] = reason[:500]
+
+
 def _cached_keys(store, model: str) -> set:
     # one SELECT for the whole run, not one per candidate (13.8 GB live DB)
     return {r["pair_key"] for r in store.query(
@@ -168,11 +181,26 @@ def run_ai(cfg, store, mode: str = "eval", client=None,
     if client is None and todo and budget > 0:
         client = _client()
     errors = 0
+    sources = load_sources()
     for c in todo:
         shape = shape_relation(
             f"{c.get('kalshi_text', '')} {c.get('kalshi_rules', '')}",
             c.get("pm_text", ""))
+        # Settlement source is decided in code, BEFORE the model is asked: two
+        # rulebooks can describe the same physical quantity and still settle off
+        # different published products (rule 6's stated main source of fake
+        # arbs), and the model does not catch it — see source_conflict.
+        conflict = source_conflict(c.get("kalshi_rules", ""),
+                                   c.get("pm_rules", ""), sources)
         ai = None
+        if conflict:
+            verdict, conf, reason = "different", Decimal(1), (
+                "settlement source conflict: "
+                f"{'/'.join(sorted(conflict[0]))} vs "
+                f"{'/'.join(sorted(conflict[1]))} (code)")
+            _record(store, c, verdict, conf, reason, None, str(aicfg["model"]), now)
+            classified += 1
+            continue
         # 'different' is the only shape code can settle alone; 'unknown' is the
         # code ABSTAINING and must be asked, not assumed (see system_verdict)
         if shape in ("identical", "inverted", "unknown"):
@@ -194,15 +222,7 @@ def run_ai(cfg, store, mode: str = "eval", client=None,
                     break
                 continue
         verdict, conf, reason = system_verdict(shape, ai)
-        store.insert("verdicts", {
-            "created_at": now.isoformat(), "pair_key": c["pair_id"],
-            "verdict": verdict, "confidence": conf, "rules_sha": _RULES_SHA,
-            "model": str(aicfg["model"]),
-            "cost_usd": ai["cost_usd"] if ai else Decimal(0)})
-        # convenience annotation for the curator; never touches human fields
-        c["ai_verdict"] = verdict
-        c["ai_confidence"] = float(conf)
-        c["ai_reason"] = reason[:500]
+        _record(store, c, verdict, conf, reason, ai, str(aicfg["model"]), now)
         classified += 1
     if classified:
         path.write_text(yaml.safe_dump(cands, sort_keys=True, width=100,

@@ -238,3 +238,48 @@ def test_degree_ranges_parse_so_temperature_buckets_decide_in_code():
     # percent ranges keep working
     assert parse_relation("CPI between 0.2-0.3%") \
         == ("range", Decimal("0.2"), Decimal("0.3"))
+
+
+# Verbatim from both venues' rulebooks, 2026-07-30, for KXHIGHAUS-26JUL30-B100.5
+# and its Gamma counterpart. Haiku was shown both in full (max_rules_chars=8000)
+# and still returned same_measurand=true at 0.92.
+K_AUSTIN_RULES = ("If the highest temperature recorded in Austin Bergstrom for "
+                  "July 30, 2026 as reported by the National Weather Service's "
+                  "Climatological Report (Daily), is between 100-101°, then the "
+                  "market resolves to Yes.")
+PM_AUSTIN_RULES = ("This market will resolve to the temperature range that "
+                   "contains the highest temperature recorded at the "
+                   "Austin-Bergstrom International Airport Station in degrees "
+                   "Fahrenheit on 30 Jul '26. The resolution source for this "
+                   "market will be information from Wunderground, specifically "
+                   "the highest temperature recorded for all times on this day.")
+
+
+def test_disjoint_settlement_sources_are_a_conflict():
+    """Same airport, two different reporting products: NWS CLI is
+    quality-controlled midnight-to-midnight official data, Wunderground maxes
+    over METAR observations. A 1F disagreement flips a 2F bucket, so the pair
+    is not settlement-equivalent however identical the proposition reads."""
+    from arb.nonsports.match import load_sources, source_conflict
+    src = load_sources()
+    c = source_conflict(K_AUSTIN_RULES, PM_AUSTIN_RULES, src)
+    assert c == ({"nws_climatological"}, {"wunderground"})
+
+
+def test_same_source_named_differently_is_not_a_conflict():
+    """Canonical names, not raw strings: 'BLS' and 'Bureau of Labor Statistics'
+    are one source. A guard that fired here would kill the nine adjudicated
+    econ pairs, which both settle on the same BLS release."""
+    from arb.nonsports.match import load_sources, source_conflict
+    src = load_sources()
+    assert source_conflict("as reported by the BLS",
+                           "per the Bureau of Labor Statistics", src) is None
+
+
+def test_source_conflict_needs_both_sides_named():
+    """One side silent is missing information, not evidence of divergence —
+    the pair stays for the shape/measurand stages to judge."""
+    from arb.nonsports.match import load_sources, source_conflict
+    src = load_sources()
+    assert source_conflict(K_AUSTIN_RULES, "no source named here", src) is None
+    assert source_conflict("nothing here either", PM_AUSTIN_RULES, src) is None

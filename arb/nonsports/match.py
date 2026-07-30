@@ -20,6 +20,7 @@ import yaml
 
 CONCEPTS_PATH = Path("data/nonsports_concepts.yaml")
 ENTITIES_PATH = Path("data/nonsports_entities.yaml")
+SOURCES_PATH = Path("data/nonsports_sources.yaml")
 
 _NUM = re.compile(r"\d[\d,]*(?:\.\d+)?")
 _STOP = frozenset("a an and at be by for in of on or the to will you what "
@@ -30,6 +31,32 @@ def load_concepts(path: str | Path = CONCEPTS_PATH) -> dict:
     """{concept: [[token, ...], ...]} — a text hits the concept if ALL tokens
     of any one phrase appear in it. Curated, auditable, human-extendable."""
     return yaml.safe_load(Path(path).read_text()) or {}
+
+
+def load_sources(path: str | Path = SOURCES_PATH) -> dict:
+    """Same phrase format as concepts: {source: [[token, ...], ...]}."""
+    return yaml.safe_load(Path(path).read_text()) or {}
+
+
+def source_conflict(a_rules: str, b_rules: str, sources: dict) -> tuple | None:
+    """(a_sources, b_sources) when BOTH venues name a settlement source and the
+    sets are DISJOINT; None otherwise. Not a shape question and not a measurand
+    question — two rulebooks can describe the same physical quantity and still
+    settle off different published products, which is rule 6's stated main
+    source of fake arbs.
+
+    Decided in code because the model demonstrably does not decide it: shown
+    both texts in full it called NWS-Climatological and Wunderground the same
+    measurand at 0.92-0.95 (2026-07-30), violating its own prompt rule 4. The
+    §18.5 precision of 1.0 never covered this — all nine ground-truth positives
+    are econ pairs settling on one shared BLS release.
+
+    One side silent is missing information, not evidence of divergence.
+    """
+    a, b = concepts_of(a_rules, sources), concepts_of(b_rules, sources)
+    if a and b and not (a & b):
+        return a, b
+    return None
 
 
 def load_entities(path: str | Path = ENTITIES_PATH) -> dict:
@@ -66,7 +93,9 @@ def extract_strikes(text: str) -> set[Decimal]:
 # v1 'unknown' verdict was recorded under a rule that no longer holds.
 # v2->v3 same day: the range regex learned '°', so temperature buckets that
 # were 'unknown' now parse and decide in code.
-SHAPE_VERSION = "shape-v3"
+# v3->v4: settlement-source conflict is now decided in code before the model is
+# asked, so any v3 'same' recorded across divergent sources no longer holds.
+SHAPE_VERSION = "shape-v4"
 
 _REL_RES = [
     # The trailing unit is required — a bare "100-101" is as likely a date range

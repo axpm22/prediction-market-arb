@@ -1,0 +1,45 @@
+# Settlement SOURCES, same phrase format as nonsports_concepts.yaml: a rules
+# text hits a source if ALL tokens of any one phrase appear in it.
+#
+# Guard (arb/nonsports/match.py:source_conflict): when BOTH venues' rules name
+# a source and the sets are DISJOINT, the pair is not settlement-equivalent
+# however identical the proposition reads. Rule 6: "settlement rules differing
+# between venues is the main source of fake arbs."
+#
+# Added 2026-07-30 after Haiku returned same_measurand=true at 0.92-0.95 on six
+# Austin/Miami temperature pairs whose rules it had been shown in full:
+#   Kalshi     -> National Weather Service Climatological Report (Daily)
+#   Polymarket -> Wunderground, KAUS/KMIA station page
+# Same airport, two different reporting products. NWS CLI is quality-controlled
+# midnight-to-midnight official data; Wunderground maxes over METAR
+# observations. A 1F disagreement flips a 2F bucket outright, so these settle
+# differently often enough to be fake arbs — exactly what the model missed.
+
+nws_climatological:
+  - [national, weather, service]
+  - [climatological, report]
+  - [nws]
+wunderground:
+  - [wunderground]
+bls:
+  - [bureau, labor, statistics]
+  - [bls]
+bea:
+  - [bureau, economic, analysis]
+  - [bea]
+eia:
+  - [energy, information, administration]
+  - [eia]
+federal_reserve:
+  - [federal, reserve]
+  - [fomc]
+national_hurricane_center:
+  - [national, hurricane, center]
+  - [nhc]
+usgs:
+  - [usgs]
+  - [geological, survey]
+aaa_gas:
+  - [aaa]
+census:
+  - [census, bureau]

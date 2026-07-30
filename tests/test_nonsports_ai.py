@@ -234,3 +234,32 @@ def test_needs_human_is_never_scored_as_a_positive(tmp_path):
     v, conf, _ = ai.system_verdict("unknown", {"same_measurand": True,
                                                "confidence": 1, "reason": "x"})
     assert not v.startswith("same")
+
+
+PAIR_SRC_CONFLICT = {
+    "pair_id": "K7|P7", "concept": "high_temp_austin",
+    "kalshi_text": "Will the high temp in Austin be 100-101° on Jul 30?",
+    "kalshi_rules": "as reported by the National Weather Service's "
+                    "Climatological Report (Daily) unemployment",
+    "pm_text": "100-101°F Will the highest temperature in Austin be...",
+    "pm_rules": "The resolution source will be information from Wunderground "
+                "for the Austin-Bergstrom station unemployment"}
+
+
+def test_source_conflict_blocks_same_before_the_model_is_asked(tmp_path):
+    """Shape is 'identical' and the fake client would call it same-measurand
+    (both texts say 'unemployment'), which is exactly how Haiku scored the six
+    live Austin/Miami pairs at 0.92-0.95. Disjoint settlement sources settle it
+    in code first, so no API call is spent and 'same' is unreachable."""
+    from arb.nonsports.match import shape_relation
+    assert shape_relation(
+        f"{PAIR_SRC_CONFLICT['kalshi_text']} {PAIR_SRC_CONFLICT['kalshi_rules']}",
+        PAIR_SRC_CONFLICT["pm_text"]) == "identical"
+    store = Store(str(tmp_path / "s.sqlite"))
+    fc = FakeClient()
+    out = ai.run_ai(CFG, store, mode="sweep", client=fc,
+                    candidates_path=_cands(tmp_path, [PAIR_SRC_CONFLICT]),
+                    now=NOW)
+    assert out["classified"] == 1
+    assert fc.calls == 0, "a source conflict is decidable without the model"
+    assert store.query("SELECT verdict FROM verdicts")[0]["verdict"] == "different"
