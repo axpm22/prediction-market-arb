@@ -103,10 +103,18 @@ def test_nonsports_segregated():
     assert (ok, lane) == (True, "clean")
 
 
-def test_xspread_demoted_pair_never_clean():
+def test_xspread_demoted_pair_never_clean(monkeypatch):
     # rule 12: trust is part of the ONE predicate. classify used to check
     # trusted_pairs only, so a mismatch-demoted pair still classified clean
     # while booking_trusted stamped trusted=0 — lane and trust flag disagreed.
+    #
+    # The settlement matrix ships every cell AMBER, so the control below ("a
+    # certified pair IS clean") cannot hold on a real matrix once classify
+    # consults it. Force GREEN so this test keeps testing what it was written
+    # for — that pair_demoted blocks a pair that would OTHERWISE pass — rather
+    # than passing for the unrelated reason that the matrix is unverified.
+    import arb.settlement_matrix as sm
+    monkeypatch.setattr(sm, "sport_all_green", lambda matrix, sport: True)
     cfg = dict(CFG)
     cfg["trusted_pairs"] = ["kalshi:polymarket"]
     cfg = {**cfg, "deployment": {**cfg["deployment"], "xspread_autobook": True}}
@@ -121,3 +129,35 @@ def test_xspread_demoted_pair_never_clean():
     ok, reason, lane = classify({**base, "pair_demoted": True}, cfg)
     assert (ok, lane) == (False, "review")
     assert reason == "pair-demoted"
+
+
+def _xspread_permissive_cfg():
+    """A config that clears every gate BEFORE the matrix check, so the matrix is
+    what the assertion is actually testing. Not a production config."""
+    c = dict(CFG)
+    c["trusted_pairs"] = ["kalshi:polymarket"]
+    c["deployment"] = {**CFG["deployment"], "xspread_autobook": True}
+    return c
+
+
+def test_xspread_requires_a_green_settlement_matrix():
+    """eligibility gated trust on trusted_pairs and never consulted the matrix;
+    sport_all_green had ZERO callers, so the settlement-rule verification begun
+    2026-07-29 had no path to affecting behaviour — the §18.2 gate was
+    disconnected, not closed. tennis.walkover is RED on primary-source evidence
+    (Kalshi resolves a pre-match cancellation to 'a fair price in accordance with
+    the rules'; Polymarket to a hard 50-50)."""
+    eligible, reason, lane = classify(
+        obj(kind="XSPREAD", venue_pair="kalshi:polymarket", sport="tennis",
+            certificate_n=1000, edge_points=Decimal("0.50")),
+        _xspread_permissive_cfg())
+    assert not eligible
+    assert reason == "matrix-not-green"
+    assert lane == "review"
+
+
+def test_matrix_gate_does_not_touch_same_venue_arb():
+    """The matrix is about two venues agreeing. A same-venue ARB has one oracle
+    and must be unaffected."""
+    eligible, reason, lane = classify(obj(sport="tennis"), _xspread_permissive_cfg())
+    assert (eligible, lane) == (True, "clean"), f"got {reason}/{lane}"

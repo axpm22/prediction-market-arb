@@ -90,6 +90,19 @@ def classify(o: dict, cfg) -> tuple[bool, str, str]:
             # settlement-mismatch demotion (§11.2) — the caller pins the DB fact;
             # rule 12: lane and the booking_trusted stamp must never disagree
             return False, "pair-demoted", "review"
+        # The whitelist says "we intend to trust this pair"; the matrix says
+        # "both venues' rulebooks agree for this sport". Without this call
+        # sport_all_green had ZERO callers, so the settlement-rule verification
+        # begun 2026-07-29 had no path to affecting behaviour — the §18.2 gate
+        # was disconnected, not closed.
+        #
+        # Ordered AFTER pair_demoted deliberately: a demotion is a mismatch we
+        # actually OBSERVED, which is stronger and more actionable evidence than
+        # "the rulebooks have not been verified GREEN yet". Report the specific
+        # fact, not the generic one.
+        from arb.settlement_matrix import load_matrix, sport_all_green
+        if not sport_all_green(load_matrix(), str(o.get("sport") or "")):
+            return False, "matrix-not-green", "review"
         return True, "xspread-certified", "clean"
 
     if kind == "NEGRISK":
