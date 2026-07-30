@@ -38,6 +38,12 @@ def _opp_row(o: Opportunity, poll_id):
     legs = [{"venue": q.venue, "book": q.book, "market_type": q.market_type,
              "line": q.line, "outcome": q.outcome_label, "side": q.side,
              "cost": str(q.cost), "fee_cost": str(q.fee_cost),
+             # bid is what you can EXIT at, so it is what decides whether an
+             # edge survives crossing. Absent until 2026-07-30, which made the
+             # cover-survival funnel read every leg as unexitable and report
+             # "no cover was ever executable" from a missing field rather than
+             # from the market (same shape as the depth_usd gap before it).
+             "bid": str(q.bid) if q.bid is not None else None,
              "depth_usd": str(q.depth_usd) if q.depth_usd is not None else None,
              "fetched_at": q.fetched_at.isoformat()} for q in o.legs]
     pk = position_key(o.kind, o.event.sport, o.event.event_key,

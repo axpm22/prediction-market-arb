@@ -55,12 +55,45 @@ def _depth(legs) -> float | None:
     return None if any(d is None for d in ds) else min(ds)
 
 
+def _fill_bids(con, poll_id, legs) -> list[dict]:
+    """Resolve each leg's bid from `quotes` when the leg itself has none.
+
+    Opportunity legs carried no `bid` field before 2026-07-30, so reading it
+    straight off the leg returns None for every historical row and the spread
+    gate silently becomes "was this field serialized" instead of "is the spread
+    wider than the edge". The quote that produced the leg is in the same poll,
+    so the real bid is recoverable rather than lost.
+    """
+    out = []
+    for q in legs:
+        if q.get("bid") is not None:
+            out.append(q)
+            continue
+        try:
+            row = con.execute(
+                # cost is compared NUMERICALLY: legs serialize str(Decimal) at
+                # whatever precision the venue gave ('0.4600') while quotes are
+                # quantized to six places ('0.460000'), so string equality never
+                # matches and every bid silently stayed unresolved.
+                """SELECT bid FROM quotes
+                   WHERE poll_id=? AND venue=? AND side=?
+                     AND CAST(cost AS REAL)=CAST(? AS REAL)
+                     AND IFNULL(outcome,'')=IFNULL(?,'')
+                   LIMIT 1""",
+                (poll_id, q.get("venue"), q.get("side"), q.get("cost"),
+                 q.get("outcome"))).fetchone()
+        except Exception:  # noqa: BLE001 — no quotes table: leave it unresolved
+            row = None
+        out.append({**q, "bid": row["bid"] if row else None})
+    return out
+
+
 def collect(con, since: str, kinds=("XSPREAD",)) -> dict:
     """Funnel counts plus the survivors, over polls started at/after `since`."""
     marks = ",".join("?" * len(kinds))
     rows = [dict(r) for r in con.execute(
-        f"""SELECT o.fingerprint, o.kind, o.event_key, o.edge, o.status,
-                   o.legs_json, p.started_at
+        f"""SELECT o.poll_id, o.fingerprint, o.kind, o.event_key, o.edge,
+                   o.status, o.legs_json, p.started_at
             FROM opportunities o JOIN polls p ON p.id = o.poll_id
             WHERE o.kind IN ({marks}) AND p.started_at >= ?
             ORDER BY p.started_at""", (*kinds, since))]
@@ -69,7 +102,8 @@ def collect(con, since: str, kinds=("XSPREAD",)) -> dict:
         f = seen.setdefault(r["fingerprint"], {
             "first": r["started_at"], "last": r["started_at"], "hits": 0,
             "event_key": r["event_key"], "edge": r["edge"],
-            "legs": _legs(r), "status": r["status"]})
+            "legs": _fill_bids(con, r["poll_id"], _legs(r)),
+            "status": r["status"]})
         f["last"] = r["started_at"]
         f["hits"] += 1
     return {"observations": len(rows), "distinct": len(seen), "covers": seen}

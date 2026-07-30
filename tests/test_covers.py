@@ -88,3 +88,26 @@ def test_render_states_the_censoring_when_nothing_survives():
     r = covers.funnel(CFG, c, "2026-07-30T00:00:00")
     text = covers.render(r)
     assert "NOTHING survived" in text and "censored" in text
+
+
+def test_missing_leg_bid_is_recovered_from_quotes_not_read_as_unexitable():
+    """Opportunity legs carried no `bid` before 2026-07-30. Reading it straight
+    off the leg made the spread gate test "was this field serialized" rather
+    than "is the spread wider than the edge", and reported all 64 historical
+    covers as unexitable from a missing field. The quote is in the same poll."""
+    c = _con()
+    c.execute("""CREATE TABLE quotes (poll_id INTEGER, venue TEXT, side TEXT,
+                   cost TEXT, outcome TEXT, bid TEXT)""")
+    legs = [{"venue": "kalshi", "side": "YES", "cost": "0.50",
+             "outcome": "OVER", "depth_usd": FLOOR * 4},          # no 'bid' key
+            {"venue": "polymarket", "side": "NO", "cost": "0.49",
+             "outcome": "OVER", "depth_usd": FLOOR * 4}]
+    for p, at in ((1, "2026-07-30T00:00:00"), (2, "2026-07-30T00:01:00")):
+        _add(c, p, at, "recov", "0.01", legs)
+        c.execute("INSERT INTO quotes VALUES (?,?,?,?,?,?)",
+                  (p, "kalshi", "YES", "0.50", "OVER", "0.499"))
+        c.execute("INSERT INTO quotes VALUES (?,?,?,?,?,?)",
+                  (p, "polymarket", "NO", "0.49", "OVER", "0.489"))
+    r = covers.funnel(CFG, c, "2026-07-30T00:00:00")
+    assert r["stages"]["spread<=edge"] == 1, "bid must come from quotes"
+    assert [x["event_key"] for x in r["survivors"]] == ["ev:recov"]
