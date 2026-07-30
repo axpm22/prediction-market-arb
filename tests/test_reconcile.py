@@ -164,3 +164,44 @@ def test_polymarket_resolver_asks_gamma_for_CLOSED_markets(cfg, monkeypatch):
     leg = {"venue": "polymarket", "venue_market_id": "0xabc:tokA", "venue_side": "YES"}
     assert R._polymarket(cfg, leg) == "WON"
     assert "closed=true" in seen["url"]
+
+
+def _xspread_with_passes(store, venue_pair, passes, kind="XSPREAD"):
+    """A bet whose reconcile verdicts arrived over one or more passes."""
+    bid = store.insert("flat_bets", {
+        "kind": kind, "venue_pair": venue_pair, "legs_json": "[]",
+        "stake_usd": "1", "status": "OPEN"})
+    for verdicts in passes:
+        store.insert("bet_events", {
+            "bet_id": bid, "kind": "reconciled",
+            "payload_json": json.dumps({"verdicts": verdicts})})
+    return bid
+
+
+def test_certificate_n_counts_only_fully_graded_complementary_pairs(tmp_path):
+    """eligibility.py:77 reads certificate_n and nothing ever wrote it, so every
+    XSPREAD returned 'no-certificate' forever — the Resolution Equivalence
+    Certificate was specified and never built. Verdicts arrive one leg per pass
+    (reconcile is multi-pass), so they must be UNIONED per bet; UNRESOLVABLE is
+    missing data, never evidence of agreement."""
+    from arb.reconcile import certificate_n
+    s = Store(tmp_path / "cert.sqlite")
+    _xspread_with_passes(s, "kalshi:polymarket", [["WON", None], [None, "LOST"]])  # counts
+    _xspread_with_passes(s, "kalshi:polymarket", [["WON", "LOST"]])                # counts
+    _xspread_with_passes(s, "kalshi:polymarket", [["WON", None]])                  # one leg
+    _xspread_with_passes(s, "kalshi:polymarket", [["UNRESOLVABLE", "UNRESOLVABLE"]])
+    _xspread_with_passes(s, "kalshi:polymarket", [["WON", "WON"]])                 # MISMATCH
+    _xspread_with_passes(s, "kalshi:sx", [["WON", "LOST"]])                        # other pair
+    _xspread_with_passes(s, "kalshi:self", [["WON", "LOST"]], kind="ARB")          # not XSPREAD
+    assert certificate_n(s, "kalshi:polymarket") == 2
+    assert certificate_n(s, "kalshi:sx") == 1
+    assert certificate_n(s, "polymarket:sx") == 0
+
+
+def test_certificate_n_is_zero_when_the_only_pair_mismatched(tmp_path):
+    """A mismatch does not merely fail to count — it is the event whose absence
+    the rule of three is counting."""
+    from arb.reconcile import certificate_n
+    s = Store(tmp_path / "cert2.sqlite")
+    _xspread_with_passes(s, "kalshi:polymarket", [["LOST", "LOST"]])
+    assert certificate_n(s, "kalshi:polymarket") == 0

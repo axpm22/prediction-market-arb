@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from arb.eligibility import classify
+from arb.reconcile import certificate_n
 from arb.logutil import get_logger
 from arb.models import (LOCKED_KINDS, RESOLUTION_SETTLED_KINDS, Opportunity, q6,
                         position_key)
@@ -291,6 +292,10 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
         eligible, reason, lane = classify({
             **cand, "pregame": pregame, "micro": False, "ai_matched": False,
             "live": cand.get("live", False),
+            # the certificate is a DB fact, so the caller pins it (rule 12) —
+            # classify stays a pure function of a flat dict
+            "certificate_n": certificate_n(store, cand["venue_pair"])
+            if cand["kind"] == "XSPREAD" else 0,
             "pair_demoted": not booking_trusted(cfg, store, cand["venue_pair"])
             if cand["venue_pair"] in [str(p) for p in cfg["trusted_pairs"]] else False,
         }, cfg)

@@ -167,3 +167,46 @@ def reconcile(cfg, store, now: datetime | None = None) -> int:
                     "reason": f"settlement_mismatch bet {bet['id']} leg {i}: "
                               f"scores {expected[i]} vs venue {v}"})
     return n
+
+
+GRADED = ("WON", "LOST", "VOID")
+
+
+def certificate_n(store, venue_pair: str) -> int:
+    """Resolution Equivalence Certificate size (SPEC §12, §18.2): the number of
+    XSPREAD positions on this venue pair whose BOTH legs graded and which
+    settled complementary. Feeds eligibility's rule-of-three charge (3/n)*LGM,
+    so it must count only positions that actually demonstrated agreement.
+
+    Read but never written before now: arb/eligibility.py:77 returns
+    'no-certificate' when this is 0, so every XSPREAD was review-lane forever
+    regardless of configuration.
+
+    Verdicts are UNIONED across passes. reconcile grades one leg per pass
+    (_reconciled_legs), so a fully graded pair appears as ["WON", null] in one
+    event and [null, "LOST"] in a later one; reading events independently
+    reports it as two half-graded pairs and undercounts the certificate.
+
+    UNRESOLVABLE is missing data, never evidence of agreement — which is why an
+    SX pair can never accumulate a certificate: _sx returns None unconditionally
+    while its settled-status semantics stay unverified.
+    """
+    per_bet: dict[int, dict[int, str]] = {}
+    for r in store.query(
+            "SELECT b.id AS bet_id, e.payload_json FROM flat_bets b "
+            "JOIN bet_events e ON e.bet_id = b.id "
+            "WHERE e.kind = 'reconciled' AND b.kind = 'XSPREAD' "
+            "AND b.venue_pair = ? ORDER BY e.id", (venue_pair,)):
+        verdicts = (json.loads(r["payload_json"]) or {}).get("verdicts") or []
+        slot = per_bet.setdefault(r["bet_id"], {})
+        for i, v in enumerate(verdicts):
+            if v in GRADED:
+                slot[i] = v
+    n = 0
+    for slot in per_bet.values():
+        if len(slot) < 2:
+            continue                                    # not both legs graded
+        if list(slot.values()).count("WON") != 1:
+            continue                                    # a cover pays exactly once
+        n += 1
+    return n
