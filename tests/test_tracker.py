@@ -346,3 +346,16 @@ def test_reappearance_storm_suppresses_booking(cfg, tmp_path):
     assert store.query(
         "SELECT COUNT(*) c FROM left_on_table WHERE reason='reappearance-storm'"
     )[0]["c"] == rounds - reappearance_cap(cfg)
+
+
+def test_candidate_legs_carry_depth_usd(cfg):
+    """flat_bets.legs_json dropped depth_usd, so capacity could not be measured
+    from the ledger: 74% of backtest positions fell back to an imputed median,
+    and `depth_usd or 0` read the missing field as ZERO depth rather than as
+    unknown — which produced a spurious 'every leg has zero depth' conclusion.
+    arb/projection.py and arb/banksim.py already read this key."""
+    from arb.tracker import candidate_from_opp
+    cand = candidate_from_opp(cfg, arb_opp(cfg, "0.47", "0.49"))
+    depths = [leg["depth_usd"] for leg in cand["legs"]]
+    assert depths == ["100", "100"], f"depth not persisted: {depths}"
+    assert all(Decimal(d) > 0 for d in depths)

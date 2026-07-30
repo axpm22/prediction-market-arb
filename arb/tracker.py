@@ -28,6 +28,10 @@ def candidate_from_opp(cfg, o: Opportunity) -> dict:
              "line": q.line, "outcome": q.outcome_label, "side": q.side,
              "venue_side": q.venue_side or q.side,
              "cost": str(q.cost), "fee_cost": str(q.fee_cost),
+             # depth at entry: without it the ledger cannot answer "how big could
+             # this have been", and `depth_usd or 0` downstream reads a missing
+             # field as ZERO depth rather than as unknown
+             "depth_usd": str(q.depth_usd) if q.depth_usd is not None else None,
              "mid0": str(q6((q.cost + q.bid) / 2)) if q.bid is not None else None,
              "venue_market_id": q.venue_market_id,
              "fetched_at": q.fetched_at.isoformat()} for q in o.legs]
