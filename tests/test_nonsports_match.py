@@ -195,3 +195,23 @@ def test_kalshi_series_fetch_is_parallel_and_deterministic(monkeypatch):
     assert wall < 0.5 * (n * 0.05)  # well under the sequential lower bound
     # rows identical to the sequential implementation, submission order kept
     assert [r["id"] for r in rows] == [f"S{i}-26AUG-T5" for i in range(n)]
+
+
+def test_pm_side_paginates_on_its_own_config_key(monkeypatch):
+    """_pm_side borrowed negrisk.scan_pages (10 pages = 1000 events) while
+    nonsports.gamma_scan_pages sat unused on this path. Polymarket's politics
+    tag carried 1558 open events on 2026-07-30, so 36% of the surface was
+    invisible to the matcher and the raise to gamma_scan_pages did nothing."""
+    from arb.nonsports import scan
+    seen = {}
+
+    def _fake(cfg, tag, max_pages=10, deadline=None):
+        seen[str(tag)] = max_pages
+        return []
+
+    monkeypatch.setattr("arb.venues.polymarket.fetch_gamma_events", _fake)
+    scan._pm_side(CFG, None)
+    assert set(seen) == set(str(t) for t in CFG["nonsports"]["polymarket_tags"])
+    want = int(CFG["nonsports"]["gamma_scan_pages"])
+    assert set(seen.values()) == {want}
+    assert want * 100 > 1558  # covers the observed politics surface

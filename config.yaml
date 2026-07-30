@@ -249,10 +249,26 @@ ai_matcher:
   paper_stake_usd: 1
 nonsports:
   watch_interval_secs: 300
-  gamma_scan_pages: 2               # political-lane Gamma pagination cap
-  match_date_window_days: 3         # blocking stage: resolution dates within this
-  max_candidates: 400               # per matcher run, closest-date first
-  max_series_fetch: 150             # kalshi series whose open markets get pulled
+  gamma_scan_pages: 20              # Gamma pagination cap for BOTH the political lane and the
+                                    #   matcher's PM side. 2→20 on 2026-07-30: the politics tag
+                                    #   holds 1558 open events (measured), so the effective
+                                    #   1000-event cap hid 36% of the surface. 20*100 leaves
+                                    #   headroom. Costs fetch time, not credits (keyless).
+  match_date_window_days: 14        # blocking stage: resolution dates within this. 3→14 on
+                                    #   2026-07-30 after measuring the rejected-gap histogram:
+                                    #   403 pairs at <=3d, 36 at 3-7d, 35 at 7-14d, then a
+                                    #   cliff (523 at 14-31d, 3670 at >31d — genuinely
+                                    #   different contract months). 14 harvests the 71-pair
+                                    #   shoulder and stops before the cliff. Recall only: the
+                                    #   shape prefilter, Haiku, and rule 11's REVIEW lane all
+                                    #   still adjudicate downstream.
+  max_candidates: 1000              # per matcher run. 400→1000 on 2026-07-30: the uncapped
+                                    #   blocker returned 403, so the old cap was binding by 3
+                                    #   and silently cut the alphabetically-last concept.
+  max_series_fetch: 250             # kalshi series whose open markets get pulled. Raised from
+                                    #   150 on 2026-07-30: 223 series hit the concept map and
+                                    #   the run logged 'exceed max_series_fetch; truncating',
+                                    #   so weather/econ/politics coverage was silently clipped.
   series_fetch_workers: 8           # thread-pool width for the per-series market GETs
                                     #   (I/O-bound fan-out; 150 sequential GETs blew the
                                     #   240s match deadline — truncation observed 2026-07)

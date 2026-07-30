@@ -65,8 +65,12 @@ def _pm_side(cfg, deadline) -> list[dict]:
     from arb.venues.polymarket import fetch_gamma_events
     events = []
     for tag in cfg["nonsports"]["polymarket_tags"]:
+        # This lane's OWN page cap. It read negrisk.scan_pages (10 pages = 1000
+        # events) until 2026-07-30, so nonsports.gamma_scan_pages was dead on
+        # this path and the politics tag — 1558 open events, measured — lost 36%
+        # of its surface before the blocker ever saw it.
         events.extend(fetch_gamma_events(
-            cfg, str(tag), max_pages=int(cfg["negrisk"]["scan_pages"]),
+            cfg, str(tag), max_pages=int(cfg["nonsports"]["gamma_scan_pages"]),
             deadline=deadline))
     return pm_rows(events)
 
