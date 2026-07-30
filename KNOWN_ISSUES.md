@@ -7,6 +7,13 @@ wrong, lose money, or block all progress.
 Each entry states what is *measured* versus what is *inferred*. Nothing here is
 an estimate unless it says so.
 
+**Status 2026-07-30:** six code-level defects closed (#1, #3, #5, #6, #8, #28) —
+see the `*FIXED*` line on each. None of the fixes made the system more
+permissive: #1 and #3 make the §18.2 gate computable and connected while the
+rule-of-three arithmetic still refuses every position at n=43; #5, #6 and #28
+only withhold trust; #8 is additive. Verified after all six: **banksim clean-lane
+P&L is still $0.00** and clean-lane positions in the ledger are still 2.
+
 ---
 
 ## Tier 1 — Blocks everything, or would lose money
@@ -19,6 +26,8 @@ Equivalence Certificate the SPEC specifies (n mismatch-free reconciled positions
 per venue pair) has no writer.
 *Consequence:* there is no configuration that promotes a cross-venue position.
 The feature was specified and not built.
+
+*FIXED 2026-07-30 (57fbe52):* `reconcile.certificate_n` derives it from unioned reconcile verdicts; `tracker` pins it like `pair_demoted`. **The arithmetic still gates — nothing promotes at n=43** (charge 6.98pts vs a 0.5pt median edge → `net-spread-nonpositive`).
 
 ### 2. Settlement-risk arithmetic exceeds every observed edge
 `net = gross − (3/n)·LGM`. With n=41 mismatch-free pairs and LGM=1.0 the charge is
@@ -34,6 +43,8 @@ cannot promote anything.
 *Consequence:* the work of verifying settlement rules currently has no path to
 affecting behaviour. Left in place deliberately (not parked in `attic/`) because
 it is a safety gate, not dead weight.
+
+*FIXED 2026-07-30 (f449971):* `classify` now calls `sport_all_green`, ordered after `pair_demoted` so an observed mismatch outranks an unverified rulebook. **Still gates — every shipped matrix cell is AMBER, so no sport promotes**, and tennis cannot even when whitelisted (`tennis.walkover` is RED).
 
 ### 4. Two settlement divergences confirmed from primary sources
 - **Tennis retirement:** Pinnacle voids and refunds; Kalshi pays the advancing
@@ -56,6 +67,8 @@ pair. `tennis.walkover` set to RED.
 *Consequence:* both clean-lane positions in the entire ledger are SX. Every
 top-edge artifact is SX. It should be excluded from headline stats or removed.
 
+*FIXED 2026-07-30 (c10dad1):* `clean_lane_excluded_venues: [sx]` blocks SX on either leg, for every kind including `sx:self`. Did NOT retro-edit the 2 historical SX clean rows (rule 9 — append-only).
+
 ---
 
 ## Tier 2 — Invalidates measurements
@@ -65,6 +78,8 @@ top-edge artifact is SX. It should be excluded from headline stats or removed.
 zero-volume quote has a **2¢** spread, so **99.2% of dead books pass detection**.
 *Partially mitigated* by the new `max_lead_hours` demotion, which is a proxy, not
 a fix. The guard itself is still too narrow.
+
+*FIXED 2026-07-30 (08660dd):* a spread-vs-edge guard demotes when the half-spreads we must cross exceed the edge, with `spread-unknown` reported separately from `spread>edge` so a missing bid is not recoded as a measured cost. The zombie guard itself is unchanged and still narrow.
 
 ### 7. L5's 27.9s lag is probably a sampling artifact
 We poll at 60s, so timestamp resolution *is* 60s. A median lead of
@@ -83,6 +98,8 @@ backtest used **imputed** depth (median $56). Kalshi stores **no ladder at all**
 *Consequence:* every capacity and $/day figure rests partly on an assumption.
 An early "all legs have zero depth" conclusion was itself an artifact of `or 0`
 turning `None` into 0.
+
+*FIXED 2026-07-30 (45e3e05):* `tracker` persists `depth_usd` per leg. Consequence worth noting: the first position with real depth showed $982/$623 against the imputed $56 median, so earlier all-lanes $/day figures were UNDERSTATED for depth reasons while being overstated for artifact reasons. Kalshi ladders are still absent.
 
 ### 9. Non-position lanes were judged on a money scale
 `null_band` is denominated in money-per-dollar, but L1's primary is a prevalence,
@@ -219,6 +236,8 @@ The framework Python the supervisor ran under since 17 July no longer has
 system. Its edge does move (111 distinct values), but the underlying Kalshi book
 is **11¢ wide** — a 1.5¢ "arb" requires crossing it. Not booked (the tracker's
 reappearance cap holds), but it dominates the opportunity table.
+
+*FIXED 2026-07-30 (08660dd):* the spread-vs-edge guard demotes it — a 1.5c edge inside an 11c book is `spread>edge`.
 
 ### 29. Storage grows linearly with cadence × coverage
 22.5M quotes to date; rule 7 forbids not persisting. Tier-1 speed work would
