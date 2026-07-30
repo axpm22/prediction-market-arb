@@ -174,3 +174,45 @@ def test_near_start_is_not_demoted_for_lead():
     locked = [o for o in opps if o.kind in ("ARB", "XSPREAD")]
     assert locked
     assert "lead" not in locked[0].notes
+
+
+def test_edge_inside_the_spread_demotes_to_review():
+    """Measured 2026-07-29: one CPI pair was flagged 234 times with a 1.52c edge
+    sitting inside an 11c Kalshi spread. The zombie guard cannot express this —
+    it needs volume_24h==0 AND a >=90c spread, and the median zero-volume quote
+    has a 2c spread, so it fires on 0.76% of dead books. If the half-spreads you
+    must cross exceed the edge, there is no opportunity at any size."""
+    wide = [q("kalshi", "mets", cost="0.47", bid="0.36"),        # 11c spread
+            q("polymarket", "royals", cost="0.49", bid="0.47")]  # 2c spread
+    opps, _ = detect(CFG, [group(wide)], now=NOW)
+    locked = [o for o in opps if o.kind in ("ARB", "XSPREAD")]
+    assert locked, "the covering pair should still be flagged (rule 7)"
+    assert locked[0].status == "REVIEW"
+    assert "spread>edge" in locked[0].notes
+
+
+def test_tight_spread_is_not_demoted_for_spread():
+    tight = [q("kalshi", "mets", cost="0.47", bid="0.4695"),
+             q("polymarket", "royals", cost="0.49", bid="0.4895")]
+    opps, _ = detect(CFG, [group(tight)], now=NOW)
+    locked = [o for o in opps if o.kind in ("ARB", "XSPREAD")]
+    assert locked
+    assert "spread>edge" not in locked[0].notes
+
+
+def test_a_missing_bid_is_reported_as_unknown_not_as_a_wide_spread():
+    """Missing data must stay visible as missing. Every SX quote lacks a bid
+    (0 of 356,595), so folding that into 'spread>edge' demoted all 57 clean-lane
+    ARBs while reading as though their spreads had been measured and found
+    wanting. Same discipline that keeps UNRESOLVABLE out of the
+    settlement-agreement count."""
+    from dataclasses import replace
+    # q() coerces a falsy bid to a default 2c spread, so force it off here
+    no_bid = [replace(q("sx", "mets", cost="0.47"), bid=None),
+              replace(q("sx", "royals", cost="0.49"), bid=None)]
+    opps, _ = detect(CFG, [group(no_bid)], now=NOW)
+    locked = [o for o in opps if o.kind in ("ARB", "XSPREAD")]
+    assert locked
+    assert locked[0].status == "REVIEW"
+    assert "spread-unknown" in locked[0].notes
+    assert "spread>edge" not in locked[0].notes

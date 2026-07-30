@@ -21,6 +21,31 @@ def _mid(q: Quote) -> Decimal | None:
     return (q.cost + q.bid) / 2 if q.bid is not None else None
 
 
+def _spread_verdict(cfg, legs, edge: Decimal) -> str | None:
+    """None | 'spread-unknown' | 'spread>edge'.
+
+    The zombie guard cannot express this: it requires volume_24h == 0 AND a
+    >= 0.90 spread, but the median zero-volume quote has a 2c spread, so it
+    fires on 0.76% of dead books (measured 2026-07-29). If the half-spreads we
+    must cross exceed the edge, there is no opportunity at any size.
+
+    A missing bid is reported SEPARATELY and never folded into 'spread>edge'.
+    Both demote, but they are different facts: one is a measured cost, the other
+    is absent data. Conflating them hid a real effect — every SX quote lacks a
+    bid (0 of 356,595), so a single verdict would have demoted all 57 clean-lane
+    ARBs while reading as though their spreads had been measured and found
+    wanting. Missing data stays visible as missing (the same discipline that
+    keeps UNRESOLVABLE out of the settlement-agreement count)."""
+    total = Decimal(0)
+    for q in legs:
+        if q.bid is None:
+            return "spread-unknown"
+        total += (q.cost - q.bid) / 2
+    if total > edge * cfg["execution"]["max_spread_fraction_of_edge"]:
+        return "spread>edge"
+    return None
+
+
 def _reject(rejects, g, reason, quotes, kind="ARB", edge=None):
     rejects.append({
         "event_key": g.event.event_key, "reason": reason, "kind": kind,
@@ -68,6 +93,10 @@ def _locked_opp(cfg, g, legs, now, mode="pregame") -> tuple[Opportunity | None, 
     if any(q.depth_usd is None or q.depth_usd < cfg["min_executable_usd"] for q in legs):
         status = "REVIEW"
         notes.append("thin-depth")
+    spread_note = _spread_verdict(cfg, legs, edge)
+    if spread_note:
+        status = "REVIEW"
+        notes.append(spread_note)
     # Far-from-start covering pairs sit on books nobody is trading: measured
     # 2026-07-28, legs flagged >48h out carry a median 24h volume of 3 against
     # 211,365 within 6h, and half are zero. The zombie guard cannot see them

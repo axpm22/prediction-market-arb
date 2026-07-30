@@ -159,6 +159,13 @@ execution:
   arb_size_safety_frac: 0.5
   min_ladder_fraction: 0.5          # capacity says UNKNOWN below this
   max_actionable_skew_secs: 10
+  max_spread_fraction_of_edge: 1.0  # sum of leg half-spreads must not exceed this multiple
+                                    #   of the edge. At 1.0: if crossing costs more than the
+                                    #   edge, it is not an opportunity at any size. Measured
+                                    #   2026-07-29: one CPI pair was flagged 234x with a
+                                    #   1.52c edge inside an 11c Kalshi spread, which the
+                                    #   zombie guard cannot see (it needs volume==0 AND a
+                                    #   >=90c spread, catching 0.76% of dead books).
   venue_fetch_timeout_secs: 15      # per-REQUEST timeout (one GET/POST)
   venue_deadline_secs: 30          # per-VENUE wall-clock budget across all its paginated
                                     # requests (H7); on expiry the venue returns partial + ok:false
