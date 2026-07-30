@@ -103,14 +103,28 @@ def classify_pair(client, model: str, cand: dict, max_chars: int) -> dict:
 
 def system_verdict(shape: str, ai: dict | None) -> tuple[str, Decimal, str]:
     """(verdict, confidence, reason): code decides shape, AI decides measurand.
-    shape 'different'/'unknown' never reaches the API — 'unknown' is
-    conservative-different pending a human look."""
+
+    A PARSED shape mismatch is decided in code and never reaches the API.
+    'unknown' means no threshold regex fired, i.e. the code has NO opinion —
+    which is precisely where the model's judgment is the point. Until
+    2026-07-30 it short-circuited to ('different', 1.0) with no call and cached
+    that, so the 'pending a human look' this docstring used to promise never
+    arrived: _cached_keys drops the pair from every later run. That silently
+    discarded 516 of 573 live candidates (90%).
+
+    It still never yields 'same' on its own: an unparsed proposition has no
+    verified boundary, and boundary worlds are exactly where the model failed
+    at 0.95 confidence (first eval 2026-07-13). Same-measurand + unparsed shape
+    is 'needs-human' — a curation queue, not a match."""
     if shape == "different":
         return "different", Decimal(1), "shape: boundary/threshold mismatch (code)"
-    if shape == "unknown":
-        return "different", Decimal(1), "shape: unparsed proposition (code, conservative)"
+    if ai is None:  # budget ran out before the call — stay conservative
+        return "different", Decimal(1), "shape: unparsed, no model verdict (conservative)"
     if not ai["same_measurand"]:
         return "different", ai["confidence"], f"measurand: {ai['reason']}"
+    if shape == "unknown":
+        return ("needs-human", ai["confidence"],
+                f"shape UNPARSED + measurand: {ai['reason']}")
     verdict = "same" if shape == "identical" else "same-inverted"
     return verdict, ai["confidence"], f"shape:{shape} + measurand: {ai['reason']}"
 
@@ -159,7 +173,9 @@ def run_ai(cfg, store, mode: str = "eval", client=None,
             f"{c.get('kalshi_text', '')} {c.get('kalshi_rules', '')}",
             c.get("pm_text", ""))
         ai = None
-        if shape in ("identical", "inverted"):  # only then is the API needed
+        # 'different' is the only shape code can settle alone; 'unknown' is the
+        # code ABSTAINING and must be asked, not assumed (see system_verdict)
+        if shape in ("identical", "inverted", "unknown"):
             if api_calls >= budget:
                 # budget gates API spend only; shape-decided pairs below
                 # keep classifying for free

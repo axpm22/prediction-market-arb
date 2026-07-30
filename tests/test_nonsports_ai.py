@@ -50,10 +50,14 @@ PAIR_SAME = {"pair_id": "K1|P1", "concept": "unemployment",
              "kalshi_text": "US unemployment above 5%",
              "kalshi_rules": "BLS U-3", "pm_text": "US unemployment above 5%?",
              "pm_rules": "BLS", "verdict": "same"}
+# Both sides parse to a threshold that disagrees -> shape 'different', settled
+# in code with no API call. (Until 2026-07-30 this fixture read "Core CPI 0.2%?"
+# on the PM side, which does NOT parse — so it was shape 'unknown' and the tests
+# below were really asserting the old "unparsed => no call" short-circuit.)
 PAIR_DIFF = {"pair_id": "K2|P2", "concept": "cpi",
              "kalshi_text": "CPI MoM above 0.2%", "kalshi_rules": "headline CPI",
-             "pm_text": "Core CPI 0.2%?", "pm_rules": "core CPI",
-             "verdict": "different"}
+             "pm_text": "Will Core CPI MoM be 0.1% or less?",
+             "pm_rules": "core CPI", "verdict": "different"}
 PAIR_NEW = {"pair_id": "K3|P3", "concept": "unemployment",
             "kalshi_text": "US unemployment above 4%",
             "kalshi_rules": "BLS", "pm_text": "US unemployment above 4%?",
@@ -177,3 +181,56 @@ def test_sweep_mode_classifies_unverdicted_and_tolerates_errors(tmp_path):
                   candidates_path=path, now=NOW)
     # sweep covers BOTH pairs (curated + not); the one error is absorbed
     assert s["classified"] == 1 and s["errors"] == 1
+
+
+# An unparsed proposition: no threshold regex fires on either side, so
+# shape_relation returns 'unknown'. 516 of 573 live candidates looked like this
+# on 2026-07-30 — 90% of the surface.
+PAIR_UNPARSED = {"pair_id": "K9|P9", "concept": "fed_decision",
+                 "kalshi_text": "Fed decision in September",
+                 "kalshi_rules": "FOMC target range unemployment",
+                 "pm_text": "Will the Fed cut in September? unemployment",
+                 "pm_rules": "FOMC"}
+
+
+def test_unknown_shape_reaches_haiku_instead_of_silent_different(tmp_path):
+    """'unknown' means the CODE has no opinion — exactly where the AI's
+    judgment is the point. It used to short-circuit to ('different', 1.0) with
+    no API call and then cache that, so the 'pending a human look' in
+    system_verdict's docstring never happened: _cached_keys excludes the pair
+    from every later run."""
+    from arb.nonsports.match import shape_relation
+    assert shape_relation(
+        f"{PAIR_UNPARSED['kalshi_text']} {PAIR_UNPARSED['kalshi_rules']}",
+        PAIR_UNPARSED["pm_text"]) == "unknown"
+    store = Store(str(tmp_path / "t.sqlite"))
+    client = FakeClient()
+    out = ai.run_ai(CFG, store, mode="sweep", client=client,
+                    candidates_path=_cands(tmp_path, [PAIR_UNPARSED]), now=NOW)
+    assert out["classified"] == 1
+    assert client.calls == 1, "unknown shape must consult the model"
+    v = store.query("SELECT verdict, confidence FROM verdicts")[0]
+    # the model says same-measurand, but shape is UNPARSED and boundary logic is
+    # exactly where Haiku failed (2026-07-13) — never assert 'same' from here
+    assert v["verdict"] == "needs-human"
+
+
+def test_unknown_shape_with_different_measurand_stays_different(tmp_path):
+    """Haiku ruling out the measurand is a safe, cheap 'different' — only the
+    same-measurand case needs a human."""
+    pair = dict(PAIR_UNPARSED, pair_id="K8|P8",
+                kalshi_rules="FOMC target range", pm_text="Will the Fed cut?")
+    store = Store(str(tmp_path / "t.sqlite"))
+    out = ai.run_ai(CFG, store, mode="sweep", client=FakeClient(),
+                    candidates_path=_cands(tmp_path, [pair]), now=NOW)
+    assert out["classified"] == 1
+    assert store.query("SELECT verdict FROM verdicts")[0]["verdict"] == "different"
+
+
+def test_needs_human_is_never_scored_as_a_positive(tmp_path):
+    """§18.5 precision must not be inflated by the new verdict: 'needs-human'
+    is not a claim of 'same', so it can never be a false positive, and when the
+    human said 'same' it registers as the miss it is."""
+    v, conf, _ = ai.system_verdict("unknown", {"same_measurand": True,
+                                               "confidence": 1, "reason": "x"})
+    assert not v.startswith("same")

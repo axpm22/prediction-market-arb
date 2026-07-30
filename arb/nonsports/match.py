@@ -59,7 +59,12 @@ def extract_strikes(text: str) -> set[Decimal]:
                     and 1900 <= int(m) <= 2100)}
 
 
-SHAPE_VERSION = "shape-v1"  # folded into the verdict-cache sha (ai.py)
+# Folded into the verdict-cache sha (ai.py) so a change in shape-decision
+# SEMANTICS re-asks instead of serving stale verdicts — without deleting a row
+# (rule 11: the cache is append-only). v1->v2 on 2026-07-30: shape 'unknown'
+# stopped short-circuiting to 'different' and now consults the model, so every
+# v1 'unknown' verdict was recorded under a rule that no longer holds.
+SHAPE_VERSION = "shape-v2"
 
 _REL_RES = [
     ("range", re.compile(r"(\d+(?:\.\d+)?)\s*%?\s*(?:–|-)\s*(\d+(?:\.\d+)?)\s*%")),
