@@ -237,7 +237,7 @@ system. Its edge does move (111 distinct values), but the underlying Kalshi book
 is **11¢ wide** — a 1.5¢ "arb" requires crossing it. Not booked (the tracker's
 reappearance cap holds), but it dominates the opportunity table.
 
-*FIXED 2026-07-30 (08660dd):* the spread-vs-edge guard demotes it — a 1.5c edge inside an 11c book is `spread>edge`.
+*FIXED 2026-07-30 (08660dd, completed in a follow-up):* the spread-vs-edge guard demotes it — a 1.5c edge inside an 11c book is `spread>edge`. **08660dd alone did NOT close this**: the mapped lane builds its own `Opportunity` instead of routing through `arbitrage._locked_opp`, so it inherited none of that function's guards and the CPI pair was still emitted OK afterwards. Caught by checking production output rather than trusting the commit.
 
 ### 29. Storage grows linearly with cadence × coverage
 22.5M quotes to date; rule 7 forbids not persisting. Tier-1 speed work would

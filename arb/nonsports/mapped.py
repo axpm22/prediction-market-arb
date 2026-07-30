@@ -18,6 +18,7 @@ from pathlib import Path
 import yaml
 
 from arb.logutil import get_logger
+from arb.arbitrage import _spread_verdict
 from arb.models import Event, Opportunity, Quote, q6
 from arb.venues.base import get_json, post_json
 from arb.venues.fees import leg_fee_cost
@@ -149,12 +150,27 @@ def detect_pair(cfg, entry, quotes: list[Quote]) -> list[Opportunity]:
             s = sum(q.effective_cost for q in legs)
             if s < 1:
                 roi = q6(1 / s - 1)
+                edge = q6(1 - s)
+                notes = [f"mapped-pair {entry['kalshi']}; sum={q6(s)}"]
+                status = "OK"
+                if roi > cfg["arb_stale_warn"]:
+                    status = "REVIEW"
+                # This lane builds its own Opportunity rather than routing
+                # through arbitrage._locked_opp, so it does NOT inherit that
+                # function's guards and every one it needs must be applied here.
+                # KXCPICORE was flagged 234 times as OK with a 1.5c edge inside
+                # an 11c Kalshi book because this status line only consulted
+                # arb_stale_warn.
+                spread_note = _spread_verdict(cfg, legs, edge)
+                if spread_note:
+                    status = "REVIEW"
+                    notes.append(spread_note)
+                if entry.get("inverted"):
+                    notes.append("inverted")
                 opps.append(Opportunity(
                     kind="XSPREAD", category="nonsports", event=event,
-                    legs=legs, edge=q6(1 - s), stakes=[],
-                    status="REVIEW" if roi > cfg["arb_stale_warn"] else "OK",
-                    notes=f"mapped-pair {entry['kalshi']}; sum={q6(s)}"
-                          + ("; inverted" if entry.get("inverted") else "")))
+                    legs=legs, edge=edge, stakes=[], status=status,
+                    notes="; ".join(notes)))
     for side in ("YES", "NO"):
         a, b = best.get(("kalshi", side)), best.get(("polymarket", side))
         if a and b and a.bid is not None and b.bid is not None:

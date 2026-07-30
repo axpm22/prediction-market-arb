@@ -326,3 +326,25 @@ def test_mapped_ledger_has_no_same_poll_confirms(tmp_path, monkeypatch):
         """SELECT be.id FROM bet_events be JOIN flat_bets fb ON fb.id = be.bet_id
            WHERE be.kind='confirmed'
              AND json_extract(be.payload_json, '$.poll_id') = fb.poll_id""") == []
+
+
+def test_mapped_lane_demotes_an_edge_inside_the_spread(monkeypatch):
+    """This lane builds its own Opportunity instead of routing through
+    arbitrage._locked_opp, so it does NOT inherit that function's guards. Real
+    shape observed 2026-07-30: KXCPICORE was flagged 234 times as status OK with
+    a ~1.5c edge inside an 11c Kalshi book, because the status line consulted
+    only arb_stale_warn."""
+    # kalshi YES 0.95 / bid 0.84 -> an 11c spread, exactly the observed book
+    _fake_kalshi(monkeypatch, yes_ask="0.95", yes_bid="0.84",
+                 no_ask="0.16", no_bid="0.05")
+    quotes = mapped.kalshi_pair_quotes(CFG, ENTRY_INV, NOW)
+    # polymarket NO cheap enough that kalshi.YES + pm.NO sums under 1
+    quotes += [mapped._quote(CFG, ENTRY_INV, "polymarket", "NO", "YES",
+                             Decimal("0.03"), Decimal("0.02"), Decimal("80"),
+                             "econ", NOW, "0xabc:tY")]
+    opps = mapped.detect_pair(CFG, ENTRY_INV, quotes)
+    locked = [o for o in opps if o.kind == "XSPREAD" and "mapped-pair" in o.notes
+              and "mids" not in o.notes]
+    assert locked, "the cover should still be emitted (rule 7)"
+    assert locked[0].status == "REVIEW"
+    assert "spread>edge" in locked[0].notes
