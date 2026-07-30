@@ -71,7 +71,7 @@ SCHEMA = {
     "settle_days_from": NUM, "settle_tripwire_secs": NUM,
     "tracker": {"terminal_mute_grace_mins": NUM, "max_reappearances": NUM,
                 "dead_checks": NUM, "reappearance_ref_interval_secs": NUM},
-    "mlbstats_enabled": BOOL, "auto_fill": BOOL, "trusted_pairs": LIST,
+    "mlbstats_enabled": BOOL, "auto_fill": BOOL, "trusted_pairs": LIST, "clean_lane_excluded_venues": LIST,
     "fuzzy_match_threshold": NUM, "fee_stale_days": NUM,
     "kalshi": {"fee_rate": NUM, "maker_fee_rate": NUM, "source_url": STR, "confirmed_on": DATE},
     "polymarket": {"sports_fee_rate": NUM, "crypto_fee_rate": NUM, "politics_fee_rate": NUM,

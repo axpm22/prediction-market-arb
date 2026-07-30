@@ -161,3 +161,29 @@ def test_matrix_gate_does_not_touch_same_venue_arb():
     and must be unaffected."""
     eligible, reason, lane = classify(obj(sport="tennis"), _xspread_permissive_cfg())
     assert (eligible, lane) == (True, "clean"), f"got {reason}/{lane}"
+
+
+def test_sx_never_reaches_the_clean_lane():
+    """0 of 356,595 stored SX quotes carry a bid, so an SX leg can never be
+    unwound or marked; reconcile._sx returns None unconditionally (settled-status
+    semantics unverified) so SX legs never grade and no certificate can accrue;
+    and the chain is being deprecated. Yet BOTH clean-lane positions in the whole
+    ledger were SX, and SX legs quoted at 0.001-0.041 produced every top-edge
+    artifact in the ledger at 15-98% 'edges'."""
+    eligible, reason, lane = classify(obj(venue_pair="sx:self"), CFG)
+    assert not eligible
+    assert reason == "venue-excluded"
+    assert lane == "review"
+
+
+def test_an_excluded_venue_on_either_leg_blocks_the_pair():
+    eligible, reason, _ = classify(
+        obj(kind="XSPREAD", venue_pair="polymarket:sx"), CFG)
+    assert not eligible and reason == "venue-excluded"
+
+
+def test_a_non_excluded_same_venue_arb_still_reaches_clean():
+    """The guard against Task 5 emptying the clean lane by accident rather than
+    by rule: a kalshi self-pair must still promote."""
+    eligible, reason, lane = classify(obj(venue_pair="kalshi:self"), CFG)
+    assert (eligible, lane) == (True, "clean"), f"got {reason}/{lane}"

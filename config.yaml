@@ -137,6 +137,13 @@ tracker:
 mlbstats_enabled: true
 auto_fill: false                    # permanently false; flat_bets is the executor
 trusted_pairs: []                   # empty until the §18.2 gate clears — weeks by construction
+clean_lane_excluded_venues: [sx]    # a venue that cannot support a position never reaches
+                                    #   clean, whatever the kind. SX: 0 of 356,595 stored
+                                    #   quotes carry a bid (no unwind, no markout),
+                                    #   reconcile._sx returns None unconditionally because
+                                    #   settled-status semantics are unverified (so no
+                                    #   certificate can accrue), and the chain is being
+                                    #   deprecated. Empty the list to re-enable.
 fuzzy_match_threshold: 92
 fee_stale_days: 30                  # fees are dated facts; stale = badge, never halt
 kalshi:      { fee_rate: 0.07, maker_fee_rate: 0.0175,   # maker = 25% of taker, NOT zero

@@ -71,6 +71,17 @@ def classify(o: dict, cfg) -> tuple[bool, str, str]:
     if o.get("status") == "REVIEW":
         return False, o.get("reason") or "detection-review", "review"
 
+    # A venue that cannot support a position never reaches clean, whatever the
+    # kind — including a same-venue ARB on that venue. Both clean-lane positions
+    # in the ledger were SX, which can neither be unwound (no bid on any of
+    # 356,595 stored quotes) nor graded (reconcile._sx returns None
+    # unconditionally while its settled-status semantics stay unverified, so no
+    # certificate can ever accrue). Config-driven so the operator can re-enable
+    # a venue once its settlement is verified live.
+    excluded = {str(v) for v in cfg["clean_lane_excluded_venues"]}
+    if excluded & set(str(o.get("venue_pair") or "").split(":")):
+        return False, "venue-excluded", "review"
+
     # kind-specific gates
     if kind == "XSPREAD":
         # rule of three: net = gross − Σfees − (3/n)·LGM; n=0 → ineligible outright (§12)
