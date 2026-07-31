@@ -1056,3 +1056,50 @@ Note: if `data/pm_tape.sqlite` is large, add it to `.gitignore` instead of commi
 **3. Type consistency.** `MakerSim.post(token, price, queue_ahead, posted_at)` and `MakerSim.observe(token, price, size, at)` are used with those exact names in `bench_maker.replay`. Fill dicts carry `token/price/at/basis` throughout, gaining `markout` and `horizon` only in `replay`. `bracket()` reads `basis` and `markout`, both of which `replay` sets. `open_tape`/`persist_frames`/`contested_tokens`/`record` are used in Tasks 4 and 5 exactly as defined in Task 2.
 
 **Known limitation, stated rather than hidden.** Fill inference cannot distinguish a trade from an order *cancellation* — both remove size from a level. This inflates the fill count in both bounds, and therefore makes the lane optimistic in a way the bracket does not capture. Cancellations are unobservable on a public feed without per-order data, so this cannot be fixed here; if the conservative bound comes out positive, that result must carry this caveat explicitly and should not be trusted until a venue with public trade prints (Kalshi `GET /markets/trades`, SPEC.md §437, still unverified per rule 3) corroborates it.
+
+---
+
+## Result — 2026-07-31
+
+First recorded bracket. 30-minute tape, 58 contested tokens, **198,965 frames**
+(`book` 1,490 · `price_change` ~197k · `last_trade_price` 817). The socket
+dropped once near the end (`ConnectionClosedError`) after the tape was already
+full; the recorder logged it and flushed rather than losing the batch.
+
+```
+prints=817  simulated fills=35  marked=79  tokens=58
+  conservative  n=  19  mean=-0.062053  [-0.097916, -0.026189]  <- primary
+  optimistic    n=  60  mean=-0.022550  [-0.053507,  0.008407]
+NOT SCORED: under min_fills_for_verdict (100)
+```
+
+**Both bounds are negative.** The conservative CI excludes zero; the optimistic
+one straddles it. Read at face value that says even the front of the queue does
+not get paid, and the back of the queue loses 6.2 points per contract.
+
+**But it is NOT SCORED, and must not be quoted as a finding.** n=19 against a
+floor of 100.
+
+### The plan's own remedy is wrong
+
+Task 5 Step 6 says a low `n` means "record a longer tape". That is incorrect,
+and this run proves it: **817 prints produced only 35 fills.** The binding
+constraint is not tape length but `replay`'s design — it posts ONE resting
+order per token and never re-posts after a fill:
+
+```python
+if tok not in sim.orders:
+    sim.post(tok, price, queue_ahead=size, posted_at=at)
+```
+
+So fills cap at 2 x tokens regardless of how many prints arrive, and
+conservative fills at 1 x tokens (58). A 24-hour tape would still cap at 58.
+
+A real maker re-posts continuously — that is what making a market IS. The fix
+is to re-post after each fill and let the same 817 prints generate hundreds of
+independent fills: a change to `arb/bench_maker.py:replay` and `arb/maker.py`
+(an order must reset rather than latch in `filled`), plus a test pinning that a
+re-posted order joins the queue at the BACK at the NEW touch, not the old one.
+
+Until that lands, this lane is **instrumented but unpowered**, and the negative
+means above are a hint, not a measurement.
