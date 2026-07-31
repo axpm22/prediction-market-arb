@@ -87,24 +87,35 @@ def markout(fill: dict, exit_bid: Decimal, fee: Decimal) -> Decimal:
               - Decimal(str(fee)))
 
 
-def _stats(vals: list[Decimal]) -> dict:
+def _stats(vals: list[Decimal], clusters: list[str]) -> dict:
+    """Mean with a CLUSTER-ROBUST interval, clustered on token.
+
+    Re-posting yields many fills per token, and fills within one token are
+    correlated — same book, same hour, often the same move. Dividing by
+    sqrt(n_fills) would manufacture precision the data does not have, so the
+    interval divides by sqrt(n_clusters) instead. bench_markout.l7_maker does
+    the same thing with `nc = len(clusters)`; this is that rule, not a new one.
+    """
     if not vals:
-        return {"n": 0, "mean": None, "lo": None, "hi": None}
+        return {"n": 0, "clusters": 0, "mean": None, "lo": None, "hi": None}
     fs = [float(v) for v in vals]
     mean = statistics.fmean(fs)
     sd = statistics.stdev(fs) if len(fs) > 1 else 0.0
-    half = 1.96 * sd / (len(fs) ** 0.5)
-    return {"n": len(fs), "mean": q6(Decimal(mean)),
+    nc = len(set(clusters)) or len(fs)
+    half = 1.96 * sd / (nc ** 0.5)
+    return {"n": len(fs), "clusters": nc, "mean": q6(Decimal(mean)),
             "lo": q6(Decimal(mean - half)), "hi": q6(Decimal(mean + half))}
 
 
 def bracket(fills: list[dict]) -> dict:
     """Both bounds, with the primary named. Never collapse this to one number:
     the gap between the bounds IS the queue-position uncertainty."""
-    by = {"conservative": [], "optimistic": []}
+    by: dict[str, list[Decimal]] = {"conservative": [], "optimistic": []}
+    cl: dict[str, list[str]] = {"conservative": [], "optimistic": []}
     for f in fills:
         if f.get("basis") in by and f.get("markout") is not None:
             by[f["basis"]].append(Decimal(str(f["markout"])))
-    return {"conservative": _stats(by["conservative"]),
-            "optimistic": _stats(by["optimistic"]),
+            cl[f["basis"]].append(str(f.get("token") or ""))
+    return {"conservative": _stats(by["conservative"], cl["conservative"]),
+            "optimistic": _stats(by["optimistic"], cl["optimistic"]),
             "primary": "conservative"}

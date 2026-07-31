@@ -198,3 +198,57 @@ def test_replay_on_an_empty_tape_reports_nothing_measured(tmp_path):
     res = bench_maker.replay(_cfg(), con)
     assert res["fills"] == 0
     assert res["bracket"]["conservative"]["mean"] is None
+
+
+# --- re-posting -------------------------------------------------------------
+# The 2026-07-31 run produced 35 fills from 817 prints because replay posted
+# ONE order per token and never re-posted, capping fills at 2 x tokens however
+# long the tape ran. A market maker re-posts continuously — that is what making
+# a market IS.
+
+def test_replay_reposts_after_a_fill_so_one_token_yields_many_observations():
+    from arb import bench_maker, pm_tape
+    import tempfile, os
+    with tempfile.TemporaryDirectory() as d:
+        con = pm_tape.open_tape(os.path.join(d, "t.sqlite"))
+        frames, times, t = [], [], 1.0
+        for i in range(4):                    # four post -> fill -> re-post cycles
+            frames.append(_book("tokA", "0.40", "0", i))
+            times.append(t); t += 1
+            frames.append(_trade("tokA", "0.40", "5", i))
+            times.append(t); t += 1
+        frames.append(_pc("tokA", "0.45", 99))
+        times.append(t + 1000)
+        pm_tape.persist_frames(con, frames, times)
+        res = bench_maker.replay(_cfg(), con)
+        # without re-posting this is capped at 2; with it, one per cycle per basis
+        assert res["fills"] > 2, f"expected re-posting, got {res['fills']}"
+        assert res["prints"] == 4
+
+
+def test_bracket_ci_clusters_by_token_not_by_fill():
+    """Re-posting makes many fills per token, and fills within a token are
+    correlated. Dividing by sqrt(n_fills) would manufacture precision the data
+    does not have — the CI must widen to sqrt(n_tokens), as l7_maker does."""
+    from arb.maker import bracket
+    many = [{"basis": "conservative", "markout": Decimal("0.01"), "token": "tokA"},
+            {"basis": "conservative", "markout": Decimal("0.03"), "token": "tokA"},
+            {"basis": "conservative", "markout": Decimal("-0.01"), "token": "tokA"},
+            {"basis": "conservative", "markout": Decimal("0.02"), "token": "tokA"}]
+    one_cluster = bracket(many)["conservative"]
+    spread_out = [{**f, "token": f"tok{i}"} for i, f in enumerate(many)]
+    four_clusters = bracket(spread_out)["conservative"]
+    assert one_cluster["n"] == four_clusters["n"] == 4
+    assert one_cluster["mean"] == four_clusters["mean"]
+    width_1 = one_cluster["hi"] - one_cluster["lo"]
+    width_4 = four_clusters["hi"] - four_clusters["lo"]
+    assert width_1 > width_4, "one cluster must give a WIDER interval than four"
+
+
+def test_bracket_reports_the_cluster_count_so_power_is_readable():
+    from arb.maker import bracket
+    fills = [{"basis": "conservative", "markout": Decimal("0.01"), "token": "a"},
+             {"basis": "conservative", "markout": Decimal("0.02"), "token": "a"},
+             {"basis": "conservative", "markout": Decimal("0.03"), "token": "b"}]
+    s = bracket(fills)["conservative"]
+    assert s["n"] == 3 and s["clusters"] == 2

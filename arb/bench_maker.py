@@ -76,8 +76,14 @@ def replay(cfg, tape_con) -> dict:
                 continue
             price, size = touch
             bids.setdefault(tok, []).append((at, price))
-            if tok not in sim.orders:
-                # join the queue at the BACK: everything resting is ahead of us
+            o = sim.orders.get(tok)
+            # RE-POST once an order has filled on both bases. A maker does not
+            # quote once and stop — quoting continuously IS making a market, and
+            # posting once per token capped fills at 2 x tokens no matter how
+            # long the tape ran (35 fills from 817 prints, 2026-07-31).
+            # The new order joins the queue at the BACK of the CURRENT touch:
+            # everything resting now is ahead of us, and the price may have moved.
+            if o is None or len(o.filled) >= 2:
                 sim.post(tok, price, queue_ahead=size, posted_at=at)
 
         elif kind == "price_change":
