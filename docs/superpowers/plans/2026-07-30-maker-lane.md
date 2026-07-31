@@ -1129,3 +1129,36 @@ Still n=36 against a floor of 100, so still NOT SCORED. But fills now scale
 with tape length, which they provably did not before, so "record a longer tape"
 has finally become the correct remedy rather than a wasted day. A 2-hour tape
 is recording.
+
+### SCORED — 2026-07-31, n=126
+
+With re-posting and cluster-robust CIs, on a ~2.5h accumulated tape:
+
+```
+L12  maker bracket (PM WS tape)   n=126   -0.0386   [-0.0693, -0.0079]   SIGNAL adverse
+  3,800 trade prints over 104 tokens -> 141 simulated fills, 350 marked
+  optimistic bound: n=224  mean=-0.018554
+```
+
+**Both bounds are negative and the conservative CI excludes zero.** Per this
+plan's own interpretation rule: *"If both bounds are negative, the maker route
+is closed too, and the project's conclusion is that neither side of the spread
+pays. That is a real finding, not a failure."*
+
+Posting loses ~3.9 points per contract assuming we are last in queue, and ~1.9
+points even assuming we are first. The optimistic bound is the important one:
+it says the loss is **not** a queue-position artifact. Even with perfect
+priority, a resting order is filled exactly when the market is about to move
+against it — textbook adverse selection. The person lifting your bid knows
+something you do not, and on average that knowledge is worth more than the
+spread you earned.
+
+### What this closes
+
+| route | verdict |
+|---|---|
+| cross the spread (taker) | pays 13x the edge — measured |
+| earn the spread (maker) | **-0.0386 [-0.0693, -0.0079]** — measured, adverse |
+
+Neither side pays. That is the project's answer, and it is now a measurement
+rather than an inference from absence.
