@@ -834,3 +834,29 @@ def cmd_covers(cfg, store, args):
     con = sqlite3.connect(f"file:{store.path}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     print(covers.render(covers.funnel(cfg, con, str(args.since))))
+
+
+def cmd_pm_tape(cfg, store, args):
+    """Record the PM WebSocket book tape into its OWN SQLite (rule 9
+    unreachable), then print what the maker bracket makes of it."""
+    from arb import bench_maker, pm_tape
+    secs = int(args.record_secs or cfg["maker"]["record_secs"])
+    tokens = pm_tape.contested_tokens(cfg)
+    print(f"recording {len(tokens)} contested tokens for {secs}s -> "
+          f"{cfg['maker']['tape_db']}")
+    stats = pm_tape.record(cfg, tokens, secs)
+    print(f"  frames={stats['frames']} batches={stats['batches']} "
+          f"trade prints={stats['trades']}")
+    res = bench_maker.replay(cfg, pm_tape.open_tape(cfg["maker"]["tape_db"]))
+    print(f"  prints={res['prints']} simulated fills={res['fills']} "
+          f"marked={res['marked']} tokens={res['tokens']}")
+    b = res["bracket"]
+    for basis in ("conservative", "optimistic"):
+        s = b[basis]
+        star = "  <- primary" if basis == b["primary"] else ""
+        print(f"    {basis:13} n={s['n']:>6} mean={s['mean']} "
+              f"[{s['lo']}, {s['hi']}]{star}")
+    floor = int(cfg["maker"]["min_fills_for_verdict"])
+    if int(b["conservative"]["n"]) < floor:
+        print(f"  NOT SCORED: under min_fills_for_verdict ({floor}) — "
+              f"record a longer tape rather than reading an underpowered mean")

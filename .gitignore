@@ -13,3 +13,4 @@ backups/
 .claude/settings.local.json
 .DS_Store
 data/archive/
+data/pm_tape.sqlite*

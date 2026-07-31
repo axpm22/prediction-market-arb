@@ -89,6 +89,10 @@ def main(argv=None):
                                           "what WOULD have paid (read-only)")
     p_cov.add_argument("--since", required=True, metavar="ISO",
                        help="only polls started at/after this timestamp")
+    p_tape = sub.add_parser("pm-tape", help="record the Polymarket WS book tape "
+                                            "for the maker lane (keyless, 0 credits)")
+    p_tape.add_argument("--record-secs", type=int, default=None,
+                        help="override maker.record_secs")
     p_bench = sub.add_parser("bench", help="score and rank every STRATEGIES.md lane on "
                                            "the data we hold (read-only)")
     p_bench.add_argument("--pull", action="store_true",
