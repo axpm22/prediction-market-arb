@@ -107,3 +107,94 @@ def test_bracket_on_no_fills_is_empty_not_zero():
     b = bracket([])
     assert b["conservative"]["n"] == 0
     assert b["conservative"]["mean"] is None
+
+
+# --- replay (World A) -------------------------------------------------------
+# DEVIATION from the plan, stated deliberately: the plan wrote replay for
+# World B (fills inferred from book deltas) because trade prints were assumed
+# absent. Task 1 verified they exist. Real prints remove the limitation the
+# plan recorded as unfixable — a book delta cannot distinguish a TRADE from a
+# CANCELLATION, and counting cancellations biases every maker number upward.
+
+def _cfg():
+    from pathlib import Path
+    from arb.config import load
+    return load(Path(__file__).resolve().parent.parent / "config.yaml")
+
+
+def _book(tok, price, size, ts):
+    return {"event_type": "book", "asset_id": tok, "timestamp": str(ts),
+            "bids": [{"price": str(price), "size": str(size)}],
+            "asks": [{"price": "0.99", "size": "50"}]}
+
+
+def _trade(tok, price, size, ts):
+    return {"event_type": "last_trade_price", "asset_id": tok,
+            "price": str(price), "size": str(size), "side": "SELL",
+            "fee_rate_bps": "0", "timestamp": str(ts), "transaction_hash": "0x1"}
+
+
+def _pc(tok, best_bid, ts):
+    return {"event_type": "price_change", "timestamp": str(ts),
+            "price_changes": [{"asset_id": tok, "price": str(best_bid),
+                               "size": "1", "side": "BUY",
+                               "best_bid": str(best_bid), "best_ask": "0.99"}]}
+
+
+def test_replay_fills_from_real_trade_prints(tmp_path):
+    """A print is unambiguous: it says a trade happened at a price for a size."""
+    from arb import bench_maker, pm_tape
+    con = pm_tape.open_tape(tmp_path / "t.sqlite")
+    frames = [_book("tokA", "0.40", "10", 1),          # post at 0.40, 10 ahead
+              _trade("tokA", "0.40", "50", 2),         # 50 traded -> both bases
+              _pc("tokA", "0.45", 3)]                  # later executable exit
+    pm_tape.persist_frames(con, frames, [1.0, 2.0, 100.0])
+    res = bench_maker.replay(_cfg(), con)
+    assert res["fills"] == 2                            # optimistic + conservative
+    assert res["prints"] == 1
+
+
+def test_replay_ignores_book_size_shrinking_because_it_may_be_a_cancellation(tmp_path):
+    """The whole reason Task 1 mattered. Size leaving a level is NOT evidence
+    of a trade — it is equally a cancellation. Only a print counts."""
+    from arb import bench_maker, pm_tape
+    con = pm_tape.open_tape(tmp_path / "t.sqlite")
+    frames = [_book("tokA", "0.40", "100", 1),
+              _book("tokA", "0.40", "3", 2),           # 97 vanished, no print
+              _pc("tokA", "0.45", 3)]
+    pm_tape.persist_frames(con, frames, [1.0, 2.0, 100.0])
+    res = bench_maker.replay(_cfg(), con)
+    assert res["prints"] == 0
+    assert res["fills"] == 0
+
+
+def test_replay_marks_out_against_a_later_executable_bid(tmp_path):
+    from arb import bench_maker, pm_tape
+    con = pm_tape.open_tape(tmp_path / "t.sqlite")
+    frames = [_book("tokA", "0.40", "0", 1),
+              _trade("tokA", "0.40", "5", 2),
+              _pc("tokA", "0.45", 3)]
+    pm_tape.persist_frames(con, frames, [1.0, 2.0, 200.0])
+    res = bench_maker.replay(_cfg(), con)
+    assert res["marked"] >= 1
+    # 0.45 exit - 0.40 fill - maker fee > 0 on a 5c favourable move
+    assert res["bracket"]["conservative"]["mean"] > Decimal("0")
+
+
+def test_replay_leaves_unmarked_fills_censored_rather_than_scoring_them_zero(tmp_path):
+    """No later bid means no mark. Scoring it 0 would invent a flat trade."""
+    from arb import bench_maker, pm_tape
+    con = pm_tape.open_tape(tmp_path / "t.sqlite")
+    frames = [_book("tokA", "0.40", "0", 1), _trade("tokA", "0.40", "5", 2)]
+    pm_tape.persist_frames(con, frames, [1.0, 2.0])
+    res = bench_maker.replay(_cfg(), con)
+    assert res["fills"] == 2 and res["marked"] == 0
+    assert res["bracket"]["conservative"]["mean"] is None
+
+
+def test_replay_on_an_empty_tape_reports_nothing_measured(tmp_path):
+    from arb import bench_maker, pm_tape
+    con = pm_tape.open_tape(tmp_path / "t.sqlite")
+    res = bench_maker.replay(_cfg(), con)
+    assert res["fills"] == 0
+    assert res["bracket"]["conservative"]["mean"] is None
