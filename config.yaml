@@ -453,6 +453,18 @@ bench:                              # STRATEGIES.md lane bench: measure every su
     L10: 0
     L11: 0
 
+maker:                              # maker-side measurement lane (2026-07-30). Taking always
+                                    #   pays the spread, which is 13x the edge on the one
+                                    #   fully-measured cover; this lane measures EARNING it.
+  tape_db: data/pm_tape.sqlite      # own SQLite file: rule 9 cannot be reached from here
+  record_secs: 3600                 # one recording session's wall clock
+  max_tokens: 60                    # WS subscription width; 50 tokens produced ~108k frames
+                                    #   in 7 minutes, so this bounds tape size not coverage
+  min_price: 0.10                   # contested markets only: a book at 0.002/0.998 is
+  max_price: 0.90                   #   resolved and can never produce a maker fill
+  markout_horizons_secs: [30, 120, 600]
+  min_fills_for_verdict: 100        # below this the bracket is reported but never scored
+
 scale_in:                             # add to a live arb that is still there and BETTER
   enabled: true
   min_edge_widening: 1.2              # only add at >=1.2x the first-seen edge. Adding on mere
