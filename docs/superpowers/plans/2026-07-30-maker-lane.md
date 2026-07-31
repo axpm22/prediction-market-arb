@@ -1103,3 +1103,29 @@ re-posted order joins the queue at the BACK at the NEW touch, not the old one.
 
 Until that lands, this lane is **instrumented but unpowered**, and the negative
 means above are a hint, not a measurement.
+
+### Update — re-post landed (`df99372`)
+
+The fix above is implemented, together with a correction it forced.
+
+Re-scored on the SAME 30-minute tape:
+
+```
+  fills            35 -> 59
+  conservative  n= 19 mean=-0.062053 [-0.097916, -0.026189]
+             -> n= 36 mean=-0.039800 [-0.082200, +0.002600]
+  optimistic    n= 60 -> 87, mean -0.022550 -> -0.021080
+```
+
+**The conservative interval now straddles zero.** Re-posting produces many
+fills per token, and fills within a token are correlated — same book, same
+hour, often the same move — so the CI is now clustered on token
+(`sqrt(n_clusters)`, as `l7_maker` already does with `nc = len(clusters)`).
+The earlier "conservative CI excludes zero" was an artifact of treating
+correlated fills as independent. **That result was overstated and is retracted
+here.**
+
+Still n=36 against a floor of 100, so still NOT SCORED. But fills now scale
+with tape length, which they provably did not before, so "record a longer tape"
+has finally become the correct remedy rather than a wasted day. A 2-hour tape
+is recording.
