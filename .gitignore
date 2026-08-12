@@ -7,10 +7,20 @@ data/*.sqlite*
 logs/
 # daily report .md files are committed (versioned evidence, SPEC §13.3); CSVs ignored
 reports/daily/*.csv
-reports/replay/          # replay panel output, regenerable
+# replay panel output, regenerable (a trailing comment on this line
+# was part of the PATTERN, so the rule never matched — fixed 2026-07-31)
+reports/replay/
 backups/
 .locks/
 .claude/settings.local.json
 .DS_Store
 data/archive/
 data/pm_tape.sqlite*
+
+# stray ledger DBs from a mistyped --db at the repo root; the real one lives
+# under data/ and is covered above (an empty one appeared 2026-07-31)
+/*.sqlite*
+# ad-hoc run checkpoint streams: regenerable logs, not the SPEC §13.3 evidence
+# chain (that is reports/daily/*.md + HASHES.log, which ARE committed)
+reports/*.jsonl
+reports/covertest-24h-start.txt
