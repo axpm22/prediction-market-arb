@@ -1162,3 +1162,45 @@ spread you earned.
 
 Neither side pays. That is the project's answer, and it is now a measurement
 rather than an inference from absence.
+
+---
+
+## Taker side, 9-day run (2026-07-30 -> 2026-08-09)
+
+The cover funnel ran on HEAD 8087817 — i.e. with bids actually serialized onto
+the opportunity row — for nine days:
+
+```
+4,176 cover observations -> 81 distinct covers
+    detected              81
+    edge_net>0            81   (-0)
+    spread<=edge           5   (-76)
+    depth>=$50             0   (-5)
+    survived>=2 polls      0
+```
+
+**Five covers cleared the spread.** That is the first time anything has, and it
+corrects the earlier "the spread kills everything" summary. The spread kills
+94% (76 of 81); the survivors die on DEPTH.
+
+| edge | half-spread sum | ratio | min leg depth |
+|---|---|---|---|
+| 0.02535 | 0.02500 | 0.99x | $0.43 |
+| 0.01734 | 0.01000 | 0.58x | $16.84 |
+| 0.01289 | 0.01150 | 0.89x | $9.00 |
+| 0.01309 | 0.00550 | 0.42x | $0.26 |
+| 0.02196 | 0.00550 | **0.25x** | $11.67 |
+
+One of them carried an edge **four times** its spread. The constraint is not
+that the mispricing is imaginary — it is that the mispricing is **unsizeable**.
+The deepest of the five offers $16.84 at 1.7 points, or about **$0.29** of
+profit; the best ratio offers $11.67 at 2.2 points, about **$0.26**.
+
+So the honest statement of the taker result is not "no arb exists". It is:
+
+> Roughly one cover every two days survives fees and the spread, and each is
+> worth about a quarter, against a $50 depth floor that exists because smaller
+> than that cannot be filled on two venues at once.
+
+That is a stronger and more useful negative than "we found nothing", because it
+says WHY: the edge is real, rare, and too small to stand on.
