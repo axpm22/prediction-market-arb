@@ -41,7 +41,7 @@ fixes) may change freely with dated changelog entries — fixing a parser is not
 
 ## Amendments (append-only)
 
-- **2026-06-12 — EV signal added (per EV_SPEC.md).** New hypotheses, frozen now before EV
+- **2026-06-12 — EV signal added (per `docs/SPEC.md`).** New hypotheses, frozen now before EV
   data accumulates. EV betting stays OFF; these gate whether it ever turns on.
   - **H-EV1 (CLV):** EV flags with edge ≥ `ev.e_min` beat their own venue close —
     mean CLV > 0 with a bootstrap 95% CI excluding 0, over **n ≥ 40** depth-floored flags.

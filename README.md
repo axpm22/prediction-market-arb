@@ -9,7 +9,7 @@ I be today — and how much of the claimed edge survived contact with reality?**
 
 **Start here:** [RESULTS.md](RESULTS.md) (the findings) ·
 [PREREGISTRATION.md](PREREGISTRATION.md) (frozen methodology) ·
-[INTERVIEW_NOTES.md](INTERVIEW_NOTES.md) (the short version). Headline finding: cross-venue
+[FAQ.md](FAQ.md) (the short version). Headline finding: cross-venue
 sports arbitrage nets **≈$0 on confirmed fills** — the mirage the harness was built to
 measure honestly.
 

@@ -39,7 +39,7 @@ Result: 352 of 678 pending EV bets became permanently unsettleable from the Odds
 
 ### Preferred: run the daemon (auto-settles every cycle)
 ```
-cd ~/Downloads/Codex/ArbitrageModel && source .venv/bin/activate
+cd /path/to/prediction-market-arb && source .venv/bin/activate
 python -m arb daemon
 ```
 The daemon: watches every cycle, runs the free MLB backfill every cycle, runs the Odds API
@@ -54,7 +54,7 @@ python -m arb settle-backfill   # MLB Stats (everything, no window)
 ```
 A cron entry every 2 hours is plenty:
 ```
-0 */2 * * *  cd ~/Downloads/Codex/ArbitrageModel && ./.venv/bin/python -m arb settle-backfill >> logs/settle.log 2>&1
+0 */2 * * *  cd /path/to/prediction-market-arb && ./.venv/bin/python -m arb settle-backfill >> logs/settle.log 2>&1
 ```
 
 ## 5. Monitoring — the orphan check (run this to KNOW it's working)

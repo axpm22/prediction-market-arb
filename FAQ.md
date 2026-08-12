@@ -1,9 +1,9 @@
-# Interview cheat-sheet — ArbitrageModel
+# FAQ — the short version
 
-One page. The three findings, then the methodology questions that test whether you
-understand your own work.
+One page: the three findings, then the methodology questions the project is most
+often challenged on.
 
-## The three findings (30 seconds each)
+## The three findings
 
 1. **Cross-venue sports arb is a mirage.** ~945k quotes, 44 settled arbs net +$0.13
    (~$0.003/bet). Flash re-quote: 33 verified, 10 vanished. The edge dies to fees,

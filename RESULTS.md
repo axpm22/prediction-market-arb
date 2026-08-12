@@ -26,7 +26,7 @@ venue fees). Detection runs per game × market × exact line. Every flag is a $1
 then graded down an evidence ladder: depth floor → match-suspect quarantine → time-skew
 label → flash re-quote (VERIFIED/VANISHED) → settlement. Cross-venue flags stay REVIEW
 until both rulebooks are read. Flat-$1 is the honest headline; quarter-Kelly is a parallel
-projection. Full method and de-vig in PREREGISTRATION.md and EV_SPEC.md.
+projection. Full method and de-vig in PREREGISTRATION.md and `docs/SPEC.md` §8.
 
 ## Finding 1 — cross-venue sports arb is a mirage on confirmed fills
 

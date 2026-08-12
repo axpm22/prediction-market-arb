@@ -1,4 +1,4 @@
-# ArbitrageProject — Claude Code instructions
+# prediction-market-arb — Claude Code instructions
 
 Read `docs/SPEC.md` fully before writing any code. It is the single source of truth. Implement phases in order; do not start a phase until the previous phase's acceptance checks pass.
 
