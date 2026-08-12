@@ -47,3 +47,9 @@ config.local.yaml.bak
 
 # Phase D supervisor per-process lock dir (runtime)
 .locks/
+
+# Working prompt files — kept local, deliberately out of the public repo
+prompts/
+
+# Generated from docs/REBUILD_SPEC_V3.md via pandoc; the markdown is the source of truth
+ArbitrageModel_Rebuild_Spec_v3.pdf

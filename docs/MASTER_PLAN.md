@@ -325,6 +325,40 @@ it's real. **Measurement first, betting later.** Nothing here starts before Stag
 
 ---
 
+## 3a. Stage α outcomes (2026-07-06, prompt 13 — improvement-scan addendum)
+
+Three read-only measurements from queue prompt 13. Decision rules were frozen in
+`PREREGISTRATION_V2.md §9` before the queries ran; full evidence and per-surface memos live there.
+Numbers re-verified against `data/arb.sqlite` (post-cutover live, Jul 3–6) and
+`data/archive-pre-v2/arb.sqlite`.
+
+- **α1 — totals cross-venue scope: premise REFUTED, totals STAY.** Pairwise exact-line overlap is
+  **100% live (21/21 MLB)** and **98.2% archive (270/275 MLB)** — far above the 2% drop cutoff on
+  both DBs. Overlap is entirely **Kalshi-strike-ladder-driven** (Kalshi's 2.5→12.5 half-point
+  ladder contains Polymarket/SX main lines). MMA/soccer totals are Polymarket-single-venue and
+  already out of cross-venue scope. Second branch fires → **deliverable: a ladder-aware totals
+  matching prompt** (verify/ensure detection pairs every Kalshi strike, not a single main line).
+  Extends SPEC §1/§5, §2#8. NB: 0 ARB today is the fees/edge null, not proof of no matching.
+
+- **α2 — AI-matcher recall: UNMEASURABLE (zero ground truth).** No known-equivalent non-sports pair
+  exists anywhere: `nonsports_map.yaml` = empty templates, candidate log = 0 bytes, `0/8` positive
+  verdicts ever, no verdict table in the V1 archive. Zero-GT contingency (spirit of the <50%
+  branch) → **do NOT expand Haiku budget**; prerequisite deliverable is a stage-1 recall harness +
+  a hand-labeled ground-truth set. Also surfaced: post-cutover the nonsports/AI lane hasn't run at
+  all (not in `supervisor.processes`). Extends `prompts/nonsports_ai_matcher.md`, §3 item 5.
+
+- **α3 — dead schema: unlaunched lanes, not dead code.** Every zero-row table has a working writer;
+  `supervisor.processes = {watch: true}` is why they're empty. Memos (full text in PREREG §9):
+  `positions`/`ledger` (V1 `paper.py` executor, superseded by `flat_bets`) → **DELETE** (Stage 3);
+  `btc_oracle_prints` (single-oracle, post-fee-fix) → **REVIVE** with a dated "real if" (clear
+  `data/stop-btc`, supervise `btc`, oracles must agree ≥N windows); `wallets`/`wallet_trades`
+  (whale debunk, unrun) → lean **DELETE**; `forecasts` (manual, unused) → **DELETE**; **ev-exit**
+  DOES write durable rows (γ2's "writes nothing" premise is false) → **KEEP dormant** while EV is
+  frozen. Extends §3, config `btc_arb`/`micro`.
+
+**STOP gate (prompt 13, end of Stage α):** the three outcomes above are the review deliverable.
+β (amends queue 07/08) and γ (soccer normalization, ev-exit) are later-stage and not started.
+
 ## 4. Sequencing — dependency-ordered roadmap
 
 Stage gates are hard: **STOP for review** at the end of each stage; a stage starts only

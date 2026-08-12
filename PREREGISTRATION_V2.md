@@ -127,6 +127,7 @@ Halfway checkpoints (`halfway_n`) are for monitoring only and never promote a st
 | 2026-07-02 | **Phase A regrade verdict → EV bet creation FROZEN** (`ev_enabled: false`); `devig_method` restored `proportional`→`power` (shipped config had drifted off the freeze). | Prompt 04 ran `arb regrade --db data/archive-pre-v2/arb.sqlite` (read-only). See §7. |
 | 2026-07-02 | **Fee cost vectors re-frozen.** Polymarket linear→**quadratic** per category (`fee = feeRate·p·(1−p)`); SX singles 0 / winning-parlay 5%; Kalshi 0.07 re-verified. | Prompt 05. Published schedules (Polymarket 2026-03-30, SX, Kalshi Jun-2026). See §8. |
 | 2026-07-03 | **Baseline cutover (Option A) + supervised restart.** Live `data/arb.sqlite` archived to `data/arb-incident-baseline-20260703.sqlite` (507 flat_bets / 616,889 quotes, read-only); fresh empty `data/arb.sqlite` initialized; system restarted under the Phase D supervisor and `data/stop-all` removed. | Prompt 03, after 01–08 landed on `main` (515 tests green). **Rule: pre-cutover data (this baseline + `data/archive-pre-v2/`) is analysis-only and is NEVER blended into post-cutover P&L.** The measurement clock restarts here. |
+| 2026-07-06 | **Stage α decision rules frozen** (prompt 13 — improvement-scan addendum). Three pre-committed read-only-measurement rules recorded in §9 BEFORE their data was collected: α1 totals cross-venue scope (2% overlap cutoff), α2 AI-matcher stage-1 recall (<50% / ≥80% bands), α3 dead-schema DELETE-or-REVIVE. | Prompt 13, Stage α. Rules transcribed verbatim from the prompt's pre-committed clauses; outcomes recorded in §9 after the queries ran. |
 
 ---
 
@@ -189,3 +190,102 @@ fees were not the binding constraint on the archived baskets.** No class flipped
 no fresh forward test is triggered here (the general negrisk exhaustive sweep remains prompt 12).
 Forward negrisk scans now price on the corrected quadratic curve and will flag more baskets than
 the linear model did.
+
+---
+
+## 9. Stage α decision rules (2026-07-06, prompt 13) — FROZEN before Stage α data
+
+Three read-only measurements from the improvement-scan addendum. The decision rules below are
+transcribed from the prompt's pre-committed clauses and frozen here **before** the queries were
+run; outcomes (the "Result" lines) were filled in afterward from `data/arb.sqlite` (post-cutover
+live) and `data/archive-pre-v2/arb.sqlite`.
+
+### α1 — Totals cross-venue scope
+- **Metric.** Pairwise exact-line overlap = the fraction of *multi-venue* TOTAL events (an event
+  with a `market_type='TOTAL'` line quoted by ≥2 distinct venues) for which at least one venue
+  **pair** shares an identical `line` value. Measured over BOTH DBs. Kalshi multi-strike totals
+  ladders are checked separately for intersection with Polymarket/SX main lines.
+- **Rule (pre-committed).** Pairwise exact-line overlap **< 2%** of multi-venue totals events
+  across BOTH DBs → totals leave cross-venue detection scope (config flag + dated SPEC amendment;
+  single-venue totals persistence unchanged). If overlap is instead concentrated in Kalshi strike
+  ladders intersecting Polymarket/SX main lines → do NOT drop totals; write a ladder-aware matching
+  item as a new queue prompt.
+- **Result (2026-07-06) — PREMISE REFUTED, second branch fires.** Pairwise exact-line overlap:
+  LIVE MLB **21/21 = 100%**; ARCHIVE MLB **270/275 = 98.2%**, NBA 1/1. MLB is the ONLY
+  multi-venue totals sport — MMA and soccer totals are Polymarket-single-venue (14 / 137 events)
+  and so are correctly outside cross-venue scope by construction, not by a drop decision. The
+  overlap is **entirely Kalshi-strike-ladder-driven**: Kalshi quotes an exhaustive half-point
+  ladder (2.5→12.5, 11–25 distinct lines) that contains Polymarket's (8.5/9.5) and SX's (8.5)
+  main lines — `kalshi+polymarket` share a line in 21/21 live events. Far above the 2% cutoff on
+  BOTH DBs, so **totals do NOT leave cross-venue scope**; the pre-committed second branch fires →
+  the deliverable is a **ladder-aware matching prompt** (detection must consider every Kalshi
+  strike, not just a main line). Totals are ~50% of live quote inventory (27,721 of 55,618).
+  Detection already keys outcomes by `(market_type, line, outcome)` with every Kalshi strike
+  persisted, so the follow-on prompt's first task is to VERIFY strike-level pairing actually
+  fires (0 ARB today is the fees/edge null, not necessarily a matching gap).
+
+### α2 — AI-matcher stage-1 recall
+- **Metric.** Recall = of the human-mapped / manually-identified equivalent non-sports pairs
+  available as ground truth (`data/nonsports_map.yaml` enabled+filled entries; archive
+  `logs/nonsports_candidates.log` manually-confirmed equivalents), the fraction that today's
+  stage-1 candidate generation (fuzzy ≥ `nonsports.candidate_threshold` = 85 + the deterministic
+  strike matcher) would emit as a candidate. Offline, **zero API calls**.
+- **Rule (pre-committed).** Recall **< 50%** on ground-truth pairs → stage-1 thresholds get their
+  own tuning prompt before ANY Haiku-budget expansion (MASTER_PLAN §3.5). Recall **≥ 80%** →
+  expansion proceeds as MASTER_PLAN §3.5. (50–80%: inconclusive — default to tuning-first,
+  re-measure as ground truth accrues.)
+- **Zero-ground-truth contingency (pre-committed).** If no filled ground-truth pairs exist (map
+  all-template, archive log absent/empty), recall is *undefined* — the pre-committed action is the
+  spirit of the <50% branch: **never expand Haiku spend on an unmeasured recall**; assembling
+  ground truth is a prerequisite deliverable before any stage-1 expansion.
+- **Result (2026-07-06) — recall UNMEASURABLE; zero-GT contingency fires.** There are **zero
+  ground-truth pairs anywhere**: `data/nonsports_map.yaml` = 3 disabled all-empty templates (no
+  filled tickers/market_ids); `logs/nonsports_candidates.log` = **0 bytes**; `nonsports_verdicts`
+  = **0 positive of 8 ever recorded** (pre-cutover baseline), 0 rows live, and the V1 archive has
+  no verdict table at all. No known-equivalent non-sports pair has ever been confirmed. Recall is
+  therefore undefined → the pre-committed contingency (= spirit of the <50% branch): **do NOT
+  expand Haiku budget**; the prerequisite deliverable is a **stage-1 recall harness + a
+  hand-labeled ground-truth set** (equivalent pairs mined from stored Kalshi/Polymarket listings)
+  before any expansion. Separately: post-cutover the whole nonsports/AI-matcher lane **has not run
+  at all** (0 verdicts; `nonsports` is not in `supervisor.processes`), so *precision* isn't being
+  measured either — ties to α3's unlaunched-lanes finding.
+
+### α3 — Dead-schema surfaces
+- **Rule (pre-committed).** Every zero-row table (`wallets`, `wallet_trades`, `forecasts`,
+  `btc_oracle_prints`; and `positions`/`ledger` if zero) either has, **by end of Stage 2**, a dated
+  revive prompt carrying a pre-registered "real if" clause, or its schema + feeding code are
+  **deleted in Stage 3** alongside queue 10. No third (indefinite-dormant) state. The BTC
+  same-oracle lane (`btc_arb`) is evaluated for revive AFTER queue-05 corrected fees (done, §8), on
+  its single-oracle no-settlement-mismatch merit. `ev-exit`: if it writes nothing durable,
+  instrument its exit marks into an analysis table (CLV-at-exit) with a one-page spec, or stop the
+  runner (γ2).
+- **Result (2026-07-06) — every zero-row table has a WORKING writer; they are UNLAUNCHED lanes,
+  not dead code.** `supervisor.processes = {watch: true}` only, so post-cutover just watch (140
+  polls) + scan (2) ran; ev-exit/focus/negrisk/political/whales/btc/forecast were never launched
+  (the prompt's "1,961 ev-exit polls" was the pre-cutover daemon). Per-surface memo:
+  - **`positions` + `ledger`** ← `arb/paper.py:fill_opportunity`, the V1 auto-fill executor,
+    reachable only when `auto_fill=true` (permanently false; V2 books to `flat_bets`). Empirically
+    dead: 11 `flat_bets` rows, 0 `positions`/`ledger`. → **DELETE candidate** (schema +
+    `arb/paper.py` + the `positions` fill path) in Stage 3 alongside queue 10, after confirming the
+    scan path never calls `fill_opportunity`.
+  - **`btc_oracle_prints`** ← `arb/experimental/btc_oracle.py` (`btc` cmd). → **REVIVE.** The
+    prompt's designated candidate: the ONLY cross-venue class with the single-oracle
+    (BRTI vs UMA) no-settlement-mismatch property, and queue-05 fees are now corrected.
+    `data/stop-btc` (set 2026-06-22) blocks it. Revive plan (own dated prompt by end of Stage 2):
+    clear stop-btc, add `btc` to `supervisor.processes`, collect prints; **real if** = the two
+    oracles print the SAME binary result over ≥ N windows (N set in the revive prompt) before
+    `btc_arb.trusted` is even discussed; whitelisting still gated by §3.3.
+  - **`wallets` + `wallet_trades`** ← `arb/experimental/whales.py` (`whales` cmd), Phase 5
+    "measurement/debunk only", manual, single-venue read-only. → **REVIVE-or-DELETE, lean DELETE
+    (YAGNI):** disconnected from the arb thesis, never run, no committed study. Revive only with a
+    "real if" (qualified wallets' forward copy-fill P&L beats base rate); else delete in Stage 3.
+  - **`forecasts`** ← `arb/forecast/ledger.py` (`forecast-log/settle/report`), a MANUAL
+    calibration ledger (not a loop, zero idle cost), 0 rows = never used. → **DELETE candidate
+    (YAGNI)** unless the operator commits to logging forecasts.
+  - **ev-exit (γ2 preview):** the "writes nothing durable" premise is **FALSE** — it appends
+    EXITED/SOLD/STOPPED rows to `flat_bets` (`ev_exit.py:170-199`). It found 0 candidates because
+    it only acts on `kind='EV' AND status='OPEN'` bets and EV creation is frozen; post-cutover it
+    isn't even launched. → **KEEP code, leave dormant** (do not supervise while EV is frozen — no
+    work exists); revisit if/when EV bet creation re-enables. No instrumentation needed.
+  - No third (indefinite-dormant) state: revive prompts land by end of Stage 2; deletions execute
+    in Stage 3.
