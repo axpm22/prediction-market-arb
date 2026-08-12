@@ -1,4 +1,4 @@
-"""B3 — BTC cross-venue oracle-divergence tracker (MicroEVBitcoin.md).
+"""B3 — BTC cross-venue oracle-divergence tracker (docs/MicroEVBitcoin.md).
 
 Cross-venue BTC arbs are permanently REVIEW because Kalshi (CF Benchmarks BRTI) and
 Polymarket (UMA) are not PROVEN to settle identically (hard rule #6). This turns that into an

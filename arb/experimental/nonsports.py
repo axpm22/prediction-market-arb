@@ -1,6 +1,6 @@
 """Non-sports markets (politics/econ/weather) — SPEC §1/§5.4, separate process.
 
-Two matching paths (spec amendment, prompts/nonsports_ai_matcher.md):
+Two matching paths (spec amendment, docs/nonsports_ai_matcher.md):
   1. Manual (always on): `nonsports-suggest` fuzzy-pairs venue titles into
      logs/nonsports_candidates.log; a human reads both rulebooks and promotes a pair into
      data/nonsports_map.yaml. Human entries always win over an AI verdict.

@@ -1,4 +1,4 @@
-# ArbitrageProject
+# prediction-market-arb
 
 A paper-only research system that hunts cross-venue arbitrage in prediction markets —
 Kalshi, Polymarket, and SX Bet — and keeps a brutally honest, append-only record of

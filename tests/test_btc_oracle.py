@@ -1,4 +1,4 @@
-"""B3 — BTC oracle-divergence tracker (MicroEVBitcoin.md): the REVIEW -> whitelist evidence path."""
+"""B3 — BTC oracle-divergence tracker (docs/MicroEVBitcoin.md): the REVIEW -> whitelist evidence path."""
 from datetime import datetime, timezone
 
 from arb.experimental.btc_oracle import (

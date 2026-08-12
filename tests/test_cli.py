@@ -243,7 +243,7 @@ def laddered_quote(cost: str, depth: str, ladder):
 
 
 def test_micro_ev_walks_ladder_and_drops_edge_that_does_not_survive_fill() -> None:
-    # M2/M3 (MicroEVBitcoin.md): the micro stake is priced by walking the ladder, not at the
+    # M2/M3 (docs/MicroEVBitcoin.md): the micro stake is priced by walking the ladder, not at the
     # top tick, and the edge must survive that fill or it is dropped as a depth artifact.
     config = load_config()
     cons = {(EVENT_KEY, "kansas city royals"): (Decimal("0.63"), datetime.now(timezone.utc))}

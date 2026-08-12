@@ -1,5 +1,5 @@
 """Haiku-decided non-sports market matching (spec amendment to "manual-only" — see
-prompts/nonsports_ai_matcher.md). Haiku compares both venues' resolution rules and decides
+docs/nonsports_ai_matcher.md). Haiku compares both venues' resolution rules and decides
 equivalence inline in the nonsports watch loop; every AI-matched event is tagged
 ai_matched=true, its opportunities stay REVIEW, and its bets report in a separate section
 so the tracker measures Haiku's real error rate instead of trusting it.

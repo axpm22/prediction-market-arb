@@ -275,7 +275,7 @@ CREATE TABLE IF NOT EXISTS forecasts(
     logloss_market REAL,
     clv REAL
 );
--- B3 (MicroEVBitcoin.md): per-window record of both venues' BTC settlement print + realized
+-- B3 (docs/MicroEVBitcoin.md): per-window record of both venues' BTC settlement print + realized
 -- result, so cross-venue oracle agreement (CF Benchmarks BRTI vs Polymarket UMA) becomes an
 -- empirical question. Append-only; the path from REVIEW -> a whitelistable trusted pair.
 CREATE TABLE IF NOT EXISTS btc_oracle_prints(
