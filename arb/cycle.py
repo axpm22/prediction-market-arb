@@ -107,11 +107,59 @@ def persist_poll(cfg, store, poll_kind: str, all_quotes: list, venue_status: dic
     return poll_id
 
 
+def enrich_gate_ladders(cfg, opps, fetch=None) -> int:
+    """Attach Kalshi ask-ladders to the covers that could actually pay.
+
+    Kalshi has no batch book endpoint — a ladder costs one request PER MARKET —
+    so fetching every market every poll would multiply Kalshi traffic ~100x and
+    blow the poll cadence. Instead this runs after detect() and fetches only for
+    opportunities that already cleared edge>0 and spread<=edge, which is the
+    only population the depth gate ever scores (~5 in 9 days, measured).
+
+    Why it exists: `depth_usd` is best-level size only, and until now every
+    Kalshi quote stored ladder_json=NULL (0 of 26,990,797 rows), so
+    capacity.py's `all(len(lad) >= 2)` could never pass on a Kalshi-legged cover
+    and "died on depth" was never actually measured against a ladder.
+
+    Mutates the leg Quotes in place, BEFORE persist_poll writes them, so nothing
+    ever updates a stored row. Returns the number of ladders filled.
+    """
+    from arb import covers
+    from arb.venues import kalshi
+    if fetch is None:
+        fetch = kalshi.fetch_orderbook
+    filled = 0
+    for o in opps:
+        if o.edge is None or o.edge <= 0:
+            continue
+        sp = covers.half_spread_sum(
+            [{"cost": q.cost, "bid": q.bid} for q in o.legs])
+        if sp is None or sp > float(o.edge):
+            continue                      # same gate covers.py scores on
+        for q in o.legs:
+            if q.venue != "kalshi" or q.ladder_json is not None:
+                continue
+            # A venue hiccup must not take the poll down: the ladder simply
+            # stays absent, which the depth gate already reads as INSUFFICIENT.
+            try:
+                ob = fetch(cfg, q.venue_market_id)
+            except Exception as e:  # noqa: BLE001
+                log.warning("kalshi ladder fetch failed for %s: %s",
+                            q.venue_market_id, e)
+                continue
+            lad = kalshi.ask_ladder(ob, q.venue_side or q.side)
+            if lad:
+                q.ladder_json = kalshi.ladder_json(lad)
+                filled += 1
+    return filled
+
+
 def run_cycle(cfg, store, quotes_by_venue: dict, venue_status: dict,
               poll_kind: str = "watch") -> int:
     all_quotes = [q for qs in quotes_by_venue.values() for q in qs]
     groups = build_groups(all_quotes, cfg, load_aliases(),
                           mlb_schedule=fetch_mlb_schedule(cfg))
     opps, rejects = detect(cfg, groups)
+    enrich_gate_ladders(cfg, opps)
     persist_poll(cfg, store, poll_kind, all_quotes, venue_status, groups, opps, rejects)
     return 0

@@ -38,7 +38,7 @@ def _legs(row) -> list[dict]:
         return []
 
 
-def _spread(legs) -> float | None:
+def half_spread_sum(legs) -> float | None:
     """Half-spread summed across legs — what crossing costs. None if any leg
     has no bid, which is itself disqualifying: a book you cannot exit."""
     total = 0.0
@@ -122,7 +122,7 @@ def funnel(cfg, con, since: str) -> dict:
         if edge <= 0:
             continue
         stages["edge_net>0"].append(fp)
-        sp = _spread(c["legs"])
+        sp = half_spread_sum(c["legs"])
         if sp is None or sp > edge:
             continue
         stages["spread<=edge"].append(fp)

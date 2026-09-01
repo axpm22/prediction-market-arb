@@ -191,6 +191,25 @@ def fetch_markets(cfg) -> list[Quote]:
     return quotes
 
 
+def ask_ladder(orderbook_fp: dict, side: str) -> list[tuple[Decimal, Decimal]]:
+    """ASK ladder for `side`, derived from the OPPOSITE side's bid levels.
+
+    `orderbook_fp` carries BIDS per side, so the YES asks are the NO bids
+    reflected through 1 (rule 10's inversion trap, Kalshi flavour): a NO bid of
+    0.43 is a YES ask of 0.57, carrying that level's own size. Returned
+    best-ask-first, which is the order arb/sizing.py walks.
+    """
+    levels = orderbook_fp.get("no_dollars" if side == "YES" else "yes_dollars") or []
+    lad = [(Decimal("1") - Decimal(str(p)), Decimal(str(sz))) for p, sz in levels]
+    return sorted(lad, key=lambda lvl: lvl[0])
+
+
+def ladder_json(ladder: list[tuple[Decimal, Decimal]]) -> str:
+    """Persisted form. Matches the polymarket shape so sizing.parse_ladder —
+    the one reader every depth consumer goes through — round-trips it."""
+    return json.dumps([[str(p), str(sz)] for p, sz in ladder])
+
+
 def fetch_orderbook(cfg, ticker: str) -> dict:
     """orderbook_fp: per-side BID levels [price_dollars, contracts]; the ask of one
     side derives as 1 - best opposite bid (verified vs market object 2026-07-08)."""
