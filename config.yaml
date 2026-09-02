@@ -471,6 +471,13 @@ maker:                              # maker-side measurement lane (2026-07-30). 
   max_price: 0.90                   #   resolved and can never produce a maker fill
   markout_horizons_secs: [30, 120, 600]
   min_fills_for_verdict: 100        # below this the bracket is reported but never scored
+  min_frames_per_sec: 1.0           # below this a cycle recorded NOTHING REAL: the socket
+                                    #   opened, delivered its book snapshot (~1 frame per
+                                    #   token) and then went silent. Measured 2026-09-02:
+                                    #   three consecutive 1800s cycles returned 64-68 frames
+                                    #   and 0 trades while reporting short=false, across
+                                    #   22:00-00:00 EDT — US prime time, so not market quiet.
+                                    #   Live rates run 66-347/s, so 1.0 separates cleanly.
 
 scale_in:                             # add to a live arb that is still there and BETTER
   enabled: true

@@ -44,8 +44,20 @@ while [ "$(date +%s)" -lt "$END" ]; do
     [ "$WANT" -lt 30 ] && break
     T0=$(date +%s)
     PYTHONPATH="$PWD" .venv/bin/python scripts/pm_tape_cycle.py "$WANT" >> "$LOG" 2>&1
-    ACC=$(( ACC + $(date +%s) - T0 ))
-    sleep 2   # do not hot-spin if the venue is refusing every connection
+    RC=$?
+    ELAPSED=$(( $(date +%s) - T0 ))
+    if [ "$RC" -eq 2 ]; then
+      # Exit 2 = the socket was alive but silent (see pm_tape_cycle.py). Do NOT
+      # credit it: an uncredited dead cycle is retried inside the same period,
+      # so the run resumes on its own once the feed comes back instead of
+      # booking 30 minutes of nothing as a completed budget.
+      printf '{"ts": "%s", "dead_cycle_secs": %s, "not_credited": true}\n' \
+        "$(date -u +%FT%TZ)" "$ELAPSED" >> "$LOG"
+      sleep 10
+    else
+      ACC=$(( ACC + ELAPSED ))
+      sleep 2   # do not hot-spin if the venue is refusing every connection
+    fi
   done
 
   # Idle out the rest of the period.

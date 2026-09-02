@@ -1,4 +1,4 @@
-"""One bounded PM-tape recording session. Prints a single JSON line.
+"""One bounded PM-tape recording session. Prints a JSON line; exit 2 = dead feed.
 
 Exists because pm_tape.record() has NO reconnect: arb/pm_tape.py breaks out of
 its receive loop on any socket drop and returns NORMALLY. A single 3-day call
@@ -22,6 +22,7 @@ def main() -> int:
     secs = int(sys.argv[1]) if len(sys.argv) > 1 else 3600
     rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "want_secs": secs}
     t0 = time.time()
+    cfg = None
     try:
         cfg = load("config.yaml")
         tokens = pm_tape.contested_tokens(cfg)
@@ -36,8 +37,19 @@ def main() -> int:
     # A cycle that returns far early is a DROP, not a clean session. Naming it
     # here is what makes truncation visible in the log instead of invisible.
     rec["short"] = rec["actual_secs"] < secs * 0.9
+
+    # A cycle that runs its FULL duration can still have recorded nothing: the
+    # socket opens, delivers one book snapshot (~1 frame per token), then goes
+    # silent — which is what a resumed-from-sleep zombie socket looks like.
+    # `short` cannot see it, so on 2026-09-02 three consecutive 1800s cycles
+    # reported healthy while capturing 64 frames and 0 trades. Rate is the
+    # signal that separates them; the caller must not credit a dead cycle.
+    rate = rec.get("frames", 0) / max(rec["actual_secs"], 1e-9)
+    rec["frames_per_sec"] = round(rate, 2)
+    floor = float(cfg["maker"]["min_frames_per_sec"]) if cfg else 1.0
+    rec["dead"] = "error" not in rec and rate < floor
     print(json.dumps(rec), flush=True)
-    return 0
+    return 2 if rec["dead"] else 0
 
 
 if __name__ == "__main__":
