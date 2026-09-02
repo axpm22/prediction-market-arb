@@ -131,6 +131,15 @@ Passive: log price paths of any market we already persist that enters a dispute.
 ### L11 (was S16, salvage). Large-print markout on Kalshi tape
 Wallet-copy is scrapped (Kalshi trades are anonymous; PM wallet data is ANJ-fragile; and the replay granted the follower the whale's own fill — a fiction). Salvage: markout of large prints measured **from the post-print touch on the follower's side** [fix], Kalshi tape only, Later tier, diagnostic value (does size predict direction here?).
 
+### L13 (new 2026-09-02, from the literature). No-side calibration — the Yes-Bias test
+L8 reads `yes_ask` and only `yes_ask`, so every band it reports is the return to a taker who bought YES. Its uniformly negative curve is therefore consistent with two different worlds it cannot separate: an efficient market where we pay the spread, or a real mispricing we were standing on the wrong side of.
+
+Source: the 2026 Kalshi microstructure literature reports the favorite-longshot bias is largely a **"Yes Bias"** — YES systematically overpriced — which makes buying NO the mirror trade. Kalshi candles quote only `yes_ask`/`yes_bid`, so the no-ask derives from the identity already in `data/verified_facts.md`: the ask of one side is `1 - the opposite side's best bid`.
+
+Same horizon, same two-sided gate, same bands, same clustering, same family-wise correction as L8, so the two are comparable market-for-market.
+
+**Read the result carefully.** Buying both sides of one market loses exactly the spread plus both fees, so `yes_edge + no_edge == -(spread + fees)` identically (pinned in `tests/test_no_side_calibration.py`). A positive L13 number is the arithmetic MIRROR of a negative L8 number, never a second observation of it. What is new is only the direction — whether either side of these books was payable at all, which L8's design could not ask.
+
 ---
 
 ## 4. Ranked queue v2 — with the two columns the audit demanded

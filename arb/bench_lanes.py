@@ -16,7 +16,7 @@ import statistics
 from decimal import Decimal
 
 from arb.bench import LaneResult, rule_of_three, verdict_for, wilson
-from arb.bench_kalshi import _d, l6_tail, l8_calibration
+from arb.bench_kalshi import _d, l6_tail, l8_calibration, l13_no_side
 from arb.bench_maker import l12_maker
 from arb.bench_markout import l7_maker, l11_prints
 from arb.models import q6
@@ -398,5 +398,6 @@ LANES = {
     "L10": ("dispute case-log", l10_dispute),
     "L11": ("large-print markout", l11_prints),
     "L12": ("maker bracket (PM WS tape)", l12_maker),
+    "L13": ("no-side calibration (Yes-Bias test)", l13_no_side),
 }
 

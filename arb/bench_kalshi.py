@@ -59,19 +59,32 @@ def _two_sided(cfg, candle: dict, ask: Decimal) -> bool:
             and (ask - bid) <= Decimal(str(cfg["bench"]["max_spread"])))
 
 
-def _ask_at(cfg, candles: list[dict], cutoff_ts: int) -> Decimal | None:
-    """Last EXECUTABLE yes-ask at or before `cutoff_ts`. An ask of exactly 1.00
-    with no offer behind it is the empty-book trap (arb/venues/kalshi.py:56),
+def _ask_at(cfg, candles: list[dict], cutoff_ts: int,
+            side: str = "yes") -> Decimal | None:
+    """Last EXECUTABLE ask for `side` at or before `cutoff_ts`. An ask of exactly
+    1.00 with no offer behind it is the empty-book trap (arb/venues/kalshi.py:56),
     not a price; 0.00 is likewise not buyable; and a one-sided book is handled
     by _two_sided. All are dropped rather than winsorized — measurement rule 1
-    says executable prices only."""
+    says executable prices only.
+
+    side="no" prices the OTHER side of the same candle. The candles carry only
+    `yes_ask`/`yes_bid`, so the no-ask comes from the identity verified in
+    data/verified_facts.md and arb/venues/kalshi.py: the ask of one side is
+    1 - the opposite side's best bid. Inverting that silently flips the whole
+    lane, which is rule 10's trap in Kalshi form — tests/test_no_side_calibration.py
+    pins it.
+
+    The validation gate is deliberately the YES gate for BOTH sides, so the two
+    lanes select an identical population and stay comparable market-for-market.
+    """
     best = None
     for c in candles:
         if c.get("end_period_ts", 0) > cutoff_ts:
             break                      # candles arrive in ascending period order
         a = _d((c.get("yes_ask") or {}).get("close_dollars"))
         if a is not None and Decimal(0) < a < Decimal(1) and _two_sided(cfg, c, a):
-            best = a
+            best = (a if side == "yes"
+                    else Decimal(1) - _d((c.get("yes_bid") or {}).get("close_dollars")))
     return best
 
 
@@ -104,7 +117,8 @@ def _freq_minus_cost(cfg, obs: list[tuple[Decimal, int, str]]) -> tuple:
 # Retrospective Kalshi lanes (zero credits, decision-grade today)
 # --------------------------------------------------------------------------- #
 
-def _horizon_observations(cfg, hist, dropped: dict | None = None) -> list[dict]:
+def _horizon_observations(cfg, hist, dropped: dict | None = None,
+                          side: str = "yes") -> list[dict]:
     """One observation per settled market: the last executable ask `horizon_hours`
     before close, its all-in cost, and the outcome. This is the pre-registered
     snapshot rule of measurement rule 11 — one unit per market, never per poll.
@@ -130,14 +144,16 @@ def _horizon_observations(cfg, hist, dropped: dict | None = None) -> list[dict]:
         if min(c.get("end_period_ts", 0) for c in candles) > cutoff:
             seen["too_short"] += 1      # market did not exist that far before close
             continue
-        ask = _ask_at(cfg, candles, cutoff)
+        ask = _ask_at(cfg, candles, cutoff, side)
         if ask is None:
             seen["no_executable_ask"] += 1   # one-sided or empty book at the horizon
             continue
         out.append({"ticker": row["ticker"], "event": row["event_ticker"],
                     "category": row["category"] or "Uncategorized",
                     "cost": _all_in(cfg, row["category"] or "", ask), "ask": ask,
-                    "won": 1 if row["result"] == "yes" else 0, "candles": candles})
+                    # `side` is "yes"/"no" and so is `result`: the no-buyer
+                    # WINS the markets the yes-buyer loses.
+                    "won": 1 if row["result"] == side else 0, "candles": candles})
     return out
 
 
@@ -173,6 +189,17 @@ def l8_calibration(cfg, con, hist) -> LaneResult:
         r.note = ("corpus holds no market with an executable ask "
                   f"{cfg['bench']['horizon_hours']}h before close")
         return r
+    _band_scan(cfg, obs, dropped, r)
+    return r
+
+
+def _band_scan(cfg, obs: list[dict], dropped: dict, r: LaneResult) -> None:
+    """Score every pre-registered price band and fill `r` in place.
+
+    Shared by L8 (yes side) and L13 (no side) so the multiple-comparison
+    bookkeeping lives once: if the two lanes ever disagreed about what counts
+    as a band, a cleared CI, or a family-wise correction, they would stop being
+    comparable and the whole point of running both would be lost."""
     bands = [float(b) for b in cfg["bench"]["price_bands"]]
     plo, phi = (float(x) for x in cfg["bench"]["primary_band"])
     flagged = 0
@@ -210,6 +237,49 @@ def l8_calibration(cfg, con, hist) -> LaneResult:
                        f"T-{cfg['bench']['horizon_hours']}h horizon, "
                        f"{dropped['no_executable_ask']} with no two-sided book there")
     r.verdict = verdict_for(cfg, r.estimate, r.lo, r.hi, r.n, r.null_band)
+
+
+def l13_no_side(cfg, con, hist) -> LaneResult:
+    """L13 — the SAME books L8 prices, bought from the other side.
+
+    L8 reads `yes_ask` and only `yes_ask`. Every band it reports is the return
+    to a taker who bought YES, so its uniformly negative result is consistent
+    with two very different worlds: an efficient market where we pay the
+    spread, or a real mispricing we were standing on the wrong side of. L8
+    cannot separate them, because it never prices the other side.
+
+    The favorite-longshot literature (Kalshi microstructure work, 2026) reports
+    the bias is largely a *Yes Bias* — YES systematically overpriced — which
+    makes buying NO the mirror trade.
+
+    READ THE RESULT CAREFULLY. This is NOT independent evidence. Buying both
+    sides of one market loses exactly the spread plus both fees, so
+    yes_edge + no_edge == -(spread + fees) identically, market by market
+    (pinned in tests/test_no_side_calibration.py). A positive number here is
+    the arithmetic mirror of L8's negative one, not a second observation of it.
+    What is genuinely new is only the DIRECTION: whether either side of these
+    books was payable at all, which L8's design could not ask.
+
+    Same horizon, same two-sided gate, same bands, same clustering, same
+    family-wise correction — so the two lanes are comparable market-for-market.
+    """
+    r = LaneResult(lane="L13", name="no-side calibration (Yes-Bias test)",
+                   primary=f"after-fee TAKER edge buying NO (freq - no_ask - fee) "
+                           f"in band {cfg['bench']['primary_band']}, unit = market",
+                   unit="market")
+    if hist is None:
+        r.note = "no Kalshi corpus: run `arb bench --pull` (keyless, 0 credits)"
+        return r
+    dropped = {}
+    obs = _horizon_observations(cfg, hist, dropped, side="no")
+    if not obs:
+        r.note = ("corpus holds no market with an executable no-ask "
+                  f"{cfg['bench']['horizon_hours']}h before close")
+        return r
+    _band_scan(cfg, obs, dropped, r)
+    r.detail.append(
+        "MIRROR, NOT REPLICATION: yes_edge + no_edge == -(spread + fees) by "
+        "construction, so this lane adds a direction, never a second sample")
     return r
 
 
