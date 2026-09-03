@@ -287,7 +287,7 @@ pregame position (BUY minus SELL size > 0) whose last print is within
 |---|---|
 | V1 flat | 1 |
 | V2 excess | `score_lb − min_score_lb` |
-| V3 size | `(score_lb − min_score_lb) × log10(1 + notional_usd / whale.size.unit_usd)`, `size.unit_usd` = 100 |
+| V3 size | `(score_lb − min_score_lb) × log10(1 + open_notional / whale.size.unit_usd)`, `size.unit_usd` = 100; `open_notional = (size − sold_size) × avg_price`, the whale's live exposure on that side (pinned 2026-09-03, Task 6) |
 
 **Fire** when all hold for a side s:
 
@@ -297,10 +297,11 @@ pregame position (BUY minus SELL size > 0) whose last print is within
    rows: they are evaluated and persisted but never fire. On day 14 the
    value is computed by one formula, written as a dated amendment, and
    frozen: take every whale that qualified in at least one evaluated signal
-   during the window; `q10` = the 10th percentile of their `score_lb −
-   min_score_lb`; `min_points.V2 = 3 × q10`; `min_points.V3 = 3 × q10 ×
-   log10(1 + median_print_notional / size.unit_usd)` over the same whales'
-   prints. Fewer than 10 such whales → the window extends 7 days at a time,
+   during the window; each wallet is reduced to the median of its `score_lb −
+   min_score_lb` over the window (one value per wallet); `q10` = the 10th
+   percentile (nearest rank) of those values; `min_points.V2 = 3 × q10`;
+   `min_points.V3 = 3 × q10 × log10(1 + median(open_notional) /
+   size.unit_usd)` over the same wallets (pinned 2026-09-03, Task 6). Fewer than 10 such whales → the window extends 7 days at a time,
    reported each day. The lane cycle, which has the tape DB, enforces the
    "null only during calibration" rule: past the window with a null, it
    logs CRITICAL and books nothing for that variant. The config loader
@@ -387,7 +388,7 @@ Exit when any of:
 |---|---|---|
 | `flip` | Recomputed ratio for our side under the bet's own variant < `whale.exit.flip_ratio` | 0.50 |
 | `left` | Whales that formed the signal have net SOLD ≥ `whale.exit.sold_fraction` of the size they held at booking | 0.50 |
-| `confidence` | Points-weighted mean `score_lb` of the remaining whales on our side < `whale.exit.min_score_lb` (scores move as their other positions resolve) | −0.01 |
+| `confidence` | Points-weighted mean `score_lb` of the remaining whales on our side < `whale.exit.min_score_lb` (scores move as their other positions resolve); a whale whose points went negative since booking weighs zero, never negative (pinned 2026-09-03) | −0.01 |
 
 Exit price = best bid − taker fee, priced from a fresh `fetch_books`. No bid,
 or depth at the bid below `min_executable_usd`: no exit, annotation
