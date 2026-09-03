@@ -6,6 +6,7 @@ tape is a tmp_path SQLite file; the ledger is a tmp_path Store.
 """
 import copy
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -74,7 +75,7 @@ def _tape(tmp_path, start=START):
 
 
 def _bet(store, *, kind="WHALE", token=TOKENS[0], outcome=None, created_at=None,
-         start=START, cost="0.50", legs=1):
+         start=START, cost="0.50", legs=1, side="YES"):
     return store.insert("flat_bets", {
         "created_at": (created_at or START - timedelta(hours=1)).isoformat(),
         "poll_id": 1, "poll_kind": "whale", "fingerprint": f"fp-{token[:8]}",
@@ -84,7 +85,7 @@ def _bet(store, *, kind="WHALE", token=TOKENS[0], outcome=None, created_at=None,
         "stake_usd": "1", "payout": "1", "status": "OPEN",
         "legs_json": json.dumps([{
             "venue": "polymarket", "market_type": "WINNER", "line": None,
-            "outcome": outcome or LABELS[TOKENS.index(token)], "side": "YES",
+            "outcome": outcome or LABELS[TOKENS.index(token)], "side": side,
             "cost": cost, "fee_cost": "0",
             "venue_market_id": f"{COND}:{token}"}] * legs)})
 
@@ -129,6 +130,28 @@ def test_market_before_resolve_after_hours_is_not_read(cfg, tmp_path):
     assert get.urls == []
 
 
+def test_seed_starts_fills_a_null_start_but_never_overwrites_a_real_one(cfg, tmp_path):
+    """INSERT OR IGNORE left a start_utc NULL forever once the row existed
+    (bypassing the 4h resolve_after_hours gate, finding 3). The upsert must
+    fill a NULL from the bet's own start, but a start_utc the tape already
+    has (from Gamma, presumably more accurate) must survive untouched."""
+    con = _tape(tmp_path)
+    con.execute("UPDATE markets SET start_utc=NULL WHERE condition_id=?", (COND,))
+    con.commit()
+    bet = {"id": 1, "event_start_utc": START.isoformat()}
+    whale_resolve._seed_starts(con, [bet], {1: COND}, NOW)
+    row = con.execute("SELECT start_utc FROM markets WHERE condition_id=?",
+                      (COND,)).fetchone()
+    assert row["start_utc"] == START.isoformat()
+
+    other_start = (START + timedelta(hours=5)).isoformat()
+    whale_resolve._seed_starts(con, [{"id": 1, "event_start_utc": other_start}],
+                               {1: COND}, NOW)
+    row = con.execute("SELECT start_utc FROM markets WHERE condition_id=?",
+                      (COND,)).fetchone()
+    assert row["start_utc"] == START.isoformat()   # unchanged, not clobbered
+
+
 # --- settlement -------------------------------------------------------------
 
 @pytest.mark.parametrize("prices,token,result,pnl", [
@@ -151,6 +174,45 @@ def test_settle_auto_pm_appends_one_settled_event_with_pnl(
     # a second pass settles nothing more (open_resolution_bets excludes it)
     assert whale_resolve.settle_auto_pm(cfg, store, con, NOW, get=get) == 0
     assert len(_settled(store, bid)) == 1
+
+
+@pytest.mark.parametrize("outcome,side,token,expected", [
+    ("Down", "YES", TOKENS[1], "WON"),   # bought the winning token, own label
+    ("Up", "YES", TOKENS[0], "LOST"),    # bought the losing token, own label
+    ("Down", "NO", TOKENS[1], "LOST"),   # side=NO inversion flag flips a WHALE
+                                          # leg even on the winning token — the
+                                          # convention docs this still applies
+])
+def test_leg_convention_winner_decided_by_token_identity(
+        cfg, tmp_path, outcome, side, token, expected):
+    """Pinned leg convention (spec §8): a WHALE leg BUYS one token, `outcome`
+    names that token's own label, `side=NO` is the ledger's ordinary
+    complement-inversion flag. Down (index 1) wins in the recorded fixture."""
+    con, store = _tape(tmp_path), Store(tmp_path / "arb.sqlite")
+    bid = _bet(store, token=token, outcome=outcome, side=side)
+    get = FakeGet([_market()])
+    assert whale_resolve.settle_auto_pm(cfg, store, con, NOW, get=get) == 1
+    events = _settled(store, bid)
+    assert events[0]["per_leg"] == [expected]
+
+
+def test_settle_auto_pm_counts_only_appended_settled_events(cfg, tmp_path):
+    """settle_bet has refusal branches (future-start guard, terminal grace)
+    that return without appending a bet_events row; n must reflect actual
+    settlements, not every settle_bet call (finding 2)."""
+    start = NOW - timedelta(hours=1)   # inside terminal_mute_grace_mins (180m)
+    con, store = _tape(tmp_path, start=start), Store(tmp_path / "arb.sqlite")
+    bid = _bet(store, token=TOKENS[1], start=start)
+    con.execute(
+        "INSERT INTO resolutions (condition_id, resolved_at, winner_outcome_index,"
+        " status, source, raw_json, fetched_at) VALUES (?,?,?,?,?,?,?)",
+        (COND, NOW.isoformat(), LABELS.index("Down"), "resolved", "gamma",
+         json.dumps(RESOLVED), NOW.isoformat()))
+    con.commit()
+    get = FakeGet([])   # already resolved and not due — must not be called
+    assert whale_resolve.settle_auto_pm(cfg, store, con, NOW, get=get) == 0
+    assert get.urls == []
+    assert _settled(store, bid) == []
 
 
 def test_settle_auto_pm_refuses_a_multi_leg_bet(cfg, tmp_path):
@@ -186,6 +248,45 @@ def test_unresolved_past_giveup_annotates_once_and_never_settles(cfg, tmp_path):
     assert len(get.urls) == calls
     assert len(store.query(
         "SELECT * FROM annotations WHERE kind='resolution-giveup'")) == 1
+
+
+def test_settle_auto_pm_survives_a_failed_gamma_call(cfg, tmp_path):
+    """A failed Gamma call backs off (whale_tape._set_backoff) and the cycle
+    still returns cleanly — no bet settled, nothing raised."""
+    con, store = _tape(tmp_path), Store(tmp_path / "arb.sqlite")
+    bid = _bet(store, token=TOKENS[0])
+    get = FakeGet(RuntimeError("gamma 500"))
+    assert whale_resolve.settle_auto_pm(cfg, store, con, NOW, get=get) == 0
+    assert _settled(store, bid) == []
+    assert whale_tape._meta(con, "backoff_until") is not None
+    assert whale_resolve.resolution_for(con, COND) is None
+
+
+def test_winner_label_collision_refuses_to_settle(cfg, tmp_path, caplog):
+    """A leg whose recorded `outcome` matches the winner's label but whose
+    token does not (bad data, or two outcomes sharing a label) must never
+    settle silently: _winner_label refuses and only a warning is logged."""
+    con, store = _tape(tmp_path), Store(tmp_path / "arb.sqlite")
+    # bought the Up token but the leg's outcome is mislabeled "Down" — the
+    # winning label — so token identity and label identity disagree
+    bid = _bet(store, token=TOKENS[0], outcome="Down")
+    get = FakeGet([_market()])   # Down (index 1) wins
+    with caplog.at_level(logging.WARNING):
+        assert whale_resolve.settle_auto_pm(cfg, store, con, NOW, get=get) == 0
+    assert _settled(store, bid) == []
+    assert any("refusing to settle" in r.getMessage() for r in caplog.records)
+
+
+def test_settle_auto_pm_returns_zero_on_a_broken_tape(cfg, tmp_path):
+    """sqlite3.OperationalError from the tape (e.g. a wiped/corrupt file
+    caught mid-write) must never propagate out of the settle cycle."""
+    con, store = _tape(tmp_path), Store(tmp_path / "arb.sqlite")
+    bid = _bet(store, token=TOKENS[0])
+    con.execute("DROP TABLE resolutions")
+    con.commit()
+    get = FakeGet([_market()])
+    assert whale_resolve.settle_auto_pm(cfg, store, con, NOW, get=get) == 0
+    assert _settled(store, bid) == []
 
 
 def test_exit_source_is_exempt_from_the_instant_settle_tripwire(cfg, tmp_path):
@@ -254,17 +355,49 @@ def test_cmd_settle_runs_check_even_when_settle_auto_pm_raises(cfg, tmp_path,
     from types import SimpleNamespace
 
     from arb import commands
+    from arb.venues import mlbstats
     cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
     store = Store(tmp_path / "arb.sqlite")
     _bet(store, token=TOKENS[0])
-    called, ran = [], []
+    called, ran, mlb_calls = [], [], []
 
     def boom(*a, **k):
         called.append(1)
         raise RuntimeError("gamma down")
     monkeypatch.setattr(whale_resolve, "settle_auto_pm", boom)
     monkeypatch.setattr(invariants, "check", lambda c, s, *a, **k: ran.append(1) or [])
+    # finding 6: settle_auto_mlb runs FOR REAL here (only settle_auto_pm is
+    # stubbed). It must never reach the live MLB Stats API for this bet — that
+    # currently holds because it is kind=WHALE (settlement.py's own exclusion)
+    # — but the test must catch it directly, not lean on that exclusion never
+    # regressing and silently making a network call in the suite.
+    monkeypatch.setattr(mlbstats, "fetch_schedule",
+                        lambda *a, **k: mlb_calls.append(1) or [])
     rc = commands.cmd_settle(cfg, store, SimpleNamespace(manual=None, dry_run=False,
                                                          yes=True))
     assert called == [1]   # cmd_settle actually calls it
+    assert ran == [1] and rc == 0
+    assert mlb_calls == []
+
+
+def test_cmd_settle_survives_a_whale_import_failure(cfg, tmp_path, monkeypatch):
+    """finding 5: the whale imports moved inside the try (arb/commands.py) —
+    an import-time failure must not take reconcile()/check() down with it,
+    same as any other settle_auto_pm failure."""
+    import sys
+    from types import SimpleNamespace
+
+    from arb import commands
+    cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
+    store = Store(tmp_path / "arb.sqlite")
+    ran = []
+    monkeypatch.setattr(invariants, "check", lambda c, s, *a, **k: ran.append(1) or [])
+    # simulate an import-time failure of arb.whale_resolve: drop the cached
+    # attribute on the `arb` package AND mark the submodule broken in
+    # sys.modules, so `from arb import whale_resolve` re-attempts the import
+    # and raises ImportError (the standard sys.modules[name]=None technique).
+    monkeypatch.delattr(sys.modules["arb"], "whale_resolve", raising=False)
+    monkeypatch.setitem(sys.modules, "arb.whale_resolve", None)
+    rc = commands.cmd_settle(cfg, store, SimpleNamespace(manual=None, dry_run=False,
+                                                         yes=True))
     assert ran == [1] and rc == 0

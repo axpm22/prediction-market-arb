@@ -13,7 +13,7 @@ from arb.venues.base import get_json
 from arb.whale_rows import _keep
 from arb.whale_tape import (DATA_API, GAMMA, GAMMA_IDS_PER_CALL, LEADERBOARD_PAGE,
                             MARKET_COLS, SPORTS_MARKET_TYPE, _backoff_active, _bucket,
-                            _call, _iso, _meta, _set_backoff, _set_meta, log)
+                            _call, _iso, _json_list, _meta, _set_backoff, _set_meta, log)
 from arb.models import q6
 
 
@@ -171,14 +171,3 @@ def _sport_of(slug: str, prefixes) -> str | None:
         if head == key or head.startswith(key):
             return prefixes[key]
     return None
-
-
-def _json_list(value) -> list:
-    """Gamma JSON-encodes clobTokenIds/outcomes as STRINGS, not arrays."""
-    if isinstance(value, list):
-        return value
-    try:
-        parsed = json.loads(value or "[]")
-    except (TypeError, ValueError):
-        return []
-    return parsed if isinstance(parsed, list) else []

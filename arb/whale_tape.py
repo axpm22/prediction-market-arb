@@ -223,6 +223,17 @@ def _iso(value) -> str | None:
         return None
 
 
+def _json_list(value) -> list:
+    """Gamma JSON-encodes clobTokenIds/outcomes as STRINGS, not arrays."""
+    if isinstance(value, list):
+        return value
+    try:
+        parsed = json.loads(value or "[]")
+    except (TypeError, ValueError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
 def persist_markets(con, markets, now):
     con.executemany(
         f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 10)}) "

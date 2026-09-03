@@ -222,19 +222,21 @@ def cmd_settle(cfg, store, args):
         n = settle_auto_mlb(cfg, store)
         console.print(f"auto-settled {n} MLB bets (mlbstats)")
         # Polymarket-native settlement for kind WHALE (§10). Its own tape file
-        # and its own venue: an exception here must never cost the cycle its
-        # reconcile() and invariant check(), which run for every other kind —
-        # so the imports the handler itself needs happen OUTSIDE the try.
-        from arb import whale_resolve
-        from arb.whale_tape import log as whale_log, open_tape
+        # and its own venue: an exception here — an import failure included —
+        # must never cost the cycle its reconcile() and invariant check(),
+        # which run for every other kind, so the imports live INSIDE the try.
         if cfg["whale"]["enabled"]:
             try:
+                from arb import whale_resolve
+                from arb.whale_tape import open_tape
                 con = open_tape(cfg["whale"]["tape_db"])
                 n_pm = whale_resolve.settle_auto_pm(cfg, store, con,
                                                     datetime.now(timezone.utc))
                 console.print(f"auto-settled {n_pm} WHALE bets (pm-gamma)")
             except Exception as e:  # noqa: BLE001
-                whale_log.warning("settle_auto_pm failed: %s", e)
+                from arb.logutil import get_logger
+                get_logger("arb.whale", "logs/whale.log").warning(
+                    "settle_auto_pm failed: %s", e)
                 console.print(f"[red]settle_auto_pm failed: {e}[/]")
     n_rec = reconcile(cfg, store)
     console.print(f"reconciled {n_rec} bets")

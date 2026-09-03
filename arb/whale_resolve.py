@@ -24,9 +24,8 @@ from datetime import datetime, timedelta, timezone
 
 from arb.settlement import open_resolution_bets, settle_bet
 from arb.venues.base import get_json
-from arb.whale_backfill import _json_list
 from arb.whale_tape import (GAMMA, GAMMA_IDS_PER_CALL, _backoff_active, _bucket,
-                            _call, _iso, _meta, _set_backoff, _set_meta, log)
+                            _call, _iso, _json_list, _meta, _set_backoff, _set_meta, log)
 
 # The only two price strings a resolution ever names (verified 2026-09-03).
 WINNER_PRICE, LOSER_PRICE = "1", "0"
@@ -139,7 +138,16 @@ def read_resolutions(cfg, con, condition_ids, now, get=get_json) -> int:
 def _winner_label(bet, leg, res: Resolution) -> str | None:
     """The outcome label settle_bet compares against `leg["outcome"]`. Decided
     by TOKEN, which is the resolution's own identifier, then translated to the
-    label the leg carries — our leg labels are normalised, Gamma's are not."""
+    label the leg carries — our leg labels are normalised, Gamma's are not.
+
+    Leg convention (spec §8, controller decision pinned 2026-09-03): a WHALE
+    leg always BUYS one token — `side = "YES"`, `outcome` = that token's own
+    label (e.g. "Rays", "Down", or literally "No" on a Yes/No market),
+    `venue_market_id = "<conditionId>:<tokenId>"`. `side = "NO"` is the
+    ledger's complement-inversion flag and is never used for WHALE legs, but
+    `_leg_result` (arb/settlement.py) still honours it if ever set — so
+    settlement decides the winner by TOKEN identity here, and the label is
+    used only to name the losing side."""
     if res.status == "void":
         return "VOID"
     token = str(leg.get("venue_market_id") or "").partition(":")[2]
@@ -189,8 +197,19 @@ def settle_auto_pm(cfg, store, con, now: datetime | None = None, get=get_json) -
             winner = _winner_label(bet, legs[bet["id"]], res)
             if winner is None:
                 continue
+            # settle_bet has its own refusal branches (future-start guard,
+            # terminal grace) that return without appending anything — count
+            # a bet only when a `settled` event actually landed, not on every
+            # call.
+            before = len(store.query(
+                "SELECT 1 FROM bet_events WHERE bet_id=? AND kind='settled'",
+                (bet["id"],)))
             settle_bet(cfg, store, bet, winner, f"pm-gamma:{cond}", now)
-            n += 1
+            after = len(store.query(
+                "SELECT 1 FROM bet_events WHERE bet_id=? AND kind='settled'",
+                (bet["id"],)))
+            if after > before:
+                n += 1
         return n
     except sqlite3.OperationalError as e:
         log.warning("whale tape unavailable, settled 0 WHALE bets: %s", e)
@@ -199,15 +218,20 @@ def settle_auto_pm(cfg, store, con, now: datetime | None = None, get=get_json) -
 
 def _seed_starts(con, bets, conds, now):
     """A bet whose market the tape never saw (a wiped or foreign tape) still
-    has to become due and to give up: carry the bet's own start across."""
+    has to become due and to give up: carry the bet's own start across. Also
+    backfills a `markets` row the tape mapped but never learned a start for
+    (an INSERT OR IGNORE left `start_utc` NULL forever there, bypassing the
+    4-hour resolve_after_hours gate) — but never overwrites a start_utc the
+    tape already has."""
     for bet in bets:
         cond = conds[bet["id"]]
         if not cond or not bet["event_start_utc"]:
             continue
-        con.execute("INSERT OR IGNORE INTO markets (condition_id, start_utc, "
-                    "first_seen, last_seen) VALUES (?,?,?,?)",
-                    (cond, _iso(bet["event_start_utc"]), now.isoformat(),
-                     now.isoformat()))
+        con.execute(
+            "INSERT INTO markets (condition_id, start_utc, first_seen, last_seen) "
+            "VALUES (?,?,?,?) ON CONFLICT(condition_id) DO UPDATE SET "
+            "start_utc = COALESCE(markets.start_utc, excluded.start_utc)",
+            (cond, _iso(bet["event_start_utc"]), now.isoformat(), now.isoformat()))
     con.commit()
 
 
