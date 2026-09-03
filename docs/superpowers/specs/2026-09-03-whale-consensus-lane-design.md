@@ -450,6 +450,16 @@ pregame markout coverage and mean drift; exits by reason with exit-vs-hold
 P&L; base rate and its n. `arb bench` gains L14 with a `LaneResult` whose
 primary is V2/flat settled ROI.
 
+**Dashboard (operator request, 2026-09-03).** The existing read-only local
+panel (`arb dashboard`, `dashboard.host:port`) gains: cumulative settled P&L
+curves per `(kind, lane, variant)` over `dashboard.pnl_days`; an open
+positions table with the current bid, unrealized P&L at bid minus fee, and
+for WHALE rows the contributing whales and live exit-rule status; the
+latest bench verdict per lane L1–L14 from a new append-only `bench_results`
+table; and a whale panel (wallets, qualifying whales, signals, exits, base
+rate, collector health, calibration status). GETs only, no chart library,
+whale DB opened read-only. Plan Task 12.
+
 **Primary metric.** Mean settled ROI per $ staked, V2/flat, clustered by
 `event_key` (= `pm:<event_slug>` for every WHALE row), 90% CI.
 

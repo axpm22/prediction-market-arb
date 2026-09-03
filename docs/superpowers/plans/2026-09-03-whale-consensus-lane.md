@@ -157,6 +157,7 @@ Copied from CLAUDE.md; every task's requirements include these.
 | `arb/whale_signal.py` (new) | Pure: V1/V2/V3 points; fire rule; exit evaluation. |
 | `arb/lanes/whale.py` (new) | The `whale --once` cycle; quotes rows; candidates; exits. |
 | `arb/bench_whale.py` (new) | L14 `LaneResult`. |
+| `arb/dashboard_data.py` (new), `arb/dashboard.py`, `arb/dashboard.html` (modify) | Task 12: P&L curves, open positions with exit status, lane verdicts, whale panel; read-only. |
 | `arb/settlement.py`, `arb/models.py`, `arb/eligibility.py`, `arb/tracker.py`, `arb/invariants.py`, `arb/reconcile.py`, `arb/metrics.py`, `arb/schema.py`, `arb/migrations.py`, `arb/report.py`, `arb/dashboard.py`, `arb/regrade.py`, `arb/heartbeat.py`, `arb/cli.py`, `arb/commands.py`, `arb/config.py`, `config.yaml` (modify) | Wiring listed per task. |
 | `tests/test_whale_tape.py`, `tests/test_whale_resolve.py`, `tests/test_whale_score.py`, `tests/test_whale_signal.py`, `tests/test_whale_lane.py`, `tests/test_whale_ledger.py` (new) | One failure mode per test. |
 | `tests/fixtures/whale_*.json`, `tests/fixtures/whale_frozen_clock.sqlite` (new) | Recorded in Task 1 and Task 5. |
@@ -336,6 +337,25 @@ Cycle order as spec §5 steps 1–9. Book quotes rows via a `book_quote_rows`-st
 - [ ] Day 7: write `reports/whale-week1-YYYY-MM-DD.md` with G, `f_print`, `f_fire` (V1 only fires until calibration), qualifying-whale counts by sport, backfill coverage, and the projected days to n = 100.
 - [ ] Day 14 (outage days excluded): run `arb whale-score --calibrate`, which applies spec §7's formula (`3 × q10` of qualifiers' `score_lb − min_score_lb`, V3 scaled by the median print size) and prints the two values or `None` if fewer than `calibration_min_whales` qualified (then the window extends 7 days and the report says so daily); write the values as a dated amendment in `PREREGISTRATION.md` and `config.yaml`; V2/V3 begin firing from the next commit.
 - [ ] Every daily report thereafter: the `whale` section is committed with the rest of `reports/daily`.
+
+## Task 12 — Dashboard: P&L curves, open positions, lanes, whale panel (added 2026-09-03 at the operator's request)
+
+**Files:** `arb/dashboard.py` (modify; the existing read-only server on `dashboard.host:port`, `/api/state`), `arb/dashboard.html` (modify; vanilla JS, no CDN — the panel must work offline), `arb/bench.py` (modify: persist each `LaneResult` to an append-only `bench_results` table in `data/arb.sqlite`: `id, ran_at, lane, primary, ci_lo, ci_hi, n, verdict, payload_json`), `arb/schema.py` + `arb/migrations.py` (migration 8: `bench_results`, CREATE TABLE IF NOT EXISTS), `tests/test_dashboard.py` (extend).
+
+**What it shows** (one page, sections in this order; every number comes from `arb/metrics.py` or the same queries `arb report` uses, never re-derived in the page):
+
+1. **P&L curves.** Cumulative settled P&L per `(kind, lane, variant)` over the last `dashboard.pnl_days` (30) days, one line per class, from `flat_bets` + `bet_events` at read time; a second panel with the three P&L bases side by side for the headline class (`pnl_optimistic`, `pnl_confirmed`, `pnl_markout`). Inline SVG lines drawn by the page's own JS; no chart library.
+2. **Open positions.** Every bet with no `settled`/`void`/`lifetime_closed` event: kind, lane, variant, sport, event, side/outcome, entry cost + fee, stake, current best bid from the latest `quotes` row for the leg (or "no quote"), unrealized P&L at that bid minus taker fee, age, start time, and for WHALE rows the `signal_id`, the contributing whales (pseudonym, score_lb, native/transfer) and the live exit-rule status (ratio now, sold fraction, weighted score_lb). Sorted by start time.
+3. **Lanes.** The latest `bench_results` row per lane L1–L14: primary, CI, n, verdict, ran_at; stale rows flagged past `dashboard.bench_stale_days` (7).
+4. **Whale panel** (from `data/whale_tape.sqlite`, read-only): wallets tracked / backfilled / hygiene-excluded; qualifying whales by sport at lb80 (top 20 by score_lb with n and native/transfer); signals last 24 h evaluated/fired/suppressed by reason and variant; exits by reason; base rate and n; collector health (last poll status, `bad_rows`, backoff, prints/min); calibration window status for `min_points.V2/V3`.
+5. Everything the page already shows (headline, gates, lamps, errors, schedule, classes, left-on-table, venues, capacity) stays.
+
+**Endpoints:** `/api/state` unchanged; new `/api/pnl?days=N`, `/api/positions`, `/api/lanes`, `/api/whale`. GETs only; no writes anywhere; the whale DB is opened `mode=ro`. Refresh cadence from `dashboard.refresh_secs` (60). New config keys with comments and schema entries: `dashboard.pnl_days`, `dashboard.bench_stale_days`, `dashboard.refresh_secs`. Host stays `127.0.0.1`; the operator changes `dashboard.host` to expose it on the LAN.
+
+- [ ] Failing tests: `/api/pnl` on a fixture ledger with two classes returns two series whose last cumulative values equal `report.daily_frame`'s `settled_pnl` for the same window; `/api/positions` lists an open WHALE bet with its signal's whales and an unrealized P&L computed at `bid − fee` (and `null` when no quote exists); `/api/lanes` returns the latest row per lane and flags a stale one; `/api/whale` renders on an empty tape DB and on the Task 8 fixture DB; `bench_results` gains one row per `arb bench` lane run and the rule-9 grep still passes; the page's `<script>` references every new element id.
+- [ ] Implement; keep `arb/dashboard.py` under 300 lines by moving the new queries into `arb/dashboard_data.py`.
+- [ ] Acceptance: `.venv/bin/python -m arb dashboard` then `curl -s 127.0.0.1:8722/api/positions | head -c 400` and a screenshot of the page in the report.
+- [ ] Commit: `L14 task 12: dashboard — P&L curves, open positions with exit status, lanes, whale panel`.
 
 ## Self-review
 
