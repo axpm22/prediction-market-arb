@@ -12,6 +12,7 @@ Rule 9: writes only to whale.tape_db, so flat_bets is structurally
         unreachable from this lane — the arb/pm_tape.py defence.
 
 I/O only. Positions, scores and signals are pure functions elsewhere.
+One print row (parse + persist) lives in arb/whale_rows.py, on size alone.
 """
 from __future__ import annotations
 
@@ -19,13 +20,12 @@ import json
 import sqlite3
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from decimal import Decimal
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from arb.logutil import get_logger
-from arb.models import q6
 from arb.venues.base import get_json
+from arb.whale_rows import _keep
 
 log = get_logger("arb.whale", "logs/whale.log")
 
@@ -73,9 +73,6 @@ CREATE TABLE IF NOT EXISTS base_rates (
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
-PRINT_COLS = ("observed_at, ts, tx_hash, proxy_wallet, pseudonym, condition_id, asset,"
-              " outcome, outcome_index, side, price, size, notional_usd, event_slug,"
-              " slug, title, source, raw_json")
 # `slug` is kept so a market Gamma answered for but whose league code is not
 # in whale.slug_sport_prefixes can be re-mapped LOCALLY when that map grows —
 # without it, an unmappable market would be stuck at sport=NULL forever.
@@ -153,6 +150,20 @@ class _Bucket:
         self.tokens -= 1.0
 
 
+_BUCKET: _Bucket | None = None
+
+
+def _bucket(cfg) -> _Bucket:
+    """ONE bucket per process, shared by poll_prints / snapshot_leaderboard /
+    backfill: a bucket per call site let one command burst 3x the cap.
+    # ponytail: first cfg wins for the life of the process — max_calls_per_min
+    # is not reloaded mid-run anywhere, and the supervisor restarts on change."""
+    global _BUCKET
+    if _BUCKET is None:
+        _BUCKET = _Bucket(cfg["whale"]["max_calls_per_min"])
+    return _BUCKET
+
+
 def _call(bucket, get, url, cfg, res) -> list:
     """One paced GET. get_json returns parsed JSON or raises VenueError whose
     message carries the HTTP status, so the status IS the exception text."""
@@ -190,7 +201,12 @@ def _backoff_active(con, now) -> bool:
 
 
 def _set_backoff(con, cfg, now):
-    until = now + timedelta(seconds=int(cfg["whale"]["backoff_secs"]))
+    """The pause runs from the WALL clock at the moment of failure, not from
+    the cycle-start `now` the caller carries: a backfill cycle runs ~11 min
+    against backoff_secs=300, so `now` would write an already-expired pause.
+    Never earlier than `now` either, so a replayed/fixed clock still pauses."""
+    wall = datetime.now(timezone.utc) if now.tzinfo else datetime.now()
+    until = max(now, wall) + timedelta(seconds=int(cfg["whale"]["backoff_secs"]))
     _set_meta(con, "backoff_until", until.isoformat())
     log.warning("whale collector backing off until %s", until.isoformat())
 
@@ -204,36 +220,6 @@ def _iso(value) -> str | None:
         return datetime.fromisoformat(str(value)).isoformat()
     except ValueError:
         return None
-
-
-def _print_row(r: dict, observed_at: str, source: str) -> tuple:
-    """`/trades` and `/activity` rows share their field names (both verified
-    2026-09-03). notional = price x size per spec §5; activity's own `usdcSize`
-    disagrees with that product (it prices at the fill, not the shown price),
-    so it is kept only inside raw_json."""
-    price = Decimal(str(r.get("price") or 0))
-    size = Decimal(str(r.get("size") or 0))
-    idx = r.get("outcomeIndex")
-    return (observed_at, int(r.get("timestamp") or 0), str(r.get("transactionHash") or ""),
-            str(r.get("proxyWallet") or ""), r.get("pseudonym"),
-            str(r.get("conditionId") or ""), str(r.get("asset") or ""), r.get("outcome"),
-            int(idx) if idx is not None else None, str(r.get("side") or ""),
-            str(q6(price)), str(q6(size)), str(q6(price * size)),
-            r.get("eventSlug"), r.get("slug"), r.get("title"), source,
-            json.dumps(r, sort_keys=True))
-
-
-def _keep(con, body, ids, now, res, source="tape"):
-    """Persist the rows we track. Duplicates are rejected by the unique index."""
-    rows = [_print_row(r, now.isoformat(), source) for r in body
-            if ids is None or str(r.get("conditionId") or "") in ids]
-    before = con.total_changes
-    con.executemany(f"INSERT OR IGNORE INTO prints ({PRINT_COLS}) "
-                    f"VALUES ({','.join('?' * 18)})", rows)
-    con.commit()
-    kept = con.total_changes - before
-    res["rows"] = res.get("rows", 0) + kept
-    res["dupes"] = res.get("dupes", 0) + len(rows) - kept
 
 
 def persist_markets(con, markets, now):
@@ -255,13 +241,14 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
     kept rows filtered client-side, paging by `offset` only while a page is
     full AND its oldest row is still newer than last_seen - overlap_secs."""
     w = cfg["whale"]
-    res = {"calls": 0, "rows": 0, "dupes": 0, "status_counts": {}, "status": "ok"}
+    res = {"calls": 0, "rows": 0, "dupes": 0, "bad_rows": 0,
+           "status_counts": {}, "status": "ok"}
     if _backoff_active(con, now):
         res["status"] = "backoff"
         return res
     persist_markets(con, markets, now)
     ids = {m.condition_id for m in markets}
-    bucket = _Bucket(w["max_calls_per_min"])
+    bucket = _bucket(cfg)
     taker = "true" if w["taker_only"] else "false"
     size = int(w["page_size"])
     newest = 0
@@ -273,20 +260,23 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
                 csv = ",".join(ordered[i:i + per])   # comma CSV verified for /trades
                 body = _call(bucket, get, f"{DATA_API}/trades?market={csv}"
                              f"&takerOnly={taker}&limit={size}", cfg, res)
-                _keep(con, body, ids, now, res)
-                newest = max([newest] + [int(r["timestamp"]) for r in body])
+                newest = max([newest] + _keep(con, body, ids, now, res))
         else:
             # No last_seen => cold start, no gap to catch up on: one page and
             # stop, or the age rule would walk the venue's whole history.
             last_seen = int(_meta(con, "last_seen_ts") or 0)
             floor = last_seen - int(w["overlap_secs"])
             offset = 0
+            # ponytail: the catch-up walk after an outage is bounded only by
+            # the token bucket — at ~1,515 rows/min a 24h gap is ~218 pages of
+            # 10,000, i.e. ~7 min at max_calls_per_min=30, and `offset` beyond
+            # the verified 10,000 is UNPROBED. Cap it (or use the now-verified
+            # start/end window) if an outage ever outruns a cycle.
             while True:
                 url = f"{DATA_API}/trades?takerOnly={taker}&limit={size}"
                 body = _call(bucket, get, url + (f"&offset={offset}" if offset else ""),
                              cfg, res)
-                _keep(con, body, ids, now, res)
-                stamps = [int(r["timestamp"]) for r in body]
+                stamps = _keep(con, body, ids, now, res)
                 newest = max([newest] + stamps)
                 if len(body) < size or not stamps or not last_seen or min(stamps) <= floor:
                     break
@@ -295,6 +285,8 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
         log.warning("whale poll aborted after %d call(s): %s", res["calls"], e)
         _set_backoff(con, cfg, now)
         res["status"] = "error"
-    if newest:
+    # ONLY on a completed poll: on an abort the pages behind the failure were
+    # never fetched, and advancing the watermark would strand that gap forever.
+    if newest and res["status"] == "ok":
         _set_meta(con, "last_seen_ts", newest)
     return res

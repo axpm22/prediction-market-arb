@@ -10,9 +10,10 @@ import json
 from decimal import Decimal
 
 from arb.venues.base import get_json
+from arb.whale_rows import _keep
 from arb.whale_tape import (DATA_API, GAMMA, GAMMA_IDS_PER_CALL, LEADERBOARD_PAGE,
-                            MARKET_COLS, SPORTS_MARKET_TYPE, _backoff_active, _Bucket,
-                            _call, _iso, _keep, _meta, _set_backoff, _set_meta, log)
+                            MARKET_COLS, SPORTS_MARKET_TYPE, _backoff_active, _bucket,
+                            _call, _iso, _meta, _set_backoff, _set_meta, log)
 from arb.models import q6
 
 
@@ -34,8 +35,14 @@ def snapshot_leaderboard(cfg, con, now, get=get_json) -> int:
     if not lb["enabled"] or _meta(con, "leaderboard_day") == day or _backoff_active(con, now):
         return 0
     res: dict = {}
-    bucket = _Bucket(cfg["whale"]["max_calls_per_min"])
+    bucket = _bucket(cfg)
     added = 0
+    # The day is claimed BEFORE the first page: a failure at page k leaves the
+    # pages already stored, and a same-day retry would write a second copy of
+    # ranks 1..50 under a new snapshot_at.
+    # ponytail: costs one day's seed on a mid-page failure; the tape discovers
+    # wallets anyway, so a transaction spanning every page is not worth it.
+    _set_meta(con, "leaderboard_day", day)
     for page in range(int(lb["pages"])):
         url = (f"{DATA_API}/v1/leaderboard?category={lb['category']}"
                f"&timePeriod={lb['time_period']}&orderBy={lb['order_by']}"
@@ -57,7 +64,6 @@ def snapshot_leaderboard(cfg, con, now, get=get_json) -> int:
                                     for r in body], now, "leaderboard")
         if len(body) < LEADERBOARD_PAGE:
             break
-    _set_meta(con, "leaderboard_day", day)
     return added
 
 
@@ -84,15 +90,15 @@ def backfill(cfg, con, now, get=get_json) -> dict:
     through Gamma. Unmappable markets are stored and never scored."""
     w = cfg["whale"]
     bf = w["backfill"]
-    res = {"wallets": 0, "rows": 0, "dupes": 0, "calls": 0, "mapped": 0, "unmappable": 0,
-           "status_counts": {}, "status": "ok"}
+    res = {"wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0, "mapped": 0,
+           "unmappable": 0, "status_counts": {}, "status": "ok"}
     if _backoff_active(con, now):
         res["status"] = "backoff"
         return res
     wallets = [r[0] for r in con.execute(
         "SELECT proxy_wallet FROM wallets WHERE backfilled_at IS NULL "
         "ORDER BY first_seen, proxy_wallet LIMIT ?", (int(bf["wallets_per_cycle"]),))]
-    bucket = _Bucket(w["max_calls_per_min"])
+    bucket = _bucket(cfg)
     size = int(bf["page_size"])
     seen: set[str] = set()
     try:

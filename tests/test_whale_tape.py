@@ -8,12 +8,24 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from arb.config import load
 from arb.venues.base import VenueError
 from arb import whale_backfill, whale_tape
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 NOW = datetime(2026, 9, 3, 17, 0, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_bucket():
+    """The rate guard is one bucket per PROCESS (so a single command cannot
+    burst 3x the cap); here it is one per TEST, or the suite's hundreds of
+    fake calls would pace themselves against the real 30/min."""
+    whale_tape._BUCKET = None
+    yield
+    whale_tape._BUCKET = None
 
 
 def _cfg(**over):
@@ -212,11 +224,45 @@ def test_a_failed_call_records_a_backoff_and_the_next_poll_short_circuits(tmp_pa
     boom = FakeGet(VenueError("503 from https://data-api.polymarket.com/trades"))
     res = whale_tape.poll_prints(_cfg(), con, mk, NOW, get=boom)
     assert res["status"] == "error" and res["status_counts"]["error"] == 1
-    until = con.execute("SELECT value FROM meta WHERE key='backoff_until'").fetchone()[0]
-    assert until == (NOW + timedelta(seconds=300)).isoformat()
+    until = datetime.fromisoformat(
+        con.execute("SELECT value FROM meta WHERE key='backoff_until'").fetchone()[0])
+    # the pause is stamped from the WALL clock, never earlier than the cycle's
+    # own `now` — so a fixed test clock still gets exactly backoff_secs
+    assert until >= NOW + timedelta(seconds=300)
     quiet = FakeGet([])
     res2 = whale_tape.poll_prints(_cfg(), con, mk, NOW + timedelta(seconds=60), get=quiet)
     assert res2["status"] == "backoff" and quiet.urls == []
+
+
+def test_an_abort_mid_page_does_not_advance_the_watermark(tmp_path):
+    """Page 1 lands, page 2 raises: last_seen_ts must NOT jump to page 1's
+    newest, or the unfetched gap behind it is never revisited."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    page = _fixture("whale_trades_global")
+    con.execute("INSERT INTO meta (key, value) VALUES ('last_seen_ts', '1')")
+    con.commit()
+    get = FakeGet(page, VenueError("503 from https://data-api.polymarket.com/trades"))
+    cfg = _cfg(page_size=len(page), overlap_secs=120)
+    res = whale_tape.poll_prints(cfg, con, _global_markets(1), NOW, get=get)
+    assert res["status"] == "error" and len(get.urls) == 2
+    assert whale_tape._meta(con, "last_seen_ts") == "1"
+    assert whale_tape._meta(con, "backoff_until") is not None
+
+
+def test_one_malformed_row_is_skipped_not_the_whole_page(tmp_path):
+    """A bad row is the venue's data, not a venue outage: keep the rest of the
+    page, count it, and do NOT write a backoff."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    page = copy.deepcopy(_fixture("whale_trades_global"))
+    mk = _global_markets(1)
+    ours = [r for r in page if r["conditionId"] == mk[0].condition_id]
+    del ours[0]["timestamp"]
+    ours[1]["price"] = "abc"
+    res = whale_tape.poll_prints(_cfg(page_size=10000), con, mk, NOW, get=FakeGet(page))
+    assert res["status"] == "ok" and res["bad_rows"] == 2
+    assert res["rows"] == len(ours) - 2
+    assert con.execute("SELECT COUNT(*) FROM prints").fetchone()[0] == len(ours) - 2
+    assert whale_tape._meta(con, "backoff_until") is None
 
 
 def test_batched_mode_sends_comma_csv_markets_in_groups(tmp_path):
@@ -259,6 +305,38 @@ def test_leaderboard_runs_at_most_once_per_utc_day(tmp_path):
     again = FakeGet(_fixture("whale_leaderboard"))
     assert whale_backfill.snapshot_leaderboard(cfg, con, NOW + timedelta(hours=6), get=again) == 0
     assert again.urls == []
+
+
+def test_a_leaderboard_failure_mid_snapshot_cannot_duplicate_ranks(tmp_path):
+    """Page 1 stored, page 2 fails: the day is already claimed, so a retry
+    cannot write a second copy of ranks 1..50 under the same snapshot."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    board = _fixture("whale_leaderboard")
+    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS", "time_period": "MONTH",
+                            "order_by": "PNL", "pages": 4})
+    get = FakeGet(board, VenueError("503 from https://data-api.polymarket.com/v1/leaderboard"))
+    whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=get)
+    stored = con.execute("SELECT COUNT(*) FROM leaderboard_snapshots").fetchone()[0]
+    assert stored == len(board) and len(get.urls) == 2      # page 1 kept, page 2 lost
+    con.execute("DELETE FROM meta WHERE key='backoff_until'")   # isolate the day guard
+    con.commit()
+    retry = FakeGet(board)
+    assert whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=retry) == 0
+    assert retry.urls == []
+    assert con.execute("SELECT COUNT(*) FROM leaderboard_snapshots").fetchone()[0] == stored
+
+
+def test_the_rate_bucket_is_one_per_process_not_one_per_call_site(tmp_path):
+    """Three call sites, one budget: otherwise a single command bursts 3x the
+    configured cap."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS", "time_period": "MONTH",
+                            "order_by": "PNL", "pages": 1})
+    whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=FakeGet(_fixture("whale_leaderboard")))
+    after_leaderboard = whale_tape._BUCKET.tokens
+    whale_tape.poll_prints(cfg, con, _global_markets(1), NOW, get=FakeGet([]))
+    assert whale_tape._BUCKET.tokens < after_leaderboard
+    assert after_leaderboard <= float(cfg["whale"]["max_calls_per_min"]) - 1
 
 
 # --- discovery --------------------------------------------------------------
@@ -306,7 +384,9 @@ def test_backfill_pulls_activity_pages_until_a_short_page(tmp_path):
     _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")
     con.commit()
     acts = _fixture("whale_activity")
-    cfg = _cfg(backfill={"wallets_per_cycle": 5, "pages_per_wallet": 40, "page_size": len(acts)})
+    # the Gamma ladder is ~36 calls: pace them off the clock, not at 30/min
+    cfg = _cfg(max_calls_per_min=100000,
+               backfill={"wallets_per_cycle": 5, "pages_per_wallet": 40, "page_size": len(acts)})
     get = FakeGet(acts, [], [])                    # full page, then a short one
     res = whale_backfill.backfill(cfg, con, NOW, get=get)
     trade_urls = [u for u in get.urls if "/activity" in u]
@@ -365,6 +445,19 @@ def test_backfill_short_circuits_while_a_backoff_is_live(tmp_path):
     get = FakeGet([])
     assert whale_backfill.backfill(_cfg(), con, NOW, get=get)["status"] == "backoff"
     assert get.urls == []
+
+
+def test_a_backoff_written_late_in_a_long_cycle_is_still_in_the_future(tmp_path):
+    """A backfill cycle runs ~11 min against backoff_secs=300, so a pause
+    stamped from the CYCLE-START clock has already expired when it is written."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")
+    con.commit()
+    started = datetime.now(timezone.utc) - timedelta(minutes=20)
+    boom = FakeGet(VenueError("503 from https://data-api.polymarket.com/activity"))
+    assert whale_backfill.backfill(_cfg(), con, started, get=boom)["status"] == "error"
+    until = datetime.fromisoformat(whale_tape._meta(con, "backoff_until"))
+    assert until > datetime.now(timezone.utc)
 
 
 def test_a_cold_start_takes_one_page_and_does_not_walk_the_venues_history(tmp_path):
