@@ -285,7 +285,11 @@ pregame position (BUY minus SELL size > 0) whose last print is within
 2026-09-03, Task 6 review): a wallet's several BUY windows on the same
 `(market, side)` merge into one contributor with summed open size,
 notional-weighted average price, and the newest `last_ts`; it is scored
-once and carries one vote. Three pre-registered variants:
+once and carries one vote. The merge covers **all** of the wallet's open
+windows on that side (its live exposure); the signal window gates
+qualification through the newest window's `last_ts` only, and the exit
+rule's `left` test compares like with like (pinned 2026-09-03, Task 6
+re-review). Three pre-registered variants:
 
 | Variant | points per whale on its side |
 |---|---|
