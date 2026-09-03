@@ -1,0 +1,195 @@
+{
+ "_comment": "L14 Task 5 frozen-clock fixture: synthetic prints/markets/resolutions, no live data. 0xm4 resolves AFTER as_of and is the row the truncated copy deletes; 0xm5 is VOID.",
+ "as_of": "2026-09-10T12:00:00+00:00",
+ "markets": [
+  {
+   "condition_id": "0xm1",
+   "sport": "baseball_mlb",
+   "market_type": "WINNER",
+   "start_utc": "2026-09-05T00:00:00+00:00",
+   "event_key": "0xm1-k"
+  },
+  {
+   "condition_id": "0xm2",
+   "sport": "baseball_mlb",
+   "market_type": "WINNER",
+   "start_utc": "2026-09-06T00:00:00+00:00",
+   "event_key": "0xm2-k"
+  },
+  {
+   "condition_id": "0xm3",
+   "sport": "basketball_nba",
+   "market_type": "WINNER",
+   "start_utc": "2026-09-07T00:00:00+00:00",
+   "event_key": "0xm3-k"
+  },
+  {
+   "condition_id": "0xm4",
+   "sport": "baseball_mlb",
+   "market_type": "WINNER",
+   "start_utc": "2026-09-09T00:00:00+00:00",
+   "event_key": "0xm4-k"
+  },
+  {
+   "condition_id": "0xm5",
+   "sport": "baseball_mlb",
+   "market_type": "WINNER",
+   "start_utc": "2026-09-08T00:00:00+00:00",
+   "event_key": "0xm5-k"
+  }
+ ],
+ "prints": [
+  {
+   "proxy_wallet": "0xa",
+   "condition_id": "0xm1",
+   "ts": 1788559200,
+   "side": "BUY",
+   "price": "0.400000",
+   "size": "2000.000000",
+   "outcome_index": 0,
+   "source": "tape"
+  },
+  {
+   "proxy_wallet": "0xa",
+   "condition_id": "0xm1",
+   "ts": 1788559300,
+   "side": "BUY",
+   "price": "0.440000",
+   "size": "2000.000000",
+   "outcome_index": 0,
+   "source": "tape"
+  },
+  {
+   "proxy_wallet": "0xa",
+   "condition_id": "0xm1",
+   "ts": 1788562800,
+   "side": "BUY",
+   "price": "0.500000",
+   "size": "1000.000000",
+   "outcome_index": 0,
+   "source": "tape"
+  },
+  {
+   "proxy_wallet": "0xa",
+   "condition_id": "0xm1",
+   "ts": 1788564600,
+   "side": "SELL",
+   "price": "0.600000",
+   "size": "1000.000000",
+   "outcome_index": 0,
+   "source": "tape"
+  },
+  {
+   "proxy_wallet": "0xa",
+   "condition_id": "0xm2",
+   "ts": 1788649200,
+   "side": "BUY",
+   "price": "0.300000",
+   "size": "3000.000000",
+   "outcome_index": 0,
+   "source": "tape"
+  },
+  {
+   "proxy_wallet": "0xa",
+   "condition_id": "0xm3",
+   "ts": 1788735600,
+   "side": "BUY",
+   "price": "0.550000",
+   "size": "2000.000000",
+   "outcome_index": 0,
+   "source": "tape"
+  },
+  {
+   "proxy_wallet": "0xa",
+   "condition_id": "0xm4",
+   "ts": 1788908400,
+   "side": "BUY",
+   "price": "0.700000",
+   "size": "1000.000000",
+   "outcome_index": 0,
+   "source": "tape"
+  },
+  {
+   "proxy_wallet": "0xa",
+   "condition_id": "0xm5",
+   "ts": 1788822000,
+   "side": "BUY",
+   "price": "0.450000",
+   "size": "1000.000000",
+   "outcome_index": 0,
+   "source": "tape"
+  },
+  {
+   "proxy_wallet": "0xa",
+   "condition_id": "0xm2",
+   "ts": 1788652700,
+   "side": "BUY",
+   "price": "0.310000",
+   "size": "100.000000",
+   "outcome_index": 0,
+   "source": "activity"
+  },
+  {
+   "proxy_wallet": "0xb",
+   "condition_id": "0xm2",
+   "ts": 1788647400,
+   "side": "BUY",
+   "price": "0.650000",
+   "size": "1500.000000",
+   "outcome_index": 1,
+   "source": "activity"
+  },
+  {
+   "proxy_wallet": "0xb",
+   "condition_id": "0xm3",
+   "ts": 1788733800,
+   "side": "BUY",
+   "price": "0.480000",
+   "size": "1200.000000",
+   "outcome_index": 0,
+   "source": "activity"
+  },
+  {
+   "proxy_wallet": "0xb",
+   "condition_id": "0xm4",
+   "ts": 1788906600,
+   "side": "BUY",
+   "price": "0.520000",
+   "size": "1200.000000",
+   "outcome_index": 0,
+   "source": "activity"
+  }
+ ],
+ "resolutions": [
+  {
+   "condition_id": "0xm1",
+   "resolved_at": "2026-09-05T04:00:00+00:00",
+   "winner_outcome_index": 0,
+   "status": "resolved"
+  },
+  {
+   "condition_id": "0xm2",
+   "resolved_at": "2026-09-06T04:00:00+00:00",
+   "winner_outcome_index": 1,
+   "status": "resolved"
+  },
+  {
+   "condition_id": "0xm3",
+   "resolved_at": "2026-09-07T04:00:00+00:00",
+   "winner_outcome_index": 0,
+   "status": "resolved"
+  },
+  {
+   "condition_id": "0xm4",
+   "resolved_at": "2026-09-10T18:00:00+00:00",
+   "winner_outcome_index": 0,
+   "status": "resolved"
+  },
+  {
+   "condition_id": "0xm5",
+   "resolved_at": "2026-09-08T04:00:00+00:00",
+   "winner_outcome_index": null,
+   "status": "void"
+  }
+ ]
+}
