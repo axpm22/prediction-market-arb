@@ -163,7 +163,13 @@ market's `start_utc`; only pregame positions are scored or signalled.
 
 **Outcome per position.** Realized edge in probability points:
 `e = payout − avg_price`, `payout ∈ {0, 1}` from `resolutions`. VOID markets
-are excluded from numerator and denominator. This is the whale's own fill and
+are excluded from numerator and denominator. When the whale sold part or
+all of the position before resolution (SELL prints matched FIFO), the sold
+shares realize their sell price instead of the payout:
+`e = (Σ sold_size × sell_price + remaining_size × payout) / size − avg_price`
+(pinned 2026-09-03). This is the whale's realized edge per share; a trader
+who buys at 0.40, sells at 0.60, and then sees the team lose is scored
++0.20, not −0.40. This is the whale's own fill and
 their own outcome, a fact, so the follower-fill fallacy does not arise here.
 The lane's P&L (§8) is a different quantity and never uses the whale's price.
 
@@ -320,7 +326,10 @@ month.
 Every `signals` row records, per contributing whale, its own-bucket `n`
 and whether it qualified on its own bucket (`native`) or only through
 pooled sport/root evidence (`transfer`), so the report can split signals
-by native versus transfer-only whales. If the operator's transfer
+by native versus transfer-only whales. **Definition (pinned 2026-09-03):**
+`native` iff the whale's bucket-only score, computed with the chain fed
+nothing but that bucket's own positions (`n_root = n_sport = n_bucket`,
+same base rate and priors), also clears `min_score_lb`. No new config key. If the operator's transfer
 assumption is wrong, that split shows it instead of diluting the aggregate.
 
 ## 8. Booking
