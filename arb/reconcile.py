@@ -96,9 +96,13 @@ def reconcile(cfg, store, now: datetime | None = None) -> int:
     bet_event per pass with the newly-resolved leg verdicts; corrections append
     rows, never edit. Re-runs a bet until every leg has a verdict (per-leg, H4)."""
     now = now or datetime.now(timezone.utc)
+    # kind WHALE is excluded, not skipped later: single venue, single oracle —
+    # the Polymarket resolution the bet settled from IS its reconciliation, so a
+    # cross-check would re-read the same Gamma row to compare it with itself.
     settled = store.query(
         """SELECT fb.* FROM flat_bets fb
-           WHERE EXISTS (SELECT 1 FROM bet_events be
+           WHERE fb.kind != 'WHALE'
+             AND EXISTS (SELECT 1 FROM bet_events be
                          WHERE be.bet_id = fb.id AND be.kind = 'settled')""")
     n = 0
     for bet in settled:

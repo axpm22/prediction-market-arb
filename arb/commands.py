@@ -221,6 +221,21 @@ def cmd_settle(cfg, store, args):
     else:
         n = settle_auto_mlb(cfg, store)
         console.print(f"auto-settled {n} MLB bets (mlbstats)")
+        # Polymarket-native settlement for kind WHALE (§10). Its own tape file
+        # and its own venue: an exception here must never cost the cycle its
+        # reconcile() and invariant check(), which run for every other kind —
+        # so the imports the handler itself needs happen OUTSIDE the try.
+        from arb import whale_resolve
+        from arb.whale_tape import log as whale_log, open_tape
+        if cfg["whale"]["enabled"]:
+            try:
+                con = open_tape(cfg["whale"]["tape_db"])
+                n_pm = whale_resolve.settle_auto_pm(cfg, store, con,
+                                                    datetime.now(timezone.utc))
+                console.print(f"auto-settled {n_pm} WHALE bets (pm-gamma)")
+            except Exception as e:  # noqa: BLE001
+                whale_log.warning("settle_auto_pm failed: %s", e)
+                console.print(f"[red]settle_auto_pm failed: {e}[/]")
     n_rec = reconcile(cfg, store)
     console.print(f"reconciled {n_rec} bets")
     violations = check(cfg, store)
@@ -516,11 +531,13 @@ def cmd_status(cfg, store, args):
     if demoted:
         console.print("[red]demoted pairs (settlement mismatch, §11.2): "
                       + ", ".join(r["pair"] for r in demoted) + "[/]")
+    from arb.models import RESOLUTION_SETTLED_KINDS
     open_n = store.query(
-        """SELECT COUNT(*) n FROM flat_bets fb
-           WHERE fb.kind IN ('EV','NEGRISK','BTC')
+        f"""SELECT COUNT(*) n FROM flat_bets fb
+           WHERE fb.kind IN ({','.join('?' * len(RESOLUTION_SETTLED_KINDS))})
              AND NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id=fb.id
-                             AND be.kind IN ('settled','void'))""")[0]["n"]
+                             AND be.kind IN ('settled','void'))""",
+        RESOLUTION_SETTLED_KINDS)[0]["n"]
     console.print(f"open resolution-settled bets: {open_n}")
     # per-lane silence: heartbeat_stale_polls covers the supervisor beat as a
     # whole, so negrisk+political went dark for 9.7 days unreported

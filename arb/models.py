@@ -22,9 +22,13 @@ QUALITY_FLAGS = ("none", "empty_book", "one_sided", "match_suspect",
                  "stale_consensus", "edge_implausible", "zombie")
 START_GRADES = ("verified", "nominal", "absent")
 # RULE 1 (v3.5): ARB is same-venue only; cross-venue is XSPREAD, never called arb.
-KINDS = ("ARB", "XSPREAD", "EV", "DIVERGENCE", "NEGRISK", "POLITICAL", "BTC", "PARLAY")
+KINDS = ("ARB", "XSPREAD", "EV", "DIVERGENCE", "NEGRISK", "POLITICAL", "BTC", "PARLAY",
+         "WHALE")
 LOCKED_KINDS = ("ARB", "XSPREAD", "NEGRISK", "POLITICAL", "BTC")  # locked at entry
-RESOLUTION_SETTLED_KINDS = ("EV", "NEGRISK", "BTC")  # instant-settle tripwire applies
+# instant-settle tripwire applies. The ONE list: tracker, cmd_status, invariants
+# and settlement all import it, so a new resolution-settled kind (L14's WHALE)
+# is treated as one everywhere at once instead of in four hand-typed tuples.
+RESOLUTION_SETTLED_KINDS = ("EV", "NEGRISK", "BTC", "WHALE")
 
 
 @dataclass

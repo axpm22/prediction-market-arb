@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from arb.logutil import get_logger
+from arb.models import RESOLUTION_SETTLED_KINDS
 
 log = get_logger("arb.invariants", "logs/scan.log")
 
@@ -46,7 +47,7 @@ def check(cfg, store) -> list[str]:
                  ON be.bet_id = fb.id AND be.kind = 'settled'
                WHERE fb.event_start_utc IS NOT NULL"""):
         start = datetime.fromisoformat(r["event_start_utc"])
-        if r["kind"] in ("EV", "NEGRISK", "BTC"):
+        if r["kind"] in RESOLUTION_SETTLED_KINDS:
             if datetime.fromisoformat(r["settled_at"]) < start:
                 v.append(f"invariant-3: bet {r['id']} resolution-settled before start")
         else:

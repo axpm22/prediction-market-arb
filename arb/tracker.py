@@ -78,14 +78,14 @@ def candidate_from_basket(b: dict) -> dict:
 
 def _active_bets(store, poll_kind: str):
     return store.query(
-        """SELECT fb.* FROM flat_bets fb
+        f"""SELECT fb.* FROM flat_bets fb
            WHERE fb.poll_kind = ?
              AND NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id = fb.id
                              AND be.kind IN ('lifetime_closed', 'void'))
-             AND NOT (fb.kind IN ('EV', 'NEGRISK', 'BTC')
+             AND NOT (fb.kind IN ({','.join('?' * len(RESOLUTION_SETTLED_KINDS))})
                       AND EXISTS (SELECT 1 FROM bet_events be2
                                   WHERE be2.bet_id = fb.id AND be2.kind = 'settled'))""",
-        (poll_kind,))
+        (poll_kind, *RESOLUTION_SETTLED_KINDS))
 
 
 def _consecutive_misses(store, bet_id: int) -> int:

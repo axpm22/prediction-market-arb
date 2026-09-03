@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from arb.logutil import get_logger
 from arb.matching import line_key
+from arb.models import RESOLUTION_SETTLED_KINDS
 
 log = get_logger("arb.settle", "logs/scan.log")
 NY = ZoneInfo("America/New_York")
@@ -18,7 +19,8 @@ NY = ZoneInfo("America/New_York")
 # at startup, not a permanent-OPEN surprise later (bug E3). XSPREAD's registered
 # settler IS the locked-at-entry path (L1).
 SETTLEMENT_PATHS = {"ARB": "entry", "XSPREAD": "entry", "POLITICAL": "entry",
-                    "EV": "resolution", "NEGRISK": "resolution"}
+                    "EV": "resolution", "NEGRISK": "resolution",
+                    "WHALE": "resolution"}
 
 
 def validate_settlement_paths(cfg) -> None:
@@ -31,10 +33,11 @@ def validate_settlement_paths(cfg) -> None:
 
 def open_resolution_bets(store):
     return store.query(
-        """SELECT fb.* FROM flat_bets fb
-           WHERE fb.kind IN ('EV', 'NEGRISK', 'BTC')
+        f"""SELECT fb.* FROM flat_bets fb
+           WHERE fb.kind IN ({','.join('?' * len(RESOLUTION_SETTLED_KINDS))})
              AND NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id = fb.id
-                             AND be.kind IN ('settled', 'void'))""")
+                             AND be.kind IN ('settled', 'void'))""",
+        RESOLUTION_SETTLED_KINDS)
 
 
 def _leg_result(leg: dict, winner: str, total: Decimal | None = None) -> str:
@@ -83,8 +86,12 @@ def settle_bet(cfg, store, bet, winner: str, source: str, now: datetime,
         "payload_json": json.dumps(payload)})
 
     placed = datetime.fromisoformat(bet["created_at"])
-    # instant-settle tripwire: resolution-settled kinds only (§10.4)
-    if (now - placed).total_seconds() < float(cfg["settle_tripwire_secs"]):
+    # instant-settle tripwire: resolution-settled kinds only (§10.4). An `exit:`
+    # source is a DELIBERATE early terminal row (L14 §9), not the "settled one
+    # poll after placement" pathology this guard exists to catch — blacklisting
+    # the fingerprint would ban the market the exit rule just worked on.
+    if not source.startswith("exit:") \
+            and (now - placed).total_seconds() < float(cfg["settle_tripwire_secs"]):
         store.insert("annotations", {
             "created_at": now.isoformat(), "target_kind": "bet",
             "target_id": str(bet["id"]), "kind": "settle-tripwire",
@@ -133,8 +140,11 @@ def settle_auto_mlb(cfg, store, now: datetime | None = None) -> int:
     from arb.venues.mlbstats import fetch_schedule, is_final
     now = now or datetime.now(timezone.utc)
     aliases = load_aliases()
+    # WHALE is Polymarket-native: one oracle per kind (§10) — the whale's own
+    # outcome and the bet's settlement must come from the same resolution.
     bets = [b for b in open_resolution_bets(store)
-            if b["sport"] == "baseball_mlb" and b["event_start_utc"]]
+            if b["sport"] == "baseball_mlb" and b["event_start_utc"]
+            and b["kind"] != "WHALE"]
     if not bets:
         return 0
     dates = sorted({datetime.fromisoformat(b["event_start_utc"]).astimezone(NY)
