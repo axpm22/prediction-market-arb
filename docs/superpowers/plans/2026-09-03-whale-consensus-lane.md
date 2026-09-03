@@ -86,7 +86,7 @@
 >    inconclusive) nor on a known `limit` cap (probe 2 inconclusive). Task 3
 >    pages by `offset` in `whale.page_size` steps and stops when the oldest row
 >    on a page is older than `last_seen − overlap_secs`; `start` is not sent (dated correction 2026-09-03: the age rule alone bounds paging)
->    anyway. Task 3 also re-probes `limit` and `start`/`end` once against a
+>    Task 3 also re-probes `limit` and `start`/`end` once against a
 >    high-volume market taken from `whale_trades_global.json` and records the
 >    result.
 > 3. **Backfill source is `/activity?user=&type=TRADE`**, not
