@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from arb.models import q6
-from arb.whale_signal import NO, YES, _d, _sybil, _ts, _wmean, point_of, qualifying
+from arb.whale_signal import NO, YES, d, point_of, qualifying, tally, ts, wmean
 
 
 @dataclass(frozen=True)
@@ -25,27 +25,28 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg) -> ExitDeci
     open_size — a `Signal.whales` list is exactly this shape)."""
     ex, variant = cfg["whale"]["exit"], bet_ctx["variant"]
     side, cid = int(bet_ctx["side"]), bet_ctx["condition_id"]
-    start = _ts(bet_ctx.get("start_utc"))
-    if start is None or _ts(now) >= start:
+    start = ts(bet_ctx.get("start_utc"))
+    if start is None or ts(now) >= start:
         return None
 
     # flip: the consensus itself moved, recomputed under this bet's variant.
-    live = qualifying(cid, open_positions_now, score_lookup, now, cfg)
-    for s in (YES, NO):
-        _sybil([x for x in live if x["side"] == s],
-               int(cfg["whale"]["fire"]["sybil_gap_secs"]))
-    for x in live:
-        x["points"] = Decimal(0) if x["sybil_dropped"] else point_of(variant, x, cfg)
-    total = sum((x["points"] for x in live), Decimal(0))
-    ours = sum((x["points"] for x in live if x["side"] == side), Decimal(0))
-    ratio = q6(ours / total) if total > 0 else Decimal(0)
-    if ratio < _d(ex["flip_ratio"]):
-        return ExitDecision("flip", {"ratio": ratio, "points_side": q6(ours),
-                                     "points_total": q6(total)})
+    # `total == 0` is every contributing print having simply aged out of
+    # signal_window_secs — no reading at all, not a reading that flipped, so it
+    # falls through to `left`/`confidence`, which measure the whales directly.
+    by_side, _ = tally(variant, qualifying(cid, open_positions_now,
+                                           score_lookup, now, cfg), cfg)
+    total, ours = by_side[YES] + by_side[NO], by_side[side]
+    ratio = q6(ours / total) if total > 0 else None
+    if ratio is not None and ratio < d(ex["flip_ratio"]):
+        return ExitDecision("flip", {"ratio": ratio, "points_side": ours,
+                                     "points_total": total})
 
-    # left: the whales that formed the signal sold out from under us.
-    booked = {x["wallet"]: _d(x["open_size"]) for x in bet_ctx["whales"]
-              if x.get("side", side) == side}
+    # left: the whales that formed the signal sold out from under us. Rows sum
+    # per wallet: a pre-merge `whales` list can name a wallet more than once.
+    booked: dict[str, Decimal] = {}
+    for x in bet_ctx["whales"]:
+        if x.get("side", side) == side:
+            booked[x["wallet"]] = booked.get(x["wallet"], Decimal(0)) + d(x["open_size"])
     open_now = {w: Decimal(0) for w in booked}
     avg = {}
     for p in open_positions_now:
@@ -54,7 +55,7 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg) -> ExitDeci
             avg.setdefault(p.wallet, p.avg_price)
     held_then = sum(booked.values(), Decimal(0))
     held_now = sum(open_now.values(), Decimal(0))
-    if held_now <= (1 - _d(ex["sold_fraction"])) * held_then:
+    if held_now <= (1 - d(ex["sold_fraction"])) * held_then:
         return ExitDecision("left", {"open_now": q6(held_now),
                                      "open_at_booking": q6(held_then)})
 
@@ -64,20 +65,20 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg) -> ExitDeci
     remaining = []
     for x in bet_ctx["whales"]:
         wallet = x["wallet"]
-        if open_now.get(wallet, Decimal(0)) <= 0:
+        if x.get("sybil_dropped") or open_now.get(wallet, Decimal(0)) <= 0:
             continue
         score = score_lookup(wallet, *_bucket(open_positions_now, cid, wallet))
         if score is None:
             continue
         cur = {"wallet": wallet, "lb": score.lb, "score": score,
                "open_notional": q6(open_now[wallet] * avg.get(wallet, Decimal(0))),
-               "drop": q6(_d(x["lb"]) - score.lb)}
+               "drop": q6(d(x["lb"]) - score.lb)}
         cur["points"] = point_of(variant, cur, cfg)
         remaining.append(cur)
     if not remaining:
         return None
-    S = _wmean(remaining, "lb")
-    if S < _d(ex["min_score_lb"]):
+    S = wmean(remaining, "lb")
+    if S < d(ex["min_score_lb"]):
         # Pooling means a loss in another sport can lower a score here: §9 wants
         # that auditable, so name the whale that moved and the n at each level.
         worst = max(remaining, key=lambda x: x["drop"])
