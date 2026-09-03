@@ -375,7 +375,12 @@ Exit when any of:
 
 Exit price = best bid − taker fee, priced from a fresh `fetch_books`. No bid,
 or depth at the bid below `min_executable_usd`: no exit, annotation
-`exit-no-bid`, re-evaluated next cycle. A `confidence` exit records which
+`exit-no-bid`, re-evaluated next cycle. The lane inserts the exit's
+`settled` event directly through `store.insert`, never through
+`settle_bet`: that function's future-start guard rejects any settlement
+before the event starts, which is exactly when exits happen (Task 4
+finding). The tripwire exemption by `source` prefix stays as a second
+guard. A `confidence` exit records which
 whale, which hierarchy level, and which newly resolved position moved the
 score, because pooling means a loss in another sport can lower a whale's
 score on this market; that is the transfer model working as specified, and
