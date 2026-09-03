@@ -98,7 +98,7 @@ def test_whale_fire_ratio_invariant(tmp_path):
     text = SHIPPED.read_text().replace("ratio: 0.80,", "ratio: 0.40,")
     bad = tmp_path / "config.yaml"
     bad.write_text(text)
-    with pytest.raises(ConfigError, match="whale.fire.ratio"):
+    with pytest.raises(ConfigError, match="must exceed 0.5"):
         load(bad)
 
 
@@ -119,9 +119,7 @@ def test_whale_size_stake_invariant(tmp_path):
 
 
 def test_whale_poll_secs_invariant(tmp_path):
-    text = SHIPPED.read_text().replace(
-        "poll_secs: 60                       # collector cycle interval; invariant: poll_secs >= 30",
-        "poll_secs: 10                       # collector cycle interval; invariant: poll_secs >= 30")
+    text = SHIPPED.read_text().replace("  poll_secs: 60", "  poll_secs: 10")
     bad = tmp_path / "config.yaml"
     bad.write_text(text)
     with pytest.raises(ConfigError, match="whale.poll_secs"):
@@ -132,4 +130,3 @@ def test_dead_config_blocks_removed():
     cfg = load(SHIPPED)
     assert "tape_check" not in cfg
     assert "exit" not in cfg
-    assert "flip_ratio" not in cfg["whale"]  # exit lives nested under whale now

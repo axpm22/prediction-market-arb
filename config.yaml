@@ -483,7 +483,8 @@ whale:                                # L14 whale-consensus lane (design doc 202
   enabled: true                       # lane on/off; supervisor-owned like every other lane
   tape_db: data/whale_tape.sqlite     # own SQLite file: rule 9 cannot be reached from here
   poll_secs: 60                       # collector cycle interval; invariant: poll_secs >= 30
-  lookback_hours: 6                   # trades pulled from this far back, each cycle
+  lookback_hours: 6                   # bounds the market universe: start_utc in [now - lookback_hours,
+                                      #   now + lookahead_hours] (spec §5 step 1); not trade age
   lookahead_hours: 48                 # markets considered "upcoming" out to this horizon
   overlap_secs: 120                   # cycle-to-cycle overlap so no print is missed at the boundary
   collector_mode: global              # one platform-wide call per cycle; `batched` = per-market
@@ -492,7 +493,9 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   (verified)
   max_calls_per_min: 30               # collector rate cap, keyless endpoints
   backoff_secs: 300                   # pause after a collector error before retrying
-  max_print_age_secs: 300             # a print older than this is stale, not scored
+  max_print_age_secs: 300             # fire gate: a signal fires only if the newest contributing
+                                      #   print is younger than this (spec §13 "Poll latency");
+                                      #   prints are still stored and scored regardless
   min_print_usd: 200                  # prints smaller than this are noise, not signal
   discovery_min_notional_usd: 1000    # minimum notional for a wallet to enter whale discovery
   backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50 }
@@ -503,12 +506,13 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   leg (2.2x rows)
   leaderboard: { enabled: true, category: SPORTS, time_period: MONTH, order_by: PNL, pages: 4 }
                                       # leaderboard seed for whale discovery
-  resolve_after_hours: 4              # a position is resolved (winner known) this long after
-                                      #   its market's close, before scoring runs
+  resolve_after_hours: 4              # hours after the market's start_utc before resolution is
+                                      #   read (spec §5 step 5) — not after close
   resolve_giveup_days: 14             # give up resolving a position after this many days
   position_window_secs: 300           # prints within this window merge into one position
   signal_window_secs: 7200            # window a whale's position counts as a live signal
-  min_score_lb: 0.0                   # score lower-confidence-bound floor for lane visibility
+  min_score_lb: 0.0                   # qualifying-whale threshold: score_lb(bucket) >= min_score_lb
+                                      #   (spec §6 "Qualifying whale"); not lane visibility
   score:                              # whale scoring model (empirical-Bayes shrinkage)
     obs_var: 0.25                     # observation variance for the EB shrinkage estimator
     prior_sd: { root: 0.05, sport: 0.03, bucket: 0.02 }
@@ -527,7 +531,12 @@ whale:                                # L14 whale-consensus lane (design doc 202
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
                                       # entry-fire trigger: ratio + variant thresholds; V2/V3
                                       #   stay null until the calibration window (Task 8) sets
-                                      #   them — invariant: fire.ratio > 0.5
+                                      #   them — invariant: fire.ratio > 0.5; sybil_gap_secs
+                                      #   collapses same-side prints within the gap to one whale
+                                      #   (spec §7.3); max_drift_points caps the ask's drift above
+                                      #   the whale VWAP before a signal is stale (spec §7.4);
+                                      #   min_secs_to_start is the pregame floor before kickoff
+                                      #   (spec §7.5)
   size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10 }
                                       # paper stake sizing for whale-lane fills
   exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01 }
@@ -536,4 +545,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
   primary_variant: V2                 # which fire variant the lane reports as its headline
   kill: { decision_n: 100, null_n: 1200, fast_kill_min_marked: 50,
           min_signals_per_week_alarm: 10 }
-                                      # pre-registered kill-gate sample sizes
+                                      # pre-registered kill-gate sample sizes; fast_kill_min_marked
+                                      #   is the rolling 30-day marked-bet floor for kill rule 2
+                                      #   (spec §12); min_signals_per_week_alarm is the starvation
+                                      #   floor for kill rule 4 (spec §12)

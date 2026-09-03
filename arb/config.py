@@ -244,8 +244,8 @@ def _check_invariants(cfg):
     if not Decimal(whale["exit"]["flip_ratio"]) < Decimal(whale["fire"]["ratio"]):
         raise ConfigError(
             f"whale.exit.flip_ratio ({whale['exit']['flip_ratio']}) must be less than "
-            f"whale.fire.ratio ({whale['fire']['ratio']}) — otherwise a position could exit "
-            "before it was ever eligible to fire")
+            f"whale.fire.ratio ({whale['fire']['ratio']}) — otherwise a just-fired position "
+            "could be exited on the very next cycle (hysteresis)")
     if not Decimal(whale["size"]["min_stake_usd"]) <= Decimal(whale["size"]["max_stake_usd"]):
         raise ConfigError(
             f"whale.size.min_stake_usd ({whale['size']['min_stake_usd']}) must be <= "
