@@ -3,14 +3,19 @@
 > **Task 1 decisions (2026-09-03):** Rule-3 probes run against live Polymarket
 > `data-api`/`gamma-api` endpoints (10 probes, `scripts/probe_whale_endpoints.py`,
 > results dated 2026-09-03 in `data/verified_facts.md`). Decisions:
-> (a) **collector mode = `batched`** — **[corrected in the 2026-09-03 fix
-> pass]** probe 5's global feed exists, but "caps at 1000 rows/call" was
-> unsupported and is now disproven: a follow-up `limit=10000` call on the
-> same global feed returned exactly 10000 rows, not 1000. The true ceiling is
-> ≥10000 and still not located. The decision is unchanged because it never
-> rested on the raw cap — it rests on implied throughput, which stayed below
-> the 3,000 rows/min gate on both runs (≈2,000 then ≈1,400 rows/min).
-> (b) **backfill disabled** — probe 7's `closed-positions` fields do include
+> (a) **collector mode = `global`** — **[superseded by follow-up 4, controller,
+> 2026-09-03]** probe 5's global feed exists; "caps at 1000 rows/call" was
+> unsupported and was disproven in the fix pass: a `limit=10000` call on the
+> same global feed returned exactly 10000 rows (probe log only; the saved
+> fixture is the 200-row truncation of the `limit=1000` call, and Task 3's
+> step 0 re-records it). The true ceiling is ≥10000 and not located. The
+> gate was about what one call per minute can return, not about the
+> platform's own rate: with a ≥10,000-row cap against ≈1,400–2,000 rows/min,
+> one call per cycle captures the whole taker tape with ~5× headroom, so the
+> gate is met. The first-pass reading ("rate below 3,000 rows/min ⇒
+> batched") inverted it and is withdrawn.
+> (b) **backfill via `closed-positions` disabled** [superseded by follow-up 3:
+> backfill is enabled via `/activity`] — probe 7's `closed-positions` fields do include
 > entry price (`avgPrice`) and `outcome`, but probe 10 found 0 losers-to-zero
 > in 30 closed positions for the probed wallet (all 30 had `avgPrice > 0` and
 > none had `curPrice == 0`), so the "shows losers-to-zero" half of the gate is
@@ -64,8 +69,8 @@
 > starting within 6h only, `whale.lookahead_hours=6`) was not triggered: it
 > only applies if BOTH probe 1 and probe 5 fail, and both worked (probe 1's
 > CSV batching returned rows from all 3 requested markets; probe 5's global
-> feed exists). (a)'s `batched` mode is the normal per-market CSV-batched
-> collector, not this degraded fallback.
+> feed exists). The `batched` mode named in follow-up 4 as the fallback is the
+> normal per-market CSV-batched collector, not this degraded fallback.
 
 > **Task 1 follow-ups (2026-09-03, controller):** three findings change later
 > tasks; the spec is amended to match.

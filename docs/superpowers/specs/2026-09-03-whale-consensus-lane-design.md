@@ -63,7 +63,7 @@ nothing else. The lane is not built on any row that fails.
 | `data-api/v1/leaderboard?category=&timePeriod=&orderBy=&limit=&offset=` | Discovery only | Category values (is there a SPORTS category), fields, `offset` cap 1000 |
 | `data-api/activity?user=&type=TRADE&limit=&offset=` | Cold-start backfill (full trade rows, so hygiene runs on them) | Fields, `offset` cap 5000. VERIFIED 2026-09-03 (Task 1 probe 8) |
 | `data-api/closed-positions?user=&limit=50&offset=` | `avgPrice` cross-check only | VERIFIED 2026-09-03; losers-to-zero absent in the sample, so it is not a backfill source |
-| `gamma-api/markets?condition_ids=<csv>` (+ `closed=true` for resolved markets) | Resolution reader, bucket map for backfilled markets | `condition_ids` batching VERIFIED for open markets 2026-09-03; `conditionId` singular is NOT a filter. Resolved-market reachability and the resolved values of `closed`, `umaResolutionStatuses` (plural), `outcomePrices` are re-probed at the start of Task 4 |
+| `gamma-api/markets?condition_ids=<id>&condition_ids=<id>` (+ `closed=true` for resolved markets) | Resolution reader, bucket map for backfilled markets | Batching VERIFIED 2026-09-03 (fix pass) **only in the repeated-param form**; the comma CSV `condition_ids=<a>,<b>` returns nothing; `conditionId` singular is NOT a filter. Batch cap beyond 2 ids NOT PROBED. Resolved-market reachability and the resolved values of `closed`, `umaResolutionStatuses` (plural, JSON-encoded string), `outcomePrices` are re-probed at the start of Task 4 |
 | `clob/books` (already verified) | Follower touch at signal and exit time | Nothing new |
 
 Rate limits are undocumented; third-party estimates disagree by two orders
