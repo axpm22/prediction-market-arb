@@ -146,6 +146,45 @@ def test_one_wallet_is_one_whale_per_side(cfg):
     assert w0["last_ts"] == T0                        # newest window
 
 
+def test_stale_gate_compares_ask_to_fresh_prints_vwap(cfg):
+    """Controller pin, spec §7 item 4 (pinned 2026-09-03): `stale` compares the
+    ask to the points-weighted VWAP of the contributing whales' FRESH BUY
+    prints (`fresh_avg_price`), not their whole-exposure average
+    (`avg_price`). w0 accumulated 3,000 @ 0.30 in a window that has aged out
+    of `signal_window_secs`, then added 1,000 @ 0.50 in a fresh one: fresh
+    VWAP is 0.50 (+0.03 drift cap clears an 0.52 ask); the whole-exposure
+    average is 0.35 (+0.03 = 0.38), which would have suppressed it."""
+    cfg["whale"]["fire"]["min_points"]["V1"] = Decimal("1")  # isolate w0's own VWAP
+    old_ts = T0 - int(cfg["whale"]["signal_window_secs"]) - 100
+    pos = [_pos("w0", price="0.30", size="3000", last=old_ts),
+           _pos("w0", price="0.50", size="1000", last=T0)]
+    s = _ev(cfg, pos, {"w0": _score("0.05")}, touch=_touch(ask="0.52"))["V1"]
+    assert (s.fired, s.suppressed_reason) == (True, None)
+    w0 = next(w for w in s.whales if not w["sybil_dropped"])
+    assert w0["avg_price"] == Decimal("0.350000")        # whole exposure: unchanged
+    assert w0["fresh_avg_price"] == Decimal("0.500000")  # fresh window only: gates `stale`
+
+
+def test_merge_windows_keys_by_wallet_and_side(cfg):
+    """A wallet on both sides of the same market is two contributors, not
+    one: `merge_windows` keys by `(wallet, outcome_index)`, and `qualifying`
+    gates each key's own newest window against the signal window
+    independently. w0's side-0 window has aged out; its side-1 window and
+    w1's side-1 window are both fresh."""
+    old_ts = T0 - int(cfg["whale"]["signal_window_secs"]) - 100
+    pos = [_pos("w0", idx=0, price="0.50", size="3000", last=old_ts),
+           _pos("w0", idx=1, price="0.50", size="1000", last=T0),
+           _pos("w1", idx=1, price="0.50", size="1000", last=T0 - 30)]
+    merged = whale_signal.merge_windows(CID, pos, Decimal(str(cfg["whale"]["min_print_usd"])),
+                                        NOW, cfg)
+    assert sorted(merged.keys()) == [("w0", 0), ("w0", 1), ("w1", 1)]
+    scores = {"w0": _score("0.05"), "w1": _score("0.04")}
+    whales = whale_signal.qualifying(CID, pos, _lookup(scores), NOW, cfg)
+    assert sorted((w["wallet"], w["side"]) for w in whales) == [("w0", 1), ("w1", 1)]
+    total, _ = whale_signal.tally("V1", whales, cfg)
+    assert (total[whale_signal.YES], total[whale_signal.NO]) == (0, 2)
+
+
 # ------------------------------------------------------------ fire and its refusals
 
 def test_ratio_below_threshold_suppresses_with_ratio(cfg):
@@ -446,6 +485,26 @@ def test_exit_left_merges_all_of_a_wallets_windows_not_just_fresh_ones(cfg):
     assert d.reason == "left"
     assert d.detail["open_at_booking"] == Decimal("4000.000000")
     assert d.detail["open_now"] == Decimal("1000.000000")
+
+
+def test_exit_open_notional_matches_booking_bit_for_bit(cfg):
+    """Item 2, fix 3: `whale_exit.exit_reason` derives each whale's current
+    open_notional as `q6(notional)` straight off `merge_windows` — the same
+    formula `qualifying` used to book it — instead of re-deriving it through
+    a quantized avg_price multiplied back by size, which can round
+    differently. w0's two windows (1,000 @ 0.30, 2,000 @ 0.666667) sum to a
+    notional that does not divide evenly by size, so the old avg-then-
+    multiply path would have drifted a thousandth of a dollar from booking's
+    value; this pins the two paths to agree bit-for-bit when nothing changed."""
+    scores = {"w0": _score("0.05"), "w1": _score("0.04")}
+    pos = [_pos("w0", price="0.333333", size="1000", last=T0),
+           _pos("w0", price="0.666667", size="2000", last=T0 - 400),
+           _pos("w1", price="0.50", size="1000", last=T0 - 30)]
+    booked = _ev(cfg, pos, scores)["V1"].whales
+    w0 = next(w for w in booked if w["wallet"] == "w0" and not w["sybil_dropped"])
+    now_merge = whale_signal.merge_windows(CID, pos, Decimal(str(cfg["whale"]["min_print_usd"])),
+                                           NOW, cfg)
+    assert q6(now_merge[("w0", 0)]["notional"]) == w0["open_notional"]
 
 
 def test_exit_confidence_v3_weight_matches_the_merged_booking_notional(cfg):

@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from decimal import Decimal
 from statistics import median
 
 from arb.models import q6
+from arb.whale_merge import d, merge_windows, qualifying, ts
 
 VARIANTS = ("V1", "V2", "V3")
 YES, NO = 0, 1
@@ -52,21 +52,6 @@ class Signal:
     suppressed_reason: str | None
     flagged_edge: Decimal
     S: Decimal
-
-
-def ts(v) -> int | None:
-    """Epoch seconds from an int, a datetime or an ISO string (naive = UTC)."""
-    if v is None or v == "":
-        return None
-    if isinstance(v, (int, float)):
-        return int(v)
-    if isinstance(v, str):
-        v = datetime.fromisoformat(v)
-    return int((v if v.tzinfo else v.replace(tzinfo=timezone.utc)).timestamp())
-
-
-def d(x) -> Decimal:
-    return x if isinstance(x, Decimal) else Decimal(str(x))
 
 
 # -------------------------------------------------------------------- points
@@ -103,62 +88,6 @@ def wmean(whales, key) -> Decimal:
 
 
 # -------------------------------------------------------------- qualification
-
-def merge_windows(condition_id, positions, min_usd) -> dict[tuple, dict]:
-    """A wallet's several open BUY windows on the same `(market, side)` merge
-    into one contributor: summed open size, notional-weighted average price,
-    and the newest window (for `last_ts`/`sport`/`market_type`). Base
-    eligibility only — an open pregame position on this market clearing
-    `min_print_usd` — covering ALL of the wallet's open windows, however old
-    (spec §7, pinned 2026-09-03): no signal-window gate here, so `qualifying`
-    and `whale_exit`'s `left` test can each apply that gate on their own terms
-    against the same merged exposure."""
-    merged: dict[tuple, dict] = {}
-    for p in positions:
-        open_size = p.size - p.sold_size
-        if (p.condition_id != condition_id or not p.pregame or open_size <= 0
-                or p.notional_usd < min_usd):
-            continue
-        m = merged.setdefault((p.wallet, p.outcome_index),
-                              {"size": Decimal(0), "notional": Decimal(0), "newest": p})
-        m["size"] += open_size
-        m["notional"] += open_size * p.avg_price
-        if p.last_ts > m["newest"].last_ts:
-            m["newest"] = p
-    return merged
-
-
-def qualifying(condition_id, open_positions, score_lookup, now, cfg) -> list[dict]:
-    """Spec §7's qualifying whales, ONE ROW PER WALLET PER SIDE (pinned
-    2026-09-03): a wallet's several BUY windows on the same (market, side) are
-    one contributor — summed open size, notional-weighted average price, newest
-    `last_ts` — scored once and voting once.
-
-    `merge_windows` merges ALL of a wallet's open windows on that side (its
-    live exposure) regardless of age; `signal_window_secs` then gates
-    QUALIFICATION only, through the merged wallet's newest window's `last_ts`
-    (spec §7, pinned 2026-09-03). The merged wallet then needs a score
-    clearing `min_score_lb`; sport and market type come from its newest
-    window, which is what settlement and scoring already agreed on.
-    """
-    w = cfg["whale"]
-    window, min_lb = int(w["signal_window_secs"]), d(w["min_score_lb"])
-    min_usd, now_ts = d(w["min_print_usd"]), ts(now)
-    out = []
-    for m in merge_windows(condition_id, open_positions, min_usd).values():
-        p = m["newest"]
-        if now_ts - p.last_ts > window:
-            continue
-        score = score_lookup(p.wallet, p.sport, p.market_type)
-        if score is None or score.lb < min_lb:
-            continue
-        out.append({"wallet": p.wallet, "side": p.outcome_index, "lb": score.lb,
-                    "n_bucket": score.n_bucket, "native": score.native,
-                    "open_size": q6(m["size"]), "last_ts": p.last_ts,
-                    "avg_price": q6(m["notional"] / m["size"]),
-                    "open_notional": q6(m["notional"]), "sybil_dropped": False})
-    return out
-
 
 def sybil(whales, gap) -> None:
     """Spec §7.3: same-side prints within `gap` seconds are one whale.
@@ -220,6 +149,7 @@ def _signal(variant, market, whales, touch, now, cfg, m0) -> Signal:
 
     live = [x for x in scored[side] if not x["sybil_dropped"]]
     vwap = wmean(live, "avg_price") if live else Decimal(0)
+    fresh_vwap = wmean(live, "fresh_avg_price") if live else Decimal(0)
     S = wmean(live, "lb") if live else Decimal(0)
     t = touch.get(side)
     ask, bid = (t.ask, t.bid) if t else (None, None)
@@ -236,7 +166,7 @@ def _signal(variant, market, whales, touch, now, cfg, m0) -> Signal:
         reason = "uncalibrated"
     elif age >= int(w["max_print_age_secs"]):          # §13: strictly younger
         reason = "late-print"
-    elif ask is not None and ask > vwap + d(f["max_drift_points"]):
+    elif ask is not None and ask > fresh_vwap + d(f["max_drift_points"]):
         reason = "stale"
     elif market.get("start_utc") is None or to_start < int(f["min_secs_to_start"]):
         reason = "too-close"

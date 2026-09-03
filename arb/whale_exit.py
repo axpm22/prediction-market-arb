@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from arb.models import q6
-from arb.whale_signal import NO, YES, d, merge_windows, point_of, qualifying, tally, ts, wmean
+from arb.whale_merge import d, merge_windows, qualifying, ts
+from arb.whale_signal import NO, YES, point_of, tally, wmean
 
 
 @dataclass(frozen=True)
@@ -51,13 +52,13 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg) -> ExitDeci
     for x in bet_ctx["whales"]:
         if x.get("side", side) == side:
             booked[x["wallet"]] = booked.get(x["wallet"], Decimal(0)) + d(x["open_size"])
-    merged_now = merge_windows(cid, open_positions_now, d(cfg["whale"]["min_print_usd"]))
+    merged_now = merge_windows(cid, open_positions_now, d(cfg["whale"]["min_print_usd"]), now, cfg)
     open_now = {w: Decimal(0) for w in booked}
-    avg = {}
+    notional_now = {}
     for (wallet, s), m in merged_now.items():
         if s == side and wallet in booked:
             open_now[wallet] = m["size"]
-            avg[wallet] = q6(m["notional"] / m["size"])
+            notional_now[wallet] = m["notional"]
     held_then = sum(booked.values(), Decimal(0))
     held_now = sum(open_now.values(), Decimal(0))
     if held_now <= (1 - d(ex["sold_fraction"])) * held_then:
@@ -76,7 +77,7 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg) -> ExitDeci
         if score is None:
             continue
         cur = {"wallet": wallet, "lb": score.lb, "score": score,
-               "open_notional": q6(open_now[wallet] * avg.get(wallet, Decimal(0))),
+               "open_notional": q6(notional_now.get(wallet, Decimal(0))),
                "drop": q6(d(x["lb"]) - score.lb)}
         cur["points"] = point_of(variant, cur, cfg)
         remaining.append(cur)
