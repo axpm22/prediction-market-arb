@@ -41,14 +41,27 @@ def test_fresh_db_carries_variant_and_signal_id_at_schema_7(tmp_path):
 
 
 def test_migration_7_adds_columns_to_a_v6_db(tmp_path):
+    # Genuine v6 flat_bets: strip the v7 columns from the CREATE TABLE that
+    # schema.TABLES carries at HEAD, so the ALTERs in migrations.apply are
+    # actually exercised instead of skipped by the PRAGMA table_info guard.
+    v6_tables = [
+        ddl.replace(", variant TEXT, signal_id INTEGER", "")
+        if "CREATE TABLE IF NOT EXISTS flat_bets" in ddl else ddl
+        for ddl in schema.TABLES
+    ]
     path = tmp_path / "old_v6.sqlite"
     con = sqlite3.connect(path)
     con.execute("CREATE TABLE schema_version (version INTEGER, applied_at TEXT)")
-    for ddl in schema.TABLES + schema.INDEXES:
+    for ddl in v6_tables + schema.INDEXES:
         con.execute(ddl)
-    con.execute("INSERT INTO schema_version VALUES (6, datetime('now'))")
+    for v in range(1, 7):  # a real v6 DB accrued one row per migration, 1..6
+        con.execute("INSERT INTO schema_version VALUES (?, datetime('now'))", (v,))
     con.commit()
+    cols = {r[1] for r in con.execute("PRAGMA table_info(flat_bets)")}
+    assert "variant" not in cols
+    assert "signal_id" not in cols
     con.close()
+
     store = Store(path)  # __init__ runs migrations.apply -> must add columns, not error
     cols = {r[1] for r in store.conn.execute("PRAGMA table_info(flat_bets)")}
     assert {"variant", "signal_id"} <= cols
@@ -110,6 +123,8 @@ def test_book_writes_variable_stake_variant_and_signal_id(cfg, tmp_path):
     assert bet["stake_usd"] == "0.420000"
     assert bet["variant"] == "V2/conf"
     assert bet["signal_id"] == 7
+    assert bet["lane"] == "review"
+    assert bet["notes"].startswith("whale-signal")
 
 
 def test_book_defaults_stake_to_one_dollar_and_leaves_variant_signal_id_null(cfg, tmp_path):
