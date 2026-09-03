@@ -57,7 +57,8 @@ nothing else. The lane is not built on any row that fails.
 
 | Endpoint (all public GET) | Needed for | Must verify |
 |---|---|---|
-| `data-api/trades?market=<csv>&start=&end=&limit=&offset=&takerOnly=` | Print collector | CSV batching and its cap; real `limit` cap; `takerOnly` default and what `false` returns; `start`/`end` filter; whether one fill yields one row or one per leg (group by `transactionHash`); `proxyWallet` present and stable |
+| `data-api/trades?market=<csv>&start=&end=&limit=&offset=&takerOnly=` | Print collector (batched fallback) | VERIFIED 2026-09-03 (Task 1): comma CSV `market=` batching works (3 markets, one call); `takerOnly=true` gives one row per fill, `false` every leg (2.2× rows); `limit` cap ≥ 10,000 on the global feed; `start`/`end` INCONCLUSIVE; `proxyWallet` present. Task 3 step 0 re-probes ordering, `offset`, and `start`/`end` |
+| `data-api/trades?takerOnly=&limit=10000` (no `market`) | Print collector (global, primary) | VERIFIED 2026-09-03: platform-wide taker tape, 10,000 rows per call against ≈1,400–2,000 rows/min |
 | `data-api/trades` with no `market` | Optional global feed | Whether it returns the platform-wide taker tape and at what cap. If it does at ≥3,000 rows/min, one call replaces batched calls |
 | `data-api/v1/leaderboard?category=&timePeriod=&orderBy=&limit=&offset=` | Discovery only | Category values (is there a SPORTS category), fields, `offset` cap 1000 |
 | `data-api/activity?user=&type=TRADE&limit=&offset=` | Cold-start backfill (full trade rows, so hygiene runs on them) | Fields, `offset` cap 5000. VERIFIED 2026-09-03 (Task 1 probe 8) |
@@ -109,13 +110,18 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    connection (`replay.open_ro`) filtered by that poll's `poll_id` so the
    query is served by `idx_quotes_poll` and never scans the 37 GB table.
    Nothing is guessed.
-2. **Collect.** Batched `/trades` calls (`market=<csv>` of
-   `whale.markets_per_call` ids, `takerOnly=<whale.taker_only>`,
-   `limit=<whale.page_size>`, `start` = last seen timestamp minus
-   `whale.overlap_secs` (120) sent but not relied on). Pages advance by
-   `offset` and stop when the oldest row on a page is older than that bound,
-   or when a page is short. Persist every row to `prints` with
-   `observed_at`. Duplicates rejected by a unique index on
+2. **Collect.** `whale.collector_mode: global` (Task 1 fix pass: the global
+   feed returns 10,000 rows per call against a platform rate of about
+   1,400–2,000 rows/min): one `GET /trades?takerOnly=<whale.taker_only>&limit=<whale.page_size>`
+   per cycle with no `market`, rows kept only when their `conditionId` is in
+   the universe. Pages advance by `offset` only when a page is full and its
+   oldest row is still newer than `last_seen − whale.overlap_secs` (120);
+   they stop on a short page or on age. `start` is never relied on. The
+   `batched` fallback polls the universe in groups of `whale.markets_per_call`
+   using `market=<a>,<b>,<c>` (comma CSV, verified for `/trades` in Task 1
+   probe 1; note Gamma's `condition_ids` is the opposite and needs the
+   repeated-param form). Persist every kept row to `prints` with `observed_at`.
+   Duplicates rejected by a unique index on
    `(tx_hash, proxy_wallet, asset, side, price, size, ts)`.
 3. **Discover.** Any wallet whose cumulative pregame BUY notional in tracked
    markets exceeds `whale.discovery_min_notional_usd` (1,000) enters
@@ -545,14 +551,15 @@ whale:
   lookback_hours: 6
   lookahead_hours: 48
   overlap_secs: 120
-  markets_per_call: 20
+  collector_mode: global            # one platform-wide call per cycle; `batched` = per-market fallback
+  markets_per_call: 20              # batched mode only; /trades takes comma CSV `market=` (verified)
   max_calls_per_min: 30
   backoff_secs: 300
   max_print_age_secs: 300
   min_print_usd: 200
   discovery_min_notional_usd: 1000
   backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50 }
-  page_size: 500                    # trades rows per collector call; paging stops on age, never on `start`
+  page_size: 10000                  # trades rows per call (10,000 verified 2026-09-03); paging stops on age, never on `start`
   taker_only: true                  # Task 1 probe 3: one row per fill; `false` returns every leg (2.2x rows)
   leaderboard: { enabled: true, category: SPORTS, time_period: MONTH, order_by: PNL, pages: 4 }
   resolve_after_hours: 4
