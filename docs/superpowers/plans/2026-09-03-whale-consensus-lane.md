@@ -1,5 +1,45 @@
 # L14 Whale-Consensus Lane — Implementation Plan
 
+> **Task 1 decisions (2026-09-03):** Rule-3 probes run against live Polymarket
+> `data-api`/`gamma-api` endpoints (10 probes, `scripts/probe_whale_endpoints.py`,
+> results dated 2026-09-03 in `data/verified_facts.md`). Decisions:
+> (a) **collector mode = `batched`** — probe 5's global feed exists and caps at
+> 1000 rows/call, but the implied throughput (≈2,000 rows/min) is below the
+> 3,000 rows/min gate for switching to `global`.
+> (b) **backfill disabled** — probe 7's `closed-positions` fields do include
+> entry price (`avgPrice`) and `outcome`, but probe 10 found 0 losers-to-zero
+> in 30 closed positions for the probed wallet (all 30 had `avgPrice > 0` and
+> none had `curPrice == 0`), so the "shows losers-to-zero" half of the gate is
+> not met. Small sample (one wallet); re-check before permanently ruling this
+> out.
+> (c) **leaderboard enabled** — probe 6's `category=SPORTS` returned 200
+> directly (no fallback category needed).
+> (d) **resolution fields, named exactly as observed** (gamma `markets`
+> endpoint, matched via `condition_ids=<csv>` against a live market — the
+> design's assumed batch id list of 2-days-old condition ids returned no
+> matches and is not usable as a smoke test for this field set): `closed`
+> (bool), `umaResolutionStatuses` (**plural** — the design doc's assumed
+> `umaResolutionStatus` singular field does not exist), `outcomePrices`,
+> `gameStartTime`, `clobTokenIds`, `sportsMarketType`, `endDate`. Batching
+> works only via `condition_ids` (plural param); `conditionId` (singular) is
+> silently ignored and returns an unrelated default page. No `closed:true`
+> market was reached by this probe, so resolution-time values (including any
+> winner field) remain UNVERIFIED.
+> (e) **`whale.taker_only = true`** — isolates one row per fill from the
+> taker's own side, avoiding double-counted rows when grouping prints by
+> wallet. Probe 3's row-count difference, the discovery-bias number for spec
+> §13: `takerOnly=false` returned 11 rows for the same 5 underlying fills that
+> `takerOnly=true` returned as exactly 5 rows (1 per `transactionHash`, 0
+> duplicates) — a 6-row / ~2.2x inflation from counting both legs of each
+> match.
+>
+> The acceptance criterion's degraded fallback (one call per market, markets
+> starting within 6h only, `whale.lookahead_hours=6`) was not triggered: it
+> only applies if BOTH probe 1 and probe 5 fail, and both worked (probe 1's
+> CSV batching returned rows from all 3 requested markets; probe 5's global
+> feed exists). (a)'s `batched` mode is the normal per-market CSV-batched
+> collector, not this degraded fallback.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax. Design authority: `docs/superpowers/specs/2026-09-03-whale-consensus-lane-design.md` (the spec). Where this plan and the spec disagree, the spec wins and this plan gets a dated correction.
 
 **Goal:** Measure, as a paper REVIEW lane, whether following the consensus of demonstrably skilled Polymarket wallets into pregame sports markets earns a positive settled return at the follower's post-print touch, with a signal-driven exit.
