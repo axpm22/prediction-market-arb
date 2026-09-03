@@ -281,7 +281,11 @@ whale.min_score_lb` (0.00) and not hygiene-excluded.
 Evaluated per market at cycle time T over qualifying whales with an open
 pregame position (BUY minus SELL size > 0) whose last print is within
 `whale.signal_window_secs` (7,200) of T and whose print notional is at least
-`whale.min_print_usd` (200). Three pre-registered variants:
+`whale.min_print_usd` (200). **One wallet is one whale per side** (pinned
+2026-09-03, Task 6 review): a wallet's several BUY windows on the same
+`(market, side)` merge into one contributor with summed open size,
+notional-weighted average price, and the newest `last_ts`; it is scored
+once and carries one vote. Three pre-registered variants:
 
 | Variant | points per whale on its side |
 |---|---|
