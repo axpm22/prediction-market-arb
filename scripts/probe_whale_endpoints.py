@@ -273,6 +273,16 @@ def main():
                 cap_verdict = "INCONCLUSIVE: limit=10000 returned exactly 10000 rows -- real ceiling may be higher, still not located"
             else:
                 cap_verdict = f"limit=10000 returned {len(hi_rows)} rows (< requested) -> observed real cap = {len(hi_rows)} rows/call"
+            if hi_rows:
+                # Finding: this response (proves the cap isn't 1000) was
+                # computed and discarded, not saved -- fixture it (truncated,
+                # repo size) so the claim has recorded evidence like every
+                # other probe.
+                save_fixture("whale_trades_global_10000.json", hi_rows[:200])
+                cap_verdict += (
+                    f" (fixture whale_trades_global_10000.json saved: {len(hi_rows)} rows "
+                    f"returned this call, first {min(len(hi_rows), 200)} kept)"
+                )
 
             record(
                 5, f"{full_url} | {full_hi}", f"{status}/{status_hi}", ms + ms_hi,
@@ -454,9 +464,16 @@ def main():
                 f"umaResolutionStatus(singular, design's assumed name)={observed['umaResolutionStatus']}, "
                 f"umaResolutionStatuses(plural, real key)={plural_status}, outcomePrices={observed['outcomePrices']}, "
                 f"clobTokenIds={observed['clobTokenIds']}, sportsMarketType={observed['sportsMarketType']}, "
-                f"endDate={observed['endDate']}. Why r1/r2 (same-age ids) returned nothing while c1 matched is "
-                f"UNKNOWN (closed? archived? some other reachability rule?) -- not established by this probe."
+                f"endDate={observed['endDate']}."
             )
+            # Finding: this sentence claimed "r1/r2 returned nothing" even on
+            # a run where r1/r2 DID match (matched_a nonempty) -- it printed
+            # unconditionally. Gate it on the diagnostic's own evidence.
+            if not matched_a:
+                fields_note += (
+                    " Why r1/r2 (same-age ids) returned nothing while c1 matched is "
+                    "UNKNOWN (closed? archived? some other reachability rule?) -- not established by this probe."
+                )
         else:
             fields_note = f"diagnostic condition_ids=<c1> (known-live market) ALSO failed to match (matched_c={len(matched_c)}) -- condition_ids filtering could not be confirmed at all in this run."
 
@@ -490,6 +507,14 @@ def main():
             status_e, ms_e, body_e, full_e, err_e = call(url, {"condition_ids": [c1, second_id]})
             rows_d = body_d if isinstance(body_d, list) else []
             rows_e = body_e if isinstance(body_e, list) else []
+            # Finding: the reversed-batching claim (repeated-param works,
+            # CSV doesn't) had no recorded evidence -- both responses were
+            # computed and discarded. Save both, and record the exact wire
+            # form `requests` sent for the CSV call (it percent-encodes the
+            # comma as %2C) so a later reader can tell "CSV unsupported"
+            # from "encoding artifact".
+            save_fixture("whale_gamma_condition_ids_csv.json", rows_d)
+            save_fixture("whale_gamma_condition_ids_repeated.json", rows_e)
             ids_d = {m.get("conditionId") for m in rows_d}
             ids_e = {m.get("conditionId") for m in rows_e}
             present_d = {c1: c1 in ids_d, second_id: second_id in ids_d}
@@ -504,9 +529,14 @@ def main():
                 which_batches = "repeated condition_ids=&condition_ids= batches; the comma-joined CSV form does NOT"
             else:
                 which_batches = "NEITHER form returns both requested ids in one call"
+            wire_note = (
+                "requests percent-encoded the comma as %2C on the wire"
+                if "%2C" in full_d
+                else "comma was sent RAW (not percent-encoded) on the wire"
+            )
             batching_note = (
                 f"second known-good id={second_id} (confirmed alone in {second_id_ms}ms); "
-                f"condition_ids=<csv> [{full_d}] -> present={present_d}; "
+                f"condition_ids=<csv> [{full_d}] ({wire_note}) -> present={present_d}; "
                 f"repeated condition_ids= [{full_e}] -> present={present_e}; {which_batches}. "
                 f"Batch cap NOT PROBED (only 2 ids tested, not the ceiling)."
             )
