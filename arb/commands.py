@@ -860,3 +860,34 @@ def cmd_pm_tape(cfg, store, args):
     if int(b["conservative"]["n"]) < floor:
         print(f"  NOT SCORED: under min_fills_for_verdict ({floor}) — "
               f"record a longer tape rather than reading an underpowered mean")
+
+
+def cmd_whale_tape(cfg, store, args):
+    """One L14 collector cycle: build the universe from the latest watch poll,
+    poll the global print feed, then promote wallets over the discovery floor.
+    Writes ONLY to whale.tape_db; the ledger is opened read-only (rule 9)."""
+    from datetime import datetime, timezone
+    from arb import whale_backfill, whale_tape
+    from arb.replay import open_ro
+    now = datetime.now(timezone.utc)
+    con = whale_tape.open_tape(cfg["whale"]["tape_db"])
+    markets = whale_tape.universe(open_ro(store.path), cfg, now)
+    print(f"universe: {len(markets)} polymarket sports markets in "
+          f"[-{cfg['whale']['lookback_hours']}h, +{cfg['whale']['lookahead_hours']}h]")
+    res = whale_tape.poll_prints(cfg, con, markets, now)
+    print(f"  prints: {res['status']} calls={res['calls']} rows={res['rows']} "
+          f"dupes={res['dupes']} statuses={res['status_counts']}")
+    print(f"  discovered: {whale_backfill.discover_wallets(cfg, con, now)} new wallets")
+
+
+def cmd_whale_backfill(cfg, store, args):
+    """Daily leaderboard snapshot plus the per-wallet trade-history backfill."""
+    from datetime import datetime, timezone
+    from arb import whale_backfill, whale_tape
+    now = datetime.now(timezone.utc)
+    con = whale_tape.open_tape(cfg["whale"]["tape_db"])
+    print(f"leaderboard: {whale_backfill.snapshot_leaderboard(cfg, con, now)} new wallets")
+    res = whale_backfill.backfill(cfg, con, now)
+    print(f"  backfill: {res['status']} wallets={res['wallets']} calls={res['calls']} "
+          f"rows={res['rows']} dupes={res['dupes']} mapped={res['mapped']} "
+          f"unmappable={res['unmappable']}")

@@ -172,7 +172,7 @@ SCHEMA = {
               "max_print_age_secs": NUM, "min_print_usd": NUM,
               "discovery_min_notional_usd": NUM,
               "backfill": {"wallets_per_cycle": NUM, "pages_per_wallet": NUM, "page_size": NUM},
-              "page_size": NUM, "taker_only": BOOL,
+              "page_size": NUM, "taker_only": BOOL, "slug_sport_prefixes": MAP(STR),
               "leaderboard": {"enabled": BOOL, "category": STR, "time_period": STR,
                               "order_by": STR, "pages": NUM},
               "resolve_after_hours": NUM, "resolve_giveup_days": NUM,

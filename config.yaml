@@ -504,6 +504,21 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   paging stops on age, never on `start`
   taker_only: true                    # Task 1 probe 3: one row per fill; `false` returns every
                                       #   leg (2.2x rows)
+  slug_sport_prefixes:                # league code leading a Polymarket sports slug
+                                      #   (`kbo-lot-kt-2026-08-09`) -> our canonical sport.
+                                      #   Backfill-only: markets already in `quotes` carry
+                                      #   their sport. Longest key wins and matches as a
+                                      #   prefix, so one `cric` covers crict20max/cricjcl/...
+                                      #   Codes observed in the Task 1 fixtures plus the
+                                      #   unambiguous leagues from `sports:` above. Soccer is
+                                      #   deliberately ABSENT: its slugs lead with per-league
+                                      #   codes (qat1, fl1, el1, lal, ...) that cannot be
+                                      #   mapped without guessing (rule 3). An unlisted code
+                                      #   means sport=NULL, and such a market is never scored.
+    { mlb: baseball_mlb, kbo: baseball_kbo, npb: baseball_npb,
+      nba: basketball_nba, wnba: basketball_wnba, nfl: americanfootball_nfl,
+      nhl: icehockey_nhl, atp: tennis, wta: tennis, itf: tennis,
+      ufc: mma, cric: cricket }
   leaderboard: { enabled: true, category: SPORTS, time_period: MONTH, order_by: PNL, pages: 4 }
                                       # leaderboard seed for whale discovery
   resolve_after_hours: 4              # hours after the market's start_utc before resolution is

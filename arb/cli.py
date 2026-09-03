@@ -93,6 +93,12 @@ def main(argv=None):
                                             "for the maker lane (keyless, 0 credits)")
     p_tape.add_argument("--record-secs", type=int, default=None,
                         help="override maker.record_secs")
+    p_whale = sub.add_parser("whale-tape", help="collect Polymarket prints for the L14 "
+                                                "whale lane (keyless, 0 credits)")
+    p_whale.add_argument("--once", action="store_true",
+                         help="one collector cycle (the only mode until the lane lands)")
+    sub.add_parser("whale-backfill", help="daily leaderboard snapshot + per-wallet "
+                                          "trade-history backfill for the L14 whale lane")
     p_bench = sub.add_parser("bench", help="score and rank every STRATEGIES.md lane on "
                                            "the data we hold (read-only)")
     p_bench.add_argument("--pull", action="store_true",
