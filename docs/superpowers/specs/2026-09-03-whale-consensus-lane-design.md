@@ -340,6 +340,13 @@ Per fired (market, side, variant), two `flat_bets` rows, distinct
 Each row has one leg: venue `polymarket`, the outcome token on side s,
 `cost` = best ask at booking, `fee_cost` via `leg_fee_cost(cfg, "polymarket",
 "sports", ask)`, `depth_usd`, `mid0`, `venue_market_id = condition_id:token`.
+**Leg convention (pinned 2026-09-03, Task 4 review):** a WHALE leg always
+BUYS one token, so `side = "YES"` and `outcome` = that token's own label
+(`"Rays"`, `"Down"`, or literally `"No"` on a Yes/No market), exactly as the
+watch lane's Polymarket sports `quotes` rows are written. `side = "NO"` is
+the ledger's complement-inversion flag and is never used for WHALE legs;
+settlement decides by token identity (`venue_market_id` vs the winning
+`clobTokenIds` entry), and the label is only used to name the losing side.
 `kind = WHALE`, `category = sports`, `event_key = pm:<event_slug>` always,
 never the cross-venue matched key: `event_slug` from the print feed groups
 every market of one game (moneyline and total share it) even when our
