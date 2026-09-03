@@ -145,12 +145,13 @@ def _book(cfg, store, poll_id, poll_kind, cand, lane, reason, now,
         "event_start_utc": cand["event_start_utc"].isoformat()
             if cand["event_start_utc"] else None,
         "start_grade": cand["start_grade"], "legs_json": json.dumps(cand["legs"]),
-        "stake_usd": Decimal(1), "edge_points": cand["edge_points"],
+        "stake_usd": cand.get("stake_usd", Decimal(1)), "edge_points": cand["edge_points"],
         "trusted": trusted, "lane": lane, "quality_flag": cand["quality_flag"],
         "consensus_age_secs": cand.get("consensus_age_secs"),
         "leg_skew_secs": cand["leg_skew_secs"], "status": cand["status"],
         "pnl_optimistic": pnl_optimistic, "reappearance_of": reappearance_of,
         "gamepk": cand.get("gamepk"), "payout": cand.get("payout"),
+        "variant": cand.get("variant"), "signal_id": cand.get("signal_id"),
         "notes": f"{reason}; {cand['notes']}".strip("; ")})
     if cand["kind"] in LOCKED_KINDS and cand["kind"] not in RESOLUTION_SETTLED_KINDS:
         # ARB/XSPREAD/POLITICAL settle at entry by design (§11.1, L1) — exempt

@@ -1,7 +1,7 @@
 """SQLite DDL (SPEC §9). Money columns are TEXT holding Decimal strings, never REAL.
 Every table is INSERT-only or INSERT+terminal-row; nothing ever UPDATEs ledger rows."""
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # v2 additions (migrations only ever ADD):
 MIGRATION_2 = [
@@ -41,6 +41,15 @@ MIGRATION_6 = [
     "CREATE INDEX IF NOT EXISTS idx_annotations_target ON annotations(target_kind, target_id)",
 ]
 
+# v7: L14 whale lane booking facts, both ENTRY-TIME (rule 9). `variant`
+# distinguishes the two flat_bets rows one signal fires (V2/flat, V2/conf,
+# §8); `signal_id` ties them back to the whale signal that fired them.
+# Nullable; every existing row (and every non-WHALE lane) is unaffected.
+MIGRATION_7 = [
+    "ALTER TABLE flat_bets ADD COLUMN variant TEXT",
+    "ALTER TABLE flat_bets ADD COLUMN signal_id INTEGER",
+]
+
 TABLES = [
     """CREATE TABLE IF NOT EXISTS quotes (
         id INTEGER PRIMARY KEY, poll_id INTEGER, fetched_at TEXT, event_key TEXT,
@@ -65,7 +74,7 @@ TABLES = [
         legs_json TEXT, stake_usd TEXT, edge_points TEXT, trusted INTEGER, lane TEXT,
         quality_flag TEXT, consensus_age_secs REAL, leg_skew_secs REAL, status TEXT,
         pnl_optimistic TEXT, reappearance_of INTEGER, notes TEXT, gamepk INTEGER,
-        payout TEXT)""",
+        payout TEXT, variant TEXT, signal_id INTEGER)""",
     # append-only lifecycle log; kind: confirmed | lifetime_closed | settled | void
     # | reconciled | leg_failure; at most one settled row per bet (terminal)
     """CREATE TABLE IF NOT EXISTS bet_events (

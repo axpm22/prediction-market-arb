@@ -32,6 +32,11 @@ def classify(o: dict, cfg) -> tuple[bool, str, str]:
     is_sports = o.get("category") == "sports"
     if o.get("ai_matched"):
         return False, "ai-matched", "review"
+    if kind == "WHALE":
+        # L14 whale-consensus lane: REVIEW by construction, always (design §8).
+        # Checked before depth/timing/quality so a WHALE candidate is never
+        # blocked from booking by a gate that doesn't apply to it.
+        return False, "whale-signal", "review"
     if not is_sports and kind not in ("NEGRISK", "POLITICAL"):
         return False, "nonsports-segregated", "review"
     if o.get("live"):

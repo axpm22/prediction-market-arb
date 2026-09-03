@@ -39,4 +39,13 @@ def apply(conn):
         for ddl in schema.MIGRATION_6:
             conn.execute(ddl)  # CREATE INDEX IF NOT EXISTS — idempotent
         conn.execute("INSERT INTO schema_version VALUES (6, datetime('now'))")
+    if current < 7:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(flat_bets)")}
+        for ddl in schema.MIGRATION_7:
+            if "ADD COLUMN variant" in ddl and "variant" in cols:
+                continue  # fresh DBs already carry it via TABLES
+            if "ADD COLUMN signal_id" in ddl and "signal_id" in cols:
+                continue  # fresh DBs already carry it via TABLES
+            conn.execute(ddl)
+        conn.execute("INSERT INTO schema_version VALUES (7, datetime('now'))")
     conn.commit()

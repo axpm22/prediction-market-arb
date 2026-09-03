@@ -56,6 +56,11 @@ def bet_pnl_optimistic(store, bet: dict) -> Decimal | None:
     if not settled:
         return None
     payload = json.loads(settled[0]["payload_json"])
+    if str(payload.get("source", "")).startswith("exit:"):
+        # L14 exit engine's own terminal row (design §9) — inserted directly,
+        # never via settle_bet, so it carries no per_leg/entry-cost basis to
+        # recompute from; its pnl IS the answer.
+        return q6(Decimal(str(payload["pnl"])))
     stake = Decimal(str(bet["stake_usd"]))
     legs = json.loads(bet["legs_json"])
     c = bet_effective_cost(bet)
@@ -111,7 +116,7 @@ def bet_confirmed(store, bet: dict) -> tuple[bool, Decimal | None]:
         return True, q6(stake * (1 - cost_sum) / cost_sum)
     if results[0] == "LOST":  # full stake lost regardless of entry price
         return True, -stake
-    return True, opt  # VOID: entry price can't change the payoff
+    return True, opt  # VOID/EXITED: entry price can't change the payoff
 
 
 def pnl_confirmed_cell(rows: list[dict]) -> tuple[Decimal, int]:
