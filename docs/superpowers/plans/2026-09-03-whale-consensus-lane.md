@@ -40,6 +40,30 @@
 > feed exists). (a)'s `batched` mode is the normal per-market CSV-batched
 > collector, not this degraded fallback.
 
+> **Task 1 follow-ups (2026-09-03, controller):** three findings change later
+> tasks; the spec is amended to match.
+> 1. **Resolved markets are unverified.** `condition_ids` only reaches Gamma's
+>    default (open) index. Task 4 opens with a re-probe: `markets?condition_ids=<c>&closed=true`
+>    for a market from the 2026-08-09 poll, plus a `markets?closed=true&limit=5`
+>    listing as the fallback query; record `closed`, `umaResolutionStatuses`
+>    (plural; the singular does not exist), `outcomePrices` at resolution, and
+>    any winner field as a fixture and dated rows. Task 4 uses only those
+>    names. If no resolved market is reachable by any documented query, Task 4
+>    stops and reports BLOCKED.
+> 2. **The collector must not depend on `start` being honored** (probe 4
+>    inconclusive) nor on a known `limit` cap (probe 2 inconclusive). Task 3
+>    pages by `offset` in `whale.page_size` steps and stops when the oldest row
+>    on a page is older than `last_seen − overlap_secs`; it sends `start`
+>    anyway. Task 3 also re-probes `limit` and `start`/`end` once against a
+>    high-volume market taken from `whale_trades_global.json` and records the
+>    result.
+> 3. **Backfill source is `/activity?user=&type=TRADE`**, not
+>    `/closed-positions`: activity returns full trade rows (verified, probe 8),
+>    so backfilled prints run through the same `positions_from_prints` and
+>    hygiene filters as live prints, and resolve through Task 4's reader.
+>    `closed-positions` is kept only as an `avgPrice` cross-check. Decision (b)
+>    therefore becomes: **backfill enabled via activity, gated on follow-up 1**.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax. Design authority: `docs/superpowers/specs/2026-09-03-whale-consensus-lane-design.md` (the spec). Where this plan and the spec disagree, the spec wins and this plan gets a dated correction.
 
 **Goal:** Measure, as a paper REVIEW lane, whether following the consensus of demonstrably skilled Polymarket wallets into pregame sports markets earns a positive settled return at the follower's post-print touch, with a signal-driven exit.
@@ -147,12 +171,13 @@ def universe(store_ro, cfg, now) -> list[Market]  # from latest watch poll's PM 
 def poll_prints(cfg, con, markets, now, get=get_json) -> dict   # {calls, rows, dupes, status_counts}
 def snapshot_leaderboard(cfg, con, now, get=get_json) -> int
 def discover_wallets(cfg, con, now) -> int        # tape-sourced wallets over the notional threshold
-def backfill(cfg, con, now, get=get_json) -> dict # per-wallet closed-positions pages; bucket map via Gamma
+def backfill(cfg, con, now, get=get_json) -> dict # per-wallet /activity?type=TRADE pages -> prints(source='activity'); bucket map via Gamma condition_ids
 ```
 
 Tables in `data/whale_tape.sqlite`: `prints`, `markets`, `wallets`, `leaderboard_snapshots`, `wallet_history`, `resolutions`, `signals`, `base_rates`, `meta`. Columns per spec §5 and §6; every price/size/notional is TEXT holding a 6-place `Decimal` string. Unique index on prints `(tx_hash, proxy_wallet, asset, side, price, size, ts)`.
 
-- [ ] Failing tests, one each: schema creates all tables; `universe()` returns only PM sports markets inside the window and carries `condition_id`, tokens, sport, market_type, line, start; `poll_prints` persists the fixture rows with `observed_at`, rejects duplicates on a second call, honors `markets_per_call`, records a non-200 and returns a backoff flag; `snapshot_leaderboard` persists rows with `source='leaderboard'`; `discover_wallets` adds a wallet only above `discovery_min_notional_usd` counting pregame BUYs only; `backfill` pages until a short page, stores `bucket=NULL` for unmappable markets, respects `wallets_per_cycle`.
+- [ ] **Step 0, rule 3:** two calls at most against a high-volume market taken from `tests/fixtures/whale_trades_global.json` (pick the `conditionId` with the most rows): `GET /trades?market=<c>&takerOnly=true&limit=2000` (record the real cap from the row count) and `GET /trades?market=<c>&takerOnly=true&start=<newest_ts−600>&end=<newest_ts>` (record whether rows outside the window appear). Append dated `data/verified_facts.md` rows. Whatever the result, the collector pages by `offset` and stops on age (spec §5 step 2); `start` is sent but never relied on.
+- [ ] Failing tests, one each: schema creates all tables; `universe()` returns only PM sports markets inside the window and carries `condition_id`, tokens, sport, market_type, line, start; `poll_prints` persists the fixture rows (`tests/fixtures/whale_trades_batch.json`) with `observed_at`, rejects duplicates on a second call, honors `markets_per_call`, sends `takerOnly` from config, pages by `offset` and stops when the oldest row on a page is older than `last_seen − overlap_secs` even when the fake server ignores `start`, records a non-200 and returns a backoff flag; `snapshot_leaderboard` persists `tests/fixtures/whale_leaderboard.json` rows with `source='leaderboard'`; `discover_wallets` adds a wallet only above `discovery_min_notional_usd` counting pregame BUYs only; `backfill` pulls `tests/fixtures/whale_activity.json`-shaped pages into `prints` with `source='activity'`, pages until a short page, stores `bucket=NULL` for unmappable markets, respects `wallets_per_cycle`, and is FIFO by `first_seen`.
 - [ ] Implement. `get_json` is injected so tests never touch the network; the module opens the ledger through `arb.replay.open_ro` for `universe()` only, and `universe()` filters `quotes` by the latest `watch` `poll_id` (served by `idx_quotes_poll`), never by a `fetched_at` range, which would scan the 37 GB table. The collector sends `takerOnly=<whale.taker_only>` explicitly on every call. Backfill order is FIFO by `wallets.first_seen`. `open_tape` sets WAL and `busy_timeout` (two processes touch this file: `whale` and `settle`).
 - [ ] Rate guard: a token bucket sized by `whale.max_calls_per_min`; on any non-200 write `meta.backoff_until`.
 - [ ] Full `pytest -q`; commit: `L14 task 3: whale print collector, leaderboard snapshot, backfill (own SQLite file)`.
@@ -171,6 +196,7 @@ def resolution_for(con, condition_id) -> Resolution | None                # stat
 def settle_auto_pm(cfg, store, con, now) -> int                           # settles open WHALE bets
 ```
 
+- [ ] **Step 0, rule 3 (before any code):** Task 1 could not reach a resolved market. Probe, one call each, at most 4 calls: `GET https://gamma-api.polymarket.com/markets?condition_ids=<c>&closed=true` for a condition id from the 2026-08-09 watch poll (`data/arb.sqlite`, read-only, `poll_id = (SELECT MAX(id) FROM polls WHERE kind='watch')`), and `GET .../markets?closed=true&limit=5` as the fallback listing. Save the resolved-market response verbatim as `tests/fixtures/whale_gamma_resolved.json`; append dated `data/verified_facts.md` rows for: reachability of resolved markets by `condition_ids&closed=true`, the resolved values of `closed`, `umaResolutionStatuses`, `outcomePrices` (exact strings), and any winner field. If neither query reaches a resolved market, stop and report BLOCKED — do not guess a field. Every later step uses only these names.
 - [ ] `arb/models.py`: `KINDS += ("WHALE",)`, `RESOLUTION_SETTLED_KINDS += ("WHALE",)`. `arb/settlement.py`: `SETTLEMENT_PATHS["WHALE"] = "resolution"`; `open_resolution_bets` uses `RESOLUTION_SETTLED_KINDS` instead of its literal tuple; `settle_auto_mlb` skips `kind == 'WHALE'`; the tripwire skips `source` beginning `exit:`. The three other hand-typed `('EV','NEGRISK','BTC')` tuples — `tracker._active_bets` (tracker.py:85-87), `commands.cmd_status` (commands.py:521), `invariants` check 3 (invariants.py:49) — import `RESOLUTION_SETTLED_KINDS`. `reconcile()` (reconcile.py:99-102) excludes kind WHALE. `cmd_settle` calls `settle_auto_pm` after `settle_auto_mlb` inside a `try/except Exception` that logs and continues, so `reconcile()` and `check()` always run; `settle_auto_pm` itself catches `sqlite3.OperationalError` from the tape file, logs, and returns.
 - [ ] Failing tests: a resolved fixture yields `winner_outcome_index`; a 0.5/0.5 `outcomePrices` fixture yields `void`; an open market yields `open` and no row; a closed market without a winner past `resolve_giveup_days` writes one annotation and no settlement; `settle_auto_pm` appends exactly one `settled` event for a WHALE bet with the right `pnl` (WON, LOST, VOID cases), using `settle_bet`; an EV bet is untouched; a WHALE bet settled 30 s after entry with `source='exit:flip'` is not tripwired, the same bet with `source='pm-gamma:x'` is; a settled WHALE bet is not returned by `tracker._active_bets` for `poll_kind='whale'`, so a re-fired signal on the same market books again; `invariants` check 3 treats WHALE as resolution-settled; `reconcile()` over a fixture with a settled and an exited WHALE bet performs no Gamma read and writes no `pair_demotions`; a `settle_auto_pm` that raises leaves `cmd_settle` running `check()`.
 - [ ] Implement, using only the field names Task 1 verified.
@@ -191,7 +217,7 @@ def scores(positions, resolutions, as_of, cfg, base_rates) -> dict[(wallet, root
 # Score: n_bucket, n_sport, n_root, mu, sd, lb, lb_report (all Decimal q6)
 ```
 
-- [ ] Failing tests, one each: two BUY prints 100 s apart form one position with the size-weighted price; a third print 400 s later forms a second position; a SELL reduces size FIFO and never forms a position; a print after `start_utc` marks the position `pregame=False`; VOID resolutions are excluded from n; `base_rate` returns the default below `base_rate_min_n`; the spec §6 worked table is reproduced to 3 decimals for n = 5, 15, 40, 120, 400; at `n = 0` a level's variance equals `prior_sd² + var_parent` and at `n = 10⁶` equals `obs_var/n` to 1e-9; the transfer example (200 MLB at +0.08, 3 NBA at 0) gives NBA lb80 = +0.006 ± 0.001 and −0.067 ± 0.001 without history, and the `Score` carries `n_bucket = 3` and `native = False`; a nonsports position never changes a sports score (root isolation); `hygiene_flags` flags the `mm`, `both_sides`, `wash` fixtures and not a clean one; backfilled positions of a wallet with fewer than `backfill.min_live_prints` clean live prints are excluded from `scores`, and the position-level both-sides filter runs on backfill rows; **frozen clock**: `scores(as_of=T0)` equals `scores` over a copy with rows `resolved_at >= T0` deleted, bit-for-bit on every `Decimal` field.
+- [ ] Failing tests, one each: two BUY prints 100 s apart form one position with the size-weighted price; a third print 400 s later forms a second position; a SELL reduces size FIFO and never forms a position; a print after `start_utc` marks the position `pregame=False`; VOID resolutions are excluded from n; `base_rate` returns the default below `base_rate_min_n`; the spec §6 worked table is reproduced to 3 decimals for n = 5, 15, 40, 120, 400; at `n = 0` a level's variance equals `prior_sd² + var_parent` and at `n = 10⁶` equals `obs_var/n` to 1e-9; the transfer example (200 MLB at +0.08, 3 NBA at 0) gives NBA lb80 = +0.006 ± 0.001 and −0.067 ± 0.001 without history, and the `Score` carries `n_bucket = 3` and `native = False`; a nonsports position never changes a sports score (root isolation); `hygiene_flags` flags the `mm`, `both_sides`, `wash` fixtures and not a clean one; prints with `source='activity'` (backfill) build positions and are hygiene-filtered through exactly the same calls as live prints, and `Position.source` carries the value through so the report can split them; **frozen clock**: `scores(as_of=T0)` equals `scores` over a copy with rows `resolved_at >= T0` deleted, bit-for-bit on every `Decimal` field.
 - [ ] Structural test: every SQL or group-by in `whale_score.py` that aggregates positions includes `root` (grep-test, same pattern as `tests/test_hygiene.py`).
 - [ ] Implement. Floats allowed inside the normal-normal arithmetic, outputs quantized `q6`.
 - [ ] Full `pytest -q`; commit: `L14 task 5: pure whale scoring — positions, hygiene, hierarchical lower bound, frozen-clock proof`.

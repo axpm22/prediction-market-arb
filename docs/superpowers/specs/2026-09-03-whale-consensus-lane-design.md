@@ -60,9 +60,9 @@ nothing else. The lane is not built on any row that fails.
 | `data-api/trades?market=<csv>&start=&end=&limit=&offset=&takerOnly=` | Print collector | CSV batching and its cap; real `limit` cap; `takerOnly` default and what `false` returns; `start`/`end` filter; whether one fill yields one row or one per leg (group by `transactionHash`); `proxyWallet` present and stable |
 | `data-api/trades` with no `market` | Optional global feed | Whether it returns the platform-wide taker tape and at what cap. If it does at ≥3,000 rows/min, one call replaces batched calls |
 | `data-api/v1/leaderboard?category=&timePeriod=&orderBy=&limit=&offset=` | Discovery only | Category values (is there a SPORTS category), fields, `offset` cap 1000 |
-| `data-api/closed-positions?user=&limit=50&offset=` | Cold-start backfill | Fields (`avgPrice`, `realizedPnl`, `outcome`, `conditionId`, resolution time), page cap 50, offset cap |
-| `data-api/activity?user=&type=TRADE` | Backfill of open positions | Fields, `offset` cap 5000 |
-| `gamma-api/markets?condition_ids=<csv>` or equivalent | Resolution reader, bucket map for backfilled markets | Batch param name and cap; `closed`, `umaResolutionStatus`, `outcomePrices`, `gameStartTime`, `clobTokenIds`, `sportsMarketType` or equivalent |
+| `data-api/activity?user=&type=TRADE&limit=&offset=` | Cold-start backfill (full trade rows, so hygiene runs on them) | Fields, `offset` cap 5000. VERIFIED 2026-09-03 (Task 1 probe 8) |
+| `data-api/closed-positions?user=&limit=50&offset=` | `avgPrice` cross-check only | VERIFIED 2026-09-03; losers-to-zero absent in the sample, so it is not a backfill source |
+| `gamma-api/markets?condition_ids=<csv>` (+ `closed=true` for resolved markets) | Resolution reader, bucket map for backfilled markets | `condition_ids` batching VERIFIED for open markets 2026-09-03; `conditionId` singular is NOT a filter. Resolved-market reachability and the resolved values of `closed`, `umaResolutionStatuses` (plural), `outcomePrices` are re-probed at the start of Task 4 |
 | `clob/books` (already verified) | Follower touch at signal and exit time | Nothing new |
 
 Rate limits are undocumented; third-party estimates disagree by two orders
@@ -109,19 +109,26 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    connection (`replay.open_ro`) filtered by that poll's `poll_id` so the
    query is served by `idx_quotes_poll` and never scans the 37 GB table.
    Nothing is guessed.
-2. **Collect.** Batched `/trades` calls with `start` = last seen timestamp
-   minus `whale.overlap_secs` (120). Persist every row to `prints` with
+2. **Collect.** Batched `/trades` calls (`market=<csv>` of
+   `whale.markets_per_call` ids, `takerOnly=<whale.taker_only>`,
+   `limit=<whale.page_size>`, `start` = last seen timestamp minus
+   `whale.overlap_secs` (120) sent but not relied on). Pages advance by
+   `offset` and stop when the oldest row on a page is older than that bound,
+   or when a page is short. Persist every row to `prints` with
    `observed_at`. Duplicates rejected by a unique index on
    `(tx_hash, proxy_wallet, asset, side, price, size, ts)`.
 3. **Discover.** Any wallet whose cumulative pregame BUY notional in tracked
    markets exceeds `whale.discovery_min_notional_usd` (1,000) enters
    `wallets` with `source='tape'`. Leaderboard wallets enter with
    `source='leaderboard'` from a daily snapshot. Source never enters the score.
-4. **Backfill.** For wallets not yet backfilled, up to
-   `whale.backfill_wallets_per_cycle` (5): pull `/closed-positions` pages up
-   to `whale.backfill_pages_per_wallet` (40, i.e. 2,000 positions). Markets
-   not in `quotes` are mapped to a bucket through Gamma by `condition_id`;
-   unmappable ones are stored with `bucket=NULL` and never scored.
+4. **Backfill.** For wallets not yet backfilled, FIFO by discovery time, up
+   to `whale.backfill.wallets_per_cycle` (5): pull `/activity?type=TRADE`
+   pages up to `whale.backfill.pages_per_wallet` (40 × `page_size` 50 =
+   2,000 trades) into `prints` with `source='activity'`, deduplicated like
+   live prints. Markets not in `quotes` are mapped to a bucket through Gamma
+   by `condition_ids`; unmappable ones are stored with `bucket=NULL` and
+   never scored. Their outcomes come from the same resolution reader as
+   everything else (step 5).
 5. **Resolve.** For every `condition_id` with an unresolved whale position or
    an open WHALE bet whose `start_utc` is more than `whale.resolve_after_hours`
    (4) in the past, read Gamma; persist `resolutions`.
@@ -156,17 +163,13 @@ wins 90% of the time with zero skill. `e` subtracts the price. Its
 expectation for a random taker is negative, about minus the half-spread and
 fee; that is the base rate, measured not assumed.
 
-Backfilled closed positions supply the same `(avg_price, payout)` pair from
-the wallet's own history, so scoring starts on day one for active wallets.
-Backfilled rows carry `source='closed-positions'` and the report shows scores
-with and without them until live-observed positions dominate. Backfill has
-no print-level detail, so the print-based hygiene filters (§13) cannot run
-on it. Two rules close that hole: a wallet's backfill enters scoring only
-after the wallet has at least `whale.backfill.min_live_prints` (20)
-live-observed prints that pass hygiene, and the position-level filter that
-`/closed-positions` does support, both outcomes of one market held in
-overlapping windows, runs on backfill directly. Backfill order is FIFO by
-discovery time, so no second selection sits on top of discovery.
+Backfilled activity rows are full prints, so they build positions through
+the same code path as live prints, pass the same hygiene filters (§13), and
+resolve through the same reader. Scoring therefore starts on day one for
+active wallets with no separate backfill logic. Backfilled prints carry
+`source='activity'` and the report shows scores with and without them until
+live-observed positions dominate. Backfill order is FIFO by discovery time,
+so no second selection sits on top of discovery.
 
 **Point-in-time.** `scores(..., as_of)` uses only positions whose
 `resolved_at < as_of`. `as_of` is a required argument. A frozen-clock test
@@ -386,9 +389,12 @@ stated as such; the `exit:` config block is replaced by `whale.exit`.
 logged and the cycle continues** into `reconcile()` and the invariant
 `check()`: for every open resolution bet with a Polymarket leg (kind WHALE
 now; EV bets with PM legs are a stated later extension), read Gamma by
-`condition_id`, and when `closed` is true and the resolution fields name a
-winner, call `settle_bet(..., source='pm-gamma:<condition_id>')`.
-`outcomePrices` at 0.5/0.5 or a documented void status settles VOID.
+`condition_ids` with `closed=true` (the only query verified to reach
+resolved markets; Task 4 re-probes it first), and when `closed` is true and
+`outcomePrices` names a winner (one outcome at 1, the other at 0, exact
+values as recorded by Task 4's fixture), call `settle_bet(...,
+source='pm-gamma:<condition_id>')`. `outcomePrices` at 0.5/0.5 or a void
+entry in `umaResolutionStatuses` settles VOID.
 Markets closed without a winner after `whale.resolve_giveup_days` (14) get
 an annotation, never a guess. `settle_auto_mlb` skips kind WHALE (one
 oracle per kind: the whale's outcome and the bet's settlement come from the
@@ -521,11 +527,12 @@ Threats and their status:
 - **Winner's curse from discovery**: the acting score is a continuously
   recomputed lower bound, and the replication month is mandatory. Any
   single-month positive is presumed inflated.
-- **Backfill bias**: `/closed-positions` shows what a wallet closed, which
-  may over-represent its winners if it holds losers to zero without a
-  closing print. Verification checks whether resolved-to-zero positions
-  appear there; if not, backfill is capped to markets whose resolution we
-  read ourselves.
+- **Backfill bias**: `/closed-positions` was found (Task 1, probe 10) to
+  omit positions held to zero, so it is not used for scoring. `/activity`
+  lists every trade regardless of outcome, and outcomes come from our own
+  resolution reads, so backfill carries no winner-selection. The residual
+  risk is `/activity`'s 5,000-row offset cap truncating very active wallets
+  to their most recent trades; stated, and bounded by `pages_per_wallet`.
 - **Regime change**: replication month; recency weighting deferred.
 
 ## 14. Config (`whale:` block, all new keys; strict loader schema updated)
@@ -544,9 +551,9 @@ whale:
   max_print_age_secs: 300
   min_print_usd: 200
   discovery_min_notional_usd: 1000
-  backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50,
-              min_live_prints: 20 }
-  taker_only: true                  # set by Task 1's verification, recorded in verified_facts
+  backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50 }
+  page_size: 500                    # trades rows per collector call; paging stops on age, never on `start`
+  taker_only: true                  # Task 1 probe 3: one row per fill; `false` returns every leg (2.2x rows)
   leaderboard: { enabled: true, category: SPORTS, time_period: MONTH, order_by: PNL, pages: 4 }
   resolve_after_hours: 4
   resolve_giveup_days: 14
