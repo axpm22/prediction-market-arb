@@ -3,28 +3,55 @@
 > **Task 1 decisions (2026-09-03):** Rule-3 probes run against live Polymarket
 > `data-api`/`gamma-api` endpoints (10 probes, `scripts/probe_whale_endpoints.py`,
 > results dated 2026-09-03 in `data/verified_facts.md`). Decisions:
-> (a) **collector mode = `batched`** — probe 5's global feed exists and caps at
-> 1000 rows/call, but the implied throughput (≈2,000 rows/min) is below the
-> 3,000 rows/min gate for switching to `global`.
+> (a) **collector mode = `batched`** — **[corrected in the 2026-09-03 fix
+> pass]** probe 5's global feed exists, but "caps at 1000 rows/call" was
+> unsupported and is now disproven: a follow-up `limit=10000` call on the
+> same global feed returned exactly 10000 rows, not 1000. The true ceiling is
+> ≥10000 and still not located. The decision is unchanged because it never
+> rested on the raw cap — it rests on implied throughput, which stayed below
+> the 3,000 rows/min gate on both runs (≈2,000 then ≈1,400 rows/min).
 > (b) **backfill disabled** — probe 7's `closed-positions` fields do include
 > entry price (`avgPrice`) and `outcome`, but probe 10 found 0 losers-to-zero
 > in 30 closed positions for the probed wallet (all 30 had `avgPrice > 0` and
 > none had `curPrice == 0`), so the "shows losers-to-zero" half of the gate is
-> not met. Small sample (one wallet); re-check before permanently ruling this
-> out.
+> not met. **[2026-09-03 fix pass]** Cross-referenced against `/activity` for
+> the same wallet: 67 markets were bought, only 30 (all fully-redeemed
+> winners, `curPrice==1`, `realizedPnl>0`) appear in `closed-positions` — 37
+> traded markets are simply absent, not present as losers or zeros. Decision
+> stands (disabled); the gap this leaves is wider than "no losers observed"
+> suggested — most traded history isn't in this endpoint at all. Small
+> sample (one wallet); re-check before permanently ruling this out.
 > (c) **leaderboard enabled** — probe 6's `category=SPORTS` returned 200
-> directly (no fallback category needed).
+> directly (no fallback category needed). **[2026-09-03 fix pass]** This is
+> now on firmer ground: `SPORTS` was compared against `OVERALL` (the
+> documented default) and the two return different `proxyWallet` sets
+> (29/50 overlap) — `category` has a real, confirmed filtering effect, it is
+> not a no-op that happened to return 200.
 > (d) **resolution fields, named exactly as observed** (gamma `markets`
-> endpoint, matched via `condition_ids=<csv>` against a live market — the
-> design's assumed batch id list of 2-days-old condition ids returned no
-> matches and is not usable as a smoke test for this field set): `closed`
+> endpoint, matched via `condition_ids=<id>` against a live market): `closed`
 > (bool), `umaResolutionStatuses` (**plural** — the design doc's assumed
 > `umaResolutionStatus` singular field does not exist), `outcomePrices`,
-> `gameStartTime`, `clobTokenIds`, `sportsMarketType`, `endDate`. Batching
-> works only via `condition_ids` (plural param); `conditionId` (singular) is
-> silently ignored and returns an unrelated default page. No `closed:true`
-> market was reached by this probe, so resolution-time values (including any
-> winner field) remain UNVERIFIED.
+> `gameStartTime`, `clobTokenIds`, `sportsMarketType`, `endDate`.
+> `umaResolutionStatuses`, `outcomePrices`, and `clobTokenIds` are all
+> **JSON-encoded strings** (e.g. `"[]"`, `"[\"0.445\", \"0.555\"]"`), not
+> native lists — a consumer must `json.loads()` them.
+> **[CORRECTED in the 2026-09-03 fix pass — the original batching claim was
+> wrong.]** A real 2-id test (not the original single-id call, which had no
+> comma to parse and so proved nothing about batching) shows: the
+> comma-joined CSV form `condition_ids=<id1>,<id2>` returns **0/2 matches —
+> BROKEN**; the repeated-param form `condition_ids=<id1>&condition_ids=<id2>`
+> returns **2/2 matches — WORKS**. Any collector code must use the
+> repeated-param form, never comma-joined CSV, for `condition_ids`. Batch cap
+> beyond 2 ids: **NOT PROBED**. `conditionId` (singular) is silently ignored
+> and returns the same unrelated 20-row default page regardless of value
+> (page saved as `whale_gamma_conditionId_singular_default.json`). The
+> design's original 2-days-old batch-id list (r1/r2) was also re-examined:
+> those ids are NOT ">2 days old" vs a "live" id — r1, r2, and the matched
+> c1 are all from the same watch poll (`started_at=2026-08-09`), ~24 days
+> old as of this probe. Why c1 matches gamma's default index and r1/r2 don't
+> is UNKNOWN (closed? archived? something else?) — still NOT VERIFIED. No
+> `closed:true` market was reached by this or the original probe, so
+> resolution-time values (including any winner field) remain UNVERIFIED.
 > (e) **`whale.taker_only = true`** — isolates one row per fill from the
 > taker's own side, avoiding double-counted rows when grouping prints by
 > wallet. Probe 3's row-count difference, the discovery-bias number for spec

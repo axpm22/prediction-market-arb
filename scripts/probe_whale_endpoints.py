@@ -123,6 +123,10 @@ def main():
 
     c1, c2, c3 = recent[0][0], recent[1][0], recent[2][0]
     r1, r2 = old[0][0], (old[1][0] if len(old) > 1 else old[0][0])
+    # Finding: log the watch poll's started_at to stdout too, not only stderr
+    # -- it's load-bearing evidence for probe 9's "how old are these ids"
+    # story and belongs in the table output, not just the diagnostic log.
+    print(f"poll started_at={picks['poll_started_at']}")
     print(f"poll started_at={picks['poll_started_at']}", file=sys.stderr)
     print(f"recent (probes 1-5): c1={c1} c2={c2} c3={c3}", file=sys.stderr)
     print(f"old (probe 9): r1={r1} r2={r2}", file=sys.stderr)
@@ -146,7 +150,7 @@ def main():
             state["probe1_rows"] = trade_rows
             record(
                 1, full_url, status, ms,
-                f"CSV batching {'WORKS' if len(conds & {c1, c2, c3}) >= 1 else 'no rows matched'}; "
+                f"CSV batching {'WORKS (all requested markets present)' if all(present.values()) else 'PARTIAL/BROKEN (not all requested markets present)'}; "
                 f"{len(trade_rows)} rows; markets present: {present}; distinct conditionIds returned: {len(conds)}",
             )
     except Exception as e:
@@ -246,7 +250,10 @@ def main():
         elif status != 200:
             record(5, full_url, status, ms, f"non-200; body={str(body)[:200]}")
         else:
-            save_fixture("whale_trades_global.json", body)
+            # Fixture kept small for repo size; full response (len == the
+            # requested `limit`) is still used for every stat below. Truncate
+            # here (not by hand) so a re-run reproduces the same fixture.
+            save_fixture("whale_trades_global.json", body[:200])
             g_rows = body if isinstance(body, list) else []
             timestamps = [r["timestamp"] for r in g_rows if "timestamp" in r]
             if len(timestamps) >= 2:
@@ -254,52 +261,75 @@ def main():
                 rate = (len(g_rows) / span_secs) * 60 if span_secs > 0 else None
             else:
                 rate = None
+
+            # Finding: "CAPPED-AT-1000" was asserted from a single
+            # limit=1000 call, which is equally consistent with "the real
+            # cap is >=1000 and we just didn't ask for more." Ask for more.
+            status_hi, ms_hi, body_hi, full_hi, err_hi = call(url, {"limit": 10000})
+            hi_rows = body_hi if isinstance(body_hi, list) else []
+            if err_hi or status_hi != 200:
+                cap_verdict = f"limit=10000 check FAILED (status={status_hi} err={err_hi}); real cap still unknown"
+            elif len(hi_rows) == 10000:
+                cap_verdict = "INCONCLUSIVE: limit=10000 returned exactly 10000 rows -- real ceiling may be higher, still not located"
+            else:
+                cap_verdict = f"limit=10000 returned {len(hi_rows)} rows (< requested) -> observed real cap = {len(hi_rows)} rows/call"
+
             record(
-                5, full_url, status, ms,
-                f"global feed {'EXISTS' if g_rows else 'returned empty'}; {len(g_rows)} rows; "
-                f"cap-at-limit={len(g_rows) == 1000}; implied rate="
+                5, f"{full_url} | {full_hi}", f"{status}/{status_hi}", ms + ms_hi,
+                f"global feed {'EXISTS' if g_rows else 'returned empty'}; {len(g_rows)} rows at limit=1000 "
+                f"(matches requested limit -- on its own this only shows 'the feed had >=1000 rows available', "
+                f"not a cap); real-cap check: {cap_verdict}; implied rate="
                 f"{f'{rate:.0f} rows/min' if rate is not None else 'n/a (insufficient timestamp span)'}",
             )
+            # Also resolves probe 2's cap question (same `limit` param,
+            # same /trades endpoint, just market-filtered vs global) -- probe
+            # 2's own market was too thin to exercise it. Patch that row.
+            for r in rows:
+                if r["probe"] == 2:
+                    r["finding"] += f" | cross-ref probe 5 global-feed real-cap check: {cap_verdict}"
+                    break
     except Exception as e:
         record(5, "?", "EXC", 0, f"script exception: {e}")
 
     # --- Probe 6: leaderboard ------------------------------------------------
     try:
         url = f"{DATA_API}/v1/leaderboard"
-        status, ms, body, full_url, err = call(
+        status_s, ms_s, body_s, full_s, err_s = call(
             url, {"category": "SPORTS", "timePeriod": "MONTH", "orderBy": "PNL", "limit": 50, "offset": 0}
         )
-        tried = [("SPORTS", status, ms, body, full_url, err)]
-        if err or (status is not None and status >= 400):
-            # SPORTS 400'd (or errored) - try OVERALL as the only other category
-            # name this task has independent grounds to believe might exist
-            # (default/no-filter leaderboard). No other category list is
-            # documented anywhere in this repo's verified facts, so this is
-            # the single fallback attempt, not a guessed list (rule 3).
-            status2, ms2, body2, full_url2, err2 = call(
-                url, {"category": "OVERALL", "timePeriod": "MONTH", "orderBy": "PNL", "limit": 50, "offset": 0}
-            )
-            tried.append(("OVERALL", status2, ms2, body2, full_url2, err2))
-        ok = next((t for t in tried if t[1] == 200), None)
-        total_ms = sum(t[2] for t in tried)
-        urls = " | ".join(f"{t[0]}:{t[4]}" for t in tried)
-        if ok:
-            save_fixture("whale_leaderboard.json", ok[3])
-            lb_rows = ok[3] if isinstance(ok[3], list) else (ok[3].get("data") if isinstance(ok[3], dict) else None)
-            fields = sorted(lb_rows[0].keys()) if lb_rows else "unknown (empty list)"
-            statuses = "/".join(str(t[1]) for t in tried)
-            record(
-                6, urls, statuses, total_ms,
-                f"category '{ok[0]}' returned 200; fields={fields}; n={len(lb_rows) if lb_rows else 0}; "
-                f"attempted categories: {[t[0] for t in tried]}",
-            )
+        sports_rows = body_s if isinstance(body_s, list) else []
+        if sports_rows:
+            save_fixture("whale_leaderboard.json", sports_rows)
+
+        # Finding: a 200 with rows is not proof `category` did anything --
+        # need a second call to see if the result actually differs. OVERALL
+        # is the documented default category per docs.polymarket.com's
+        # "get-trader-leaderboard-rankings" page (used when `category` is
+        # omitted), so it's the one comparison point with a citation behind
+        # it, not a guessed name.
+        status_o, ms_o, body_o, full_o, err_o = call(
+            url, {"category": "OVERALL", "timePeriod": "MONTH", "orderBy": "PNL", "limit": 50, "offset": 0}
+        )
+        overall_rows = body_o if isinstance(body_o, list) else []
+        if overall_rows:
+            save_fixture("whale_leaderboard_overall.json", overall_rows)
+
+        sports_wallets = {r.get("proxyWallet") for r in sports_rows}
+        overall_wallets = {r.get("proxyWallet") for r in overall_rows}
+        both_present = bool(sports_rows) and bool(overall_rows)
+        identical = both_present and sports_wallets == overall_wallets
+        fields = sorted(sports_rows[0].keys()) if sports_rows else "unknown (empty)"
+        if not both_present:
+            verdict = "INCONCLUSIVE (one of the two calls returned no rows -- cannot compare sets)"
+        elif identical:
+            verdict = "IDENTICAL proxyWallet sets -> category param is IGNORED (SPORTS silently no-ops)"
         else:
-            statuses = "/".join(str(t[1]) for t in tried)
-            record(
-                6, urls, statuses, total_ms,
-                f"no category returned 200; attempted {[t[0] for t in tried]} -> statuses {[t[1] for t in tried]}; "
-                f"errors {[t[5] for t in tried]}",
-            )
+            verdict = "DIFFERENT proxyWallet sets -> category param has a real effect"
+        record(
+            6, f"{full_s} | {full_o}", f"{status_s}/{status_o}", ms_s + ms_o,
+            f"SPORTS: status={status_s} n={len(sports_rows)}; OVERALL: status={status_o} n={len(overall_rows)}; "
+            f"overlap={len(sports_wallets & overall_wallets)}/{len(sports_wallets)}; {verdict}; fields={fields}",
+        )
     except Exception as e:
         record(6, "?", "EXC", 0, f"script exception: {e}")
 
@@ -357,106 +387,187 @@ def main():
             else:
                 save_fixture("whale_activity.json", body)
                 act_rows = body if isinstance(body, list) else []
+                state["activity_rows"] = act_rows
                 fields = sorted(act_rows[0].keys()) if act_rows else "unknown (empty)"
                 record(8, full_url, status, ms, f"{len(act_rows)} rows; fields={fields}")
     except Exception as e:
         record(8, "?", "EXC", 0, f"script exception: {e}")
 
-    # --- Probe 9: gamma resolution ---------------------------------------------
+    # --- Probe 9: gamma resolution + CSV/repeated-param batching proof --------
     try:
         url = f"{GAMMA_API}/markets"
+        now = datetime.now(timezone.utc)
+        poll_dt = datetime.fromisoformat(picks["poll_started_at"])
+        age_days = (now - poll_dt).days
+
         status_a, ms_a, body_a, full_a, err_a = call(url, {"condition_ids": f"{r1},{r2}"})
         status_b, ms_b, body_b, full_b, err_b = call(url, {"conditionId": r1})
         rows_a = body_a if isinstance(body_a, list) else []
         rows_b = body_b if isinstance(body_b, list) else []
         matched_a = [m for m in rows_a if m.get("conditionId") in (r1, r2)]
         matched_b = [m for m in rows_b if m.get("conditionId") == r1]
+        if rows_b:
+            # Minor finding: trim the "unrelated default page" evidence into
+            # its own fixture so the ABSENT claim below isn't just prose.
+            save_fixture("whale_gamma_conditionId_singular_default.json", rows_b[:5])
         which_works = []
-        if status_a == 200 and matched_a:
-            which_works.append("condition_ids(csv)")
+        if status_a == 200 and len(matched_a) == 2:
+            which_works.append("condition_ids(csv, old ids, matched 2/2)")
+        elif status_a == 200 and len(matched_a) == 1:
+            which_works.append("condition_ids(csv, old ids, matched 1/2 only)")
         if status_b == 200 and matched_b:
-            which_works.append("conditionId(single)")
+            which_works.append("conditionId(single, old id, matched)")
 
-        # Diagnostic (rule 3: verify, don't guess): r1/r2 are >2 days old per
-        # the brief, but neither form matched them above. Before concluding
-        # the endpoint/params are broken, check condition_ids against a market
-        # we KNOW is real and indexed (c1, live trades seen in probe 1) to
-        # isolate "wrong param" from "old/resolved markets fall out of the
-        # default index".
+        # r1/r2 come from the SAME watch poll as c1/c2/c3 (just further down
+        # the recency sort) -- they are NOT "old" vs c1's "live"; all five
+        # ids are the same age. Finding 3: state that age plainly instead of
+        # the ">2 days old" framing.
+        old_ids_note = (
+            f"poll_started_at={picks['poll_started_at']} -> r1={r1}, r2={r2}, and c1={c1} are ALL "
+            f"~{age_days}d old as of this run (same poll, not a live-vs-stale comparison). "
+            f"condition_ids=<r1,r2> matched {len(matched_a)}/2; conditionId=<r1> matched {len(matched_b)}/1 "
+            f"of {len(rows_b)} rows returned"
+            + (f" (unrelated default page, e.g. question='{rows_b[0].get('question')}')" if rows_b and not matched_b else "")
+            + f". which_works={which_works or ['NEITHER form matched r1 or r2']}."
+        )
+
+        # Diagnostic (rule 3: verify, don't guess): check condition_ids
+        # against a market we KNOW is indexed (c1, live trades seen in
+        # probe 1) to isolate "wrong param" from "this particular market
+        # isn't reachable this way".
         status_c, ms_c, body_c, full_c, err_c = call(url, {"condition_ids": c1})
         rows_c = body_c if isinstance(body_c, list) else []
         matched_c = [m for m in rows_c if m.get("conditionId") == c1]
 
         watch_fields = ["closed", "umaResolutionStatus", "outcomePrices", "gameStartTime",
                          "clobTokenIds", "sportsMarketType", "endDate"]
-
         if matched_c:
             save_fixture("whale_gamma_resolution.json", rows_c)
             m = matched_c[0]
             observed = {f: m.get(f, "<absent - not a key on this object>") for f in watch_fields}
             plural_status = m.get("umaResolutionStatuses", "<absent>")
-            finding = (
-                f"OLD r1/r2 (>2d, per brief): condition_ids csv matched 0/2, conditionId single matched "
-                f"0/1 of {len(rows_b)} rows returned (param silently ignored, returns an unrelated default "
-                f"page e.g. '{rows_b[0].get('question') if rows_b else '?'}'). DIAGNOSTIC on live market c1 "
-                f"(condition_ids=<c1> alone): matched 1/1 -> condition_ids CSV genuinely filters correctly "
-                f"when the market is still in gamma's default index; old/resolved condition ids just are not "
-                f"in it (closed:true resolved markets appear to drop out, needs a separate closed=true query "
-                f"to reach them - NOT VERIFIED here, out of this probe's specified scope). conditionId "
-                f"(singular) is NOT a working filter param at all. Fields on the matched live market: "
-                f"{observed}; NOTE design doc assumes 'umaResolutionStatus' (singular) but the real key is "
-                f"'umaResolutionStatuses' (plural, list) = {plural_status}. Resolution-time values (closed:true "
-                f"market) remain UNVERIFIED — no matched row in this probe was actually closed."
+            resolve_desc = m.get("description", "")
+            postponed_hint = "postponement clause present in description" if "postponed" in resolve_desc.lower() else "no postponement clause found"
+            fields_note = (
+                f"c1 matched (condition_ids=<c1> alone, {len(matched_c)}/1): closed={observed['closed']}, "
+                f"gameStartTime={observed['gameStartTime']} (~{age_days}d ago, still closed=False -- {postponed_hint}), "
+                f"umaResolutionStatus(singular, design's assumed name)={observed['umaResolutionStatus']}, "
+                f"umaResolutionStatuses(plural, real key)={plural_status}, outcomePrices={observed['outcomePrices']}, "
+                f"clobTokenIds={observed['clobTokenIds']}, sportsMarketType={observed['sportsMarketType']}, "
+                f"endDate={observed['endDate']}. Why r1/r2 (same-age ids) returned nothing while c1 matched is "
+                f"UNKNOWN (closed? archived? some other reachability rule?) -- not established by this probe."
             )
         else:
-            finding = (
-                f"NEITHER form matched r1/r2, AND diagnostic condition_ids=<c1> (known-live market) also "
-                f"failed to match (matched_c={len(matched_c)}) - condition_ids filtering could not be "
-                f"confirmed at all in this run."
+            fields_note = f"diagnostic condition_ids=<c1> (known-live market) ALSO failed to match (matched_c={len(matched_c)}) -- condition_ids filtering could not be confirmed at all in this run."
+
+        # --- CSV vs repeated-param batching proof (finding: batching was
+        # never actually exercised with 2 real ids -- the only matching call
+        # so far was single-id). Need a SECOND id confirmed to match alone
+        # before a 2-id call means anything; c1 is already confirmed above.
+        second_id = None
+        second_id_ms = 0
+        second_id_tries = []
+        for cand in (c2, c3):
+            status_x, ms_x, body_x, full_x, err_x = call(url, {"condition_ids": cand})
+            second_id_ms += ms_x
+            rows_x = body_x if isinstance(body_x, list) else []
+            hit = any(m.get("conditionId") == cand for m in rows_x)
+            second_id_tries.append((cand, hit))
+            if hit:
+                second_id = cand
+                break
+
+        if second_id is None or not matched_c:
+            batching_note = (
+                f"CSV/repeated-param batching proof SKIPPED: "
+                + (f"no second id confirmed to match alone (tried {second_id_tries})" if second_id is None else "c1 itself did not match alone")
+                + f" -- {second_id_ms}ms spent confirming. Batch cap NOT PROBED."
             )
+            batch_status = "SKIP"
+            batch_ms = second_id_ms
+        else:
+            status_d, ms_d, body_d, full_d, err_d = call(url, {"condition_ids": f"{c1},{second_id}"})
+            status_e, ms_e, body_e, full_e, err_e = call(url, {"condition_ids": [c1, second_id]})
+            rows_d = body_d if isinstance(body_d, list) else []
+            rows_e = body_e if isinstance(body_e, list) else []
+            ids_d = {m.get("conditionId") for m in rows_d}
+            ids_e = {m.get("conditionId") for m in rows_e}
+            present_d = {c1: c1 in ids_d, second_id: second_id in ids_d}
+            present_e = {c1: c1 in ids_e, second_id: second_id in ids_e}
+            csv_batches = all(present_d.values())
+            repeated_batches = all(present_e.values())
+            if csv_batches and repeated_batches:
+                which_batches = "BOTH condition_ids=<csv> and repeated condition_ids=&condition_ids= batch correctly"
+            elif csv_batches:
+                which_batches = "condition_ids=<csv> (comma-joined) batches; the repeated-param form does NOT"
+            elif repeated_batches:
+                which_batches = "repeated condition_ids=&condition_ids= batches; the comma-joined CSV form does NOT"
+            else:
+                which_batches = "NEITHER form returns both requested ids in one call"
+            batching_note = (
+                f"second known-good id={second_id} (confirmed alone in {second_id_ms}ms); "
+                f"condition_ids=<csv> [{full_d}] -> present={present_d}; "
+                f"repeated condition_ids= [{full_e}] -> present={present_e}; {which_batches}. "
+                f"Batch cap NOT PROBED (only 2 ids tested, not the ceiling)."
+            )
+            batch_status = f"{status_d}/{status_e}"
+            batch_ms = ms_d + ms_e + second_id_ms
+
+        finding = f"{old_ids_note} {fields_note} BATCHING: {batching_note}"
         record(
-            9, f"{full_a} | {full_b} | {full_c}", f"{status_a}/{status_b}/{status_c}",
-            ms_a + ms_b + ms_c, finding,
+            9, f"{full_a} | {full_b} | {full_c}", f"{status_a}/{status_b}/{status_c}/{batch_status}",
+            ms_a + ms_b + ms_c + batch_ms, finding,
         )
     except Exception as e:
         record(9, "?", "EXC", 0, f"script exception: {e}")
 
-    # --- Probe 10: backfill-bias (losers-to-zero), reuses probe 7 data ---------
+    # --- Probe 10: backfill-bias (losers-to-zero), reuses probe 7+8 data -------
     try:
         positions = state.get("closed_positions", [])
         if not positions:
             record(10, "(derived from probe 7)", "SKIP", 0, "no closed positions collected in probe 7")
         else:
-            sample = positions[0]
             payout_field = next(
-                (f for f in ("curPrice", "currentPrice", "payout", "cashPnl") if f in sample), None
+                (f for f in ("curPrice", "currentPrice", "payout", "cashPnl") if f in positions[0]), None
             )
             if payout_field is None:
                 record(
                     10, "(derived from probe 7)", "N/A", 0,
-                    f"could not confirm — no current-price/payout field found among observed keys: {sorted(sample.keys())}",
+                    f"could not confirm — no current-price/payout field found among observed keys: {sorted(positions[0].keys())}",
                 )
             else:
-                losers_to_zero = 0
-                entries_gt0 = 0
-                for p in positions:
-                    try:
-                        avg = float(p.get("avgPrice", -1))
-                    except (TypeError, ValueError):
-                        continue
-                    if avg > 0:
-                        entries_gt0 += 1
-                        try:
-                            payout = float(p.get(payout_field, -1))
-                        except (TypeError, ValueError):
-                            continue
-                        if payout == 0:
-                            losers_to_zero += 1
+                cur_price_1 = sum(1 for p in positions if p.get("curPrice") == 1)
+                pnl_neg = sum(1 for p in positions if isinstance(p.get("realizedPnl"), (int, float)) and p.get("realizedPnl") < 0)
+                pnl_pos = sum(1 for p in positions if isinstance(p.get("realizedPnl"), (int, float)) and p.get("realizedPnl") > 0)
+                losers_to_zero = sum(
+                    1 for p in positions
+                    if isinstance(p.get("avgPrice"), (int, float)) and p.get("avgPrice", -1) > 0
+                    and isinstance(p.get(payout_field), (int, float)) and p.get(payout_field) == 0
+                )
+
+                # Finding: cross-reference against probe 8's /activity for
+                # the SAME wallet to see how many markets were actually
+                # traded vs how many show up here at all (winners or not).
+                activity_rows = state.get("activity_rows", [])
+                traded_conditions = {a.get("conditionId") for a in activity_rows if a.get("side") == "BUY"}
+                closed_conditions = {p.get("conditionId") for p in positions}
+                missing = traded_conditions - closed_conditions
+                if activity_rows:
+                    backfill_note = (
+                        f"cross-ref probe 8 /activity (same wallet): {len(traded_conditions)} distinct markets "
+                        f"bought, {len(closed_conditions & traded_conditions)}/{len(traded_conditions)} appear here "
+                        f"({len(missing)} traded markets MISSING from closed-positions)"
+                    )
+                else:
+                    backfill_note = "no probe 8 activity rows available for cross-reference"
+
                 record(
-                    10, "(derived from probe 7)", "N/A", 0,
-                    f"payout field used='{payout_field}'; {entries_gt0} positions with avgPrice>0 out of "
-                    f"{len(positions)} total; {losers_to_zero} of those show payout==0 (held to zero) -> "
-                    f"losers-to-zero {'APPEAR' if losers_to_zero > 0 else 'DO NOT APPEAR'} in this endpoint",
+                    10, "(derived from probe 7 + probe 8)", "N/A", 0,
+                    f"payout field used='{payout_field}'; {len(positions)} closed positions: "
+                    f"{cur_price_1}/{len(positions)} curPrice==1, {pnl_pos}/{len(positions)} realizedPnl>0, "
+                    f"{pnl_neg}/{len(positions)} realizedPnl<0, {losers_to_zero} held-to-zero (avgPrice>0 and "
+                    f"{payout_field}==0). closed-positions ≈ redeemed winners; losers of any kind ABSENT in "
+                    f"this sample ({pnl_neg}/{len(positions)} negative PnL). {backfill_note}.",
                 )
     except Exception as e:
         record(10, "?", "EXC", 0, f"script exception: {e}")
