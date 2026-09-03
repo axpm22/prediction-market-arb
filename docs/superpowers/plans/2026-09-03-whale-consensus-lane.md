@@ -6,9 +6,9 @@
 > (a) **collector mode = `global`** — **[superseded by follow-up 4, controller,
 > 2026-09-03]** probe 5's global feed exists; "caps at 1000 rows/call" was
 > unsupported and was disproven in the fix pass: a `limit=10000` call on the
-> same global feed returned exactly 10000 rows (probe log only; the saved
-> fixture is the 200-row truncation of the `limit=1000` call, and Task 3's
-> step 0 re-records it). The true ceiling is ≥10000 and not located. The
+> same global feed returned exactly 10000 rows (fixture
+> `whale_trades_global_10000.json`, first 200 rows). The true ceiling is
+> ≥10000 and not located. The
 > gate was about what one call per minute can return, not about the
 > platform's own rate: with a ≥10,000-row cap against ≈1,400–2,000 rows/min,
 > one call per cycle captures the whole taker tape with ~5× headroom, so the
@@ -48,7 +48,7 @@
 > returns **2/2 matches — WORKS**. Any collector code must use the
 > repeated-param form, never comma-joined CSV, for `condition_ids`. Batch cap
 > beyond 2 ids: **NOT PROBED**. `conditionId` (singular) is silently ignored
-> and returns the same unrelated 20-row default page regardless of value
+> and returned the same unrelated 20-row default page for the one id tried
 > (page saved as `whale_gamma_conditionId_singular_default.json`). The
 > design's original 2-days-old batch-id list (r1/r2) was also re-examined:
 > those ids are NOT ">2 days old" vs a "live" id — r1, r2, and the matched
@@ -343,7 +343,7 @@ Cycle order as spec §5 steps 1–9. Book quotes rows via a `book_quote_rows`-st
 - **Placeholders.** `min_points.V2/V3` are deliberately null until Task 11's calibration; the loader warns for 14 days, then errors. No other TBDs.
 - **Type consistency.** `Position`, `Score`, `Signal` are frozen dataclasses defined once (Tasks 5, 6) and imported by Task 8; every money field is `Decimal` quantized `q6` at the store boundary.
 - **Rule 9.** No task writes `UPDATE`/`DELETE` against the ledger; the collector never opens `data/arb.sqlite` for writing; exits are inserts.
-- **Scope.** One lane, one new SQLite file, one migration, two pure modules, one loop. Nonsports, Kalshi, Kelly, §10.8 policies, and the global feed (unless verified) are out.
+- **Scope.** One lane, one new SQLite file, one migration, two pure modules, one loop. Nonsports, Kalshi, Kelly, and the §10.8 policies are out. The global feed is the primary collector mode since follow-up 4.
 
 ## Result
 

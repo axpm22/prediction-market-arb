@@ -58,8 +58,7 @@ nothing else. The lane is not built on any row that fails.
 | Endpoint (all public GET) | Needed for | Must verify |
 |---|---|---|
 | `data-api/trades?market=<csv>&start=&end=&limit=&offset=&takerOnly=` | Print collector (batched fallback) | VERIFIED 2026-09-03 (Task 1): comma CSV `market=` batching works (3 markets, one call); `takerOnly=true` gives one row per fill, `false` every leg (2.2× rows); `limit` cap ≥ 10,000 on the global feed; `start`/`end` INCONCLUSIVE; `proxyWallet` present. Task 3 step 0 re-probes ordering, `offset`, and `start`/`end` |
-| `data-api/trades?takerOnly=&limit=10000` (no `market`) | Print collector (global, primary) | VERIFIED 2026-09-03: platform-wide taker tape, 10,000 rows per call against ≈1,400–2,000 rows/min |
-| `data-api/trades` with no `market` | Optional global feed | Whether it returns the platform-wide taker tape and at what cap. If it does at ≥3,000 rows/min, one call replaces batched calls |
+| `data-api/trades?limit=10000` (no `market`) | Print collector (global, primary) | VERIFIED 2026-09-03: platform-wide feed, 10,000 rows per call against ≈1,400–2,000 rows/min. Probe 5 sent no `takerOnly`, so its effect on the global feed (and the "taker tape" reading) is unverified until Task 3 step 0 (i) |
 | `data-api/v1/leaderboard?category=&timePeriod=&orderBy=&limit=&offset=` | Discovery only | Category values (is there a SPORTS category), fields, `offset` cap 1000 |
 | `data-api/activity?user=&type=TRADE&limit=&offset=` | Cold-start backfill (full trade rows, so hygiene runs on them) | Fields, `offset` cap 5000. VERIFIED 2026-09-03 (Task 1 probe 8) |
 | `data-api/closed-positions?user=&limit=50&offset=` | `avgPrice` cross-check only | VERIFIED 2026-09-03; losers-to-zero absent in the sample, so it is not a backfill source |
