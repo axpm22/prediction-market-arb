@@ -317,7 +317,12 @@ re-review). Three pre-registered variants:
 3. Two whales whose prints on this market fall within
    `whale.fire.sybil_gap_secs` (5) of each other count once.
 4. Staleness: the current best ask on side s is at most
-   `whale.fire.max_drift_points` (0.03) above the points-weighted whale VWAP.
+   `whale.fire.max_drift_points` (0.03) above the points-weighted VWAP of the
+   contributing whales' **fresh** BUY prints (windows whose `last_ts` is
+   inside `signal_window_secs`), not their whole-exposure average price: the
+   gate asks whether we are chasing the prints that formed this signal
+   (pinned 2026-09-03, Task 6 review #3). The merged contributor therefore
+   carries both `avg_price` (all open windows) and `fresh_avg_price`.
 5. Pregame with at least `whale.fire.min_secs_to_start` (600) remaining;
    depth at the ask ≥ `min_executable_usd`; the book is two-sided and not a
    zombie.
