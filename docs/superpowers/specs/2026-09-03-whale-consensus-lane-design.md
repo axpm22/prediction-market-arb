@@ -277,7 +277,7 @@ pregame position (BUY minus SELL size > 0) whose last print is within
 |---|---|
 | V1 flat | 1 |
 | V2 excess | `score_lb − min_score_lb` |
-| V3 size | `(score_lb − min_score_lb) × log10(1 + notional_usd / whale.size_unit_usd)`, `size_unit_usd` = 100 |
+| V3 size | `(score_lb − min_score_lb) × log10(1 + notional_usd / whale.size.unit_usd)`, `size.unit_usd` = 100 |
 
 **Fire** when all hold for a side s:
 
@@ -289,7 +289,7 @@ pregame position (BUY minus SELL size > 0) whose last print is within
    frozen: take every whale that qualified in at least one evaluated signal
    during the window; `q10` = the 10th percentile of their `score_lb −
    min_score_lb`; `min_points.V2 = 3 × q10`; `min_points.V3 = 3 × q10 ×
-   log10(1 + median_print_notional / size_unit_usd)` over the same whales'
+   log10(1 + median_print_notional / size.unit_usd)` over the same whales'
    prints. Fewer than 10 such whales → the window extends 7 days at a time,
    reported each day. The lane cycle, which has the tape DB, enforces the
    "null only during calibration" rule: past the window with a null, it
@@ -481,7 +481,7 @@ and can only confirm a modest one at the EV lane's `target_n` scale.
    (outage) pauses the streak; it does not reset it. The same rule applies to
    the calibration window: outage days do not count toward its 14 days.
 3. At n = 1,200 without the lower 80% bound above zero: NULL, kill.
-4. Starvation: fewer than `whale.min_signals_per_week_alarm` (10) fired
+4. Starvation: fewer than `whale.kill.min_signals_per_week_alarm` (10) fired
    signals per week after 4 weeks → the design is reported as starved and
    the operator decides.
 
