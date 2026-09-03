@@ -133,7 +133,11 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    live prints. Markets not in `quotes` are mapped to a bucket through Gamma
    by `condition_ids`; unmappable ones are stored with `bucket=NULL` and
    never scored. Their outcomes come from the same resolution reader as
-   everything else (step 5).
+   everything else (step 5). Backfill and the daily leaderboard snapshot run
+   in their own supervisor process (`whale-backfill --once`, cadence
+   `whale.backfill.cadence_secs` = 600, runtime cap 900 s), never inside the
+   60 s cycle: at `max_calls_per_min` 30, five wallets × 40 pages is about
+   seven minutes of calls (Task 3 acceptance measured 353 calls / 11 min).
 5. **Resolve.** For every `condition_id` with an unresolved whale position or
    an open WHALE bet whose `start_utc` is more than `whale.resolve_after_hours`
    (4) in the past, read Gamma; persist `resolutions`.
@@ -557,7 +561,8 @@ whale:
   max_print_age_secs: 300
   min_print_usd: 200
   discovery_min_notional_usd: 1000
-  backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50 }
+  backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50,
+              cadence_secs: 600 }     # own supervisor process; ~7 min of calls per cycle
   page_size: 10000                  # trades rows per call (10,000 verified 2026-09-03); paging stops on age, never on `start`
   taker_only: true                  # Task 1 probe 3: one row per fill; `false` returns every leg (2.2x rows)
   leaderboard: { enabled: true, category: SPORTS, time_period: MONTH, order_by: PNL, pages: 4 }

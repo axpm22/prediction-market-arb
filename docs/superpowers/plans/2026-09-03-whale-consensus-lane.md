@@ -298,7 +298,7 @@ def conf_stake(S, cfg) -> Decimal
 
 ## Task 8 — The lane (`arb/lanes/whale.py`) and supervisor wiring
 
-**Files:** `arb/lanes/whale.py` (new), `arb/heartbeat.py`, `arb/cli.py`, `arb/commands.py`, `config.yaml` (`supervisor.processes.whale: true`, `commands.whale: "whale --once"`, `max_child_runtime_secs.whale: 120`), `tests/test_whale_lane.py` (new).
+**Files:** `arb/lanes/whale.py` (new), `arb/heartbeat.py`, `arb/cli.py`, `arb/commands.py`, `config.yaml` (`supervisor.processes.whale: true` and `whale-backfill: true`, `commands.whale: "whale --once"` and `commands.whale-backfill: "whale-backfill --once"`, `max_child_runtime_secs.whale: 120` and `whale-backfill: 900`, new `whale.backfill.cadence_secs: 600` with schema entry), `tests/test_whale_lane.py` (new). The 60 s `whale` cycle never calls backfill or the leaderboard snapshot (Task 3 measured ~11 min per backfill cycle under the rate guard); `_base_lane_interval` gets a `whale-backfill` branch reading `whale.backfill.cadence_secs`.
 
 **Interface:** `run_whale_cycle(cfg, store, con, now, get=get_json, post=post_json) -> dict` returning counts: prints, wallets, signals_evaluated, fired, booked, exited, quotes_rows, status.
 
