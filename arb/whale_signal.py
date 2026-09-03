@@ -104,26 +104,20 @@ def wmean(whales, key) -> Decimal:
 
 # -------------------------------------------------------------- qualification
 
-def qualifying(condition_id, open_positions, score_lookup, now, cfg) -> list[dict]:
-    """Spec §7's qualifying whales, ONE ROW PER WALLET PER SIDE (pinned
-    2026-09-03): a wallet's several BUY windows on the same (market, side) are
-    one contributor — summed open size, notional-weighted average price, newest
-    `last_ts` — scored once and voting once.
-
-    A window qualifies on its own before merging: an open pregame position on
-    this market of at least `min_print_usd`, its last print inside
-    `signal_window_secs`. The merged wallet then needs a score clearing
-    `min_score_lb`; sport and market type come from its newest window, which is
-    what settlement and scoring already agreed on.
-    """
-    w = cfg["whale"]
-    window, min_lb = int(w["signal_window_secs"]), d(w["min_score_lb"])
-    min_usd, now_ts = d(w["min_print_usd"]), ts(now)
+def merge_windows(condition_id, positions, min_usd) -> dict[tuple, dict]:
+    """A wallet's several open BUY windows on the same `(market, side)` merge
+    into one contributor: summed open size, notional-weighted average price,
+    and the newest window (for `last_ts`/`sport`/`market_type`). Base
+    eligibility only — an open pregame position on this market clearing
+    `min_print_usd` — covering ALL of the wallet's open windows, however old
+    (spec §7, pinned 2026-09-03): no signal-window gate here, so `qualifying`
+    and `whale_exit`'s `left` test can each apply that gate on their own terms
+    against the same merged exposure."""
     merged: dict[tuple, dict] = {}
-    for p in open_positions:
+    for p in positions:
         open_size = p.size - p.sold_size
         if (p.condition_id != condition_id or not p.pregame or open_size <= 0
-                or p.notional_usd < min_usd or now_ts - p.last_ts > window):
+                or p.notional_usd < min_usd):
             continue
         m = merged.setdefault((p.wallet, p.outcome_index),
                               {"size": Decimal(0), "notional": Decimal(0), "newest": p})
@@ -131,9 +125,30 @@ def qualifying(condition_id, open_positions, score_lookup, now, cfg) -> list[dic
         m["notional"] += open_size * p.avg_price
         if p.last_ts > m["newest"].last_ts:
             m["newest"] = p
+    return merged
+
+
+def qualifying(condition_id, open_positions, score_lookup, now, cfg) -> list[dict]:
+    """Spec §7's qualifying whales, ONE ROW PER WALLET PER SIDE (pinned
+    2026-09-03): a wallet's several BUY windows on the same (market, side) are
+    one contributor — summed open size, notional-weighted average price, newest
+    `last_ts` — scored once and voting once.
+
+    `merge_windows` merges ALL of a wallet's open windows on that side (its
+    live exposure) regardless of age; `signal_window_secs` then gates
+    QUALIFICATION only, through the merged wallet's newest window's `last_ts`
+    (spec §7, pinned 2026-09-03). The merged wallet then needs a score
+    clearing `min_score_lb`; sport and market type come from its newest
+    window, which is what settlement and scoring already agreed on.
+    """
+    w = cfg["whale"]
+    window, min_lb = int(w["signal_window_secs"]), d(w["min_score_lb"])
+    min_usd, now_ts = d(w["min_print_usd"]), ts(now)
     out = []
-    for m in merged.values():
+    for m in merge_windows(condition_id, open_positions, min_usd).values():
         p = m["newest"]
+        if now_ts - p.last_ts > window:
+            continue
         score = score_lookup(p.wallet, p.sport, p.market_type)
         if score is None or score.lb < min_lb:
             continue

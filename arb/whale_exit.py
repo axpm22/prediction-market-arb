@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from arb.models import q6
-from arb.whale_signal import NO, YES, d, point_of, qualifying, tally, ts, wmean
+from arb.whale_signal import NO, YES, d, merge_windows, point_of, qualifying, tally, ts, wmean
 
 
 @dataclass(frozen=True)
@@ -43,16 +43,21 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg) -> ExitDeci
 
     # left: the whales that formed the signal sold out from under us. Rows sum
     # per wallet: a pre-merge `whales` list can name a wallet more than once.
+    # `open_now`/`avg` merge current positions the same way `qualifying` does
+    # (same helper) — ALL of a wallet's open windows on this side, not just
+    # the ones still inside the signal window — so `left` compares like with
+    # like against `booked` (spec §7, pinned 2026-09-03).
     booked: dict[str, Decimal] = {}
     for x in bet_ctx["whales"]:
         if x.get("side", side) == side:
             booked[x["wallet"]] = booked.get(x["wallet"], Decimal(0)) + d(x["open_size"])
+    merged_now = merge_windows(cid, open_positions_now, d(cfg["whale"]["min_print_usd"]))
     open_now = {w: Decimal(0) for w in booked}
     avg = {}
-    for p in open_positions_now:
-        if p.condition_id == cid and p.outcome_index == side and p.wallet in booked:
-            open_now[p.wallet] += p.size - p.sold_size
-            avg.setdefault(p.wallet, p.avg_price)
+    for (wallet, s), m in merged_now.items():
+        if s == side and wallet in booked:
+            open_now[wallet] = m["size"]
+            avg[wallet] = q6(m["notional"] / m["size"])
     held_then = sum(booked.values(), Decimal(0))
     held_now = sum(open_now.values(), Decimal(0))
     if held_now <= (1 - d(ex["sold_fraction"])) * held_then:

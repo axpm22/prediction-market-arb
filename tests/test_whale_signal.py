@@ -244,6 +244,28 @@ def test_depth_is_checked_before_one_sided(cfg):
     assert (s.fired, s.suppressed_reason) == (False, "depth")
 
 
+def test_late_print_is_checked_before_stale(cfg):
+    """Both gates fail at once: the newest print is past `max_print_age_secs`
+    AND the ask has drifted past `max_drift_points` above VWAP. `late-print`
+    sits earlier in the chain (spec §13) and must win."""
+    _, scores = _three()                               # VWAP 0.50
+    old = [_pos(f"w{i}", last=N - 400 - 30 * i) for i in range(3)]  # past max_print_age
+    s = _ev(cfg, old, scores, touch=_touch(ask="0.55"))["V1"]       # and a stale drift
+    assert (s.fired, s.suppressed_reason) == (False, "late-print")
+
+
+def test_too_close_is_checked_before_depth(cfg):
+    """Both gates fail at once: only 300 s to start (< `min_secs_to_start`)
+    AND depth below `min_executable_usd`. `too-close` sits earlier in the
+    chain and must win."""
+    late = START - timedelta(seconds=300)
+    _, scores = _three()
+    fresh = int(late.timestamp()) - 60                 # prints stay young: not `late-print`
+    pos = [_pos(f"w{i}", last=fresh - 30 * i) for i in range(3)]
+    s = _ev(cfg, pos, scores, touch=_touch(depth="10"), now=late)["V1"]
+    assert (s.fired, s.suppressed_reason) == (False, "too-close")
+
+
 def test_max_print_age_is_exclusive_at_the_boundary(cfg):
     """Spec §7/§13: a signal fires only if the newest print is YOUNGER than
     max_print_age_secs, so age == max already refuses."""
@@ -400,6 +422,52 @@ def test_exit_left_uses_the_merged_held_size(cfg):
     assert d.reason == "left"                         # 2,300 of 5,000 left
     assert d.detail["open_at_booking"] == Decimal("5000.000000")
     assert d.detail["open_now"] == Decimal("2300.000000")
+
+
+def test_exit_left_merges_all_of_a_wallets_windows_not_just_fresh_ones(cfg):
+    """Spec §7, pinned 2026-09-03: `merge_windows` covers ALL of a wallet's
+    open windows on this side, however old — the signal window gates
+    QUALIFICATION only, through the newest window's `last_ts`. w0's older
+    window (3,000) is already outside `signal_window_secs` by booking time;
+    before the fix `qualifying` dropped it from the merge entirely (booked
+    `open_size` 1,000) while `open_now` summed every window regardless, so
+    selling all 3,000 of the old window read as nothing sold at all. Selling
+    3,000 of the wallet's true 4,000 (75%) must trip `left`."""
+    old_ts = T0 - int(cfg["whale"]["signal_window_secs"]) - 100
+    pos = [_pos("w0", price="0.50", size="3000", last=old_ts),
+           _pos("w0", price="0.50", size="1000", last=T0)]
+    booked = _ev(cfg, pos, {"w0": _score("0.05")})["V1"].whales
+    live = [x for x in booked if not x["sybil_dropped"]]
+    assert len(live) == 1 and live[0]["wallet"] == "w0"
+    assert live[0]["open_size"] == Decimal("4000.000000")  # merged, not just the fresh 1,000
+    now_pos = [_pos("w0", price="0.50", size="3000", sold="3000", last=old_ts),
+               _pos("w0", price="0.50", size="1000", last=T0)]
+    d = whale_exit.exit_reason(_ctx(whales=booked), now_pos, _lookup({"w0": _score("0.05")}), NOW, cfg)
+    assert d.reason == "left"
+    assert d.detail["open_at_booking"] == Decimal("4000.000000")
+    assert d.detail["open_now"] == Decimal("1000.000000")
+
+
+def test_exit_confidence_v3_weight_matches_the_merged_booking_notional(cfg):
+    """`whale_exit.py` used to keep the FIRST window's `avg_price`
+    (`avg.setdefault`) times the wallet's total open size — for w0's two
+    windows (1,000 @ 0.40 iterated first, 3,000 @ 0.60 second) that gave
+    4,000 * 0.40 = 1,600, not the merged notional of 2,200 (1,000*0.40 +
+    3,000*0.60) `qualifying` would have booked. V3 weighs each whale by
+    `log10(1 + open_notional / unit_usd)`, so the wrong notional shifts the
+    confidence-weighted mean `S`; this pins the value the correct
+    (`merge_windows`) weight produces (0.043943 under the old bug)."""
+    cfg["whale"]["exit"]["min_score_lb"] = Decimal("1")   # force confidence to evaluate S
+    now_pos = [_pos("w0", price="0.40", size="1000", last=T0),       # iterated first: the old
+               _pos("w0", price="0.60", size="3000", last=T0 - 400),  #   bug would grab this price
+               _pos("w1", price="0.50", size="1000", last=T0 - 30)]
+    ctx = _ctx(variant="V3", whales=[
+        {"wallet": "w0", "lb": Decimal("0.05"), "side": 0, "open_size": Decimal("4000")},
+        {"wallet": "w1", "lb": Decimal("0.02"), "side": 0, "open_size": Decimal("1000")}])
+    scores = {"w0": _score("0.05"), "w1": _score("0.02")}
+    d = whale_exit.exit_reason(ctx, now_pos, _lookup(scores), NOW, cfg)
+    assert d.reason == "confidence"
+    assert d.detail["S"] == Decimal("0.044418")
 
 
 def test_exit_confidence_ignores_sybil_dropped_whales(cfg):
