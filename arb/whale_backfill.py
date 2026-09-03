@@ -37,12 +37,14 @@ def snapshot_leaderboard(cfg, con, now, get=get_json) -> int:
     res: dict = {}
     bucket = _bucket(cfg)
     added = 0
-    # The day is claimed BEFORE the first page: a failure at page k leaves the
-    # pages already stored, and a same-day retry would write a second copy of
-    # ranks 1..50 under a new snapshot_at.
-    # ponytail: costs one day's seed on a mid-page failure; the tape discovers
+    # The day is claimed right after page 0 LANDS, not before it is fetched:
+    # a failure getting page 0 itself stores nothing, so it must not burn the
+    # day — a same-day retry should still get a full run. Claiming it there
+    # (rather than after every page) is still the mid-page guard: a failure
+    # on page 1+ leaves page 0's rows stored and the day already claimed, so
+    # a same-day retry can't write a second copy of ranks 1..50.
+    # ponytail: costs one day's seed on a page-1+ failure; the tape discovers
     # wallets anyway, so a transaction spanning every page is not worth it.
-    _set_meta(con, "leaderboard_day", day)
     for page in range(int(lb["pages"])):
         url = (f"{DATA_API}/v1/leaderboard?category={lb['category']}"
                f"&timePeriod={lb['time_period']}&orderBy={lb['order_by']}"
@@ -60,6 +62,8 @@ def snapshot_leaderboard(cfg, con, now, get=get_json) -> int:
               r.get("userName"), str(q6(Decimal(str(r.get("vol") or 0)))),
               str(q6(Decimal(str(r.get("pnl") or 0))))) for r in body])
         con.commit()
+        if page == 0:
+            _set_meta(con, "leaderboard_day", day)
         added += _add_wallets(con, [(str(r.get("proxyWallet") or ""), r.get("userName"))
                                     for r in body], now, "leaderboard")
         if len(body) < LEADERBOARD_PAGE:

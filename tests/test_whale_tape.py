@@ -265,6 +265,29 @@ def test_one_malformed_row_is_skipped_not_the_whole_page(tmp_path):
     assert whale_tape._meta(con, "backoff_until") is None
 
 
+def test_a_full_page_of_unreadable_rows_is_an_error_not_a_quiet_stop(tmp_path):
+    """Every row of a full page fails to parse: this must NOT read as "caught
+    up" (status ok, watermark advanced, no backoff) — that's indistinguishable
+    from the venue silently sending garbage forever. It must abort like any
+    other failed call."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    mk = _global_markets(1)
+    good = _fixture("whale_trades_global")
+    bad = copy.deepcopy(good)
+    for r in bad:
+        del r["timestamp"]
+    cfg = _cfg(page_size=len(good), overlap_secs=120)
+    con.execute("INSERT INTO meta (key, value) VALUES ('last_seen_ts', '1')")
+    con.commit()
+    get = FakeGet(good, bad, good)          # third page must never be reached
+    res = whale_tape.poll_prints(cfg, con, mk, NOW, get=get)
+    assert res["status"] == "error"
+    assert len(get.urls) == 2
+    assert res["bad_rows"] == len(bad)
+    assert whale_tape._meta(con, "last_seen_ts") == "1"
+    assert whale_tape._meta(con, "backoff_until") is not None
+
+
 def test_batched_mode_sends_comma_csv_markets_in_groups(tmp_path):
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     rows = _fixture("whale_trades_batch")
@@ -324,6 +347,22 @@ def test_a_leaderboard_failure_mid_snapshot_cannot_duplicate_ranks(tmp_path):
     assert whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=retry) == 0
     assert retry.urls == []
     assert con.execute("SELECT COUNT(*) FROM leaderboard_snapshots").fetchone()[0] == stored
+
+
+def test_a_failure_on_the_first_page_does_not_burn_the_day(tmp_path):
+    """Page 0 itself fails: nothing was stored, so the day must NOT be
+    claimed — a same-day retry needs to actually run, not short-circuit."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS", "time_period": "MONTH",
+                            "order_by": "PNL", "pages": 4})
+    boom = FakeGet(VenueError("503 from https://data-api.polymarket.com/v1/leaderboard"))
+    assert whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=boom) == 0
+    assert whale_tape._meta(con, "leaderboard_day") is None
+    con.execute("DELETE FROM meta WHERE key='backoff_until'")
+    con.commit()
+    retry = FakeGet(_fixture("whale_leaderboard"))
+    n = whale_backfill.snapshot_leaderboard(cfg, con, NOW + timedelta(minutes=5), get=retry)
+    assert retry.urls and n == len(_fixture("whale_leaderboard"))
 
 
 def test_the_rate_bucket_is_one_per_process_not_one_per_call_site(tmp_path):

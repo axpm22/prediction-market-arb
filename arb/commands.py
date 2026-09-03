@@ -876,7 +876,7 @@ def cmd_whale_tape(cfg, store, args):
           f"[-{cfg['whale']['lookback_hours']}h, +{cfg['whale']['lookahead_hours']}h]")
     res = whale_tape.poll_prints(cfg, con, markets, now)
     print(f"  prints: {res['status']} calls={res['calls']} rows={res['rows']} "
-          f"dupes={res['dupes']} statuses={res['status_counts']}")
+          f"dupes={res['dupes']} bad_rows={res['bad_rows']} statuses={res['status_counts']}")
     print(f"  discovered: {whale_backfill.discover_wallets(cfg, con, now)} new wallets")
 
 
@@ -889,5 +889,5 @@ def cmd_whale_backfill(cfg, store, args):
     print(f"leaderboard: {whale_backfill.snapshot_leaderboard(cfg, con, now)} new wallets")
     res = whale_backfill.backfill(cfg, con, now)
     print(f"  backfill: {res['status']} wallets={res['wallets']} calls={res['calls']} "
-          f"rows={res['rows']} dupes={res['dupes']} mapped={res['mapped']} "
-          f"unmappable={res['unmappable']}")
+          f"rows={res['rows']} dupes={res['dupes']} bad_rows={res['bad_rows']} "
+          f"mapped={res['mapped']} unmappable={res['unmappable']}")

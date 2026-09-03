@@ -24,7 +24,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from arb.logutil import get_logger
-from arb.venues.base import get_json
+from arb.venues.base import get_json, VenueError
 from arb.whale_rows import _keep
 
 log = get_logger("arb.whale", "logs/whale.log")
@@ -40,6 +40,7 @@ GAMMA_IDS_PER_CALL = 2
 SPORTS_MARKET_TYPE = {"moneyline": "WINNER", "totals": "TOTAL"}
 
 SCHEMA = """
+-- prints columns/INSERT: arb/whale_rows.py PRINT_COLS (kept in sync by hand).
 CREATE TABLE IF NOT EXISTS prints (
     id INTEGER PRIMARY KEY, observed_at TEXT, ts INTEGER, tx_hash TEXT,
     proxy_wallet TEXT, pseudonym TEXT, condition_id TEXT, asset TEXT, outcome TEXT,
@@ -277,6 +278,12 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
                 body = _call(bucket, get, url + (f"&offset={offset}" if offset else ""),
                              cfg, res)
                 stamps = _keep(con, body, ids, now, res)
+                # A body with rows but zero parsed timestamps is an unreadable
+                # page, not a quiet end of the feed: `not stamps` below would
+                # otherwise read as "caught up" and silently advance nothing,
+                # write no backoff, and leave the gap behind it unrevisited.
+                if body and not stamps:
+                    raise VenueError(f"whale poll: {len(body)} rows, 0 parsed")
                 newest = max([newest] + stamps)
                 if len(body) < size or not stamps or not last_seen or min(stamps) <= floor:
                     break

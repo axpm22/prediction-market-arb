@@ -12,6 +12,8 @@ from arb.models import q6
 
 log = get_logger("arb.whale", "logs/whale.log")
 
+# prints columns/DDL: arb/whale_tape.py SCHEMA's `prints` table (kept in sync
+# by hand).
 PRINT_COLS = ("observed_at, ts, tx_hash, proxy_wallet, pseudonym, condition_id, asset,"
               " outcome, outcome_index, side, price, size, notional_usd, event_slug,"
               " slug, title, source, raw_json")
@@ -20,16 +22,16 @@ PRINT_COLS = ("observed_at, ts, tx_hash, proxy_wallet, pseudonym, condition_id, 
 BAD_ROW = (KeyError, ValueError, TypeError, InvalidOperation)
 
 
-def _print_row(r: dict, observed_at: str, source: str) -> tuple:
+def _print_row(r: dict, ts: int, observed_at: str, source: str) -> tuple:
     """`/trades` and `/activity` rows share their field names (both verified
     2026-09-03). notional = price x size per spec §5; activity's own `usdcSize`
     disagrees with that product (it prices at the fill, not the shown price),
-    so it is kept only inside raw_json. `timestamp` is read STRICTLY: a row
-    without one cannot be ordered, and a 0 would drag the watermark back."""
+    so it is kept only inside raw_json. `ts` is already parsed by the caller —
+    every row needs it for the page bound, kept or not (see _keep)."""
     price = Decimal(str(r.get("price") or 0))
     size = Decimal(str(r.get("size") or 0))
     idx = r.get("outcomeIndex")
-    return (observed_at, int(r["timestamp"]), str(r.get("transactionHash") or ""),
+    return (observed_at, ts, str(r.get("transactionHash") or ""),
             str(r.get("proxyWallet") or ""), r.get("pseudonym"),
             str(r.get("conditionId") or ""), str(r.get("asset") or ""), r.get("outcome"),
             int(idx) if idx is not None else None, str(r.get("side") or ""),
@@ -40,22 +42,32 @@ def _print_row(r: dict, observed_at: str, source: str) -> tuple:
 
 def _keep(con, body, ids, now, res, source="tape") -> list[int]:
     """Persist the rows we track; duplicates are rejected by the unique index.
-    Returns the timestamps of every row that PARSED — the caller's paging
-    bounds come from those, never from the raw body, because one unreadable
-    row must not abort the page (which would also write a backoff the venue
-    never earned)."""
+    Returns the timestamps of every row whose `timestamp` PARSED — the
+    caller's paging bounds come from those, never from the raw body, because
+    one unreadable row must not abort the page (which would also write a
+    backoff the venue never earned). `conditionId in ids` is checked before
+    the Decimal/q6 conversions and json.dumps below, so a page full of rows
+    outside our universe (the common case) pays for none of that, and a bad
+    price/size on one of THOSE rows is not counted as a defect — it was never
+    going to be stored."""
     observed_at = now.isoformat()
     rows, stamps = [], []
     for r in body:
         try:
-            row = _print_row(r, observed_at, source)
+            ts = int(r["timestamp"])
         except BAD_ROW as e:
             res["bad_rows"] = res.get("bad_rows", 0) + 1
             log.warning("whale skipped an unreadable print row: %s", e)
             continue
-        stamps.append(row[1])
-        if ids is None or row[5] in ids:
-            rows.append(row)
+        stamps.append(ts)
+        if ids is not None and str(r.get("conditionId") or "") not in ids:
+            continue
+        try:
+            rows.append(_print_row(r, ts, observed_at, source))
+        except BAD_ROW as e:
+            res["bad_rows"] = res.get("bad_rows", 0) + 1
+            log.warning("whale skipped an unreadable print row: %s", e)
+            continue
     before = con.total_changes
     con.executemany(f"INSERT OR IGNORE INTO prints ({PRINT_COLS}) "
                     f"VALUES ({','.join('?' * 18)})", rows)
