@@ -28,6 +28,7 @@ _DecimalLoader.add_constructor(
 
 # Leaf type specs
 NUM = (int, Decimal)          # any number (ints allowed where YAML omits the dot)
+NUM_OPT = (int, Decimal, type(None))  # NUM or null — only fire.min_points.V2/V3 (calibration gate)
 BOOL = bool
 STR = str
 DATE = datetime.date
@@ -129,7 +130,6 @@ SCHEMA = {
     "db_backup": {"time": STR, "dest": STR, "keep_last": NUM},
     "canary": {"enabled": BOOL, "day_of_month": NUM, "time": STR},
     "dashboard": {"host": STR, "port": NUM},
-    "tape_check": {"enabled": BOOL, "window_secs": NUM},
     "zombie_spread_min": NUM, "max_lead_hours": NUM,
     "risk_free_rate": {"value": NUM, "source_url": STR, "confirmed_on": DATE},
     "deployment": {"annualized_hurdle": NUM, "xspread_autobook": BOOL,
@@ -166,10 +166,33 @@ SCHEMA = {
               "min_frames_per_sec": NUM},
     "scale_in": {"enabled": BOOL, "min_edge_widening": NUM, "require_edge_moved": BOOL,
                  "max_tranches": NUM, "max_position_frac": NUM},
-    "exit": {"enabled": BOOL, "policies": LIST, "capture_fraction": NUM,
-             "trail_fraction": NUM, "min_peak_edge_fraction": NUM, "exit_price_basis": STR,
-             "promote_requires": {"min_n": NUM, "ci_excludes_zero": BOOL,
-                                  "replication_month": BOOL}},
+    "whale": {"enabled": BOOL, "tape_db": STR, "poll_secs": NUM, "lookback_hours": NUM,
+              "lookahead_hours": NUM, "overlap_secs": NUM, "collector_mode": STR,
+              "markets_per_call": NUM, "max_calls_per_min": NUM, "backoff_secs": NUM,
+              "max_print_age_secs": NUM, "min_print_usd": NUM,
+              "discovery_min_notional_usd": NUM,
+              "backfill": {"wallets_per_cycle": NUM, "pages_per_wallet": NUM, "page_size": NUM},
+              "page_size": NUM, "taker_only": BOOL,
+              "leaderboard": {"enabled": BOOL, "category": STR, "time_period": STR,
+                              "order_by": STR, "pages": NUM},
+              "resolve_after_hours": NUM, "resolve_giveup_days": NUM,
+              "position_window_secs": NUM, "signal_window_secs": NUM, "min_score_lb": NUM,
+              "score": {"obs_var": NUM, "prior_sd": {"root": NUM, "sport": NUM, "bucket": NUM},
+                        "z": NUM, "z_report": NUM, "base_rate_lookback_days": NUM,
+                        "base_rate_min_n": NUM, "base_rate_default": NUM,
+                        "eb_min_wallets": NUM},
+              "hygiene": {"mm_window_secs": NUM, "mm_market_share": NUM, "mm_max_avg_usd": NUM,
+                          "both_sides_tolerance": NUM, "wash_gap_secs": NUM},
+              "fire": {"ratio": NUM, "min_points": {"V1": NUM, "V2": NUM_OPT, "V3": NUM_OPT},
+                       "calibration_days": NUM, "calibration_min_whales": NUM,
+                       "sybil_gap_secs": NUM, "max_drift_points": NUM,
+                       "min_secs_to_start": NUM},
+              "size": {"unit_usd": NUM, "cap_points": NUM, "max_stake_usd": NUM,
+                       "min_stake_usd": NUM},
+              "exit": {"flip_ratio": NUM, "sold_fraction": NUM, "min_score_lb": NUM},
+              "primary_variant": STR,
+              "kill": {"decision_n": NUM, "null_n": NUM, "fast_kill_min_marked": NUM,
+                       "min_signals_per_week_alarm": NUM}},
 }
 
 
@@ -212,6 +235,25 @@ def _check_invariants(cfg):
         raise ConfigError(
             f"negrisk.exhaustive_proof.max_half_spread_sum ({proof['max_half_spread_sum']}) "
             f"must equal the window slack 1-mids_sum_min ({slack}) — dry-run patch A2")
+
+    whale = cfg["whale"]
+    if not Decimal(whale["fire"]["ratio"]) > Decimal("0.5"):
+        raise ConfigError(
+            f"whale.fire.ratio ({whale['fire']['ratio']}) must exceed 0.5 — a fire threshold "
+            "at or below a coin flip cannot mean whale consensus")
+    if not Decimal(whale["exit"]["flip_ratio"]) < Decimal(whale["fire"]["ratio"]):
+        raise ConfigError(
+            f"whale.exit.flip_ratio ({whale['exit']['flip_ratio']}) must be less than "
+            f"whale.fire.ratio ({whale['fire']['ratio']}) — otherwise a position could exit "
+            "before it was ever eligible to fire")
+    if not Decimal(whale["size"]["min_stake_usd"]) <= Decimal(whale["size"]["max_stake_usd"]):
+        raise ConfigError(
+            f"whale.size.min_stake_usd ({whale['size']['min_stake_usd']}) must be <= "
+            f"whale.size.max_stake_usd ({whale['size']['max_stake_usd']})")
+    if not Decimal(whale["poll_secs"]) >= Decimal(30):
+        raise ConfigError(
+            f"whale.poll_secs ({whale['poll_secs']}) must be >= 30 — the collector shares "
+            "keyless endpoints with every other lane (max_calls_per_min budget)")
 
 
 def load(path: str | Path = "config.yaml") -> dict:

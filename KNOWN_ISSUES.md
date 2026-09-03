@@ -246,6 +246,17 @@ reach 250M+, which needs a ladder-retention decision *before* switching on.
 ### 30. `db_backup.dest` is on the same volume as the DB
 Warned on every startup. A disk failure loses both.
 
+### 31. Config with no implementation, removed 2026-09-03
+`tape_check` and top-level `exit` (config.yaml, `arb/config.py` SCHEMA) had no
+reader anywhere under `arb/` or `tests/` — grepped and confirmed before
+deletion. Their intent is carried forward: `tape_check`'s "confirm a fill only
+if the venue printed a trade at-or-through price, in-window" becomes the whale
+print collector (L14 task 3, the same tape-confirmation idea against the
+whale-consensus lane's own tape). `exit`'s SELL-engine fields (capture/trail
+fractions, promote_requires) become `whale.exit` (signal-driven exits — flip
+ratio, sold fraction — design doc 2026-09-03 spec §9), a narrower mechanism
+scoped to the new lane rather than a general read-time engine nothing called.
+
 ---
 
 ## The two numbers that matter most
