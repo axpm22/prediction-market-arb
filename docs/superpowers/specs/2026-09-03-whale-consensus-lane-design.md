@@ -155,7 +155,7 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
 
 **Positions.** BUY prints by one wallet in one `(condition_id, outcome_index)`
 within `whale.position_window_secs` (300) of each other form one position:
-`avg_price = Σ price·size / Σ size`, `size = Σ size`, `entry_ts` = last print.
+`avg_price = Σ price·size / Σ size`, `size = Σ size`; `entry_ts` = first BUY, `last_ts` = last BUY, and every gate (pregame, signal window, print age) reads `last_ts` (clarified 2026-09-03, Task 5).
 SELL prints reduce the open size FIFO and are the input to the exit rule and
 the market-maker filter; they never form a copy signal (Polymarket has no
 native short). A position is **pregame** iff its last print precedes the
