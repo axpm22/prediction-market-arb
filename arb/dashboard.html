@@ -75,6 +75,15 @@
   .gap-ok{color:var(--ok)} .gap-warn{color:var(--warn)} .gap-bad{color:var(--bad)}
   #errsec table td{border-top-color:var(--edge)}
   .msg{max-width:640px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* charts: drawn by this page's own JS — no library, no CDN, works offline */
+  .chart{overflow-x:auto;margin:6px 0 2px}
+  .chart svg{min-width:520px;display:block}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--dim);font-size:11.5px;
+    margin-bottom:10px}
+  .legend .key{display:flex;align-items:center;gap:6px}
+  .legend i{width:10px;height:2px;display:inline-block}
+  .legend b{color:var(--paper);font-weight:600}
+  section > div[id]{overflow-x:auto}
   footer{margin-top:44px;color:var(--faint);font-size:12px;
     border-top:1px solid var(--edge);padding-top:12px;line-height:1.7}
   footer b{color:var(--dim)}
@@ -104,6 +113,49 @@
     <div class="hint">Everything at WARNING or above from the live logs, newest first.
       The ANJ block on Polymarket shows here as one fast-fail line per host per poll.</div>
     <div id="errors"></div>
+  </section>
+
+  <section>
+    <h2>Cumulative settled P&amp;L <span id="pnl-window"></span></h2>
+    <div class="hint">One line per (class, lane, variant), cumulative over the window,
+      dated by the day each bet SETTLED. Drawn from the same rows the daily report
+      sums — the panel computes no P&amp;L of its own.</div>
+    <div id="pnl"></div>
+    <div class="hint">The same headline class on its three bases: optimistic fills,
+      confirmed fills (a missed confirmation counts $0, never dropped), and
+      markout — optimistic minus adverse drift, favourable drift never credited.</div>
+    <div id="bases"></div>
+  </section>
+
+  <section>
+    <h2>Open positions — marked</h2>
+    <div class="hint">Every bet with no terminal event, marked at the latest persisted
+      bid minus the taker fee that selling into it would cost. “no quote” is a
+      position we cannot mark, not a position worth zero. WHALE rows carry the whales
+      that formed the signal and the exit rule’s live verdict.</div>
+    <div id="positions"></div>
+  </section>
+
+  <section>
+    <h2>Lane verdicts — latest bench</h2>
+    <div class="hint">The most recent <code>arb bench</code> result per lane. NULL is a
+      result, not a failure: it retires a lane. A row past the staleness window is
+      still the answer, just an old one.</div>
+    <div id="bench"></div>
+  </section>
+
+  <section>
+    <h2>L14 whale-consensus lane</h2>
+    <div class="hint">REVIEW lane, never headline. Bounds are one-sided (§12):
+      lb80 is the 20th percentile of the event-clustered bootstrap, ub90 the 90th.</div>
+    <div id="whale"></div>
+  </section>
+
+  <section>
+    <h2>Kill rules — L14 (§12)</h2>
+    <div class="hint">Pre-registered before the data. “not yet” means the rule cannot
+      fire at this n; “armed” means it can and has not; FIRED stops booking.</div>
+    <div id="kill"></div>
   </section>
 
   <div class="grid">
@@ -206,10 +258,57 @@ function table(head, rows, emptyMsg){
     rows.map(r=>`<tr>${r.map(c=>`<td class="${c.r?'r':''} ${c.c||''}">${esc(c.t)}</td>`).join('')}</tr>`).join('') + '</table>';
 }
 
+// Charts are drawn here, in this file, with no library and no network: the panel
+// has to work on a laptop with the wifi off.
+const SERIES_INK = ['#3ddc97','#e8a13d','#7aa2f7','#d24c3f','#b48ead','#8fd3c7',
+                    '#d9b45b','#7f8ea3'];
+function chart(days, lines){
+  const vals = lines.flatMap(l => l.values.map(Number)).filter(v => isFinite(v));
+  if(!lines.length || !vals.length)
+    return `<div class="empty">nothing settled in the window</div>`;
+  const W = 720, H = 190, L = 52, R = 8, T = 12, B = 20;
+  let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+  if(hi === lo){ hi = lo + 1; }
+  const x = i => L + i * (W - L - R) / Math.max(1, days.length - 1);
+  const y = v => T + (hi - v) * (H - T - B) / (hi - lo);
+  const path = l => l.values.map((v, i) => `${x(i).toFixed(1)},${y(Number(v)).toFixed(1)}`).join(' ');
+  const grid = [hi, (hi + lo) / 2, lo].map(v =>
+    `<line x1="${L}" y1="${y(v).toFixed(1)}" x2="${W - R}" y2="${y(v).toFixed(1)}"
+       stroke="#232a36"/><text x="${L - 6}" y="${(y(v) + 3.5).toFixed(1)}"
+       text-anchor="end" fill="#5c6470" font-size="10">$${v.toFixed(2)}</text>`).join('');
+  const svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
+      aria-label="cumulative settled P&L">${grid}` +
+    `<line x1="${L}" y1="${y(0).toFixed(1)}" x2="${W - R}" y2="${y(0).toFixed(1)}"
+       stroke="#2e3745" stroke-dasharray="3 3"/>` +
+    lines.map((l, i) => `<polyline fill="none" stroke="${SERIES_INK[i % SERIES_INK.length]}"
+       stroke-width="1.6" points="${path(l)}"/>`).join('') +
+    `<text x="${L}" y="${H - 6}" fill="#5c6470" font-size="10">${esc(days[0])}</text>` +
+    `<text x="${W - R}" y="${H - 6}" text-anchor="end" fill="#5c6470"
+       font-size="10">${esc(days[days.length - 1])}</text></svg>`;
+  const legend = lines.map((l, i) =>
+    `<span class="key"><i style="background:${SERIES_INK[i % SERIES_INK.length]}"></i>` +
+    `${esc(l.name)} <b>$${esc(l.values[l.values.length - 1])}</b></span>`).join('');
+  return `<div class="chart">${svg}</div><div class="legend">${legend}</div>`;
+}
+function money(v){ return v == null ? '—' : `$${Number(v).toFixed(4)}`; }
+function killCls(state){ return state === 'FIRED' ? 'lane-invalid'
+  : (state === 'armed' ? 'lane-review' : ''); }
+
 async function refresh(){
+  // each section paints as its own endpoint answers: /api/state runs the whole
+  // daily frame and takes tens of seconds on the real ledger, and the P&L curves
+  // must not wait on it
+  const paint = (url, draw, el) => fetch(url).then(r => r.json()).then(draw)
+    .catch(e => { $(el).innerHTML = `<div class="empty">${esc(String(e))}</div>`; });
+  paint('/api/pnl', drawPnl, 'pnl');
+  paint('/api/positions', drawPositions, 'positions');
+  paint('/api/lanes', drawBench, 'bench');
+  paint('/api/whale', drawWhale, 'whale');
   try{
     const s = await (await fetch('/api/state')).json();
-    $('updated').textContent = `head ${s.head_sha||'?'} · refreshed ${ago(s.generated_at)} · auto 15s`;
+    $('updated').textContent = `head ${s.head_sha||'?'} · refreshed ${ago(s.generated_at)}`
+      + ` · auto ${s.refresh_secs}s`;
+    if(!timer) timer = setInterval(refresh, (s.refresh_secs||60)*1000);
     const supCls = s.supervisor==='ALIVE'?'ok':(s.supervisor==='STALE'?'warn':'bad');
     const dataCls = s.data_age_secs==null?'bad':(s.data_stale?'bad':'ok');
     const dataTxt = s.data_age_secs==null?'no quotes':`${Math.round(s.data_age_secs)}s old`;
@@ -314,8 +413,94 @@ async function refresh(){
     $('updated').textContent = 'refresh failed — is the instrument running?';
   }
 }
+
+function section(el, data){
+  if(data && data.error){ $(el).innerHTML = `<div class="empty">unavailable: ${esc(data.error)}</div>`; return false; }
+  return true;
+}
+
+function drawPnl(p){
+  if(!section('pnl', p)) return;
+  $('pnl-window').textContent = `· ${p.days.length} days`;
+  $('pnl').innerHTML = chart(p.days, p.series.map(x => ({
+    name: `${x.kind} · ${x.lane}${x.variant?' · '+x.variant:''}`, values: x.values})));
+  $('bases').innerHTML = chart(p.days, p.bases.map(b => ({name: b.basis, values: b.values})));
+}
+
+function drawPositions(p){
+  if(!section('positions', p)) return;
+  $('positions').innerHTML = table(
+    [{t:'kind'},{t:'variant'},{t:'event'},{t:'outcome'},{t:'stake',r:1},{t:'entry',r:1},
+     {t:'bid',r:1},{t:'unrealized',r:1},{t:'age',r:1},{t:'starts'},{t:'whales / exit'}],
+    (p.positions||[]).map(b=>[{t:b.kind},{t:b.variant||'—'},{t:evName(b.event_key),c:'ell'},
+      {t:b.outcome||'—',c:'ell'},{t:'$'+b.stake_usd,r:1},{t:b.entry_cost,r:1},
+      {t:b.bid==null?'no quote':b.bid,r:1,c:b.bid==null?'lane-review':''},
+      {t:money(b.unrealized_pnl),r:1,
+       c:b.unrealized_pnl==null?'':(Number(b.unrealized_pnl)<0?'lane-invalid':'lane-clean')},
+      {t:ago(b.created_at),r:1},{t:b.event_start_utc?ago(b.event_start_utc):'—'},
+      {t:whaleCell(b.whale),c:'ell'}]),
+    'no open positions');
+}
+function whaleCell(w){
+  if(!w) return '';
+  const names = (w.whales||[]).map(x => `${x.pseudonym} (lb ${x.lb}${x.native?'':' ·transfer'})`);
+  return `#${w.signal_id} · ` + (names.join(', ') || 'no whale list') +
+    ' — ' + (w.exit_reason ? `EXIT: ${w.exit_reason}` : 'holding');
+}
+
+function drawBench(b){
+  if(!section('bench', b)) return;
+  $('bench').innerHTML = table(
+    [{t:'lane'},{t:'name'},{t:'primary',r:1},{t:'one-sided CI',r:1},{t:'n',r:1},
+     {t:'verdict'},{t:'ran'}],
+    (b.lanes||[]).map(r=>[{t:r.lane},{t:(r.payload||{}).name||''},
+      {t:r.primary_value==null?'—':r.primary_value,r:1},
+      {t:r.ci_lo==null?'—':`[${r.ci_lo}, ${r.ci_hi}]`,r:1},{t:fmt(r.n||0),r:1},
+      {t:(r.payload||{}).label||r.verdict,c:r.verdict==='SIGNAL'?'lane-clean':''},
+      {t:ago(r.ran_at)+(r.stale?' · STALE':''),c:r.stale?'lane-review':''}]),
+    'no bench run recorded yet — run `arb bench`');
+}
+
+function drawWhale(w){
+  if(!section('whale', w)) return;
+  const f = w.whale;
+  if(!f){ $('whale').innerHTML = '<div class="empty">whale lane not configured</div>';
+    $('kill').innerHTML = ''; return; }
+  const c = f.collector, q = f.qualifying, sg = f.signals;
+  const roi = f.roi[f.primary_variant];
+  $('whale').innerHTML =
+    `<div class="hint">${f.tape_ok?'':'<b>tape unavailable</b> — '}` +
+    `wallets ${f.wallets.tracked} tracked / ${f.wallets.backfilled} backfilled / ` +
+    `${f.wallets.hygiene_excluded} positions hygiene-excluded · qualifying whales ` +
+    `${q.n} · signals 24h ${sg.evaluated_24h} evaluated, ${sg.fired_24h} fired ` +
+    `(7d ${sg.fired_7d}) · collector ${esc(String(c.status))} rows ${esc(String(c.rows))} ` +
+    `bad ${esc(String(c.bad_rows))}, ${c.prints_per_min}/min · calibration ` +
+    `${f.calibration.signal_days}/${f.calibration.calibration_days} signal days</div>` +
+    table([{t:'variant'},{t:'bets',r:1},{t:'settled',r:1},{t:'events',r:1},
+           {t:'ROI/$',r:1},{t:'lb80',r:1},{t:'ub90',r:1},{t:'win rate',r:1}],
+      Object.keys(f.roi).sort().map(v=>[{t:v+(v===f.primary_variant?' (primary)':'')},
+        {t:f.bets[v]||0,r:1},{t:f.roi[v].n,r:1},{t:f.roi[v].n_events,r:1},
+        {t:f.roi[v].mean,r:1},{t:f.roi[v].lb80,r:1},{t:f.roi[v].ub90,r:1},
+        {t:f.roi[v].win_rate,r:1}]),
+      'no settled whale bet yet — the lane collects before it can be scored') +
+    table([{t:'whale'},{t:'bucket'},{t:'lb80',r:1},{t:'n',r:1},{t:'evidence'}],
+      (q.top||[]).map(r=>[{t:r.wallet,c:'ell'},{t:r.bucket},{t:r.lb,r:1},
+        {t:r.n_bucket,r:1},{t:r.native?'native':'transfer'}]),
+      'no qualifying whale on the current tape') +
+    table([{t:'exit reason'},{t:'exits',r:1},{t:'exit P&L',r:1},{t:'hold P&L',r:1}],
+      Object.entries(f.exits||{}).map(([k,v])=>[{t:k},{t:v.n,r:1},
+        {t:'$'+v.exit_pnl,r:1},{t:'$'+v.hold_pnl,r:1}]), 'no exit yet');
+  $('kill').innerHTML = table([{t:'rule'},{t:'state'},{t:'numbers'}],
+    (f.kill.rules||[]).map(r=>[{t:`${r.rule} ${r.name}`},
+      {t:r.state,c:killCls(r.state)},{t:r.says}]));
+  if(roi) $('whale').insertAdjacentHTML('afterbegin',
+    `<div class="hint">primary ${esc(f.primary_variant)}: ROI/$ <b>${esc(roi.mean)}</b> ` +
+    `[lb80 ${esc(roi.lb80)}, ub90 ${esc(roi.ub90)}] over ${roi.n} settled bets ` +
+    `in ${roi.n_events} events</div>`);
+}
+
+let timer = null;
 refresh();
-setInterval(refresh, 15000);
 </script>
 </body>
 </html>

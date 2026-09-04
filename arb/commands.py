@@ -783,6 +783,11 @@ def cmd_bench(cfg, store, args):
     # plain print: the bench renders a fixed-width table and rich would
     # reflow it to the terminal, breaking every column alignment
     print(bench.render(results, int(cfg["bench"]["n_min_units"])))
+    # ... and the same results, appended for the dashboard's lane panel (§12).
+    # Here rather than inside bench.run: run() holds only a read-only ledger
+    # handle, and this is the one place a bench RUN (not a scorer) happens.
+    from datetime import datetime, timezone
+    bench.persist(store, results, datetime.now(timezone.utc).isoformat())
     return 0
 
 

@@ -31,13 +31,13 @@ def cfg():
 
 # --- migration 7 -------------------------------------------------------
 
-def test_fresh_db_carries_variant_and_signal_id_at_schema_7(tmp_path):
+def test_fresh_db_carries_variant_and_signal_id_at_head_schema(tmp_path):
     store = Store(tmp_path / "fresh.sqlite")
     cols = {r[1] for r in store.conn.execute("PRAGMA table_info(flat_bets)")}
     assert {"variant", "signal_id"} <= cols
     version = store.conn.execute(
         "SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert version == schema.SCHEMA_VERSION == 7
+    assert version == schema.SCHEMA_VERSION      # HEAD, whatever it is now
 
 
 def test_migration_7_adds_columns_to_a_v6_db(tmp_path):
@@ -67,7 +67,7 @@ def test_migration_7_adds_columns_to_a_v6_db(tmp_path):
     assert {"variant", "signal_id"} <= cols
     version = store.conn.execute(
         "SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert version == 7
+    assert version == schema.SCHEMA_VERSION      # migrated all the way to HEAD
 
 
 def test_migration_7_is_idempotent_when_columns_already_present(tmp_path):

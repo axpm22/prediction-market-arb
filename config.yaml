@@ -359,8 +359,17 @@ db_backup: { time: "04:10", dest: "backups/", keep_last: 2 }    # sqlite3 .backu
                                     #   a same-volume dest is a startup WARNING (v3.4)
 canary: { enabled: true, day_of_month: 1, time: "05:30" }   # monthly synthetic
                                                  #   end-to-end fixture, tagged lane
-dashboard: { host: 127.0.0.1, port: 8722 }       # read-only local panel (§14.3); GETs only,
+dashboard: { host: 127.0.0.1, port: 8722, pnl_days: 30, bench_stale_days: 7,
+             refresh_secs: 60 }
+                                                 # read-only local panel (§14.3); GETs only,
                                                  #   never bound beyond localhost
+                                                 # pnl_days: window of the cumulative settled
+                                                 #   P&L curves (Task 12)
+                                                 # bench_stale_days: a lane's latest
+                                                 #   bench_results row older than this is
+                                                 #   shown as stale, never as current
+                                                 # refresh_secs: page poll interval; the panel
+                                                 #   is a monitor, not a tick feed
 max_lead_hours: 12                  # a covering pair flagged further than this before the
                                     #   event starts is REVIEW-only. Measured 2026-07-28:
                                     #   legs flagged >48h out have a median 24h volume of 3

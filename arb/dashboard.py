@@ -185,20 +185,52 @@ def state(cfg, store) -> dict:
         "recent_flags": [dict(r) for r in recent_flags],
         "ev_enabled": bool(cfg["ev_enabled"]),
         "trusted_pairs": [str(p) for p in cfg["trusted_pairs"]],
+        "refresh_secs": int(cfg["dashboard"]["refresh_secs"]),
+        "pnl_days": int(cfg["dashboard"]["pnl_days"]),
     }
 
 
+def _section(cfg, store, path: str, query: dict) -> dict:
+    """One JSON section (Task 12). A section that raises returns its own error
+    instead of 500-ing the page: a broken whale tape must not take the P&L
+    curves down with it."""
+    from arb import dashboard_data as dd
+    from arb import dashboard_whale
+    try:
+        if path == "/api/state":
+            return state(cfg, store)
+        if path == "/api/pnl":
+            days = int(query.get("days", [cfg["dashboard"]["pnl_days"]])[0])
+            return dd.pnl_series(cfg, store, max(1, min(days, 365)))
+        if path == "/api/positions":
+            return {"positions": dd.positions(cfg, store)}
+        if path == "/api/lanes":
+            return {"lanes": dd.lane_verdicts(cfg, store)}
+        return {"whale": dashboard_whale.whale_panel(cfg, store)}
+    except Exception as e:  # noqa: BLE001 — see docstring
+        log.warning("dashboard section %s failed: %s", path, e, exc_info=True)
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
 def make_handler(cfg, db_path):
+    from arb import dashboard_data as dd
+    sections = ("/api/state", "/api/pnl", "/api/positions", "/api/lanes",
+                "/api/whale")
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):  # noqa: N802
             try:
-                if self.path == "/api/state":
+                from urllib.parse import parse_qs, urlparse
+                url = urlparse(self.path)
+                if url.path in sections:
                     from arb.store import Store
                     # close per request: an unclosed reader lingering on GC's
                     # schedule pins the WAL and starves auto-checkpoint
                     st = Store(db_path)
                     try:
-                        body = json.dumps(state(cfg, st), default=str).encode()
+                        body = json.dumps(dd.jsonable(_section(
+                            cfg, st, url.path, parse_qs(url.query))),
+                            default=str).encode()
                     finally:
                         st.close()
                     ctype = "application/json"

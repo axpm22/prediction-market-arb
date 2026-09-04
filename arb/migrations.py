@@ -48,4 +48,8 @@ def apply(conn):
                 continue  # fresh DBs already carry it via TABLES
             conn.execute(ddl)
         conn.execute("INSERT INTO schema_version VALUES (7, datetime('now'))")
+    if current < 8:
+        for ddl in schema.MIGRATION_8:
+            conn.execute(ddl)  # CREATE TABLE IF NOT EXISTS — idempotent
+        conn.execute("INSERT INTO schema_version VALUES (8, datetime('now'))")
     conn.commit()

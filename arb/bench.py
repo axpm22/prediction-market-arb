@@ -31,6 +31,7 @@ the same z — which is measurement rule 6's "finding per credit" made concrete.
 """
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -171,6 +172,24 @@ def render(results: list[LaneResult], n_min: int) -> str:
             lines.append(f"     {d}")
         lines.append("")
     return "\n".join(lines)
+
+
+def persist(store, results: list[LaneResult], ran_at: str) -> None:
+    """Append this run to `bench_results` (schema v8) so the dashboard can show
+    the latest verdict per lane without re-running the bench. INSERT-only, one
+    row per lane, never an update of a previous run — the history IS the point:
+    a lane that flipped verdict shows two rows, not one overwritten one."""
+    for r in results:
+        store.insert("bench_results", {
+            "ran_at": ran_at, "lane": r.lane,
+            "primary_value": None if r.estimate is None else str(r.estimate),
+            "ci_lo": None if r.lo is None else str(r.lo),
+            "ci_hi": None if r.hi is None else str(r.hi),
+            "n": r.n, "verdict": r.verdict,
+            "payload_json": json.dumps({
+                "name": r.name, "primary": r.primary, "unit": r.unit,
+                "label": r.label, "credits": r.credits, "note": r.note,
+                "z": round(r.z, 4), "detail": r.detail})})
 
 
 def run(cfg, con, hist=None, only: list[str] | None = None) -> list[LaneResult]:

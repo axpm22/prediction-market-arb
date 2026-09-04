@@ -512,3 +512,159 @@ def test_the_report_writes_nothing_to_the_tape(cfg, tmp_path):
 
     assert con.execute("SELECT COUNT(*) c FROM base_rates").fetchone()["c"] == before
     assert con.total_changes == changes_before
+
+
+# ------------------------------------------------- §12 kill rules (Task 12)
+
+def _mark(store, bet_id, mark_cost="0.40", horizon=None, in_play=0):
+    from arb.whale_metrics import H_2M
+    return store.insert("markouts", {
+        "bet_id": bet_id, "leg_index": 0, "horizon_secs": horizon or H_2M,
+        "actual_offset_secs": 121.0, "mark_cost": mark_cost,
+        "marked_at": NOW.isoformat(), "in_play": in_play})
+
+
+def _report_day(store, day, detail="held"):
+    from arb.whale_metrics import FAST_KILL_KIND
+    return store.insert("annotations", {
+        "created_at": f"{day}T23:00:00+00:00", "target_kind": "report-day",
+        "target_id": day, "kind": FAST_KILL_KIND, "detail": detail})
+
+
+def _rules(cfg, store, con=None):
+    from arb.whale_metrics import kill_status
+    return {r["rule"]: r for r in kill_status(cfg, store, con, NOW)["rules"]}
+
+
+def test_every_kill_rule_starts_at_not_yet_on_an_empty_ledger(cfg, tmp_path):
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+
+    rules = _rules(cfg, store, con)
+
+    assert [r["state"] for r in rules.values()] == ["not yet"] * 4
+    assert rules[1]["n"] == 0 and rules[1]["target_n"] == 100
+    assert rules[3]["target_n"] == 1200
+    assert rules[4]["collecting_days"] == 0
+
+
+def test_rule_1_fires_when_the_upper_bound_is_negative_at_decision_n(cfg, tmp_path):
+    """§12 rule 1: at n >= decision_n, ub90 < 0 kills. n counts DISTINCT
+    signal_ids of the primary variant, and the bound is the one-sided 90th."""
+    cfg["whale"]["kill"]["decision_n"] = 3
+    store = Store(tmp_path / "t.sqlite")
+    for sid in range(1, 4):
+        _whale_row(store, "V2/flat", sid, f"pm:{sid}", pnl="-0.20")
+    _whale_row(store, "V2/conf", 9, "pm:9", pnl="0.90")     # other variant: ignored
+
+    rules = _rules(cfg, store)
+
+    assert rules[1]["n"] == 3 and rules[1]["ub90"] < 0
+    assert rules[1]["state"] == "FIRED"
+    assert "n=3/3" in rules[1]["says"]
+
+
+def test_rule_1_is_armed_but_unfired_while_the_bound_straddles_zero(cfg, tmp_path):
+    cfg["whale"]["kill"]["decision_n"] = 2
+    store = Store(tmp_path / "t.sqlite")
+    _whale_row(store, "V2/flat", 1, "pm:1", pnl="0.50")
+    _whale_row(store, "V2/flat", 2, "pm:2", pnl="-0.40")
+
+    rules = _rules(cfg, store)
+
+    assert rules[1]["state"] == "armed" and rules[1]["ub90"] > 0
+
+
+def test_rule_2_needs_two_consecutive_produced_reports(cfg, tmp_path):
+    """Drift of -0.10 against a flagged_edge of 0.05 clears -0.5 x edge, so the
+    condition holds today; alone that is one report, not two."""
+    cfg["whale"]["kill"]["fast_kill_min_marked"] = 1
+    store = Store(tmp_path / "t.sqlite")
+    _mark(store, _whale_row(store, "V2/flat", 1, "pm:1"))
+
+    today_only = _rules(cfg, store)[2]
+    _report_day(store, "2026-09-02")                     # yesterday held too
+    fired = _rules(cfg, store)[2]
+
+    assert today_only["mean_d2m"] == Decimal("-0.100000")
+    assert today_only["threshold"] == Decimal("-0.025000")
+    assert today_only["held_today"] is True
+    assert today_only["streak"] == 1 and today_only["state"] == "armed"
+    assert fired["streak"] == 2 and fired["state"] == "FIRED"
+
+
+def test_rule_2_stays_not_yet_below_the_marked_bet_floor(cfg, tmp_path):
+    cfg["whale"]["kill"]["fast_kill_min_marked"] = 50
+    store = Store(tmp_path / "t.sqlite")
+    _mark(store, _whale_row(store, "V2/flat", 1, "pm:1"))
+
+    rule = _rules(cfg, store)[2]
+
+    assert rule["n_marked"] == 1 and rule["held_today"] is False
+    assert rule["state"] == "not yet"
+
+
+def test_an_outage_day_pauses_the_streak_and_a_clear_day_breaks_it(cfg, tmp_path):
+    """§12: a day with no report pauses the streak; a produced report on which
+    the condition did NOT hold ends it."""
+    from arb.whale_metrics import fast_kill_streak
+    store = Store(tmp_path / "t.sqlite")
+    _report_day(store, "2026-08-20")                     # ... a week of outage
+    _report_day(store, "2026-08-28")
+
+    assert fast_kill_streak(store) == 2                  # gap did not reset it
+
+    _report_day(store, "2026-08-29", detail="clear")
+    _report_day(store, "2026-08-30")
+
+    assert fast_kill_streak(store) == 1                  # the clear day ended it
+
+
+def test_re_running_a_days_report_cannot_inflate_the_streak(cfg, tmp_path):
+    """The row for today is appended as the report is produced, so the count
+    must be the same however many times that day is regenerated."""
+    cfg["whale"]["kill"]["fast_kill_min_marked"] = 1
+    store = Store(tmp_path / "t.sqlite")
+    _mark(store, _whale_row(store, "V2/flat", 1, "pm:1"))
+
+    before = _rules(cfg, store)[2]["streak"]
+    for _ in range(3):
+        write_daily(cfg, store, DAY, outdir=tmp_path / "out")
+
+    assert _rules(cfg, store)[2]["streak"] == before == 1
+    assert len(store.query("SELECT * FROM annotations WHERE target_id=?", (DAY,))) == 3
+
+
+def test_write_daily_records_only_the_day_it_actually_produced(cfg, tmp_path):
+    """Re-running an OLD day records nothing: the 30-day window is today's."""
+    from arb.whale_metrics import FAST_KILL_KIND
+    store = Store(tmp_path / "t.sqlite")
+
+    write_daily(cfg, store, "2026-08-01", outdir=tmp_path / "out")
+
+    assert store.query("SELECT * FROM annotations WHERE kind=?",
+                       (FAST_KILL_KIND,)) == []
+
+
+def test_rule_4_arms_only_after_four_weeks_of_collection(cfg, tmp_path):
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    con.execute("INSERT INTO prints (observed_at, ts, proxy_wallet, condition_id) "
+                "VALUES (?,?,?,?)",
+                ((NOW - timedelta(days=29)).isoformat(),
+                 int((NOW - timedelta(days=29)).timestamp()), "w1", CID))
+    con.commit()
+
+    rule = _rules(cfg, store, con)[4]
+
+    assert rule["collecting_days"] == 29 and rule["fired_7d"] == 0
+    assert rule["state"] == "FIRED"        # armed AND starved: no fired signal
+
+
+def test_the_whale_section_prints_the_kill_block(cfg, tmp_path):
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+
+    frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+    md = "\n".join(report_whale.whale_md(frame))
+
+    assert "| kill rule (§12) | state | numbers |" in md
+    for name in ("1 decision", "2 fast kill", "3 null", "4 starvation"):
+        assert f"| {name} | not yet |" in md

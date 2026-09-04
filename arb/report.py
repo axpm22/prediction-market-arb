@@ -227,6 +227,12 @@ def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily",
     md.append("")
     frame["whale"] = _wf(cfg, store, whale_frame)
     md.extend(report_whale.whale_md(frame["whale"]))
+    # §12 kill rule 2 counts consecutive PRODUCED daily reports, so producing
+    # one is itself the datum: append this day's verdict (append-only; the
+    # streak is derived from these rows, and kill_status already counts today's
+    # live verdict, so the section above is not one day behind).
+    from arb.whale_metrics import record_fast_kill
+    record_fast_kill(cfg, store, day)
     md.append("")
     md.extend(_capacity_md(frame["capacity"]))
     md.append("")

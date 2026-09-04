@@ -1,7 +1,7 @@
 """SQLite DDL (SPEC §9). Money columns are TEXT holding Decimal strings, never REAL.
 Every table is INSERT-only or INSERT+terminal-row; nothing ever UPDATEs ledger rows."""
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # v2 additions (migrations only ever ADD):
 MIGRATION_2 = [
@@ -49,6 +49,14 @@ MIGRATION_7 = [
     "ALTER TABLE flat_bets ADD COLUMN variant TEXT",
     "ALTER TABLE flat_bets ADD COLUMN signal_id INTEGER",
 ]
+
+# v8: one append-only row per `arb bench` lane result, so the dashboard can show
+# the latest verdict per lane without re-running the bench (Task 12, §12).
+# `primary` is a SQL keyword — the column is `primary_value`.
+BENCH_RESULTS = """CREATE TABLE IF NOT EXISTS bench_results (
+        id INTEGER PRIMARY KEY, ran_at TEXT, lane TEXT, primary_value TEXT,
+        ci_lo TEXT, ci_hi TEXT, n INTEGER, verdict TEXT, payload_json TEXT)"""
+MIGRATION_8 = [BENCH_RESULTS]
 
 TABLES = [
     """CREATE TABLE IF NOT EXISTS quotes (
@@ -105,6 +113,7 @@ TABLES = [
     # append-only: venue-pairs demoted from the trusted path by a mismatch (H4)
     """CREATE TABLE IF NOT EXISTS pair_demotions (
         id INTEGER PRIMARY KEY, pair TEXT, reason TEXT, created_at TEXT)""",
+    BENCH_RESULTS,      # append-only: one row per `arb bench` lane result (v8)
 ]
 
 # Minimal indexes — more slows the 600k-row/day insert path (§9)

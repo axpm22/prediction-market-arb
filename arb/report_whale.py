@@ -21,8 +21,8 @@ from pathlib import Path
 
 from arb.models import q6
 from arb.replay import open_ro
-from arb.whale_metrics import (exit_stats, is_native, markout_stats, roi_cell,
-                               roi_rows, signals_by_id)
+from arb.whale_metrics import (exit_stats, is_native, kill_status,
+                               markout_stats, roi_cell, roi_rows, signals_by_id)
 
 
 def open_tape_ro(cfg) -> sqlite3.Connection | None:
@@ -95,7 +95,8 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None) -> dict:
         "kill": {"decision_n": int(cfg["whale"]["kill"]["decision_n"]),
                  "null_n": int(cfg["whale"]["kill"]["null_n"]),
                  "min_signals_per_week_alarm":
-                     int(cfg["whale"]["kill"]["min_signals_per_week_alarm"])},
+                     int(cfg["whale"]["kill"]["min_signals_per_week_alarm"]),
+                 **kill_status(cfg, store, con, now)},
     }
     if opened:
         con.close()
@@ -212,13 +213,19 @@ def whale_md(frame: dict) -> list[str]:
           + (f"; **backing off until {c['backoff_until']}**"
              if c["backoff_until"] else ""),
           "",
-          f"Primary: mean settled ROI per $, {frame['primary_variant']}, clustered "
-          f"by event_key. Bounds are ONE-SIDED (§12): lb80 = 20th percentile, "
-          f"ub90 = 90th. Decision at n >= {frame['kill']['decision_n']} signals; "
-          f"upper 90% bound < 0 kills the lane.",
-          "",
-          "| variant | bets | settled | events | ROI/$ | lb80 | ub90 | win rate |",
-          "|---|---|---|---|---|---|---|---|"]
+          "| kill rule (§12) | state | numbers |", "|---|---|---|"]
+    for r in frame["kill"]["rules"]:
+        md.append(f"| {r['rule']} {r['name']} | "
+                  + (f"**{r['state']}**" if r["state"] == "FIRED" else r["state"])
+                  + f" | {r['says']} |")
+    md += ["",
+           f"Primary: mean settled ROI per $, {frame['primary_variant']}, clustered "
+           f"by event_key. Bounds are ONE-SIDED (§12): lb80 = 20th percentile, "
+           f"ub90 = 90th. Decision at n >= {frame['kill']['decision_n']} signals; "
+           f"upper 90% bound < 0 kills the lane.",
+           "",
+           "| variant | bets | settled | events | ROI/$ | lb80 | ub90 | win rate |",
+           "|---|---|---|---|---|---|---|---|"]
     for variant in sorted(set(frame["bets"]) | set(frame["roi"])):
         r = frame["roi"].get(variant)
         star = " **(primary)**" if variant == frame["primary_variant"] else ""
