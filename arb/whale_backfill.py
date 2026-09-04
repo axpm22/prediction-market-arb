@@ -92,47 +92,71 @@ def _add_wallets(con, pairs, now, source) -> int:
 
 
 def snapshot_leaderboard(cfg, con, now, get=get_json) -> int:
-    """Seed discovery from the public leaderboard, at most once per UTC day.
-    Returns the number of wallets it added (source never enters the score)."""
+    """Seed discovery from the public leaderboard: every window in
+    `leaderboard.time_periods` (DAY/WEEK/MONTH/ALL since 2026-09-04), each at
+    most once per UTC day. Returns the number of wallets it added — the source
+    never enters a score, but membership in the LATEST snapshot is what the V4
+    variant reads (§7). One `now` for the whole run, so the windows of one day
+    share one `snapshot_at` and "the latest snapshot" is a single set.
+
+    A failed call sets the shared backoff and stops the run there; the windows
+    that already landed are claimed, so the same-day retry picks up where it
+    stopped instead of re-fetching them.
+    """
     lb = cfg["whale"]["leaderboard"]
-    day = now.strftime("%Y-%m-%d")
-    if not lb["enabled"] or _meta(con, "leaderboard_day") == day or _backoff_active(con, now):
+    if not lb["enabled"] or _backoff_active(con, now):
         return 0
-    res: dict = {}
-    bucket = _bucket(cfg)
+    res, bucket, added = {}, _bucket(cfg), 0
+    for period in lb["time_periods"]:
+        n, ok = _snapshot_window(cfg, con, now, get, bucket, res, str(period))
+        added += n
+        if not ok:
+            break
+    return added
+
+
+def _snapshot_window(cfg, con, now, get, bucket, res, period) -> tuple[int, bool]:
+    """One leaderboard window. The day is claimed PER WINDOW right after page 0
+    LANDS, not before it is fetched: a failure getting page 0 itself stores
+    nothing, so it must not burn the day — a same-day retry should still get a
+    full run of that window. Claiming it there (rather than after every page)
+    is still the mid-page guard: a failure on page 1+ leaves page 0's rows
+    stored and the window already claimed, so a same-day retry can't write a
+    second copy of ranks 1..50.
+    # ponytail: costs one day's seed for that window on a page-1+ failure; the
+    # tape discovers wallets anyway, so a transaction spanning every page is
+    # not worth it. Per-window keys (2026-09-04) mean a mid-run failure costs
+    # only the window it happened in, not the ones already stored.
+    """
+    lb = cfg["whale"]["leaderboard"]
+    day, key = now.strftime("%Y-%m-%d"), f"leaderboard_day:{period}"
+    if _meta(con, key) == day:
+        return 0, True
     added = 0
-    # The day is claimed right after page 0 LANDS, not before it is fetched:
-    # a failure getting page 0 itself stores nothing, so it must not burn the
-    # day — a same-day retry should still get a full run. Claiming it there
-    # (rather than after every page) is still the mid-page guard: a failure
-    # on page 1+ leaves page 0's rows stored and the day already claimed, so
-    # a same-day retry can't write a second copy of ranks 1..50.
-    # ponytail: costs one day's seed on a page-1+ failure; the tape discovers
-    # wallets anyway, so a transaction spanning every page is not worth it.
     for page in range(int(lb["pages"])):
         url = (f"{DATA_API}/v1/leaderboard?category={lb['category']}"
-               f"&timePeriod={lb['time_period']}&orderBy={lb['order_by']}"
+               f"&timePeriod={period}&orderBy={lb['order_by']}"
                f"&limit={LEADERBOARD_PAGE}&offset={page * LEADERBOARD_PAGE}")
         try:
             body = _call(bucket, get, url, cfg, res)
         except Exception:
             _set_backoff(con, cfg, now)
-            return added
+            return added, False
         con.executemany(
             "INSERT INTO leaderboard_snapshots (snapshot_at, category, time_period,"
             " order_by, rank, proxy_wallet, user_name, vol, pnl) VALUES (?,?,?,?,?,?,?,?,?)",
-            [(now.isoformat(), str(lb["category"]), str(lb["time_period"]),
+            [(now.isoformat(), str(lb["category"]), period,
               str(lb["order_by"]), int(r.get("rank") or 0), str(r.get("proxyWallet") or ""),
               r.get("userName"), str(q6(Decimal(str(r.get("vol") or 0)))),
               str(q6(Decimal(str(r.get("pnl") or 0))))) for r in body])
         con.commit()
         if page == 0:
-            _set_meta(con, "leaderboard_day", day)
+            _set_meta(con, key, day)
         added += _add_wallets(con, [(str(r.get("proxyWallet") or ""), r.get("userName"))
                                     for r in body], now, "leaderboard")
         if len(body) < LEADERBOARD_PAGE:
             break
-    return added
+    return added, True
 
 
 def discover_wallets(cfg, con, now) -> int:

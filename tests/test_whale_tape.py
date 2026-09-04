@@ -444,8 +444,8 @@ def test_leaderboard_snapshot_stores_rows_and_seeds_wallets(tmp_path):
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     board = _fixture("whale_leaderboard")
     get = FakeGet(board)
-    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS", "time_period": "MONTH",
-                            "order_by": "PNL", "pages": 1})
+    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS",
+                            "time_periods": ["MONTH"], "order_by": "PNL", "pages": 1})
     n = whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=get)
     assert "category=SPORTS" in get.urls[0] and "timePeriod=MONTH" in get.urls[0]
     assert "orderBy=PNL" in get.urls[0]
@@ -456,12 +456,63 @@ def test_leaderboard_snapshot_stores_rows_and_seeds_wallets(tmp_path):
 
 def test_leaderboard_runs_at_most_once_per_utc_day(tmp_path):
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
-    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS", "time_period": "MONTH",
-                            "order_by": "PNL", "pages": 1})
+    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS",
+                            "time_periods": ["MONTH"], "order_by": "PNL", "pages": 1})
     whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=FakeGet(_fixture("whale_leaderboard")))
     again = FakeGet(_fixture("whale_leaderboard"))
     assert whale_backfill.snapshot_leaderboard(cfg, con, NOW + timedelta(hours=6), get=again) == 0
     assert again.urls == []
+
+
+def test_the_leaderboard_snapshot_covers_every_configured_window(tmp_path):
+    """Amended 2026-09-04 (L14 amendment): discovery reads DAY/WEEK/MONTH/ALL,
+    not MONTH alone, and the four windows of one run share one `snapshot_at` —
+    which is what makes "the latest snapshot, any window" a single set."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    board = _fixture("whale_leaderboard")
+    get = FakeGet(board)
+    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS",
+                            "time_periods": ["DAY", "WEEK", "MONTH", "ALL"],
+                            "order_by": "PNL", "pages": 1})
+
+    whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=get)
+
+    assert [u.split("timePeriod=")[1].split("&")[0] for u in get.urls] \
+        == ["DAY", "WEEK", "MONTH", "ALL"]
+    assert dict(con.execute("SELECT time_period, COUNT(*) FROM leaderboard_snapshots"
+                            " GROUP BY time_period")) \
+        == {p: len(board) for p in ("DAY", "WEEK", "MONTH", "ALL")}
+    assert con.execute("SELECT COUNT(DISTINCT snapshot_at) "
+                       "FROM leaderboard_snapshots").fetchone()[0] == 1
+
+
+def test_a_failure_mid_run_cannot_duplicate_the_windows_that_landed(tmp_path):
+    """The day is claimed PER WINDOW, right after that window's page 0 lands:
+    DAY is stored, WEEK's first page fails, and a same-day retry re-fetches
+    only the windows that never landed — DAY's ranks are never written twice."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    board = _fixture("whale_leaderboard")
+    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS",
+                            "time_periods": ["DAY", "WEEK", "MONTH", "ALL"],
+                            "order_by": "PNL", "pages": 1})
+    get = FakeGet(board, VenueError("503 from https://data-api.polymarket.com/v1/leaderboard"))
+
+    whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=get)
+
+    assert len(get.urls) == 2                        # DAY kept, WEEK lost, then stop
+    assert whale_tape._meta(con, "leaderboard_day:DAY") == NOW.strftime("%Y-%m-%d")
+    assert whale_tape._meta(con, "leaderboard_day:WEEK") is None
+    con.execute("DELETE FROM meta WHERE key='backoff_until'")   # isolate the day guard
+    con.commit()
+    retry = FakeGet(board)
+
+    whale_backfill.snapshot_leaderboard(cfg, con, NOW + timedelta(minutes=5), get=retry)
+
+    assert [u.split("timePeriod=")[1].split("&")[0] for u in retry.urls] \
+        == ["WEEK", "MONTH", "ALL"]
+    assert dict(con.execute("SELECT time_period, COUNT(*) FROM leaderboard_snapshots"
+                            " GROUP BY time_period")) \
+        == {p: len(board) for p in ("DAY", "WEEK", "MONTH", "ALL")}
 
 
 def test_a_leaderboard_failure_mid_snapshot_cannot_duplicate_ranks(tmp_path):
@@ -469,8 +520,8 @@ def test_a_leaderboard_failure_mid_snapshot_cannot_duplicate_ranks(tmp_path):
     cannot write a second copy of ranks 1..50 under the same snapshot."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     board = _fixture("whale_leaderboard")
-    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS", "time_period": "MONTH",
-                            "order_by": "PNL", "pages": 4})
+    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS",
+                            "time_periods": ["MONTH"], "order_by": "PNL", "pages": 4})
     get = FakeGet(board, VenueError("503 from https://data-api.polymarket.com/v1/leaderboard"))
     whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=get)
     stored = con.execute("SELECT COUNT(*) FROM leaderboard_snapshots").fetchone()[0]
@@ -487,11 +538,11 @@ def test_a_failure_on_the_first_page_does_not_burn_the_day(tmp_path):
     """Page 0 itself fails: nothing was stored, so the day must NOT be
     claimed — a same-day retry needs to actually run, not short-circuit."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
-    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS", "time_period": "MONTH",
-                            "order_by": "PNL", "pages": 4})
+    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS",
+                            "time_periods": ["MONTH"], "order_by": "PNL", "pages": 4})
     boom = FakeGet(VenueError("503 from https://data-api.polymarket.com/v1/leaderboard"))
     assert whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=boom) == 0
-    assert whale_tape._meta(con, "leaderboard_day") is None
+    assert whale_tape._meta(con, "leaderboard_day:MONTH") is None
     con.execute("DELETE FROM meta WHERE key='backoff_until'")
     con.commit()
     retry = FakeGet(_fixture("whale_leaderboard"))
@@ -503,8 +554,8 @@ def test_the_rate_bucket_is_one_per_process_not_one_per_call_site(tmp_path):
     """Three call sites, one budget: otherwise a single command bursts 3x the
     configured cap."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
-    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS", "time_period": "MONTH",
-                            "order_by": "PNL", "pages": 1})
+    cfg = _cfg(leaderboard={"enabled": True, "category": "SPORTS",
+                            "time_periods": ["MONTH"], "order_by": "PNL", "pages": 1})
     whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=FakeGet(_fixture("whale_leaderboard")))
     after_leaderboard = whale_tape._BUCKET.tokens
     whale_tape.poll_prints(cfg, con, _global_markets(1), NOW, get=FakeGet([]))
@@ -625,7 +676,7 @@ def test_the_2026_09_04_census_prefixes_resolve_to_the_right_sport():
     (whale-backfill fix pass 2026-09-04) — one sample per family, not the
     whole 57: a traditional soccer league, a short prefix that collides on
     `startswith` with a longer sibling (kor/kor2), college football, FIBA
-    basketball, and esports (confirmed by literal team tokens, not guessed)."""
+    basketball, and the esports prefixes the L14 amendment took back out."""
     prefixes = _cfg()["whale"]["slug_sport_prefixes"]
     assert whale_backfill._sport_of("epl-ars-che-2026-09-06-che", prefixes) == "soccer"
     assert whale_backfill._sport_of("kor-jej-uls-2026-09-05-jej", prefixes) == "soccer"
@@ -634,7 +685,13 @@ def test_the_2026_09_04_census_prefixes_resolve_to_the_right_sport():
         "cfb-ballst-ohiost-2026-09-05", prefixes) == "americanfootball_ncaaf"
     assert whale_backfill._sport_of(
         "bkfibaw-usa-chi-2026-09-04", prefixes) == "basketball_fiba_womens"
-    assert whale_backfill._sport_of("cs2-b8-ntr-2026-09-04", prefixes) == "esports_cs2"
+    # esports prefixes were OBSERVED in the census but are deliberately left
+    # unmapped (controller decision 2026-09-04): `whale_score.root_of` pools
+    # every mapped sport into the one `sports` root, so an `esports_*` key
+    # would pool CS2 skill with MLB skill. Unmapped => never scored.
+    for slug in ("cs2-b8-ntr-2026-09-04", "lol-t1-geng-2026-09-04-game1",
+                 "dota2-tsp-ntr-2026-09-04", "val-tec-tyl-2026-09-04"):
+        assert whale_backfill._sport_of(slug, prefixes) is None
     assert whale_backfill._sport_of("will-trump-win-2026", prefixes) is None  # question, unmapped
 
 

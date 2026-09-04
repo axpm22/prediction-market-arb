@@ -21,7 +21,7 @@ from statistics import median
 from arb.models import q6
 from arb.whale_merge import d, merge_windows, qualifying, ts
 
-VARIANTS = ("V1", "V2", "V3")
+VARIANTS = ("V1", "V2", "V3", "V4")
 YES, NO = 0, 1
 
 
@@ -56,10 +56,18 @@ class Signal:
 
 # -------------------------------------------------------------------- points
 
-def point_of(variant, whale, cfg) -> Decimal:
-    """Spec §7's variant table for one whale dict (`lb`, `open_notional`)."""
+def point_of(variant, whale, cfg, ranked=frozenset()) -> Decimal:
+    """Spec §7's variant table for one whale dict (`lb`, `open_notional`).
+
+    `ranked` is the latest leaderboard snapshot's wallets (§7, amended
+    2026-09-04). V4 is a FILTER on top of the same qualification bar every
+    other variant uses, never a score input: a whale is only in `whales` at
+    all because `qualifying` cleared it on our own realized-edge scores, and
+    rank then decides whether it carries its one vote."""
     if variant == "V1":
         return Decimal(1)
+    if variant == "V4":
+        return Decimal(1) if whale["wallet"] in ranked else Decimal(0)
     excess = d(whale["lb"]) - d(cfg["whale"]["min_score_lb"])
     if variant == "V2":
         return q6(excess)
@@ -68,11 +76,11 @@ def point_of(variant, whale, cfg) -> Decimal:
     return q6(excess * weight)
 
 
-def points(variant, whales_on_side, cfg) -> Decimal:
+def points(variant, whales_on_side, cfg, ranked=frozenset()) -> Decimal:
     """One side's total. Sybil-dropped whales contribute nothing, so this
     agrees with `Signal.points_yes/points_no` — but the caller must hand in ONE
     side: `Signal.whales` carries both, each with its own `side`."""
-    return q6(sum((point_of(variant, w, cfg) for w in whales_on_side
+    return q6(sum((point_of(variant, w, cfg, ranked) for w in whales_on_side
                    if not w.get("sybil_dropped")), Decimal(0)))
 
 
@@ -113,7 +121,7 @@ def sybil(whales, gap) -> None:
             x["sybil_dropped"] = x is not keep
 
 
-def tally(variant, whales, cfg) -> tuple[dict, dict]:
+def tally(variant, whales, cfg, ranked=frozenset()) -> tuple[dict, dict]:
     """Side split -> sybil collapse -> points -> per-side totals: the one
     computation `evaluate` and `exit_reason` both run. `whales` is a
     `qualifying` list carrying both sides; the returned `scored` rows are
@@ -124,25 +132,29 @@ def tally(variant, whales, cfg) -> tuple[dict, dict]:
         side = [x for x in whales if x["side"] == s]
         sybil(side, gap)
         scored[s] = [dict(x, points=(Decimal(0) if x["sybil_dropped"]
-                                     else point_of(variant, x, cfg))) for x in side]
+                                     else point_of(variant, x, cfg, ranked)))
+                     for x in side]
     return ({s: q6(sum((x["points"] for x in ws), Decimal(0)))
              for s, ws in scored.items()}, scored)
 
 
 # ------------------------------------------------------------------ evaluate
 
-def evaluate(market, open_positions, score_lookup, touch, now, cfg, m0) -> list[Signal]:
-    """Three pre-registered variants per market (§7). Empty when no whale
-    qualifies on either side — nothing to persist, nothing left on the table."""
+def evaluate(market, open_positions, score_lookup, touch, now, cfg, m0,
+             ranked=frozenset()) -> list[Signal]:
+    """The four pre-registered variants per market (§7; V4 added 2026-09-04).
+    Empty when no whale qualifies on either side — nothing to persist, nothing
+    left on the table. `ranked` is V4's leaderboard filter and is ignored by
+    every other variant."""
     whales = qualifying(market["condition_id"], open_positions, score_lookup, now, cfg)
     if not whales:
         return []
-    return [_signal(v, market, whales, touch, now, cfg, m0) for v in VARIANTS]
+    return [_signal(v, market, whales, touch, now, cfg, m0, ranked) for v in VARIANTS]
 
 
-def _signal(variant, market, whales, touch, now, cfg, m0) -> Signal:
+def _signal(variant, market, whales, touch, now, cfg, m0, ranked) -> Signal:
     w, f = cfg["whale"], cfg["whale"]["fire"]
-    total, scored = tally(variant, whales, cfg)
+    total, scored = tally(variant, whales, cfg, ranked)
     side = YES if total[YES] >= total[NO] else NO      # a tie fails `ratio` below
     denom = total[YES] + total[NO]
     ratio = q6(total[side] / denom) if denom > 0 else Decimal(0)

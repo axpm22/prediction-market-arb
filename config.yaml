@@ -570,10 +570,15 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   dated evidence row. Soccer leagues share the one
                                       #   canonical `soccer` key `sports:` above already uses —
                                       #   no per-league Odds API key exists for e.g. the Saudi,
-                                      #   Uzbek or Peruvian top flights. cs2/dota2/lol/val are
-                                      #   esports, confirmed by literal team-name tokens
-                                      #   ("TEC Esports"/"TYLOO") and game1/game2 Bo3-style
-                                      #   slugs. Question-market prefixes (`will` 693, `highest`
+                                      #   Uzbek or Peruvian top flights. The esports prefixes
+                                      #   the same census OBSERVED (cs2 39, lol 19, val 8,
+                                      #   dota2 5) are deliberately left UNMAPPED (controller
+                                      #   decision 2026-09-04): `whale_score.root_of` pools
+                                      #   every mapped sport into the single `sports` root, so
+                                      #   an `esports_*` key would pool CS2 skill with MLB
+                                      #   skill. They stay unmapped — and therefore never
+                                      #   scored — until an `esports` hierarchy root exists.
+                                      #   Question-market prefixes (`will` 693, `highest`
                                       #   70, `lowest` 5 — census counts) are deliberately left
                                       #   unmapped: not a sports league, nothing to guess.
     { mlb: baseball_mlb, kbo: baseball_kbo, npb: baseball_npb,
@@ -582,8 +587,6 @@ whale:                                # L14 whale-consensus lane (design doc 202
       ufc: mma, cric: cricket,
       cfb: americanfootball_ncaaf,          # 85 (college football, e.g. cfb-ballst-ohiost)
       bkfibaw: basketball_fiba_womens,      # 4  (FIBA women's: USA vs China, Japan vs Malaysia)
-      cs2: esports_cs2, lol: esports_lol,   # 39, 19 (map-handicap / game1,game2 Bo3 slugs)
-      dota2: esports_dota2, val: esports_valorant,  # 5, 8 ("TEC Esports" vs "TYLOO")
       # soccer (2026-09-04 tape census; counts are COUNT(*) of sport-IS-NULL rows)
       epl: soccer, kor2: soccer, spl: soccer, lal: soccer, fl1: soccer, mls: soccer,  # 69,53,51,50,47,42
       bun: soccer, ukr1: soccer, sea: soccer, nor: soccer, uzb1: soccer, tur2: soccer, # 42,31,28,27,22,22
@@ -594,8 +597,18 @@ whale:                                # L14 whale-consensus lane (design doc 202
       scop: soccer, hun: soccer, ven1: soccer, el1: soccer, egy1: soccer, col1: soccer, # 6,6,5,5,5,5
       bra2: soccer, ucl: soccer, per1: soccer, ltu1: soccer, elc: soccer, el2: soccer, # 5,4,4,4,4,4
       uru1: soccer, rou1: soccer, nwsl: soccer }                                     # 3,3,3
-  leaderboard: { enabled: true, category: SPORTS, time_period: MONTH, order_by: PNL, pages: 4 }
-                                      # leaderboard seed for whale discovery
+  leaderboard: { enabled: true, category: SPORTS, order_by: PNL,
+                 time_periods: [DAY, WEEK, MONTH, ALL], pages: 20 }
+                                      # leaderboard seed for whale discovery, once per UTC
+                                      #   day per window (meta `leaderboard_day:<window>`).
+                                      #   Amended 2026-09-04 (L14 amendment, PREREGISTRATION
+                                      #   row of that date): every window instead of MONTH
+                                      #   alone, at the documented depth cap — offset <= 1000
+                                      #   against the endpoint's fixed page size 50 is 20
+                                      #   pages — so 4 x 20 = 80 paced calls a day. The
+                                      #   source still never enters a score; membership in
+                                      #   the LATEST snapshot (any window) is what variant
+                                      #   V4 reads as `ranked`.
   resolve_after_hours: 4              # hours after the market's start_utc before resolution is
                                       #   read (spec §5 step 5) — not after close
   resolve_giveup_days: 14             # give up resolving a position after this many days
@@ -616,12 +629,17 @@ whale:                                # L14 whale-consensus lane (design doc 202
   hygiene: { mm_window_secs: 600, mm_market_share: 0.30, mm_max_avg_usd: 50,
              both_sides_tolerance: 0.10, wash_gap_secs: 2 }
                                       # market-maker / wash-trade exclusion filters
-  fire: { ratio: 0.80, min_points: { V1: 3, V2: null, V3: null },
+  fire: { ratio: 0.80, min_points: { V1: 3, V2: null, V3: null, V4: 3 },
           calibration_days: 14, calibration_min_whales: 10,
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
                                       # entry-fire trigger: ratio + variant thresholds; V2/V3
                                       #   stay null until the calibration window (Task 8) sets
-                                      #   them — invariant: fire.ratio > 0.5; sybil_gap_secs
+                                      #   them. V4 (ranked, added 2026-09-04) is 3 literally,
+                                      #   like V1: the calibration guard applies only to a NULL
+                                      #   threshold, so V4 fires from day one — its filter is
+                                      #   leaderboard membership on top of the SAME min_score_lb
+                                      #   bar, never a score input.
+                                      #   Invariant: fire.ratio > 0.5; sybil_gap_secs
                                       #   collapses same-side prints within the gap to one whale
                                       #   (spec §7.3); max_drift_points caps the ask's drift above
                                       #   the whale VWAP before a signal is stale (spec §7.4);

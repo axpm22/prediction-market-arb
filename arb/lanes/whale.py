@@ -29,7 +29,8 @@ from arb import whale_tape, whale_universe
 from arb.lanes.whale_book import (_bet_ctx, _event_key, _from_prints,
                                   _persist_signal, _tape_market, _touch,
                                   _zombied, best_bid, candidate, exit_payload,
-                                  note_no_bid, quote_rows)
+                                  note_no_bid, persist_base_rates, quote_rows,
+                                  ranked_wallets)
 from arb.logutil import get_logger
 from arb.replay import open_ro
 from arb.venues.base import get_json
@@ -61,19 +62,6 @@ def _d(v) -> Decimal | None:
 
 
 # ------------------------------------------------------------------ cycle IO
-
-def _scorer(con, state, now):
-    """(score_lookup, base rate per root) from the shared scoring assembly. The
-    base rate is persisted with its `as_of` so a score is reproducible (§6) —
-    the one write in the chain, which is why the report calls `score_state`
-    directly and never this."""
-    for root, value in state.rates.items():
-        con.execute("INSERT OR REPLACE INTO base_rates (root, as_of, value, n) "
-                    "VALUES (?,?,?,?)",
-                    (root, now.isoformat(), str(value), state.rate_n[root]))
-    con.commit()
-    return state.lookup, state.rates
-
 
 def _calibration_blocked(con, cfg) -> set[str]:
     """§7.2: `min_points.V2/V3` may be null only while the tape's `signals`
@@ -145,8 +133,13 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     prints, tape_markets = state.prints, state.markets
     open_pos = state.open_positions
     res["hygiene_excluded"] = state.hygiene_excluded
-    lookup, rates = _scorer(con, state, now)
+    persist_base_rates(con, state, now)
+    lookup, rates = state.lookup, state.rates
     tokens, slugs = _from_prints(prints)
+    # V4 (§7, amended 2026-09-04): one read per cycle, shared by the signals
+    # this cycle evaluates and the exits it re-evaluates, so both sides of a
+    # V4 position are judged against the same board.
+    ranked = ranked_wallets(con)
 
     # 8-9 share one fetch: the same books price a new signal and an exit, and
     # §8 wants a quotes row every cycle for a market with an open WHALE bet so
@@ -179,7 +172,8 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
             m0 = rates.get(whale_score.root_of(m.sport, m.market_type),
                            w["score"]["base_rate_default"])
             touch = _touch(books, tokens, cid)
-            for sig in whale_signal.evaluate(market, open_pos, lookup, touch, now, cfg, m0):
+            for sig in whale_signal.evaluate(market, open_pos, lookup, touch,
+                                             now, cfg, m0, ranked):
                 token = tokens.get((cid, sig.side))
                 sig = _zombied(cfg, sig, volumes.get(f"{cid}:{token}"))
                 signal_id = _persist_signal(con, sig, cid, now)
@@ -219,7 +213,7 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     # 9: exits, on the books this cycle already fetched.
     for bet in bets:
         _exit(cfg, store, bet, ctxs[bet["id"]], open_pos, lookup, books,
-              venue_ok, now, res)
+              venue_ok, now, res, ranked)
 
     # collector health for the daily report (§12): `polls` has no column for a
     # cycle's status/rows/bad_rows and rule 9 forbids inventing one, so the
@@ -278,12 +272,13 @@ def _persist(cfg, store, rows, cands, on_table, venue_ok, latency_ms, now) -> in
     return poll_id
 
 
-def _exit(cfg, store, bet, ctx, open_pos, lookup, books, venue_ok, now, res) -> None:
+def _exit(cfg, store, bet, ctx, open_pos, lookup, books, venue_ok, now, res,
+          ranked) -> None:
     """§9 for one open bet. `exit_reason` returns None post-start (a bet is
     held to resolution then), so there is nothing extra to re-check here."""
     if ctx is None:
         return
-    decision = whale_exit.exit_reason(ctx, open_pos, lookup, now, cfg)
+    decision = whale_exit.exit_reason(ctx, open_pos, lookup, now, cfg, ranked)
     if decision is None:
         return
     bid, depth = best_bid(books.get(ctx["token"]))

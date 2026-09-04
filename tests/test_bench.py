@@ -409,6 +409,20 @@ def test_l14_counts_only_v2_flat_and_only_distinct_signal_ids(tmp_path):
     assert abs(float(r.estimate) - 0.10) < 1e-9
 
 
+def test_l14_enumerates_v4_in_the_per_variant_line(tmp_path):
+    """L14 amendment 2026-09-04: the secondary variants the bench reports gain
+    V4 ranked; the primary n is still V2/flat alone."""
+    from arb.bench_whale import l14_whale
+    con = _whale_ledger(tmp_path, [(1, "pm:a", "0.10")])
+    con.close()
+    con = _whale_ledger(tmp_path, [(2, "pm:b", "0.30")], variant="V4/flat")
+
+    r = l14_whale(CFG, con, None)
+
+    assert r.n == 1                                   # V2/flat only
+    assert any("V4/flat 0.300000" in d for d in r.detail)
+
+
 def test_l14_is_underpowered_below_the_pre_registered_decision_n(tmp_path):
     """Six all-positive signals exclude zero. The pre-registration says the
     lane cannot be called before kill.decision_n, so the verdict does not."""

@@ -83,6 +83,22 @@ def _whale(wallet, native=True, side=0, sybil_dropped=False):
             "native": native, "sybil_dropped": sybil_dropped}
 
 
+def test_the_variant_table_reports_v4_beside_the_other_variants(cfg, tmp_path):
+    """L14 amendment 2026-09-04: V4 is a secondary variant, reported with the
+    same one-sided bounds as V1/V3. The primary stays V2/flat."""
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    _whale_row(store, "V4/flat", 1, "pm:a", pnl="0.10")
+    _whale_row(store, "V2/flat", 2, "pm:b", pnl="0.20")
+
+    frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+
+    assert set(frame["roi"]) == {"V2/flat", "V4/flat"}
+    assert frame["primary_variant"] == "V2/flat"
+    md = "\n".join(report_whale.whale_md(frame))
+    assert "| V4/flat |" in md and "| V2/flat **(primary)** |" in md
+    assert "V4=3" in md                      # the calibration line names it too
+
+
 # ------------------------------------------------------- the by_class key
 
 def test_daily_frame_groups_by_kind_lane_and_variant(cfg, tmp_path):
@@ -743,6 +759,8 @@ def test_whale_score_calibrate_prints_the_yaml_to_paste(cfg, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "V2: 0.150000" in out and "V3: " in out
     assert "min_points:" in out                     # the YAML lines to paste
+    assert "V4: 3" in out                # the literal thresholds come along, or
+                                         # pasting the line drops a required key
 
     # and the CLI knows the subcommand + flag (--help exits before any DB open)
     from arb import cli

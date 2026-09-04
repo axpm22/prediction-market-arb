@@ -150,6 +150,16 @@ def _fetch(**per_token):
     return fetch
 
 
+def _ranked(con, wallets, at=NOW, period="DAY"):
+    """A leaderboard snapshot row per wallet — what V4 reads as `ranked`."""
+    con.executemany(
+        "INSERT INTO leaderboard_snapshots (snapshot_at, category, time_period,"
+        " order_by, rank, proxy_wallet, vol, pnl) VALUES (?,?,?,?,?,?,?,?)",
+        [(at.isoformat(), "SPORTS", period, "PNL", i + 1, w, "0", "0")
+         for i, w in enumerate(wallets)])
+    con.commit()
+
+
 def _run(cfg, store, con, now=NOW, rows=None, fetch=None):
     from arb.lanes.whale import run_whale_cycle
     return run_whale_cycle(cfg, store, con, now, get=Get(rows if rows is not None
@@ -230,7 +240,7 @@ def test_every_variant_is_persisted_to_signals_fired_or_not(cfg, tmp_path):
     res = _run(cfg, store, con)
 
     rows = {r["variant"]: dict(r) for r in con.execute("SELECT * FROM signals")}
-    assert set(rows) == {"V1", "V2", "V3"}
+    assert set(rows) == {"V1", "V2", "V3", "V4"}
     assert rows["V1"]["fired"] == 1 and rows["V1"]["suppressed_reason"] is None
     assert rows["V2"]["fired"] == 0
     assert rows["V2"]["suppressed_reason"] == "uncalibrated"   # min_points null
@@ -238,8 +248,9 @@ def test_every_variant_is_persisted_to_signals_fired_or_not(cfg, tmp_path):
     assert Decimal(rows["V1"]["points_yes"]) == 3
     assert len(json.loads(rows["V1"]["whale_ids_json"])) == 3
     assert Decimal(rows["V1"]["touch_ask"]) == Decimal("0.51")
-    assert res["signals_evaluated"] == 3
+    assert res["signals_evaluated"] == 4
     assert res["suppressed"]["uncalibrated"] == 2
+    assert res["suppressed"]["ratio"] == 1          # V4: no wallet is ranked here
     bet = _bets(store)[0]
     assert bet["signal_id"] == rows["V1"]["id"]
 
@@ -392,6 +403,59 @@ def test_every_variant_of_one_cycle_gets_its_own_position_key(cfg, tmp_path):
     assert {b["variant"] for b in bets} == {f"{v}/{s}" for v in ("V1", "V2", "V3")
                                             for s in ("flat", "conf")}
     assert all(b["position_key"].endswith("|" + b["variant"]) for b in bets)
+
+
+def test_the_lane_books_v4_flat_and_conf_for_a_ranked_consensus(cfg, tmp_path):
+    """§7/§8 amended 2026-09-04: three ranked qualifying whales fire V4, which
+    books its own two rows — distinct fingerprints and position keys, one
+    shared signal_id, exactly like every other variant."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _ranked(con, ["w0", "w1", "w2"])
+
+    res = _run(cfg, store, con)
+
+    bets = _bets(store)
+    assert [b["variant"] for b in bets] == ["V1/flat", "V1/conf", "V4/flat", "V4/conf"]
+    v4 = [b for b in bets if b["variant"].startswith("V4")]
+    assert len({b["fingerprint"] for b in v4}) == 2
+    assert len({b["position_key"] for b in v4}) == 2
+    assert len({b["signal_id"] for b in v4}) == 1
+    assert all(b["position_key"].endswith("|" + b["variant"]) for b in v4)
+    assert res["fired"] == 2 and res["booked"] == 4
+    row = con.execute("SELECT * FROM signals WHERE variant='V4'").fetchone()
+    assert row["fired"] == 1 and Decimal(row["points_yes"]) == 3
+    assert v4[0]["signal_id"] == row["id"]
+
+
+def test_only_the_latest_leaderboard_snapshot_ranks_a_wallet(cfg, tmp_path):
+    """V4 reads membership in the LATEST snapshot (any window). Yesterday's
+    board is not a rank today, so the same three whales score zero points."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _ranked(con, ["w0", "w1", "w2"], at=NOW - timedelta(days=1))
+    _ranked(con, ["0xsomebody-else"], at=NOW)
+
+    _run(cfg, store, con)
+
+    row = con.execute("SELECT * FROM signals WHERE variant='V4'").fetchone()
+    assert Decimal(row["points_yes"]) == 0 and row["fired"] == 0
+    assert row["suppressed_reason"] == "ratio"
+    assert [b["variant"] for b in _bets(store)] == ["V1/flat", "V1/conf"]
+
+
+def test_a_v4_exit_reads_the_same_ranked_set_the_cycle_loaded(cfg, tmp_path):
+    """§9: the exit recomputes under the bet's own variant, so a V4 bet's flip
+    must apply the ranked filter too — the whole opposition here is unranked,
+    which flips V1 and leaves V4 held."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _ranked(con, ["w0", "w1", "w2"])
+    _run(cfg, store, con)                     # V1 x2 and V4 x2 booked
+    _flip(con)                                # four UNRANKED whales on NO
+    res = _run(cfg, store, con, now=NOW + timedelta(seconds=60))
+
+    evs = _events(store)
+    exited = {b["variant"] for b in _bets(store)
+              if any(e["bet_id"] == b["id"] for e in evs)}
+    assert res["exited"] == 2 and exited == {"V1/flat", "V1/conf"}
 
 
 def test_one_bad_market_never_costs_the_cycle_its_poll_row(cfg, tmp_path, monkeypatch):

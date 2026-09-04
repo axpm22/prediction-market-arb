@@ -20,10 +20,16 @@ class ExitDecision:
     detail: dict
 
 
-def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg) -> ExitDecision | None:
+def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
+                ranked=frozenset()) -> ExitDecision | None:
     """`bet_ctx` is what the lane stored at booking: variant, side,
     condition_id, start_utc and the contributing `whales` (wallet, lb,
-    open_size — a `Signal.whales` list is exactly this shape)."""
+    open_size — a `Signal.whales` list is exactly this shape).
+
+    `ranked` is the cycle's leaderboard set, handed in by the lane. Every
+    recomputation below runs under the BET'S OWN variant, so a V4 bet is
+    re-read over ranked whales only — unranked opposition was never V4
+    consensus and must not flip a V4 position (§7 amendment 2026-09-04)."""
     ex, variant = cfg["whale"]["exit"], bet_ctx["variant"]
     side, cid = int(bet_ctx["side"]), bet_ctx["condition_id"]
     start = ts(bet_ctx.get("start_utc"))
@@ -35,7 +41,7 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg) -> ExitDeci
     # signal_window_secs — no reading at all, not a reading that flipped, so it
     # falls through to `left`/`confidence`, which measure the whales directly.
     by_side, _ = tally(variant, qualifying(cid, open_positions_now,
-                                           score_lookup, now, cfg), cfg)
+                                           score_lookup, now, cfg), cfg, ranked)
     total, ours = by_side[YES] + by_side[NO], by_side[side]
     ratio = q6(ours / total) if total > 0 else None
     if ratio is not None and ratio < d(ex["flip_ratio"]):
@@ -79,7 +85,7 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg) -> ExitDeci
         cur = {"wallet": wallet, "lb": score.lb, "score": score,
                "open_notional": q6(notional_now.get(wallet, Decimal(0))),
                "drop": q6(d(x["lb"]) - score.lb)}
-        cur["points"] = point_of(variant, cur, cfg)
+        cur["points"] = point_of(variant, cur, cfg, ranked)
         remaining.append(cur)
     if not remaining:
         return None

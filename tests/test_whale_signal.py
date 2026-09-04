@@ -68,10 +68,11 @@ MARKET = {"condition_id": CID, "start_utc": START.isoformat(),
           "sport": "baseball_mlb", "market_type": "WINNER"}
 
 
-def _ev(cfg, positions, scores, touch=None, now=NOW, market=None, m0=M0):
+def _ev(cfg, positions, scores, touch=None, now=NOW, market=None, m0=M0,
+        ranked=frozenset()):
     sigs = whale_signal.evaluate(market or MARKET, positions, _lookup(scores),
                                  _touch() if touch is None else touch,
-                                 now, cfg, m0)
+                                 now, cfg, m0, ranked)
     return {s.variant: s for s in sigs}
 
 
@@ -103,6 +104,38 @@ def test_v3_applies_the_log_size_weight(cfg):
     pos, scores = _three(lbs=("0.05",))              # 1,000 @ 0.50 = $500 open
     s = _ev(cfg, pos, scores)["V3"]
     assert s.points_yes == Decimal("0.038908")       # 0.05 * log10(1 + 500/100)
+
+
+def test_v4_counts_only_whales_in_the_latest_leaderboard_snapshot(cfg):
+    """§7 (amended 2026-09-04): 1 point per qualifying whale that is ranked,
+    0 for one that is not. An unranked whale is still a whale everywhere else."""
+    pos, scores = _three()
+    s = _ev(cfg, pos, scores, ranked=frozenset({"w0", "w2"}))["V4"]
+    assert s.points_yes == Decimal(2) and s.points_no == Decimal(0)
+    assert {w["wallet"]: w["points"] for w in s.whales} == {
+        "w0": Decimal(1), "w1": Decimal(0), "w2": Decimal(1)}
+
+
+def test_a_ranked_wallet_below_the_bar_is_never_a_v4_point(cfg):
+    """Rank is a FILTER on top of the same qualification bar, never a score
+    input: a leaderboard wallet our own scores put below `min_score_lb` never
+    reaches `evaluate`'s whale list at all, so V4 cannot count it."""
+    pos, scores = _three(lbs=("0.05", "0.04"))
+    pos.append(_pos("cold", last=T0 - 90))
+    scores["cold"] = _score("-0.01")
+    s = _ev(cfg, pos, scores, ranked=frozenset({"w0", "w1", "cold"}))["V4"]
+    assert s.points_yes == Decimal(2)
+    assert "cold" not in {w["wallet"] for w in s.whales}
+
+
+def test_v4_fires_at_three_ranked_qualifying_whales(cfg):
+    """`fire.min_points.V4` is 3 literally, like V1: no calibration window."""
+    pos, scores = _three()
+    assert cfg["whale"]["fire"]["min_points"]["V4"] == 3
+    s = _ev(cfg, pos, scores, ranked=frozenset({"w0", "w1", "w2"}))["V4"]
+    assert (s.fired, s.suppressed_reason, s.points_yes) == (True, None, Decimal(3))
+    two = _ev(cfg, pos, scores, ranked=frozenset({"w0", "w1"}))["V4"]
+    assert (two.fired, two.suppressed_reason) == (False, "min-points")
 
 
 def test_two_whales_three_seconds_apart_count_once(cfg):
@@ -335,7 +368,7 @@ def test_null_min_points_evaluates_but_never_fires(cfg):
 
 def test_evaluate_returns_one_signal_per_variant(cfg):
     pos, scores = _three()
-    assert sorted(_ev(cfg, pos, scores)) == ["V1", "V2", "V3"]
+    assert sorted(_ev(cfg, pos, scores)) == ["V1", "V2", "V3", "V4"]
 
 
 def test_no_qualifying_whale_returns_no_signals(cfg):
@@ -421,6 +454,21 @@ def test_exit_flip_when_the_ratio_falls_below_flip_ratio(cfg):
         scores[f"a{i}"] = _score("0.05")
     d = whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg)
     assert (d.reason, d.detail["ratio"]) == ("flip", Decimal("0.400000"))
+
+
+def test_a_v4_exit_recomputes_the_flip_over_ranked_whales_only(cfg):
+    """§9 under the fourth variant: the flip recomputation runs the SAME
+    variant the bet was booked under, so unranked opposition is not a V4
+    consensus. One book, two answers: V1 flips at 2-of-5, V4 holds at 2-of-3."""
+    pos, scores = _held()
+    for i in range(3):
+        pos.append(_pos(f"a{i}", idx=1, last=T0 - 60 - 30 * i))
+        scores[f"a{i}"] = _score("0.05")
+    ranked = frozenset({"w0", "w1", "a0"})
+    v1 = whale_exit.exit_reason(_ctx("V1"), pos, _lookup(scores), NOW, cfg, ranked)
+    assert (v1.reason, v1.detail["ratio"]) == ("flip", Decimal("0.400000"))
+    assert whale_exit.exit_reason(_ctx("V4"), pos, _lookup(scores), NOW, cfg,
+                                  ranked) is None
 
 
 def test_exit_left_when_the_signal_whales_sold_half(cfg):

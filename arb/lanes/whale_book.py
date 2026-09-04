@@ -99,7 +99,7 @@ def quote_rows(cfg, market, books, event_key, now) -> list[dict]:
 
 
 def fingerprint(event_key, market, label, variant, sizing) -> str:
-    """§8: `sha1(base|variant|sizing)`, so the three variants and the two
+    """§8: `sha1(base|variant|sizing)`, so the four variants and the two
     sizings of one fired signal can never collide into one bet."""
     base = "|".join([event_key, "WHALE", VENUE, market.market_type or "",
                      market.line or "", label, "YES", variant, sizing])
@@ -182,6 +182,33 @@ def exit_payload(cfg, bet, decision, bid, contracts) -> dict:
 
 
 # ------------------------------------------------------------- tape rows
+
+# V4's filter (§7, amended 2026-09-04): the wallets of the LATEST leaderboard
+# snapshot, any window — one daily run stamps its four windows with one
+# `snapshot_at`, so MAX takes all four and yesterday's board is not a rank.
+RANKED_SQL = """
+    SELECT DISTINCT proxy_wallet FROM leaderboard_snapshots
+     WHERE snapshot_at = (SELECT MAX(snapshot_at) FROM leaderboard_snapshots)
+       AND proxy_wallet <> ''"""
+
+
+def ranked_wallets(con) -> frozenset:
+    """Loaded once per cycle and handed to `evaluate`/`exit_reason`: a
+    membership test on top of the qualification bar, never a score input."""
+    return frozenset(r[0] for r in con.execute(RANKED_SQL))
+
+
+def persist_base_rates(con, state, now) -> None:
+    """The one WRITE in the scoring chain (§6): each root's base rate with the
+    `as_of` that makes a score reproducible — which is why the report calls
+    `score_state` directly and never this. Moved off arb/lanes/whale.py to keep
+    that module under ~300 lines."""
+    for root, value in state.rates.items():
+        con.execute("INSERT OR REPLACE INTO base_rates (root, as_of, value, n) "
+                    "VALUES (?,?,?,?)",
+                    (root, now.isoformat(), str(value), state.rate_n[root]))
+    con.commit()
+
 
 def _tape_market(row) -> whale_universe.Market:
     """A market we hold a bet in but that has aged out of the universe still

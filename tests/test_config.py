@@ -87,6 +87,14 @@ def test_whale_config_loads_with_spec_values():
     assert w["fire"]["min_points"]["V1"] == 3
     assert w["fire"]["min_points"]["V2"] is None
     assert w["fire"]["min_points"]["V3"] is None
+    # L14 amendment 2026-09-04: V4 ranked is literal like V1 — the calibration
+    # guard only ever applies to a NULL threshold, so V4 fires from day one.
+    assert w["fire"]["min_points"]["V4"] == 3
+    assert w["leaderboard"]["time_periods"] == ["DAY", "WEEK", "MONTH", "ALL"]
+    assert w["leaderboard"]["pages"] == 20        # offset cap 1000 / page size 50
+    # esports prefixes stay unmapped until an `esports` hierarchy root exists:
+    # `root_of` would otherwise pool CS2 skill into the sports root
+    assert not {"cs2", "lol", "dota2", "val"} & set(w["slug_sport_prefixes"])
     assert w["fire"]["calibration_days"] == 14
     assert w["fire"]["calibration_min_whales"] == 10
     assert w["primary_variant"] == "V2"

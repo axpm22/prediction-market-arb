@@ -1048,8 +1048,10 @@ def cmd_whale_score(cfg, store, args):
     print(f"  V2 = 3 x q10 = {out['V2']}")
     print(f"  V3 = V2 x log10(1 + notional/unit_usd) = {out['V3']}")
     print("paste into config.yaml under whale.fire (a dated amendment, by hand):")
+    # every key the loader requires, including the literal ones: pasting a line
+    # that omitted V4 would drop a required key and fail startup.
     print(f"    min_points: {{ V1: {fire['min_points']['V1']}, V2: {out['V2']}, "
-          f"V3: {out['V3']} }}")
+          f"V3: {out['V3']}, V4: {fire['min_points']['V4']} }}")
     return 0
 
 
