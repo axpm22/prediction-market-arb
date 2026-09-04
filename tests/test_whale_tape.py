@@ -116,6 +116,29 @@ def test_universe_keeps_only_polymarket_sports_markets_inside_the_window():
     assert got == {"0xin"}
 
 
+def test_universe_falls_back_to_the_previous_poll_when_the_latest_has_no_pm_rows():
+    """Universe resilience (2026-09-04): Polymarket's own leg of a watch poll
+    can fail (intermittent CLOB TLS errors) while the poll itself still lands
+    with rows from other venues. Strictly the latest poll would then hand the
+    lane an empty universe for the whole cycle; it must fall back one poll."""
+    led = _ledger([
+        _q("0xprev", "t1", "rays", IN_WINDOW, poll_id=1),
+        _q("0xlatest_kalshi", "t2", "jays", IN_WINDOW, poll_id=2, venue="kalshi"),
+    ])
+    got = {m.condition_id for m in whale_universe.universe(led, _cfg(), NOW)}
+    assert got == {"0xprev"}
+
+
+def test_universe_fallback_is_bounded_by_the_configured_lookback():
+    """The bound in `whale.universe_poll_lookback`, not an unbounded walk of
+    the whole polls table."""
+    led = _ledger([_q("0xprev", "t1", "rays", IN_WINDOW, poll_id=1)])
+    # poll 2 (the latest) has no rows at all; lookback=1 checks poll 2 only,
+    # so poll 1's market must never be reached.
+    got = whale_universe.universe(led, _cfg(universe_poll_lookback=1), NOW)
+    assert got == []
+
+
 def test_universe_carries_the_market_facts_and_every_token():
     led = _ledger([
         _q("0xtot", "tA", "OVER", IN_WINDOW, market_type="TOTAL", line="7.5"),
@@ -563,7 +586,13 @@ def test_backfill_is_fifo_by_first_seen_and_respects_wallets_per_cycle(tmp_path)
     assert done == ["0xfirst", "0xsecond"]
 
 
-def test_backfill_maps_unknown_markets_through_gamma_and_leaves_the_rest_unscored(tmp_path):
+def test_backfill_writes_prints_only_and_map_markets_maps_them_through_gamma(tmp_path):
+    """Whale-backfill fix pass (2026-09-04): mapping is its own step now —
+    `backfill()` only pages wallet activity into `prints`; `map_markets()`
+    reads the pending queue straight off `prints` (MAP_SQL) and maps through
+    Gamma, bounded by `map_per_cycle`. Folding mapping into `backfill()` used
+    to mean walking every condition_id THIS cycle's wallets had ever touched
+    in one unbounded pass, which is what blew the child's 900s cap."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")
     con.commit()
@@ -571,9 +600,14 @@ def test_backfill_maps_unknown_markets_through_gamma_and_leaves_the_rest_unscore
     known, other = gamma[0]["conditionId"], gamma[1]["conditionId"]
     acts = [dict(r, conditionId=c) for r, c in
             zip(_fixture("whale_activity")[:2], (known, "0xnowhere"))]
-    cfg = _cfg(backfill={"wallets_per_cycle": 1, "pages_per_wallet": 1, "page_size": 50})
-    get = FakeGet(acts, [gamma[0]])                # gamma answers for `known` only
-    whale_backfill.backfill(cfg, con, NOW, get=get)
+    cfg = _cfg(backfill={"wallets_per_cycle": 1, "pages_per_wallet": 1, "page_size": 50,
+                         "map_per_cycle": 40})
+    whale_backfill.backfill(cfg, con, NOW, get=FakeGet(acts))
+    assert con.execute("SELECT COUNT(*) FROM markets").fetchone()[0] == 0  # not mapped yet
+
+    get = FakeGet([gamma[0]])                       # gamma answers for `known` only
+    whale_backfill.map_markets(cfg, con, NOW, get=get)
+
     g = [u for u in get.urls if "gamma" in u]
     assert len(g) == 1 and g[0].count("condition_ids=") == 2   # repeated param, not CSV
     rows = {r["condition_id"]: r for r in con.execute("SELECT * FROM markets")}
@@ -584,6 +618,52 @@ def test_backfill_maps_unknown_markets_through_gamma_and_leaves_the_rest_unscore
     assert rows[known]["slug"] == "kbo-lot-kt-2026-08-09"      # kept for a LOCAL re-map
     assert rows["0xnowhere"]["sport"] is None                  # unmappable => never scored
     assert other not in rows
+
+
+def test_the_2026_09_04_census_prefixes_resolve_to_the_right_sport():
+    """Regression guard for the shipped `slug_sport_prefixes` census additions
+    (whale-backfill fix pass 2026-09-04) — one sample per family, not the
+    whole 57: a traditional soccer league, a short prefix that collides on
+    `startswith` with a longer sibling (kor/kor2), college football, FIBA
+    basketball, and esports (confirmed by literal team tokens, not guessed)."""
+    prefixes = _cfg()["whale"]["slug_sport_prefixes"]
+    assert whale_backfill._sport_of("epl-ars-che-2026-09-06-che", prefixes) == "soccer"
+    assert whale_backfill._sport_of("kor-jej-uls-2026-09-05-jej", prefixes) == "soccer"
+    assert whale_backfill._sport_of("kor2-bus-ang-2026-09-05-bus", prefixes) == "soccer"
+    assert whale_backfill._sport_of(
+        "cfb-ballst-ohiost-2026-09-05", prefixes) == "americanfootball_ncaaf"
+    assert whale_backfill._sport_of(
+        "bkfibaw-usa-chi-2026-09-04", prefixes) == "basketball_fiba_womens"
+    assert whale_backfill._sport_of("cs2-b8-ntr-2026-09-04", prefixes) == "esports_cs2"
+    assert whale_backfill._sport_of("will-trump-win-2026", prefixes) is None  # question, unmapped
+
+
+def test_map_markets_is_bounded_and_fifo_by_first_print(tmp_path):
+    """Fix 1's actual bound: three markets never seen before, `map_per_cycle`
+    covers only two, oldest first print first; the third waits."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    for i, age in enumerate((100, 300, 200)):        # insertion order != age
+        _print(con, "0xw", f"0xm{i}", "BUY", "900", int(NOW.timestamp()) - age)
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40, "page_size": 50,
+                         "map_per_cycle": 2})
+    get = FakeGet([])                                # one call covers both (GAMMA_IDS_PER_CALL=2)
+
+    res = whale_backfill.map_markets(cfg, con, NOW, get=get)
+
+    assert _asked(get) == ["0xm1", "0xm2"]           # oldest two (age 300, 200); 0xm0 waits
+    assert len(get.urls) == 1
+    assert res["unmappable"] == 2 and res["mapped"] == 0
+
+
+def test_map_markets_short_circuits_while_a_backoff_is_live(tmp_path):
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con.execute("INSERT INTO meta (key, value) VALUES ('backoff_until', ?)",
+                ((NOW + timedelta(seconds=60)).isoformat(),))
+    con.commit()
+    get = FakeGet([])
+    assert whale_backfill.map_markets(_cfg(), con, NOW, get=get)["status"] == "backoff"
+    assert get.urls == []
 
 
 def test_backfill_short_circuits_while_a_backoff_is_live(tmp_path):
@@ -756,36 +836,35 @@ def test_whale_backfill_command_runs_the_sweep(tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
-def test_whale_backfill_sweeps_on_a_fresh_clock_after_printing_the_backfill_line(
+def test_whale_backfill_runs_leaderboard_then_sweep_then_backfill_then_mapping(
         tmp_path, monkeypatch, capsys):
-    """Minors (final review fix pass): `backfill` runs ~11 min against
-    resolve_after_hours/resolve_giveup_days windows measured in hours/days, so
-    the sweep must call its own fresh `datetime.now`, never reuse the
-    command-start `now` — and its line prints after the backfill line."""
+    """Whale-backfill fix pass (2026-09-04, live diagnosis 12:20Z): `backfill`
+    and mapping can each run for minutes, and either one used to be able to
+    blow the child's 900s cap. Mapping used to run last (inside `backfill`)
+    and the sweep dead last of all — so a slow cycle starved the sweep, the
+    ONLY step that ever puts a resolution on a wallet's scoreboard (C1). The
+    sweep now runs right after the leaderboard snapshot, before either slow
+    step, so it always gets its full budget regardless of what backfill or
+    mapping do this cycle."""
     from arb.commands import cmd_whale_backfill
     from arb.store import Store
     cfg = _cfg()
     cfg["whale"]["tape_db"] = str(tmp_path / "w.sqlite")
-    backfill_nows, sweep_nows = [], []
-    monkeypatch.setattr(whale_backfill, "snapshot_leaderboard", lambda *a, **k: 0)
-
-    def fake_backfill(cfg, con, now, **k):
-        backfill_nows.append(now)
-        return {"wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0,
-                "mapped": 0, "unmappable": 0, "status_counts": {}, "status": "ok"}
-
-    def fake_sweep(cfg, con, now, **k):
-        sweep_nows.append(now)
-        return 0
-
-    monkeypatch.setattr(whale_backfill, "backfill", fake_backfill)
-    monkeypatch.setattr(whale_backfill, "resolve_sweep", fake_sweep)
+    order = []
+    monkeypatch.setattr(whale_backfill, "snapshot_leaderboard",
+                        lambda *a, **k: order.append("leaderboard") or 0)
+    monkeypatch.setattr(whale_backfill, "resolve_sweep",
+                        lambda *a, **k: order.append("sweep") or 0)
+    monkeypatch.setattr(whale_backfill, "backfill", lambda *a, **k: order.append("backfill") or {
+        "wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0, "status": "ok"})
+    monkeypatch.setattr(whale_backfill, "map_markets", lambda *a, **k: order.append("map") or {
+        "calls": 0, "mapped": 0, "unmappable": 0, "status_counts": {}, "status": "ok"})
 
     cmd_whale_backfill(cfg, Store(tmp_path / "arb.sqlite"), None)
 
-    assert sweep_nows[0] is not backfill_nows[0]    # a fresh call, not the stale start `now`
+    assert order == ["leaderboard", "sweep", "backfill", "map"]
     out = capsys.readouterr().out
-    assert out.index("backfill:") < out.index("resolutions swept:")
+    assert out.index("resolutions swept:") < out.index("backfill:") < out.index("mapping:")
 
 
 # --- the leg convention on a 3-way proposition (final review I2) -------------

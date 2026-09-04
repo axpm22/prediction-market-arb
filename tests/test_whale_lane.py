@@ -316,6 +316,22 @@ def test_disabled_books_nothing_and_records_nothing(cfg, tmp_path):
     assert con.execute("SELECT COUNT(*) c FROM prints").fetchone()["c"] == 0
 
 
+def test_an_empty_universe_skips_poll_prints_and_leaves_the_watermark_untouched(cfg, tmp_path):
+    """Universe resilience (2026-09-04): when nothing in `universe()`'s own
+    lookback window has a Polymarket sports row, the universe is genuinely
+    empty this cycle. The lane must not spend a `/trades` call or the
+    watermark on it — no store, no `_ledger(tmp_path)` watch poll at all."""
+    from arb.lanes.whale import run_whale_cycle
+    store, con = Store(tmp_path / "arb.sqlite"), _tape(tmp_path)
+    whale_tape._set_meta(con, "last_seen_ts", "12345")
+    get = Get(_three())              # would answer /trades if ever asked — must not be
+    res = run_whale_cycle(cfg, store, con, NOW, get=get, fetch=_fetch())
+
+    assert res["status"] == "no-universe" and res["markets"] == 0
+    assert not any("/trades" in u for u in get.urls)
+    assert whale_tape._meta(con, "last_seen_ts") == "12345"
+
+
 def test_the_cycle_never_backfills(cfg, tmp_path, monkeypatch):
     """Spec §5 step 4: backfill and the leaderboard snapshot are their own
     supervisor process — Task 3 measured 353 calls / 11 min per cycle."""

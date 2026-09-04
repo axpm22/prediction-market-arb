@@ -154,12 +154,17 @@ def discover_wallets(cfg, con, now) -> int:
 
 def backfill(cfg, con, now, get=get_json) -> dict:
     """Cold start (spec §5 step 4): per-wallet /activity?type=TRADE pages into
-    `prints`, FIFO by discovery time, then map any market we have never seen
-    through Gamma. Unmappable markets are stored and never scored."""
+    `prints`, FIFO by discovery time. Market mapping is its OWN bounded step
+    now (`map_markets`, whale-backfill fix pass 2026-09-04) — every print this
+    writes carries its condition_id whether or not the market ever maps
+    (`_keep(..., ids=None)`), so `prints` is itself the durable queue mapping
+    reads from; folding mapping in here used to mean walking every
+    condition_id this cycle's wallets had EVER touched (thousands, 2 ids a
+    Gamma call), which is what blew the child's 900s cap."""
     w = cfg["whale"]
     bf = w["backfill"]
-    res = {"wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0, "mapped": 0,
-           "unmappable": 0, "status_counts": {}, "status": "ok"}
+    res = {"wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0,
+           "status_counts": {}, "status": "ok"}
     if _backoff_active(con, now):
         res["status"] = "backoff"
         return res
@@ -168,21 +173,18 @@ def backfill(cfg, con, now, get=get_json) -> dict:
         "ORDER BY first_seen, proxy_wallet LIMIT ?", (int(bf["wallets_per_cycle"]),))]
     bucket = _bucket(cfg)
     size = int(bf["page_size"])
-    seen: set[str] = set()
     try:
         for wallet in wallets:
             for page in range(int(bf["pages_per_wallet"])):
                 body = _call(bucket, get, f"{DATA_API}/activity?user={wallet}&type=TRADE"
                              f"&limit={size}&offset={page * size}", cfg, res)
                 _keep(con, body, None, now, res, source="activity")
-                seen.update(str(r.get("conditionId") or "") for r in body)
                 if len(body) < size:
                     break
             con.execute("UPDATE wallets SET backfilled_at=? WHERE proxy_wallet=?",
                         (now.isoformat(), wallet))
             con.commit()
             res["wallets"] += 1
-        _map_markets(cfg, con, seen, now, bucket, get, res)
     except Exception as e:
         log.warning("whale backfill aborted after %d call(s): %s", res["calls"], e)
         _set_backoff(con, cfg, now)
@@ -190,12 +192,48 @@ def backfill(cfg, con, now, get=get_json) -> dict:
     return res
 
 
-def _map_markets(cfg, con, seen, now, bucket, get, res):
+# Pending mapping queue, FIFO by first print (any deterministic order is
+# fine — spec's own words): every distinct condition_id `prints` has ever
+# seen that `markets` does not yet have a row for. Mirrors SWEEP_SQL's shape
+# on purpose — same bounded-FIFO-off-the-tape idiom, same reason (a cycle
+# must never walk an unbounded backlog).
+MAP_SQL = """
+    SELECT p.condition_id FROM prints p
+     LEFT JOIN markets m ON m.condition_id = p.condition_id
+     WHERE m.condition_id IS NULL AND p.condition_id <> ''
+     GROUP BY p.condition_id
+     ORDER BY MIN(p.ts), p.condition_id
+     LIMIT ?"""
+
+
+def map_markets(cfg, con, now, get=get_json) -> dict:
+    """Market mapping (spec §5 step 4 continued), its own step and its own
+    budget: `whale.backfill.map_per_cycle` condition_ids a cycle, oldest
+    print first, straight off the durable queue in `prints`. Whatever does
+    not fit this cycle simply waits for the next one."""
+    w = cfg["whale"]
+    res = {"calls": 0, "mapped": 0, "unmappable": 0, "status_counts": {}, "status": "ok"}
+    if _backoff_active(con, now):
+        res["status"] = "backoff"
+        return res
+    todo = [r[0] for r in con.execute(MAP_SQL, (int(w["backfill"]["map_per_cycle"]),))]
+    if not todo:
+        return res
+    bucket = _bucket(cfg)
+    try:
+        _map_markets(cfg, con, todo, now, bucket, get, res)
+    except Exception as e:
+        log.warning("whale mapping aborted after %d call(s): %s", res["calls"], e)
+        _set_backoff(con, cfg, now)
+        res["status"] = "error"
+    return res
+
+
+def _map_markets(cfg, con, todo, now, bucket, get, res):
     """Gamma's condition_ids takes the REPEATED-param form only (verified
     2026-09-03; the comma CSV silently matches nothing), at most 2 ids a call
-    because a larger batch was never probed (rule 3)."""
-    known = {r[0] for r in con.execute("SELECT condition_id FROM markets")}
-    todo = sorted(c for c in seen if c and c not in known)
+    because a larger batch was never probed (rule 3). `todo` is already the
+    bounded, ordered slice `map_markets` (or a test) decided on."""
     prefixes = cfg["whale"]["slug_sport_prefixes"]
     for i in range(0, len(todo), GAMMA_IDS_PER_CALL):
         chunk = todo[i:i + GAMMA_IDS_PER_CALL]

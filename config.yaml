@@ -513,6 +513,11 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   now + lookahead_hours] (spec §5 step 1); not trade age
   lookahead_hours: 48                 # markets considered "upcoming" out to this horizon
   overlap_secs: 120                   # cycle-to-cycle overlap so no print is missed at the boundary
+  universe_poll_lookback: 5           # universe() falls back across this many of the most recent
+                                      #   watch polls to find one with >=1 Polymarket sports quotes
+                                      #   row, instead of strictly the latest — covers an
+                                      #   intermittent Polymarket CLOB TLS failure on one poll's PM
+                                      #   leg while the poll itself still landed (observed 2026-09-04)
   collector_mode: global              # one platform-wide call per cycle; `batched` = per-market
                                       #   fallback
   markets_per_call: 20                # batched mode only; /trades takes comma CSV `market=`
@@ -525,7 +530,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
   min_print_usd: 200                  # prints smaller than this are noise, not signal
   discovery_min_notional_usd: 1000    # minimum notional for a wallet to enter whale discovery
   backfill: { wallets_per_cycle: 3, pages_per_wallet: 40, page_size: 50,
-              cadence_secs: 600, resolve_per_cycle: 40 }
+              cadence_secs: 600, resolve_per_cycle: 100, map_per_cycle: 40 }
                                       # per-cycle backfill budget for newly discovered wallets.
                                       #   cadence_secs is the `whale-backfill` process's own
                                       #   interval (spec §14): five wallets x 40 pages is ~7 min
@@ -533,7 +538,16 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   resolve_per_cycle bounds the resolution SWEEP (spec §5
                                       #   step 5): markets with a whale position that the 60s
                                       #   cycle's universe no longer covers — every backfilled
-                                      #   one — FIFO by start_utc, 2 ids a Gamma call
+                                      #   one — FIFO by start_utc, 2 ids a Gamma call. Raised
+                                      #   40 -> 100 (<= 50 Gamma calls) 2026-09-04: the sweep now
+                                      #   runs FIRST in cmd_whale_backfill (never starved) so it
+                                      #   can afford a bigger slice. map_per_cycle bounds market
+                                      #   MAPPING (its own step, `whale_backfill.map_markets`):
+                                      #   `backfill()` used to map every condition_id its cycle's
+                                      #   wallet pages had EVER seen — thousands at once, 2 ids a
+                                      #   Gamma call — which is what blew the child's 900s cap;
+                                      #   mapping now reads a bounded, oldest-print-first slice
+                                      #   straight off `prints` instead (2026-09-04)
   page_size: 10000                    # trades rows per call (10,000 verified 2026-09-03);
                                       #   paging stops on age, never on `start`
   max_offset: 10000                   # the feed 400s past this (observed 2026-09-04);
@@ -545,16 +559,41 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   Backfill-only: markets already in `quotes` carry
                                       #   their sport. Longest key wins and matches as a
                                       #   prefix, so one `cric` covers crict20max/cricjcl/...
-                                      #   Codes observed in the Task 1 fixtures plus the
-                                      #   unambiguous leagues from `sports:` above. Soccer is
-                                      #   deliberately ABSENT: its slugs lead with per-league
-                                      #   codes (qat1, fl1, el1, lal, ...) that cannot be
-                                      #   mapped without guessing (rule 3). An unlisted code
-                                      #   means sport=NULL, and such a market is never scored.
+                                      #   An unlisted code means sport=NULL, and such a market
+                                      #   is never scored.
+                                      #   Extended 2026-09-04 (whale-backfill fix pass) from a
+                                      #   read-only census of data/whale_tape.sqlite markets
+                                      #   with sport IS NULL — every prefix below was sampled
+                                      #   (>=3 slugs each, several cross-checked against
+                                      #   tokens_json team names) before being added, never
+                                      #   guessed (rule 3); see data/verified_facts.md for the
+                                      #   dated evidence row. Soccer leagues share the one
+                                      #   canonical `soccer` key `sports:` above already uses —
+                                      #   no per-league Odds API key exists for e.g. the Saudi,
+                                      #   Uzbek or Peruvian top flights. cs2/dota2/lol/val are
+                                      #   esports, confirmed by literal team-name tokens
+                                      #   ("TEC Esports"/"TYLOO") and game1/game2 Bo3-style
+                                      #   slugs. Question-market prefixes (`will` 693, `highest`
+                                      #   70, `lowest` 5 — census counts) are deliberately left
+                                      #   unmapped: not a sports league, nothing to guess.
     { mlb: baseball_mlb, kbo: baseball_kbo, npb: baseball_npb,
       nba: basketball_nba, wnba: basketball_wnba, nfl: americanfootball_nfl,
       nhl: icehockey_nhl, atp: tennis, wta: tennis, itf: tennis,
-      ufc: mma, cric: cricket }
+      ufc: mma, cric: cricket,
+      cfb: americanfootball_ncaaf,          # 85 (college football, e.g. cfb-ballst-ohiost)
+      bkfibaw: basketball_fiba_womens,      # 4  (FIBA women's: USA vs China, Japan vs Malaysia)
+      cs2: esports_cs2, lol: esports_lol,   # 39, 19 (map-handicap / game1,game2 Bo3 slugs)
+      dota2: esports_dota2, val: esports_valorant,  # 5, 8 ("TEC Esports" vs "TYLOO")
+      # soccer (2026-09-04 tape census; counts are COUNT(*) of sport-IS-NULL rows)
+      epl: soccer, kor2: soccer, spl: soccer, lal: soccer, fl1: soccer, mls: soccer,  # 69,53,51,50,47,42
+      bun: soccer, ukr1: soccer, sea: soccer, nor: soccer, uzb1: soccer, tur2: soccer, # 42,31,28,27,22,22
+      bl2: soccer, por: soccer, fr2: soccer, qat1: soccer, ere: soccer, swe2: soccer, # 20,19,18,17,16,14
+      pol: soccer, bel1: soccer, itc: soccer, sui: soccer, kor: soccer, bra: soccer, # 14,13,12,11,10,10
+      atc: soccer, arg: soccer, uae1: soccer, ned2: soccer, tur: soccer, mex: soccer, # 10,10,9,9,8,8
+      grc: soccer, isr: soccer, es2: soccer, den: soccer, chi: soccer, argpn: soccer, # 8,7,7,7,7,7
+      scop: soccer, hun: soccer, ven1: soccer, el1: soccer, egy1: soccer, col1: soccer, # 6,6,5,5,5,5
+      bra2: soccer, ucl: soccer, per1: soccer, ltu1: soccer, elc: soccer, el2: soccer, # 5,4,4,4,4,4
+      uru1: soccer, rou1: soccer, nwsl: soccer }                                     # 3,3,3
   leaderboard: { enabled: true, category: SPORTS, time_period: MONTH, order_by: PNL, pages: 4 }
                                       # leaderboard seed for whale discovery
   resolve_after_hours: 4              # hours after the market's start_utc before resolution is

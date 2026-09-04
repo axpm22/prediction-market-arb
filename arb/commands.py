@@ -1054,20 +1054,25 @@ def cmd_whale_score(cfg, store, args):
 
 
 def cmd_whale_backfill(cfg, store, args):
-    """Daily leaderboard snapshot plus the per-wallet trade-history backfill."""
+    """Daily leaderboard snapshot, resolution sweep, per-wallet trade-history
+    backfill, then bounded market mapping — in THAT order (whale-backfill fix
+    pass 2026-09-04). Backfill's wallet paging and mapping can each run for
+    minutes and either one used to be able to blow the child's 900s cap; the
+    sweep is the only step that ever puts a resolution on a wallet's
+    scoreboard (spec §5 step 5 — the 60s cycle only ever resolves its OWN
+    universe, so a backfilled market's verdict has to be swept here or no
+    wallet can ever score), so it runs first, right after the leaderboard
+    snapshot, and always gets its full budget instead of being starved by
+    whichever of the other two ran long that cycle."""
     from datetime import datetime, timezone
     from arb import whale_backfill, whale_tape
     now = datetime.now(timezone.utc)
     con = whale_tape.open_tape(cfg["whale"]["tape_db"])
     print(f"leaderboard: {whale_backfill.snapshot_leaderboard(cfg, con, now)} new wallets")
+    print(f"  resolutions swept: {whale_backfill.resolve_sweep(cfg, con, now)}")
     res = whale_backfill.backfill(cfg, con, now)
     print(f"  backfill: {res['status']} wallets={res['wallets']} calls={res['calls']} "
-          f"rows={res['rows']} dupes={res['dupes']} bad_rows={res['bad_rows']} "
-          f"mapped={res['mapped']} unmappable={res['unmappable']}")
-    # spec §5 step 5: the 60s cycle only ever resolves its own universe, so
-    # every backfilled market's verdict has to be swept here or no wallet
-    # can ever score. Fresh clock, not the command-start `now`: `backfill`
-    # above runs ~11 min against resolve_after_hours/resolve_giveup_days
-    # windows, so `now` is stale enough by this point to matter.
-    sweep_now = datetime.now(timezone.utc)
-    print(f"  resolutions swept: {whale_backfill.resolve_sweep(cfg, con, sweep_now)}")
+          f"rows={res['rows']} dupes={res['dupes']} bad_rows={res['bad_rows']}")
+    mres = whale_backfill.map_markets(cfg, con, now)
+    print(f"  mapping: {mres['status']} calls={mres['calls']} "
+          f"mapped={mres['mapped']} unmappable={mres['unmappable']}")

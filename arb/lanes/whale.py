@@ -113,12 +113,23 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     t0 = time.monotonic()
     ro = open_ro(store.path)
 
-    # 1-3: universe, prints, discovery.
+    # 1-3: universe, prints, discovery. `universe()` already falls back across
+    # a bounded lookback of watch polls; empty here means none had a PM row.
+    # poll_prints would still burn a `/trades` call (global mode pages
+    # unconditionally) and advance the watermark past an unfiltered window, a
+    # gap the 120s overlap can't fully recover — skip it, watermark untouched.
+    # discover_wallets reads the tape only (no network), so it runs regardless.
     markets = whale_universe.universe(ro, cfg, now, res=res)
-    poll = whale_tape.poll_prints(cfg, con, markets, now, get=get)
-    res.update(status=poll["status"], markets=len(markets), prints=poll["rows"],
-               bad_rows=poll["bad_rows"],
-               wallets=whale_backfill.discover_wallets(cfg, con, now))
+    if markets:
+        poll = whale_tape.poll_prints(cfg, con, markets, now, get=get)
+        res.update(status=poll["status"], markets=len(markets), prints=poll["rows"],
+                   bad_rows=poll["bad_rows"])
+    else:
+        log.warning("whale cycle: empty market universe (no watch poll in the "
+                    "lookback window had Polymarket sports rows) — skipping "
+                    "poll_prints, watermark untouched")
+        res["status"] = "no-universe"
+    res["wallets"] = whale_backfill.discover_wallets(cfg, con, now)
 
     # 5: resolutions for tracked markets and for the markets we hold bets in.
     bets = [dict(b) for b in store.query(OPEN_BETS_SQL)]

@@ -21,12 +21,11 @@ log = get_logger("arb.whale", "logs/whale.log")
 MARKET_COLS = ("condition_id, sport, market_type, line, start_utc, event_key,"
                " tokens_json, slug, first_seen, last_seen")
 # The ledger's PM sports quotes for ONE poll: served by idx_quotes_poll. A
-# fetched_at range instead would scan the 37 GB table.
+# fetched_at range instead would scan the 37 GB table. `poll_id` is bound by
+# the caller (`_poll_with_pm_rows`), never hard-coded to MAX(id) — see there.
 UNIVERSE_SQL = (
     "SELECT venue_market_id, sport, market_type, line, outcome, side, start_utc, "
-    "event_key FROM quotes "
-    "WHERE poll_id = (SELECT MAX(id) FROM polls WHERE kind='watch') "
-    "AND venue='polymarket' AND category='sports'")
+    "event_key FROM quotes WHERE poll_id = ? AND venue='polymarket' AND category='sports'")
 
 
 @dataclass(frozen=True)
@@ -66,16 +65,36 @@ def _labels(tokens: dict) -> dict | None:
     return labels if len(set(labels.values())) == len(labels) else None
 
 
+def _poll_with_pm_rows(store_ro, lookback: int) -> int | None:
+    """The most recent watch poll, within a bounded lookback, that actually
+    has a Polymarket sports quotes row. Polymarket's CLOB has intermittent
+    TLS failures on its own leg of a watch poll (observed 2026-09-04) while
+    the poll itself still lands with rows from other venues/categories —
+    strictly the latest poll would then hand the lane an empty universe for
+    that whole cycle instead of falling back one poll."""
+    for row in store_ro.execute(
+            "SELECT id FROM polls WHERE kind='watch' ORDER BY id DESC LIMIT ?", (lookback,)):
+        if store_ro.execute(
+                "SELECT 1 FROM quotes WHERE poll_id=? AND venue='polymarket' "
+                "AND category='sports' LIMIT 1", (row["id"],)).fetchone():
+            return row["id"]
+    return None
+
+
 def universe(store_ro, cfg, now, res=None) -> list[Market]:
-    """Polymarket sports markets from the LATEST watch poll whose start lies in
+    """Polymarket sports markets from the most recent watch poll (within
+    `whale.universe_poll_lookback`) that has any, whose start lies in
     [now - lookback_hours, now + lookahead_hours] (spec §5 step 1). `res` is an
     optional diagnostics dict, as in whale_score.positions_from_prints."""
     w = cfg["whale"]
     res = {} if res is None else res
+    poll_id = _poll_with_pm_rows(store_ro, int(w["universe_poll_lookback"]))
+    if poll_id is None:
+        return []
     lo = now - timedelta(hours=float(w["lookback_hours"]))
     hi = now + timedelta(hours=float(w["lookahead_hours"]))
     by_cond: dict[str, dict] = {}
-    for r in store_ro.execute(UNIVERSE_SQL):
+    for r in store_ro.execute(UNIVERSE_SQL, (poll_id,)):
         vmid = r["venue_market_id"] or ""
         start = _iso(r["start_utc"])
         if ":" not in vmid or start is None or not (lo <= datetime.fromisoformat(start) <= hi):

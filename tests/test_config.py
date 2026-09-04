@@ -78,8 +78,12 @@ def test_whale_config_loads_with_spec_values():
     assert w["backfill"] == {"wallets_per_cycle": 3, "pages_per_wallet": 40,
                              "page_size": 50, "cadence_secs": 600,
                              # spec §14, amended 2026-09-04: the resolution
-                             # sweep's per-cycle bound (final review C1)
-                             "resolve_per_cycle": 40}
+                             # sweep's per-cycle bound (final review C1),
+                             # raised 40 -> 100 once the sweep always runs
+                             # first (whale-backfill fix pass); map_per_cycle
+                             # bounds the now-separate mapping step
+                             "resolve_per_cycle": 100, "map_per_cycle": 40}
+    assert w["universe_poll_lookback"] == 5
     assert w["fire"]["min_points"]["V1"] == 3
     assert w["fire"]["min_points"]["V2"] is None
     assert w["fire"]["min_points"]["V3"] is None
