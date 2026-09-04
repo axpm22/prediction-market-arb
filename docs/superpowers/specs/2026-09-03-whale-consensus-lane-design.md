@@ -616,6 +616,40 @@ hundred), `f_print` = share with a qualifying-whale print, `f_fire` = share
 of those that fire. Dashboard: rolling 7-day signals/day by variant,
 qualifying-whale count, and backfill progress.
 
+### Trader profiles (read-time) — added 2026-09-04
+
+Operator ask: *rank every trader to see where each one is good; success rate
+above average based on risk; what markets they are good in.* `arb/whale_rank.py`
+answers it from the positions, resolutions and base rates `whale_state` already
+built — no new endpoint, no new collector, no second scoring pass.
+
+**These are DIAGNOSTICS, not inputs.** Nothing under `whale.rank` reaches
+qualification, points, sizing, exits or firing; V1–V4 and `min_score_lb` are
+unchanged. `whale.rank.min_n` (5) is a *display* floor — a profile below it is
+computed and returned, just not ranked. Hygiene-excluded wallets are ranked and
+flagged, never hidden: "which of my whales is really a market maker" is exactly
+what the table is for.
+
+One row per (wallet, level, key), level ∈ root / sport / bucket, over every
+position that `whale_score.resolved_outcomes` says is scorable as of `as_of`:
+
+| Field | Definition |
+|---|---|
+| `n`, `wins`, `win_rate` | resolved positions; payout 1 on the side held; wins / n |
+| `implied` | size-weighted mean `avg_price` — the break-even win rate the market quoted |
+| `excess_win_rate` | `win_rate − implied`: success above average **given the risk taken** |
+| `edge_mean`, `edge_sd` | mean and sample sd of realized edge in points (unshrunk; sd 0 at n = 1) |
+| `roi_at_risk` | Σ e·size / Σ avg_price·size — dollar-weighted return on capital at risk |
+| `t_stat` | `edge_mean / (edge_sd/√n)`, null at n < 2 or a flat sample |
+| `lb80` | the shrunk lower bound: `whale_score.posterior` truncated to that level (at bucket level it IS `score_for(...).lb`, the number the fire rule reads) |
+| `excess_vs_base` | `edge_mean − m0` for the row's root |
+| `notional`, `last_resolved_at`, `native`, `hygiene_flag` | Σ notional; latest resolution; bucket rows are the wallet's own record, sport/root rows are aggregates; hygiene-excluded |
+
+Surfaces: `arb whale-rank [--level|--wallet|--top|--min-n]`,
+`/api/whale/traders?level=&top=&min_n=&wallet=` with a sortable Traders table on
+the dashboard, and a "Top traders" + "where X is good" block in the daily
+report's L14 section (deterministic: `as_of` is the report day's end).
+
 ## 13. Hygiene filters and threats
 
 Filters, all pre-registered, applied at scoring and signalling:

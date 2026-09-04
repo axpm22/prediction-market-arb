@@ -152,6 +152,17 @@
   </section>
 
   <section>
+    <h2>Traders — where each wallet is good</h2>
+    <div class="hint">Read-time diagnostics over the tape's resolved history, never a
+      lane input. <b>excess%</b> is the win rate above the break-even the price itself
+      implied — success above average <i>given the risk taken</i>. <b>ROI at risk</b> is
+      dollar-weighted return on the capital actually staked; <b>t</b> is the edge over
+      its own standard error. Hygiene-excluded wallets are ranked and flagged, never
+      hidden. Click a column to sort, a row to see that wallet's best markets.</div>
+    <div id="traders"></div>
+  </section>
+
+  <section>
     <h2>Kill rules — L14 (§12)</h2>
     <div class="hint">Pre-registered before the data. “not yet” means the rule cannot
       fire at this n; “armed” means it can and has not; FIRED stops booking.</div>
@@ -316,6 +327,7 @@ async function refresh(){
   paint('/api/positions', drawPositions, 'positions');
   paint('/api/lanes', drawBench, 'bench');
   paint('/api/whale', drawWhale, 'whale');
+  paint('/api/whale/traders', drawTraders, 'traders');
   try{
     const s = await (await fetch('/api/state')).json();
     $('updated').textContent = `head ${s.head_sha||'?'} · refreshed ${ago(s.generated_at)}`
@@ -512,6 +524,70 @@ function drawWhale(w){
     `<div class="hint">primary ${esc(f.primary_variant)}: ROI/$ <b>${esc(roi.mean)}</b> ` +
     `[lb80 ${esc(roi.lb80)}, ub90 ${esc(roi.ub90)}] over ${roi.n} settled bets ` +
     `in ${roi.n_events} events</div>`);
+}
+
+// Traders (/api/whale/traders). Sorting and the expand-a-wallet click are local
+// to the rows already fetched; only the expansion asks the server for anything,
+// and it asks for that ONE wallet's own profile.
+const TCOLS = [{k:'wallet',t:'wallet'},{k:'root',t:'root'},{k:'sport',t:'sport'},
+  {k:'key',t:'bucket'},{k:'n',t:'n',r:1},{k:'win_rate',t:'win%',r:1},
+  {k:'implied',t:'implied%',r:1},{k:'excess_win_rate',t:'excess%',r:1},
+  {k:'edge_mean',t:'edge pts',r:1},{k:'roi_at_risk',t:'ROI at risk',r:1},
+  {k:'t_stat',t:'t',r:1},{k:'lb80',t:'lb80',r:1},{k:'notional',t:'notional',r:1},
+  {k:'hygiene_flag',t:'flag'}];
+let tRows = [], tView = [], tSort = 'lb80', tDesc = true, tOpen = null, tBest = '';
+
+function drawTraders(t){
+  if(!section('traders', t)) return;
+  tRows = t.rows || [];
+  renderTraders();
+}
+function sortTraders(k){ tDesc = (k === tSort) ? !tDesc : true; tSort = k; renderTraders(); }
+function toggleTrader(i){
+  const w = tView[i] && tView[i].wallet;
+  if(!w || w === tOpen){ tOpen = null; tBest = ''; renderTraders(); return; }
+  tOpen = w; tBest = 'loading…'; renderTraders();
+  fetch('/api/whale/traders?wallet=' + encodeURIComponent(w))
+    .then(r => r.json())
+    .then(d => { tBest = (d.best||[]).map(b =>
+        `${b.key} — lb80 ${b.lb80}, n ${b.n}, excess ${pct(b.excess_win_rate)}`)
+        .join(' · ') || 'no bucket clears the display floor'; renderTraders(); })
+    .catch(e => { tBest = String(e); renderTraders(); });
+}
+const pct = v => v == null ? '—' : (Number(v)*100).toFixed(1) + '%';
+function tCell(r, k){
+  if(k === 'wallet') return String(r.wallet||'').slice(0, 12) + '…';
+  if(k === 'hygiene_flag') return r.hygiene_flag ? 'hygiene' : '';
+  if(k === 'key') return r.level === 'bucket' ? r.key : '—';
+  if(k === 'win_rate' || k === 'implied' || k === 'excess_win_rate') return pct(r[k]);
+  return r[k] == null ? '—' : r[k];
+}
+function renderTraders(){
+  tView = tRows.slice().sort((a, b) => {
+    const x = a[tSort], y = b[tSort];
+    const nx = Number(x), ny = Number(y);
+    const c = (x != null && y != null && isFinite(nx) && isFinite(ny))
+      ? nx - ny : String(x ?? '').localeCompare(String(y ?? ''));
+    return tDesc ? -c : c;
+  });
+  if(!tView.length){
+    $('traders').innerHTML = '<div class="empty">no resolved trader history on the ' +
+      'tape yet — wallets are scored only once their pregame markets settle</div>';
+    return;
+  }
+  const head = TCOLS.map(c => `<th class="${c.r?'r':''}">` +
+    `<a href="#" onclick="sortTraders('${c.k}');return false">${c.t}` +
+    `${c.k===tSort?(tDesc?' ▾':' ▴'):''}</a></th>`).join('');
+  const body = tView.map((r, i) => {
+    const cells = TCOLS.map(c =>
+      `<td class="${c.r?'r':''} ${c.k==='hygiene_flag'&&r.hygiene_flag?'lane-review':''}">` +
+      `${esc(tCell(r, c.k))}</td>`).join('');
+    const open = r.wallet === tOpen
+      ? `<tr><td colspan="${TCOLS.length}" class="ell">best markets: ${esc(tBest)}</td></tr>`
+      : '';
+    return `<tr onclick="toggleTrader(${i})">${cells}</tr>` + open;
+  }).join('');
+  $('traders').innerHTML = `<table><tr>${head}</tr>${body}</table>`;
 }
 
 refresh();

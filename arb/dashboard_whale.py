@@ -29,6 +29,40 @@ def whale_panel(cfg, store, now=None, con=None) -> dict:
     return report_whale.whale_frame(cfg, store, now=now, con=con, producing_day=today)
 
 
+def whale_traders(cfg, level="bucket", top=None, min_n=None, wallet=None,
+                  now=None, con=None) -> dict:
+    """`/api/whale/traders`: every scored wallet ranked (arb/whale_rank.py).
+
+    Read-time diagnostics — nothing here gates a fire, and the lb80 a bucket
+    row shows IS the one the fire rule reads. `wallet` swaps the table for that
+    wallet's whole root -> sport -> bucket record plus its best buckets.
+    """
+    from arb import whale_rank
+    now = now or datetime.now(timezone.utc)
+    rank_cfg = cfg["whale"]["rank"]
+    level = level if level in whale_rank.DEPTH else "bucket"
+    floor = int(rank_cfg["min_n"] if min_n is None else min_n)
+    limit = int(rank_cfg["top"] if top is None else top)
+    out = {"as_of": now.isoformat(timespec="seconds"), "tape_ok": False,
+           "level": level, "min_n": floor, "top": limit, "wallet": wallet,
+           "rows": [], "best": []}
+    opened = con is None and (con := report_whale.open_tape_ro(cfg)) is not None
+    if con is None:
+        return out
+    try:
+        rows = whale_rank.profiles(score_state(cfg, con, now), cfg, now)
+        out["tape_ok"] = True
+        if wallet:
+            out["rows"] = whale_rank.wallet_profile(rows, wallet)
+            out["best"] = whale_rank.best_markets(rows, wallet, limit, floor)
+        else:
+            out["rows"] = whale_rank.rank(rows, cfg, level=level, min_n=floor)[:limit]
+        return out
+    finally:
+        if opened:
+            con.close()
+
+
 def whale_positions(cfg, store, bets, now, con=None) -> dict[int, dict]:
     """{bet_id: whale block} for the open WHALE bets among `bets`.
 

@@ -758,6 +758,16 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   beyond one page was NOT probed (rule 3), so a wallet
                                       #   returning a full page is logged WARNING once and what
                                       #   came back is used.
+  rank: { min_n: 5, top: 15 }         # read-time trader ranking (`arb whale-rank`,
+                                      #   /api/whale/traders, the daily "Top traders"
+                                      #   table — design §12 "Trader profiles").
+                                      #   min_n is a DISPLAY floor and nothing else: a
+                                      #   profile below it is still computed and still
+                                      #   returned, it is simply not ranked. It is never
+                                      #   a scoring floor, never gates qualification or
+                                      #   firing, and no number under `rank:` reaches
+                                      #   V1-V4. `top` is how many rows the report and
+                                      #   the dashboard show by default.
   primary_variant: V2                 # which fire variant the lane reports as its headline
   kill: { decision_n: 100, null_n: 1200, fast_kill_min_marked: 50,
           min_signals_per_week_alarm: 10 }

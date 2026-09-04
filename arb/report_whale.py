@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
+from arb import whale_rank
 from arb.models import q6
 from arb.replay import open_ro
 from arb.whale_kill import kill_status
@@ -52,9 +53,14 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
     so a report written elsewhere counts the days written there). `producing_day`
     is the day this call is FOR — not yet in the chain — so rule 2 counts it too
     (see `whale_kill.fast_kill_streak`)."""
+    from arb.whale_state import score_state
     now = now or datetime.now(timezone.utc)
     opened = con is None and (con := open_tape_ro(cfg)) is not None
     try:
+        # ONE scoring pass over the tape for both readers of it below: the
+        # roster and the trader profiles are the same positions, differently
+        # summarised, and score_state rebuilds every position from every print
+        state = score_state(cfg, con, now) if con is not None else None
         fire = cfg["whale"]["fire"]
         day_ago, week_ago = now - timedelta(days=1), now - timedelta(days=7)
         booked = {r["signal_id"] for r in store.query(
@@ -63,7 +69,7 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
         # only the booked ones: every lookup below is by a bet's own signal_id
         signals = signals_by_id(con, booked)
         rows = roi_rows(store)
-        qualifying = _qualifying(cfg, con, now)
+        qualifying = _qualifying(cfg, state)
         native_of = {sid: is_native(sig) for sid, sig in signals.items()}
         classed = {"native": [], "transfer": []}
         for r in rows:
@@ -78,6 +84,9 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
             "wallets": {**_wallets(con),
                         "hygiene_excluded": qualifying.pop("hygiene_excluded", 0)},
             "qualifying": qualifying,
+            # read-time diagnostics (design §12 "Trader profiles"): who is
+            # good, and where. Never an input to points, sizing or firing.
+            "traders": whale_rank.traders_frame(cfg, state, now),
             "signals": counts,
             "bets": {r["variant"] or "-": r["c"] for r in store.query(
                 "SELECT variant, COUNT(*) c FROM flat_bets WHERE kind='WHALE' "
@@ -123,14 +132,13 @@ def _wallets(con) -> dict:
     return {"tracked": row["n"], "backfilled": row["done"]}
 
 
-def _qualifying(cfg, con, now) -> dict:
+def _qualifying(cfg, state) -> dict:
     """The lane's own roster, scored by the lane's own assembly (whale_state),
     never a second implementation of it."""
-    empty = {"by_root": {}, "by_sport": {}, "top": [], "n": 0}
-    if con is None:
-        return empty
-    from arb.whale_state import qualifying_whales, score_state
-    state = score_state(cfg, con, now)
+    if state is None:
+        return {"by_root": {}, "by_sport": {}, "top": [], "n": 0,
+                "hygiene_excluded": 0}
+    from arb.whale_state import qualifying_whales
     whales = qualifying_whales(cfg, state)
     return {"by_root": dict(Counter(w["root"] for w in whales)),
             "by_sport": dict(Counter(w["sport"] for w in whales)),
@@ -282,7 +290,7 @@ def whale_md(frame: dict) -> list[str]:
             md.append(f"| {row['wallet']} | {row['bucket']} | {row['lb']} | "
                       f"{row['n_bucket']} | "
                       f"{'native' if row['native'] else 'transfer'} |")
-    return md
+    return md + whale_rank.traders_md(frame["traders"])
 
 
 def whale_line(frame: dict) -> str:

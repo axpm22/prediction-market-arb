@@ -433,6 +433,48 @@ def test_api_whale_and_positions_and_lanes_are_json_over_http(whale_cfg, tmp_pat
         httpd.shutdown()
 
 
+def test_api_whale_traders_ranks_every_wallet_over_http(whale_cfg, tmp_path):
+    """`/api/whale/traders`: the read-time profiles, Decimals as strings. The
+    `?wallet=` form is that one wallet's root -> sport -> bucket record plus
+    the buckets it is actually good in."""
+    from tests.test_whale_rank import _tape as _rank_tape
+    store = Store(tmp_path / "t.sqlite")
+    _rank_tape(tmp_path, whale_cfg)                 # 6 resolved positions, 5 won
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(whale_cfg, store.path))
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_port}"
+        body = _get(base, "/api/whale/traders")
+        assert body["tape_ok"] is True and body["level"] == "bucket"
+        assert body["min_n"] == 5 and body["top"] == 15
+        assert len(body["rows"]) == 1
+        row = body["rows"][0]
+        assert (row["wallet"], row["key"], row["n"]) == \
+            ("0xwhale", "basketball_nba:WINNER", 6)
+        assert row["win_rate"] == "0.833333" and row["implied"] == "0.600000"
+        assert row["native"] is True and row["hygiene_flag"] is False
+        assert {"excess_win_rate", "edge_mean", "edge_sd", "roi_at_risk", "t_stat",
+                "lb80", "excess_vs_base", "notional", "last_resolved_at"} <= set(row)
+
+        one = _get(base, "/api/whale/traders?wallet=0xwhale")
+        assert [r["level"] for r in one["rows"]] == ["root", "sport", "bucket"]
+        assert one["best"][0]["key"] == "basketball_nba:WINNER"
+        assert _get(base, "/api/whale/traders?level=root")["rows"][0]["key"] == "sports"
+        assert _get(base, "/api/whale/traders?min_n=99")["rows"] == []
+    finally:
+        httpd.shutdown()
+
+
+def test_the_traders_table_is_sortable_and_defaults_to_lb80():
+    html = (ROOT / "arb" / "dashboard.html").read_text()
+    script = html.split("<script>")[1]
+    assert 'id="traders"' in html
+    assert "'/api/whale/traders'" in script
+    assert "tSort = 'lb80'" in script                # default sort column
+    assert "sortTraders(" in script and "toggleTrader(" in script
+
+
 def test_a_broken_section_reports_itself_instead_of_500ing(tmp_path, monkeypatch):
     """One failing section must not take the page down with it."""
     cfg = _cfg()

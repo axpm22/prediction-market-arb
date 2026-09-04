@@ -205,6 +205,12 @@ def _section(cfg, store, path: str, query: dict) -> dict:
             return {"positions": dd.positions(cfg, store)}
         if path == "/api/lanes":
             return {"lanes": dd.lane_verdicts(cfg, store)}
+        if path == "/api/whale/traders":
+            return dashboard_whale.whale_traders(
+                cfg, level=query.get("level", ["bucket"])[0],
+                top=query.get("top", [None])[0],
+                min_n=query.get("min_n", [None])[0],
+                wallet=query.get("wallet", [None])[0])
         return {"whale": dashboard_whale.whale_panel(cfg, store)}
     except Exception as e:  # noqa: BLE001 — see docstring
         log.warning("dashboard section %s failed: %s", path, e, exc_info=True)
@@ -214,7 +220,7 @@ def _section(cfg, store, path: str, query: dict) -> dict:
 def make_handler(cfg, db_path):
     from arb import dashboard_data as dd
     sections = ("/api/state", "/api/pnl", "/api/positions", "/api/lanes",
-                "/api/whale")
+                "/api/whale", "/api/whale/traders")
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):  # noqa: N802

@@ -153,6 +153,9 @@ def test_whale_config_loads_with_spec_values():
     assert w["fire"]["calibration_days"] == 3   # 14 -> 3 amended 2026-09-04 (provisional calibration)
     assert w["fire"]["calibration_min_whales"] == 10
     assert w["primary_variant"] == "V2"
+    # read-time trader ranking (2026-09-04): min_n is a DISPLAY floor, never a
+    # scoring floor — a profile below it is still computed, just not ranked
+    assert w["rank"] == {"min_n": 5, "top": 15}
 
 
 def test_whale_unknown_key_is_startup_error(tmp_path):

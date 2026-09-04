@@ -83,6 +83,36 @@ def _whale(wallet, native=True, side=0, sybil_dropped=False):
             "native": native, "sybil_dropped": sybil_dropped}
 
 
+def test_the_report_ranks_traders_and_says_where_each_is_good(cfg, tmp_path):
+    """Design §12 "Trader profiles": read-time diagnostics in the L14 section,
+    deterministic at the day's end, never an input to a fire rule."""
+    from arb import whale_tape
+    from tests.test_whale_rank import _tape as _rank_tape
+    store = Store(tmp_path / "t.sqlite")
+    con = whale_tape.open_tape(_rank_tape(tmp_path, cfg, now=NOW))
+
+    frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+
+    assert [r["wallet"] for r in frame["traders"]["top"]] == ["0xwhale"]
+    assert frame["traders"]["best"]["0xwhale"][0]["key"] == "basketball_nba:WINNER"
+    md = "\n".join(report_whale.whale_md(frame))
+    assert "Top traders" in md
+    assert "| 0xwhale | basketball_nba:WINNER | 6 | 83.3% | 60.0% | 23.3% |" in md
+    assert "where **0xwhale** is good: basketball_nba:WINNER" in md
+    # a re-run of the same day reproduces the same bytes (rule 9)
+    assert md == "\n".join(report_whale.whale_md(
+        report_whale.whale_frame(cfg, store, now=NOW, con=con)))
+
+
+def test_the_trader_table_is_empty_but_present_on_a_tape_with_no_history(cfg, tmp_path):
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+
+    md = "\n".join(report_whale.whale_md(
+        report_whale.whale_frame(cfg, store, now=NOW, con=con)))
+
+    assert "Top traders" in md and "| — | — | 0 |" in md
+
+
 def test_the_variant_table_reports_v4_beside_the_other_variants(cfg, tmp_path):
     """L14 amendment 2026-09-04: V4 is a secondary variant, reported with the
     same one-sided bounds as V1/V3. The primary stays V2/flat."""

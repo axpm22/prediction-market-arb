@@ -1055,6 +1055,43 @@ def cmd_whale_score(cfg, store, args):
     return 0
 
 
+def cmd_whale_rank(cfg, store, args):
+    """Rank every scored wallet and show where each one is good (design §12
+    "Trader profiles"). READ-TIME DIAGNOSTICS: nothing printed here gates
+    qualification, points or firing — the logic is arb/whale_rank.py, this is
+    the table.
+
+    Read-only per the subcommand's help text: `open_tape_ro`, never
+    `whale_tape.open_tape`, which creates the file on first touch.
+    """
+    from datetime import datetime, timezone
+    from arb import whale_rank
+    from arb.report_whale import open_tape_ro
+    from arb.whale_state import score_state
+    con = open_tape_ro(cfg)
+    if con is None:
+        print("whale tape unavailable: collector has never run here.")
+        return 0
+    now = datetime.now(timezone.utc)
+    rank_cfg = cfg["whale"]["rank"]
+    min_n = int(rank_cfg["min_n"] if args.min_n is None else args.min_n)
+    rows = whale_rank.profiles(score_state(cfg, con, now), cfg, now)
+    if args.wallet:
+        show = whale_rank.wallet_profile(rows, args.wallet)
+        print(f"{args.wallet}: {len(show)} profile row(s), best markets first "
+              f"(display floor min_n={min_n} not applied to a single wallet)")
+    else:
+        show = whale_rank.rank(rows, cfg, level=args.level, min_n=min_n)[
+            :int(rank_cfg["top"] if args.top is None else args.top)]
+        print(f"{len(rows)} profile row(s) over "
+              f"{len({r['wallet'] for r in rows})} wallet(s); top {len(show)} at "
+              f"level {args.level}, min_n {min_n} (display floor, never a score)")
+    print(whale_rank.HEADER)
+    for r in show:
+        print(whale_rank.line(r))
+    return 0
+
+
 def cmd_whale_backfill(cfg, store, args):
     """Daily leaderboard snapshot, resolution sweep, per-wallet trade-history
     backfill, then bounded market mapping — in THAT order (whale-backfill fix

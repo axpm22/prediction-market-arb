@@ -202,6 +202,7 @@ SCHEMA = {
               "exit": {"flip_ratio": NUM, "sold_fraction": NUM, "min_score_lb": NUM,
                        "holdings_poll_secs": NUM, "holdings_calls_per_cycle": NUM,
                        "holdings_page_size": NUM, "holdings_max_age_polls": NUM},
+              "rank": {"min_n": NUM, "top": NUM},
               "primary_variant": STR,
               "kill": {"decision_n": NUM, "null_n": NUM, "fast_kill_min_marked": NUM,
                        "min_signals_per_week_alarm": NUM}},

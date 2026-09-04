@@ -109,6 +109,18 @@ def main(argv=None):
     p_wsc.add_argument("--calibrate", action="store_true",
                        help="propose whale.fire.min_points.V2/V3 from the tape's signals "
                             "(design §7.2); prints the YAML, never edits config.yaml")
+    p_wr = sub.add_parser("whale-rank", help="rank every scored wallet and show where "
+                                             "each one is good (read-only, keyless, "
+                                             "0 credits; diagnostics, never a lane input)")
+    p_wr.add_argument("--level", choices=("bucket", "sport", "root"), default="bucket",
+                      help="which level of the root/sport/bucket hierarchy to rank")
+    p_wr.add_argument("--wallet", default=None, metavar="0x...",
+                      help="print this wallet's whole profile instead of the table")
+    p_wr.add_argument("--top", type=int, default=None,
+                      help="rows to print (default whale.rank.top)")
+    p_wr.add_argument("--min-n", dest="min_n", type=int, default=None,
+                      help="display floor on resolved positions (default "
+                           "whale.rank.min_n); never a scoring floor")
     p_bench = sub.add_parser("bench", help="score and rank every STRATEGIES.md lane on "
                                            "the data we hold (read-only)")
     p_bench.add_argument("--pull", action="store_true",
