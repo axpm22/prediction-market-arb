@@ -394,4 +394,20 @@ and hygiene over the whole tape (a per-wallet incremental cache is the
 upgrade path before the 120 s child cap bites); held bets are priced every
 cycle until settlement; `/api/state` takes ~41 s on the 37 GB ledger.
 
+### Final whole-branch review (2026-09-04)
+
+Verdict before fixes: No merge — two Critical defects invisible to the
+task-scoped reviews (resolutions were only read inside a 2-hour window after
+start, so backfilled positions never got outcomes and no wallet could qualify
+at the shipped bar; a held position could be re-booked once the tracker
+lifetime-closed it) and five Important ones (invariant 3 fired on exits;
+soccer 3-way tokens shared one label; the dashboard's "open" contradicted
+§9; no `whale-score --calibrate`; per-cycle whole-tape work). All fixed in
+c807524, 2534680 and 4c2fb09 (resolution sweep in `whale-backfill` with a
+once-a-day skip marker; `position-held` guard; `exit:` exemption in
+invariant 3; distinct token labels; one definition of open; the calibration
+command; column selection, booked-only signal loading, cycle duration in the
+tape). Delta re-review: closed. Suite 695 green. The merge is the operator's
+decision; the two supervisor processes stay `false` until Task 11.
+
 (measured numbers appended after Task 11)
