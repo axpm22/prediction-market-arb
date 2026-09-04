@@ -511,6 +511,62 @@ def test_collector_health_reports_the_last_cycle_the_gap_and_the_backoff(cfg, tm
     assert health["prints_per_min"] == Decimal("0.016667")    # 1 print in 60 min
 
 
+def test_the_ops_line_watches_the_tape_size_and_the_rows_per_day(cfg, tmp_path):
+    """Proposal §2 implementation notes (retention amendment 2026-09-04): the
+    17 GB/year is watched, not discovered. prints/day and holdings rows/day are
+    the 24h before `now` by `observed_at` — a function of the report day, so
+    they print in the hashed md. The file size (a stat, never an open) and the
+    MB/day it implies are LIVE facts: frame and console line only, never the md
+    (tests/test_report.py::test_write_daily_hash_ignores_collector_churn_and_future_tape_rows)."""
+    import os
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
+    # oldest first: observed_at is the collector's clock at insert, so the
+    # tape's rowid order IS its observed_at order (what bytes/day dates by)
+    for age_h in (25, 23, 1):                  # one before the day, two inside
+        at = NOW - timedelta(hours=age_h)
+        con.execute("INSERT INTO prints (observed_at, ts, proxy_wallet, condition_id, "
+                    "asset, outcome_index, side, price, size, notional_usd) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (at.isoformat(), int(at.timestamp()), "w1", CID, "0xyes", 0,
+                     "BUY", "0.50", "1000", "500"))
+    for age_h in (30, 4, 3, 2):                # one before the day, three inside
+        con.execute("INSERT INTO holdings (observed_at, proxy_wallet, condition_id, "
+                    "asset, outcome_index, size) VALUES (?,?,?,?,?,?)",
+                    ((NOW - timedelta(hours=age_h)).isoformat(), "w1", CID,
+                     "0xyes", 0, "1"))
+    con.commit()
+    size = os.path.getsize(tmp_path / "tape.sqlite")
+
+    frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+
+    c = frame["collector"]
+    assert c["prints_24h"] == 2 and c["holdings_24h"] == 3
+    assert c["tape_bytes"] == size
+    # 25 h from the first print to now: bytes/day is the size scaled to a day
+    assert c["bytes_per_day"] == int(Decimal(size) * 86400 / (25 * 3600))
+    md = "\n".join(report_whale.whale_md(frame))
+    assert "- tape: 2 prints/day, 3 holdings rows/day (24h to as-of)" in md
+    mb, mb_day = (f"{Decimal(b) / 1000000:.1f}" for b in (size, c["bytes_per_day"]))
+    assert f"{mb} MB" not in md                # live: never in the hashed md
+    assert f"tape {mb} MB, ~{mb_day} MB/day" in report_whale.whale_line(frame)
+
+
+def test_the_ops_line_reads_the_tape_size_without_a_readable_tape(cfg, tmp_path):
+    """A WAL tape under its writer can refuse a read-only open (open_tape_ro ->
+    None) and is still on disk, growing — the one case the size matters most."""
+    cfg["whale"]["tape_db"] = str(tmp_path / "locked.sqlite")
+    (tmp_path / "locked.sqlite").write_bytes(b"x" * 4096)
+    store = Store(tmp_path / "t.sqlite")
+
+    frame = report_whale.whale_frame(cfg, store, now=NOW, con=None)
+
+    assert frame["tape_ok"] is False
+    assert frame["collector"]["tape_bytes"] == 4096
+    assert frame["collector"]["bytes_per_day"] is None       # no first print to date it
+    assert "tape 0.0 MB, ~— MB/day" in report_whale.whale_line(frame)
+
+
 def test_calibration_status_shows_the_null_thresholds_and_the_day_count(cfg, tmp_path):
     store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
     for i, day in enumerate((1, 2, 2, 3)):

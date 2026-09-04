@@ -246,6 +246,7 @@
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const mb = b => b == null ? '—' : (b / 1e6).toFixed(1);   // tape size, display only
 const ago = iso => {
   if(!iso) return '—';
   const s = (Date.now() - new Date(iso).getTime())/1000;
@@ -501,7 +502,9 @@ function drawWhale(w){
     `${f.wallets.hygiene_excluded} positions hygiene-excluded · qualifying whales ` +
     `${q.n} · signals 24h ${sg.evaluated_24h} evaluated, ${sg.fired_24h} fired ` +
     `(7d ${sg.fired_7d}) · collector ${esc(String(c.status))} rows ${esc(String(c.rows))} ` +
-    `bad ${esc(String(c.bad_rows))}, ${c.prints_per_min}/min · calibration ` +
+    `bad ${esc(String(c.bad_rows))}, ${c.prints_per_min}/min · tape ` +
+    `${mb(c.tape_bytes)} MB, ~${mb(c.bytes_per_day)} MB/day, ${c.prints_24h} prints/day, ` +
+    `${c.holdings_24h} holdings rows/day · calibration ` +
     `${f.calibration.signal_days}/${f.calibration.calibration_days} signal days</div>` +
     table([{t:'variant'},{t:'bets',r:1},{t:'settled',r:1},{t:'events',r:1},
            {t:'ROI/$',r:1},{t:'lb80',r:1},{t:'ub90',r:1},{t:'win rate',r:1}],

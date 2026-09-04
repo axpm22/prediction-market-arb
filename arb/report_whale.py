@@ -13,6 +13,7 @@ five fired rows per booking.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -114,7 +115,7 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
                                    if sid in booked and cls is (k == "native"))
                             for k in ("native", "transfer")},
                 "roi": {k: roi_cell(cfg, v) for k, v in classed.items() if v}},
-            "collector": _collector(con, now),
+            "collector": _collector(cfg, con, now),
             "calibration": {
                 "min_points": dict(fire["min_points"]),
                 "signal_days": con.execute(
@@ -176,7 +177,7 @@ def _signal_counts(store, con, day_ago, week_ago) -> dict:
         "fired_24h": fires(day_ago), "fired_7d": fires(week_ago)}
 
 
-def _collector(con, now) -> dict:
+def _collector(cfg, con, now) -> dict:
     """Is the tape being written at all? Status, rows, bad_rows, `at` and
     backoff_until are the lane's OWN last cycle (tape `meta`) — kept in this
     frame for the live dashboard (arb/dashboard_whale.py reads the same
@@ -188,10 +189,21 @@ def _collector(con, now) -> dict:
     from AFTER that day. prints/min is measured over the hour before `now`,
     by `observed_at` (when the collector recorded the row — bounded above by
     `now` too) rather than `ts` (the trade's own venue timestamp, which the
-    query used to leave with no upper bound at all)."""
+    query used to leave with no upper bound at all).
+
+    The ops figure (retention amendment 2026-09-04, proposal §2): prints and
+    `holdings` rows over the 24h before `now`, by `observed_at` like the 1h
+    count — a function of the report day, printed in the md. `tape_bytes` is a
+    stat of the configured file (never an open, so a WAL tape its writer holds
+    still reports), and `bytes_per_day` scales it by the age of the first
+    print — both LIVE, so the console line and the dashboard, never the md."""
     out = {"status": None, "rows": None, "bad_rows": None, "at": None,
            "last_seen_age_secs": None, "last_gap": None, "backoff_until": None,
-           "prints_per_min": Decimal(0)}
+           "prints_per_min": Decimal(0), "prints_24h": 0, "holdings_24h": 0,
+           "tape_bytes": None, "bytes_per_day": None}
+    path = Path(str(cfg["whale"]["tape_db"]))
+    if path.exists():
+        out["tape_bytes"] = os.path.getsize(path)
     if con is None:
         return out
     meta = {r["key"]: r["value"] for r in con.execute("SELECT key, value FROM meta")}
@@ -204,10 +216,21 @@ def _collector(con, now) -> dict:
     gap = json.loads(meta["last_gap"]) if meta.get("last_gap") else None
     if gap and gap.get("at") and datetime.fromisoformat(gap["at"]) <= now:
         out["last_gap"] = gap
-    cutoff = (now - timedelta(hours=1)).isoformat()
-    n = con.execute("SELECT COUNT(*) c FROM prints WHERE observed_at >= ? "
-                    "AND observed_at <= ?", (cutoff, now.isoformat())).fetchone()["c"]
-    out["prints_per_min"] = q6(Decimal(n) / 60)
+    hour, day = ((now - timedelta(hours=h)).isoformat() for h in (1, 24))
+    # one pass over the window for both counts: prints has no observed_at index
+    row = con.execute("SELECT SUM(observed_at >= ?) h, COUNT(*) d FROM prints "
+                      "WHERE observed_at >= ? AND observed_at <= ?",
+                      (hour, day, now.isoformat())).fetchone()
+    out["prints_per_min"] = q6(Decimal(row["h"] or 0) / 60)
+    out["prints_24h"] = row["d"]
+    out["holdings_24h"] = con.execute(
+        "SELECT COUNT(*) c FROM holdings WHERE observed_at >= ? AND observed_at <= ?",
+        (day, now.isoformat())).fetchone()["c"]
+    # the first print by rowid: observed_at is insert-ordered, MIN() would scan
+    first = con.execute("SELECT observed_at FROM prints ORDER BY id LIMIT 1").fetchone()
+    secs = int((now - datetime.fromisoformat(first[0])).total_seconds()) if first else 0
+    if out["tape_bytes"] is not None and secs > 0:
+        out["bytes_per_day"] = int(Decimal(out["tape_bytes"]) * 86400 / secs)
     return out
 
 
@@ -215,6 +238,10 @@ def _collector(con, now) -> dict:
 
 def _n(v, dash="—") -> str:
     return dash if v is None else str(v)
+
+
+def _mb(b) -> str:
+    return "—" if b is None else f"{Decimal(b) / 1000000:.1f}"
 
 
 def _elite_line(elite: dict) -> str:
@@ -272,6 +299,9 @@ def whale_md(frame: dict) -> list[str]:
           f"{c['prints_per_min']} prints/min (1h)"
           + (f"; **gap** {c['last_gap'].get('secs')}s at {c['last_gap'].get('at')}"
              if c["last_gap"] else "; no recorded gap"),
+          # the file size and MB/day are live (see _collector): whale_line
+          f"- tape: {c['prints_24h']} prints/day, {c['holdings_24h']} holdings "
+          "rows/day (24h to as-of)",
           "",
           "| kill rule (§12) | state | numbers |", "|---|---|---|"]
     for r in frame["kill"]["rules"]:
@@ -325,7 +355,9 @@ def whale_line(frame: dict) -> str:
     primary = frame["roi"].get(frame["primary_variant"])
     roi = (f"{primary['mean']} [lb80 {primary['lb80']}, ub90 {primary['ub90']}] "
            f"n={primary['n']}/{primary['n_events']} events" if primary else "no sample")
+    c = frame["collector"]
     return (f"L14 whale: {frame['signals']['evaluated_24h']} signals/24h, "
             f"{frame['signals']['fired_24h']} fired; {frame['primary_variant']} "
-            f"ROI/$ {roi}; collector {_n(frame['collector']['status'])}"
+            f"ROI/$ {roi}; collector {_n(c['status'])}; tape {_mb(c['tape_bytes'])} MB, "
+            f"~{_mb(c['bytes_per_day'])} MB/day"
             + ("" if frame["tape_ok"] else "; TAPE UNAVAILABLE"))
