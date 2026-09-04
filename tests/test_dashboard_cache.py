@@ -148,3 +148,56 @@ def test_exception_in_compute_is_not_cached_and_releases_lock():
     second = dc.get_or_compute(("error-key",), 60, compute)
     assert len(calls) == 2
     assert second["v"] == 2
+
+
+def test_cap_is_hard_even_while_a_compute_is_in_flight():
+    # re-review of a0b94ff: the old per-key lock table skipped locked keys on
+    # eviction, so the cap was soft under concurrent refreshes. Now `_entries`
+    # is a hard LRU bound and single-flight uses a fixed stripe pool.
+    import threading
+    import arb.dashboard_cache as dc
+    started, release = threading.Event(), threading.Event()
+
+    def slow():
+        started.set()
+        release.wait(5)
+        return {"v": "slow"}
+
+    t = threading.Thread(target=lambda: dc.get_or_compute(("hard", "slow"), 3600, slow, max_entries=2))
+    t.start()
+    assert started.wait(5)
+    for i in range(6):                       # six inserts while the slow compute holds its stripe
+        dc.get_or_compute(("hard", i), 3600, lambda i=i: {"v": i}, max_entries=2)
+    with dc._lock:
+        assert sum(1 for k in dc._entries if k[0] == "hard") <= 2
+    release.set()
+    t.join(5)
+    with dc._lock:                           # the slow compute re-inserted itself, still capped
+        assert sum(1 for k in dc._entries if k[0] == "hard") <= 2
+    assert dc.get_or_compute(("hard", "slow"), 3600, lambda: {"v": "no"}, max_entries=2)["v"] == "slow"
+
+
+def test_single_flight_survives_eviction_of_the_key():
+    # the race the re-review demonstrated: eviction dropped a key's lock while a
+    # caller held a reference to it, and a rival minted a second lock -> two
+    # computes. With stripes, the second caller for the same key must wait.
+    import threading
+    import arb.dashboard_cache as dc
+    calls, started, release = [], threading.Event(), threading.Event()
+
+    def compute():
+        calls.append(1)
+        started.set()
+        release.wait(5)
+        return {"v": len(calls)}
+
+    key = ("sf", "same")
+    a = threading.Thread(target=lambda: dc.get_or_compute(key, 3600, compute, max_entries=1))
+    a.start()
+    assert started.wait(5)
+    dc.get_or_compute(("sf", "other"), 3600, lambda: {"v": 0}, max_entries=1)   # evicts anything else
+    b = threading.Thread(target=lambda: dc.get_or_compute(key, 3600, compute, max_entries=1))
+    b.start()
+    release.set()
+    a.join(5); b.join(5)
+    assert calls == [1], "the rival started a second compute for the same key"

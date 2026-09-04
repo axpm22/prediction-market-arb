@@ -17,9 +17,16 @@ page to display.
 `/api/whale/traders?wallet=` folds the caller-supplied wallet into the key,
 so the key space is NOT bounded by endpoint count — it's bounded by however
 many distinct wallets get looked up (review of 9e5951a). `_entries` is an
-LRU (`OrderedDict`, oldest-first); once it holds more than `max_entries`,
-inserting a new key evicts the least-recently-used one, dropping its
-`_locks` row along with it, so neither table outlives its usefulness.
+LRU (`OrderedDict`, oldest-first) with a HARD cap: once it holds more than
+`max_entries`, inserting a new key evicts the least-recently-used ones until
+it is back at the cap, in-flight or not (a compute still running simply
+re-inserts its key when it finishes). Single-flight locks are a fixed pool
+of `_STRIPES` locks indexed by `hash(key)` (re-review of a0b94ff): a
+per-key lock table that evicted its rows could drop a lock a caller already
+held a reference to and orphan two concurrent computes for one key; a
+fixed stripe pool is bounded by construction and can never be evicted from
+under anyone. Two different keys that share a stripe serialise — harmless
+for a monitor panel.
 """
 from __future__ import annotations
 
@@ -29,11 +36,16 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Callable
 
-_lock = threading.Lock()                          # guards the two tables below
+_STRIPES = 64                                     # fixed single-flight lock pool (see module doc)
+_lock = threading.Lock()                          # guards `_entries`
 _entries: "OrderedDict[tuple, tuple[float, dict]]" = OrderedDict()
                                                     # key -> (monotonic computed_at, payload)
                                                     # ordered oldest-used -> newest-used
-_locks: dict[tuple, threading.Lock] = {}           # key -> single-flight lock
+_stripes = [threading.Lock() for _ in range(_STRIPES)]
+
+
+def _stripe(key: tuple) -> threading.Lock:
+    return _stripes[hash(key) % _STRIPES]
 
 
 def _fresh(hit, ttl_secs: float, now: float):
@@ -47,20 +59,12 @@ def _fresh(hit, ttl_secs: float, now: float):
 
 def _evict_over_cap(max_entries: int) -> None:
     """Call with `_lock` held, after inserting into `_entries`. Drops
-    oldest-first until at the cap, skipping any key whose lock is currently
-    `.locked()` — that means a compute() for it is in flight elsewhere, and
-    dropping its lock would let a fresh caller start a second, concurrent
-    compute for the same key rather than joining the one running."""
-    if len(_entries) <= max_entries:
-        return
-    for stale_key in list(_entries.keys()):
-        if len(_entries) <= max_entries:
-            return
-        klock = _locks.get(stale_key)
-        if klock is not None and klock.locked():
-            continue
-        del _entries[stale_key]
-        _locks.pop(stale_key, None)
+    oldest-first until back at the cap — a hard bound. An evicted key whose
+    compute() is still in flight elsewhere loses nothing: that compute
+    re-inserts its result when it finishes, and its stripe lock still
+    serialises rivals for the same key."""
+    while len(_entries) > max_entries:
+        _entries.popitem(last=False)
 
 
 def get_or_compute(key: tuple, ttl_secs: float, compute: Callable[[], dict],
@@ -76,7 +80,7 @@ def get_or_compute(key: tuple, ttl_secs: float, compute: Callable[[], dict],
         if fresh is not None:
             _entries.move_to_end(key)
             return fresh
-        klock = _locks.setdefault(key, threading.Lock())
+    klock = _stripe(key)
     with klock:
         # a rival may have refreshed this key while we waited for klock
         now = time.monotonic()
