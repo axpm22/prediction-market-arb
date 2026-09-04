@@ -373,6 +373,11 @@ dashboard: { host: 127.0.0.1, port: 8722, pnl_days: 30, bench_stale_days: 7,
                                                  #   shown as stale, never as current
                                                  # refresh_secs: page poll interval; the panel
                                                  #   is a monitor, not a tick feed
+notify:                             # outbound webhook to the operator's OWN endpoint; never market data
+  enabled: false                    # flip true after pasting the URL; nothing posts while false
+  webhook_url: ""                   # JSON POST target; one JSON object per event (Slack/Discord adapters are the endpoint's concern)
+  min_interval_secs: 300            # per-event throttle
+  events: [daily_report, kill_rule_fired, lane_silent, supervisor_started, supervisor_stopped]
 max_lead_hours: 12                  # a covering pair flagged further than this before the
                                     #   event starts is REVIEW-only. Measured 2026-07-28:
                                     #   legs flagged >48h out have a median 24h volume of 3

@@ -232,7 +232,18 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
     if not acquire_lock():
         log.critical("another supervisor is running; refusing to double-run")
         return 1
+
+    def _notify(event: str, payload: dict | None = None) -> None:
+        if event not in cfg["notify"]["events"]:
+            return
+        try:
+            from arb.notify import post
+            post(cfg, event, payload or {})
+        except Exception as e:  # noqa: BLE001 — a notifier failure must never crash the supervisor
+            log.warning("notify %s failed: %s", event, e)
+
     log.info("supervisor up")
+    _notify("supervisor_started")
     # children inherit the supervisor's --db/--config, or data silently splits
     flags = (["--db", db] if db else []) + (["--config", config] if config else [])
     children: dict[str, subprocess.Popen] = {}
@@ -260,6 +271,7 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                     _terminate(proc, _cap(cfg, name))
                 for proc in scheduled:
                     _terminate(proc, _cap(cfg, "default"))
+                _notify("supervisor_stopped", {"reason": "stop-all"})
                 return 0
             now = time.monotonic()
             now_ny = datetime.now(NY)
@@ -319,6 +331,7 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                         log.critical("lane %s silent for %.0fs (%.2f h) — no "
                                      "poll rows and no heartbeat", lane, age,
                                      age / 3600)
+                        _notify("lane_silent", {"lane": lane, "age_secs": age})
                 except Exception as e:  # noqa: BLE001 — an alarm must never kill the loop
                     log.warning("stale-lane check failed: %s", e)
 
@@ -327,6 +340,7 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                     _terminate(proc, _cap(cfg, name))
                 for proc in scheduled:
                     _terminate(proc, _cap(cfg, "default"))
+                _notify("supervisor_stopped", {"reason": "once"})
                 return 0
             time.sleep(2)
     finally:
