@@ -48,6 +48,11 @@ def _fresh_bucket():
 def cfg():
     c = copy.deepcopy(load(ROOT / "config.yaml"))
     c["whale"]["min_score_lb"] = Decimal("-0.10")   # see the module docstring
+    # the exit bar moves with the qualification bar it is measured against:
+    # left at the shipped -0.01 every one of these whales sits below it, and a
+    # `confidence` exit would fire on the cycle after booking — which would make
+    # the flip and no-bid tests below pass without ever exercising a flip.
+    c["whale"]["exit"]["min_score_lb"] = Decimal("-0.20")
     return c
 
 
@@ -218,7 +223,7 @@ def test_a_second_cycle_on_the_same_prints_books_nothing(cfg, tmp_path):
     _run(cfg, store, con)
     res = _run(cfg, store, con, now=NOW + timedelta(seconds=60))
 
-    assert res["booked"] == 0
+    assert res["booked"] == 0 and res["exited"] == 0
     assert len(_bets(store)) == 2
     assert len(_events(store, "confirmed")) == 2
 
@@ -290,6 +295,22 @@ def test_the_cycle_never_backfills(cfg, tmp_path, monkeypatch):
         monkeypatch.setattr(whale_backfill, name,
                             lambda *a, **k: pytest.fail(f"{name} ran in the 60 s cycle"))
     _run(cfg, store, con)
+
+
+def test_a_held_market_is_priced_even_when_nothing_qualifies(cfg, tmp_path):
+    """§8: markouts attach because the lane writes quotes rows under the bet's
+    own key tuple EVERY cycle for a market it holds — including the cycles
+    where the prints that fired it have aged out of signal_window_secs."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+    later = NOW + timedelta(seconds=int(cfg["whale"]["signal_window_secs"]) + 60)
+    res = _run(cfg, store, con, now=later)
+
+    assert res["signals_evaluated"] == 0            # every print aged out
+    assert res["quotes_rows"] == 2                  # priced anyway: we hold it
+    rows = store.query("SELECT q.id FROM quotes q JOIN polls p ON p.id=q.poll_id "
+                       "WHERE p.kind='whale'")
+    assert len(rows) == 4                           # both tokens, both cycles
 
 
 # -------------------------------------------------------------------- exits
