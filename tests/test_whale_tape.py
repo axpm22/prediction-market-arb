@@ -1469,7 +1469,7 @@ def test_holdings_poll_persists_every_snapshot_row(tmp_path):
     res = whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW, get=get)
 
     assert res["wallets"] == 1 and res["rows"] == 2 and res["calls"] == 1
-    assert "positions?user=0xw0&limit=100" in get.urls[0]
+    assert "positions?user=0xw0&limit=500" in get.urls[0]
     rows = [dict(r) for r in con.execute("SELECT * FROM holdings ORDER BY asset")]
     assert [r["asset"] for r in rows] == ["tokno", "tokyes"]
     assert rows[1]["observed_at"] == NOW.isoformat()
