@@ -149,7 +149,13 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    seven minutes of calls (Task 3 acceptance measured 353 calls / 11 min).
 5. **Resolve.** For every `condition_id` with an unresolved whale position or
    an open WHALE bet whose `start_utc` is more than `whale.resolve_after_hours`
-   (4) in the past, read Gamma; persist `resolutions`.
+   (4) in the past, read Gamma; persist `resolutions`. The 60 s cycle covers
+   its own universe and open bets; the volume — every tape market with a
+   whale position and no `resolutions` row, including backfilled ones —
+   is swept by the `whale-backfill` process, FIFO by `start_utc`, bounded
+   per cycle by `whale.backfill.resolve_per_cycle`, until
+   `resolve_giveup_days` (final review 2026-09-04: without this sweep no
+   wallet could ever qualify).
 6. **Score.** `whale_score.scores(positions, resolutions, as_of=now, cfg)`.
 7. **Signal.** For each market with prints since the last cycle, evaluate
    V1/V2/V3. Persist every evaluation to `signals`, fired or suppressed with
@@ -419,17 +425,24 @@ Exit when any of:
 
 Exit price = best bid − taker fee, priced from a fresh `fetch_books`. No bid,
 or depth at the bid below `min_executable_usd`: no exit, annotation
-`exit-no-bid`, re-evaluated next cycle. An open WHALE bet for exit
+`exit-no-bid`, re-evaluated next cycle. A position that is still held (an
+open WHALE bet exists for the same `position_key`) is never booked again
+while it is open, whatever the tracker's lifetime bookkeeping says: the
+lane drops such candidates as `position-held` (final review 2026-09-04).
+An open WHALE bet for exit
 purposes is one with no `settled`/`void` event; the tracker's
 `lifetime_closed` means the flag left the feed, not that the position
-closed, and never stops exit evaluation (pinned 2026-09-04). The lane inserts the exit's
+closed, and never stops exit evaluation (pinned 2026-09-04); the dashboard's
+open-positions view uses the same definition. The lane inserts the exit's
 `settled` event directly through `store.insert`, never through
 `settle_bet`: that function's future-start guard rejects any settlement
 before the event starts, which is exactly when exits happen (Task 4
 finding). The tripwire exemption by `source` prefix stays as a second
 guard. A `confidence` exit records which
-whale, which hierarchy level, and which newly resolved position moved the
-score, because pooling means a loss in another sport can lower a whale's
+whale, which hierarchy level (its `n_bucket/n_sport/n_root` now vs at
+booking), and the size of the drop that moved the score (amended
+2026-09-04: the pure exit rule cannot name the resolved position; the
+wallet and level are the audit trail), because pooling means a loss in another sport can lower a whale's
 score on this market; that is the transfer model working as specified, and
 it must be auditable rather than silent. The exit is one append-only
 `bet_events` row: `kind='settled'`, `payload = {result: 'EXITED', source:
@@ -628,7 +641,7 @@ whale:
   min_print_usd: 200
   discovery_min_notional_usd: 1000
   backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50,
-              cadence_secs: 600 }     # own supervisor process; ~7 min of calls per cycle
+              cadence_secs: 600, resolve_per_cycle: 40 }   # own supervisor process; ~7 min of calls per cycle; resolution sweep bounded per cycle
   page_size: 10000                  # trades rows per call (10,000 verified 2026-09-03); paging stops on age, never on `start`
   max_offset: 10000                 # the feed 400s past this (observed 2026-09-04); beyond it we record a gap and move on
   taker_only: true                  # Task 1 probe 3: one row per fill; `false` returns every leg (2.2x rows)
