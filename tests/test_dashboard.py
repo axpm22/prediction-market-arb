@@ -591,6 +591,116 @@ def test_whale_mode_js_hides_the_arb_only_pieces_and_filters_positions():
     assert "b.kind === 'WHALE'" in draw[:draw.index("function ", 10)]
 
 
+def test_tail_errors_whale_mode_drops_disabled_venues_and_lanes(tmp_path):
+    """Fix pass on 5c9bbb5: the errors feed still showed sx/kalshi watch
+    failures and disabled-lane warnings (negrisk etc.) in whale mode. Drop
+    those; never drop arb.whale*/arb.supervisor lines, or an arb.watch line
+    about an enabled venue (polymarket, per config.yaml watch_venues)."""
+    import os
+
+    from arb.dashboard import _tail_errors
+    logdir = Path(os.environ["ARB_LOG_DIR"]) / "logs"
+    logdir.mkdir(parents=True, exist_ok=True)
+    (logdir / "scan.log").write_text(
+        "2026-09-05 00:01:00,000 WARNING arb.watch venue fetch failed: sx: 400 from https://x\n"
+        "2026-09-05 00:01:01,000 WARNING arb.negrisk something broke\n"
+        "2026-09-05 00:01:02,000 WARNING arb.whale wallet backfill slow\n"
+        "2026-09-05 00:01:03,000 WARNING arb.watch venue fetch failed: polymarket: 500 from https://y\n"
+        "2026-09-05 00:01:04,000 WARNING arb.supervisor child restart\n"
+        "2026-09-05 00:01:05,000 WARNING arb.kalshi pagination cap hit\n")
+
+    cfg = _cfg()
+    cfg["dashboard"]["mode"] = "whale"
+    whale = _tail_errors(cfg)
+    cfg_full = copy.deepcopy(cfg)
+    cfg_full["dashboard"]["mode"] = "full"
+    full = _tail_errors(cfg_full)
+
+    assert {e["source"] for e in whale} == {"arb.watch", "arb.whale", "arb.supervisor"}
+    assert {e["msg"] for e in whale if e["source"] == "arb.watch"} == \
+        {"venue fetch failed: polymarket: 500 from https://y"}
+    assert {e["source"] for e in full} == \
+        {"arb.watch", "arb.negrisk", "arb.whale", "arb.supervisor", "arb.kalshi"}
+
+
+def test_lanes_and_venues_stay_visible_in_whale_mode_but_scoped(tmp_path):
+    """dashboard.mode: whale keeps #lanes (all lanes, disabled ones labeled)
+    and #venues (watch_venues only) rather than hiding either."""
+    cfg = _cfg()
+    cfg["dashboard"]["mode"] = "whale"
+    store = Store(tmp_path / "t.sqlite")
+    now = datetime.now(timezone.utc)
+    store.insert("polls", {"started_at": now.isoformat(), "kind": "negrisk",
+                           "n_quotes": 0, "n_opps": 0})
+    poll_id = store.insert("polls", {"started_at": now.isoformat(), "kind": "watch",
+                                     "n_quotes": 0, "n_opps": 0})
+    for venue in ("polymarket", "sx", "kalshi"):
+        store.insert("poll_venues", {"poll_id": poll_id, "venue": venue, "ok": 1,
+                                     "n_quotes": 0, "latency_ms": 10})
+
+    from arb.dashboard import state
+    s = state(cfg, store)
+
+    lanes = {ln["name"]: ln for ln in s["lanes"]}
+    assert lanes["watch"]["enabled"] is True
+    assert lanes["negrisk"]["enabled"] is False        # off today, history still shown
+    assert {v["venue"] for v in s["venues"]} == {"polymarket"}   # watch_venues only
+
+    cfg_full = copy.deepcopy(cfg)
+    cfg_full["dashboard"]["mode"] = "full"
+    s_full = state(cfg_full, store)
+    assert {v["venue"] for v in s_full["venues"]} == {"polymarket", "sx", "kalshi"}
+
+
+def test_lanes_table_labels_disabled_lanes_in_js():
+    html = (ROOT / "arb" / "dashboard.html").read_text()
+    script = html.split("<script>")[1]
+    lanes_render = script[script.index("$('lanes').innerHTML"):
+                          script.index("$('lanes').innerHTML") + 400]
+    assert "ln.enabled" in lanes_render
+
+
+def test_whale_mode_hides_the_remaining_arb_only_sections():
+    """Fix pass on 5c9bbb5: schedule/classes/the duplicate open-positions
+    table/left-on-the-table/capacity/recent-flags/cadence are arb-only and
+    still showed in whale mode; #positions already carries WHALE rows so
+    #open is hidden rather than filtered."""
+    html = (ROOT / "arb" / "dashboard.html").read_text()
+    script = html.split("<script>")[1]
+    apply_mode = script[script.index("function applyMode("):script.index("applyMode();")]
+    assert "closest('section').hidden = true" in apply_mode
+    for el_id in ("schedule", "classes", "open", "lot", "capacity", "flags", "cadence"):
+        assert f"'{el_id}'" in apply_mode, el_id
+    # #lanes/#venues stay visible (labeled/filtered instead of hidden)
+    assert "'lanes'" not in apply_mode and "'venues'" not in apply_mode
+
+
+def test_exit_rows_walk_their_own_root_set_not_rois():
+    """drawWhale's exitRows used to reuse `roots` (built from f.roi), so an
+    exits-only root absent from f.roi silently dropped its exit row."""
+    html = (ROOT / "arb" / "dashboard.html").read_text()
+    script = html.split("<script>")[1]
+    draw = script[script.index("function drawWhale("):script.index("function drawTraders(")]
+    exit_decl = draw[draw.index("const exitRows"):draw.index("const exitRows") + 200]
+    assert "rootsFirst(f.exits" in exit_decl
+
+
+def test_whale_mode_helpers_moved_to_dashboard_mode_and_dashboard_py_stays_lean():
+    """5c9bbb5 fix pass finding: dashboard.py carried the whale-mode layout
+    helpers alongside the HTTP handler. They move to arb/dashboard_mode.py;
+    dashboard.py calls in thin."""
+    from arb import dashboard, dashboard_mode
+    dashboard_lines = len(Path("arb/dashboard.py").read_text().splitlines())
+    assert dashboard_lines < 338            # was 338 before the move
+    assert len(Path("arb/dashboard_mode.py").read_text().splitlines()) <= 150
+    for name in ("_TITLES", "_WHALE_FRONT", "_whale_first", "_extract_marked"):
+        assert not hasattr(dashboard, name)
+    assert hasattr(dashboard_mode, "TITLES")
+    assert hasattr(dashboard_mode, "WHALE_FRONT")
+    assert hasattr(dashboard_mode, "whale_first")
+    assert hasattr(dashboard_mode, "extract_marked")
+
+
 def test_the_page_draws_its_own_charts_and_loads_nothing_remote():
     html = (ROOT / "arb" / "dashboard.html").read_text()
     assert "<svg" in html and "polyline" in html

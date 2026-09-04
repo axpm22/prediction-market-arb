@@ -530,7 +530,8 @@ def test_stale_lanes_counts_a_heartbeat_as_liveness(cfg, tmp_path):
 def test_lane_status_lines_leads_with_whale_and_labels_off_lanes(cfg):
     """`arb status`/heartbeat summaries (2026-09-04 operator: PM whales only,
     for now): whale lanes sort first, and a lane the supervisor has switched
-    off reads as 'off (whale-only mode)' instead of silently vanishing."""
+    off reads as 'off (not in supervisor.processes)' instead of silently
+    vanishing (the reason is not always whale-only mode)."""
     from arb.heartbeat import lane_status_lines
     cfg = copy.deepcopy(cfg)
     cfg["supervisor"]["processes"] = {
@@ -543,8 +544,8 @@ def test_lane_status_lines_leads_with_whale_and_labels_off_lanes(cfg):
     assert names.index("whale") < names.index("watch")
     assert names.index("whale-backfill") < names.index("watch")
     status = dict(lines)
-    assert status["live"] == "off (whale-only mode)"
-    assert status["negrisk"] == "off (whale-only mode)"
+    assert status["live"] == "off (not in supervisor.processes)"
+    assert status["negrisk"] == "off (not in supervisor.processes)"
     assert status["watch"] == "no beat yet"
 
 
@@ -573,7 +574,7 @@ def test_cmd_status_leads_with_whale_lanes(cfg, tmp_path, capsys):
 
     out = capsys.readouterr().out
     assert out.index("whale:") < out.index("watch:")
-    assert "off (whale-only mode)" in out
+    assert "off (not in supervisor.processes)" in out
 
 
 def test_cadence_windows_default_to_a_no_op(cfg):

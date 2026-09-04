@@ -368,7 +368,8 @@ async function refresh(){
     };
     $('lanes').innerHTML = table(
       [{t:'lane'},{t:'every',r:1},{t:'last poll',r:1},{t:'polls today',r:1},{t:'quotes',r:1}],
-      (s.lanes||[]).map(ln=>[{t:ln.name},{t:`${ln.interval_secs}s`,r:1},
+      (s.lanes||[]).map(ln=>[{t:ln.name+(ln.enabled?'':' (disabled)'),c:ln.enabled?'':'lane-review'},
+        {t:`${ln.interval_secs}s`,r:1},
         {t:ln.last_poll?ago(ln.last_poll):'never today',r:1,c:gapCls(ln)},
         {t:fmt(ln.polls_today),r:1},{t:fmt(ln.quotes_today),r:1}]),
       'no polls persisted yet today');
@@ -515,8 +516,10 @@ function drawWhale(w){
   const roiRows = roots.flatMap(root => Object.keys(f.roi[root]).sort().map(v => ({
     root, v, cell: f.roi[root][v], bets: (f.bets[root]||{})[v] || 0,
     primary: root === f.primary_root && v === f.primary_variant})));
-  const exitRows = roots.flatMap(root => Object.entries(f.exits[root]||{})
-    .map(([reason, cell]) => ({root, reason, cell})));
+  // exits walk THEIR OWN root set, not roi's — an exits-only root (a lane
+  // whose bets all exited before ever settling into roi) must still render.
+  const exitRows = rootsFirst(f.exits, f.primary_root).flatMap(root =>
+    Object.entries(f.exits[root]||{}).map(([reason, cell]) => ({root, reason, cell})));
   $('whale').innerHTML =
     `<div class="hint">${f.tape_ok?'':'<b>tape unavailable</b> — '}` +
     `wallets ${f.wallets.tracked} tracked / ${f.wallets.backfilled} backfilled / ` +
@@ -624,6 +627,13 @@ function applyMode(){
   $('gates').hidden = true;
   $('pnl').closest('section').hidden = true;
   $('bench').closest('section').hidden = true;
+  // arb-only sections the server didn't move up top (fix pass on 5c9bbb5):
+  // schedule/ledger/the duplicate open-positions table (#positions already
+  // shows WHALE rows)/left-on-the-table/capacity/recent-flags/cadence.
+  // #lanes and #venues stay — see the lane-enabled label and venues filter
+  // in drawState/state() respectively.
+  for(const id of ['schedule','classes','open','lot','capacity','flags','cadence'])
+    $(id).closest('section').hidden = true;
 }
 applyMode();
 refresh();

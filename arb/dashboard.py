@@ -5,63 +5,34 @@ log (forensics greps must stay clean)."""
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from arb import dashboard_mode
 from arb.logutil import get_logger
 
 log = get_logger("arb.dashboard", "logs/scan.log")
 PAGE = Path(__file__).parent / "dashboard.html"
 
-# dashboard.mode (2026-09-04 operator: PM whales only, for now — SCHEMA/
-# _check_invariants in arb/config.py restrict the value to these two keys).
-_TITLES = {"whale": "Whale lane — instrument panel",
-          "full": "ArbitrageModel — instrument panel"}
-# blocks moved to the top, in order, when mode is whale — everything else
-# (including the arb-only pieces the page's own templated MODE hides) keeps
-# its original relative position.
-_WHALE_FRONT = ("whale1", "whale2", "positions", "lamps", "errsec")
-
-
-def _extract_marked(html: str, name: str) -> tuple[str, str]:
-    """Pull one `<!--WM:name-->...<!--/WM-->` block out of dashboard.html —
-    returns (inner_html, html_with_the_marked_region_removed). Raises if the
-    marker is missing rather than silently dropping a section (rule 3 style)."""
-    m = re.search(rf"<!--WM:{name}-->(.*?)<!--/WM-->", html, re.DOTALL)
-    if not m:
-        raise ValueError(f"dashboard.html: missing marker WM:{name}")
-    return m.group(1).strip(), html[:m.start()] + html[m.end():]
-
-
-def _whale_first(html: str) -> str:
-    """Cut-and-splice the five marked blocks to right after `<header>`. A
-    second HTML file would double-maintain the whole page; `dashboard.mode:
-    full` never calls this function, so today's layout can never regress."""
-    blocks = []
-    for name in _WHALE_FRONT:
-        block, html = _extract_marked(html, name)
-        blocks.append(block)
-    return html.replace("</header>", "</header>\n" + "\n".join(blocks), 1)
-
 
 def render_page(cfg) -> bytes:
     """The `/` page: REFRESH_SECS/MODE/TITLE templated in, then — mode
-    whale only — the front-of-page reorder."""
+    whale only — the front-of-page reorder (arb/dashboard_mode.py)."""
     mode = str(cfg["dashboard"]["mode"])
     html = (PAGE.read_text()
            .replace("{{REFRESH_SECS}}", str(int(cfg["dashboard"]["refresh_secs"])))
            .replace("{{DASHBOARD_MODE}}", mode)
-           .replace("{{DASHBOARD_TITLE}}", _TITLES[mode]))
+           .replace("{{DASHBOARD_TITLE}}", dashboard_mode.TITLES[mode]))
     if mode == "whale":
-        html = _whale_first(html)
+        html = dashboard_mode.whale_first(html)
     return html.encode()
 
 
-def _tail_errors(limit: int = 30) -> list[dict]:
-    """Last WARNING/ERROR lines from today's live logs, newest first. Reads
-    only the final 64 KiB of each file (scan.log runs to MBs). Honors
+def _tail_errors(cfg, limit: int = 30) -> list[dict]:
+    """Last WARNING/ERROR lines from today's live logs, newest first — whale
+    mode drops lines about a disabled venue/lane (arb/dashboard_mode.py).
+    Reads only the final 64 KiB of each file (scan.log runs to MBs). Honors
     ARB_LOG_DIR like logutil so tests never touch production logs."""
     import os
     root = Path(os.environ.get("ARB_LOG_DIR") or ".")
@@ -86,19 +57,24 @@ def _tail_errors(limit: int = 30) -> list[dict]:
                 out.append({"at": at, "level": parts[2], "source": parts[3],
                             "msg": parts[4][:300], "file": name})
     out.sort(key=lambda e: e["at"], reverse=True)
-    return out[:limit]
+    return dashboard_mode.filter_errors(cfg, out)[:limit]
 
 
 def _lane_timing(cfg, store, day_start: str) -> list[dict]:
-    """Per-lane cadence: configured interval vs last poll actually persisted."""
+    """Per-lane cadence: configured interval vs last poll actually persisted.
+    `enabled` labels a lane supervisor.processes has switched off — its
+    history can still show (e.g. after a mode change) without pretending
+    it's running today."""
     from arb.heartbeat import lane_interval
     last = {r["kind"]: dict(r) for r in store.query(
         """SELECT kind, MAX(started_at) last_poll, COUNT(*) polls_today,
                   COALESCE(SUM(n_quotes),0) quotes_today
            FROM polls WHERE started_at >= ? GROUP BY kind""", (day_start,))}
-    lanes = [k for k, v in cfg["supervisor"]["processes"].items() if v]
+    procs = cfg["supervisor"]["processes"]
+    lanes = [k for k, v in procs.items() if v]
     lanes += [k for k in last if k not in lanes]
-    return [{"name": k, "interval_secs": lane_interval(cfg, k),
+    return [{"name": k, "enabled": bool(procs.get(k, False)),
+             "interval_secs": lane_interval(cfg, k),
              "last_poll": (last.get(k) or {}).get("last_poll"),
              "polls_today": (last.get(k) or {}).get("polls_today", 0),
              "quotes_today": (last.get(k) or {}).get("quotes_today", 0)}
@@ -187,6 +163,8 @@ def state(cfg, store) -> dict:
         # Python ISO bound, never datetime('now'): the 'T' separator makes the
         # SQLite form compare by date only (the invariants.py trap)
         ((now - timedelta(hours=2)).isoformat(),))
+    if str(cfg["dashboard"]["mode"]) == "whale":
+        venues = [v for v in venues if v["venue"] in cfg["watch_venues"]]
     recent_flags = store.query(
         """SELECT o.kind, o.event_key, o.edge, o.status, o.notes, p.started_at
            FROM opportunities o JOIN polls p ON p.id = o.poll_id
@@ -196,7 +174,7 @@ def state(cfg, store) -> dict:
         "generated_at": now.isoformat(timespec="seconds"),
         "day": day,
         "lanes": _lane_timing(cfg, store, start),
-        "errors": _tail_errors(),
+        "errors": _tail_errors(cfg),
         "schedule": _daily_schedule(cfg, now),
         "supervisor": "ALIVE" if (fresh or lock_alive) else ("STALE" if beats else "DEAD"),
         "beats": beats,

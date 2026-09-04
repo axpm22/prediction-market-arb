@@ -216,14 +216,16 @@ def lane_status_lines(cfg, beats) -> list[tuple[str, str]]:
     `arb status`/dashboard heartbeat summaries — whale lanes first (2026-09-04
     operator decision: PM whales only, for now; `sorted` is stable, so ties
     keep `supervisor.processes`' own order). A disabled lane reads as
-    'off (whale-only mode)' rather than silently vanishing from the printout."""
+    'off (not in supervisor.processes)' rather than silently vanishing from
+    the printout — true whatever the reason a lane got switched off, not
+    just today's whale-only decision."""
     beat_by = {b["process"]: b for b in beats}
     order = sorted(cfg["supervisor"]["processes"].items(),
                    key=lambda kv: not kv[0].startswith("whale"))
     out = []
     for name, enabled in order:
         if not enabled:
-            out.append((name, "off (whale-only mode)"))
+            out.append((name, "off (not in supervisor.processes)"))
             continue
         b = beat_by.get(name)
         out.append((name, f"last beat {b['beat_at']} sha={b['head_sha']}"
