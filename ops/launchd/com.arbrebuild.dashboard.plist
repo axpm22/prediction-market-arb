@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Read-only instrument panel on 127.0.0.1:8722 (config `dashboard:`). Install:
+         cp ops/launchd/com.arbrebuild.dashboard.plist ~/Library/LaunchAgents/
+         launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.arbrebuild.dashboard.plist
+       Stop: launchctl bootout gui/$(id -u)/com.arbrebuild.dashboard -->
+  <key>Label</key><string>com.arbrebuild.dashboard</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/albanm/Claude/Projects/ArbRebuild/.venv/bin/python</string>
+    <string>-m</string><string>arb</string><string>dashboard</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/albanm/Claude/Projects/ArbRebuild</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/albanm/Claude/Projects/ArbRebuild/.venv/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>PYTHONUNBUFFERED</key><string>1</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardOutPath</key><string>/Users/albanm/Claude/Projects/ArbRebuild/logs/launchd-dashboard.log</string>
+  <key>StandardErrorPath</key><string>/Users/albanm/Claude/Projects/ArbRebuild/logs/launchd-dashboard.log</string>
+</dict>
+</plist>

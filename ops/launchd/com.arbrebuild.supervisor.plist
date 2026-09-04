@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- README "Run": the ONLY sanctioned way to run loops is `caffeinate -i python -m arb supervisor`
+       from a committed HEAD after a green pytest (rule 13). KeepAlive relaunches it if it exits;
+       a second copy refuses to double-run (.locks/). Install:
+         cp ops/launchd/com.arbrebuild.supervisor.plist ~/Library/LaunchAgents/
+         launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.arbrebuild.supervisor.plist
+       Stop for good: launchctl bootout gui/$(id -u)/com.arbrebuild.supervisor
+       Pause loops without unloading: touch data/stop-all (the supervisor exits; KeepAlive restarts
+       it, and it idles until the flag is removed). -->
+  <key>Label</key><string>com.arbrebuild.supervisor</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/caffeinate</string><string>-i</string>
+    <string>/Users/albanm/Claude/Projects/ArbRebuild/.venv/bin/python</string>
+    <string>-m</string><string>arb</string><string>supervisor</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/albanm/Claude/Projects/ArbRebuild</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/albanm/Claude/Projects/ArbRebuild/.venv/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>PYTHONUNBUFFERED</key><string>1</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardOutPath</key><string>/Users/albanm/Claude/Projects/ArbRebuild/logs/launchd-supervisor.log</string>
+  <key>StandardErrorPath</key><string>/Users/albanm/Claude/Projects/ArbRebuild/logs/launchd-supervisor.log</string>
+</dict>
+</plist>
