@@ -640,7 +640,7 @@ whale:
   max_print_age_secs: 300
   min_print_usd: 200
   discovery_min_notional_usd: 1000
-  backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50,
+  backfill: { wallets_per_cycle: 3, pages_per_wallet: 40, page_size: 50,   # 5 -> 3 amended 2026-09-04: the child twice exceeded its 900 s cap
               cadence_secs: 600, resolve_per_cycle: 40 }   # own supervisor process; ~7 min of calls per cycle; resolution sweep bounded per cycle
   page_size: 10000                  # trades rows per call (10,000 verified 2026-09-03); paging stops on age, never on `start`
   max_offset: 10000                 # the feed 400s past this (observed 2026-09-04); beyond it we record a gap and move on

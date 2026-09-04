@@ -524,7 +524,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   prints are still stored and scored regardless
   min_print_usd: 200                  # prints smaller than this are noise, not signal
   discovery_min_notional_usd: 1000    # minimum notional for a wallet to enter whale discovery
-  backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50,
+  backfill: { wallets_per_cycle: 3, pages_per_wallet: 40, page_size: 50,
               cadence_secs: 600, resolve_per_cycle: 40 }
                                       # per-cycle backfill budget for newly discovered wallets.
                                       #   cadence_secs is the `whale-backfill` process's own
