@@ -368,4 +368,30 @@ Cycle order as spec §5 steps 1–9. Hygiene is applied by the lane, not by `sco
 
 ## Result
 
-(appended after Task 11 with measured numbers)
+### Implementation status (2026-09-04, controller)
+
+Tasks 1–10 and 12 are implemented on branch `l14-whale-lane` (56 commits over
+`f56b205`, 71 files, suite 671 green on the day's clock), each through one to
+four task-scoped review rounds with every Critical/Important finding fixed;
+a final whole-branch review follows. Task 0 (restart the instrument, decide
+the data-API terms-of-use question) and Task 11 (enable the two supervisor
+processes in their own commit, day-7 throughput report, day-14 `min_points`
+calibration amendment) are operator steps and have not run. Both whale
+supervisor processes default to `false`.
+
+Live facts learned on the way, all dated in `data/verified_facts.md`: the
+global trades feed returns 10,000 rows per call and 400s past `offset`
+10,000 (the collector records a gap instead of wedging); Gamma batches only
+through the repeated `condition_ids` parameter; resolved markets are
+reachable with `closed=true`; `closed-positions` omits held-to-zero losers,
+so backfill uses `/activity`; `takerOnly=false` inflates rows 2.2×. One
+`arb whale --once` acceptance cycle ran (2026-09-04 00:17Z, 8 markets, no
+qualifying whale, nothing booked). The dashboard was verified on the live
+ledger (all sections, no console errors).
+
+Known ceilings for the week-one report: the 60 s cycle rebuilds positions
+and hygiene over the whole tape (a per-wallet incremental cache is the
+upgrade path before the 120 s child cap bites); held bets are priced every
+cycle until settlement; `/api/state` takes ~41 s on the 37 GB ledger.
+
+(measured numbers appended after Task 11)
