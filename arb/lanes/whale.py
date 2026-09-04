@@ -24,8 +24,8 @@ import time
 from datetime import datetime
 from decimal import Decimal
 
-from arb import whale_backfill, whale_exit, whale_holdings, whale_resolve
-from arb import whale_score, whale_signal, whale_tape, whale_universe
+from arb import whale_backfill, whale_dominance, whale_exit, whale_holdings
+from arb import whale_resolve, whale_score, whale_signal, whale_tape, whale_universe
 from arb.lanes.whale_book import (_bet_ctx, _event_key, _fetch_books,
                                   _from_prints, _persist_signal, _tape_market,
                                   _touch, _zombied, best_bid, candidate,
@@ -190,8 +190,11 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
             m0 = rates.get(whale_score.root_of(m.sport, m.market_type),
                            w["score"]["base_rate_default"])
             touch = _touch(books, tokens, cid)
-            for sig in whale_signal.evaluate(market, open_pos, lookup, touch,
-                                             now, cfg, m0, ranked):
+            # V6's denominator: the market's own 24h volume, off the same
+            # watch rows the zombie guard below reads (§7, 2026-09-04).
+            for sig in whale_signal.evaluate(
+                    market, open_pos, lookup, touch, now, cfg, m0, ranked,
+                    whale_dominance.market_volume(volumes, tokens, cid)):
                 token = tokens.get((cid, sig.side))
                 sig = _zombied(cfg, sig, volumes.get(f"{cid}:{token}"))
                 signal_id = _persist_signal(con, sig, cid, now)
@@ -231,7 +234,7 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     # 9: exits, on the books this cycle already fetched.
     for bet in bets:
         _exit(cfg, store, con, bet, ctxs[bet["id"]], open_pos, lookup, books,
-              venue_ok, now, res, ranked)
+              venue_ok, now, res, ranked, tokens, volumes)
 
     # collector health for the daily report (§12): `polls` has no column for a
     # cycle's status/rows/bad_rows and rule 9 forbids inventing one, so the
@@ -275,14 +278,19 @@ def _persist(cfg, store, rows, cands, on_table, venue_ok, latency_ms, now) -> in
 
 
 def _exit(cfg, store, con, bet, ctx, open_pos, lookup, books, venue_ok, now, res,
-          ranked) -> None:
+          ranked, tokens, volumes) -> None:
     """§9 for one open bet. `exit_reason` returns None post-start (a bet is
-    held to resolution then), so there is nothing extra to re-check here."""
+    held to resolution then), so there is nothing extra to re-check here. A V6
+    bet is re-read against THIS cycle's market — the books just fetched and the
+    volume the signals above used (§7 V6, 2026-09-04)."""
     if ctx is None:
         return
+    cid = ctx["condition_id"]
     decision = whale_exit.exit_reason(
         ctx, open_pos, lookup, now, cfg, ranked,
-        holdings=whale_holdings.for_bet(cfg, con, ctx, now))
+        holdings=whale_holdings.for_bet(cfg, con, ctx, now),
+        ctx={"volume": whale_dominance.market_volume(volumes, tokens, cid),
+             "ask": {s: t.ask for s, t in _touch(books, tokens, cid).items()}})
     if decision is None:
         return
     bid, depth = best_bid(books.get(ctx["token"]))

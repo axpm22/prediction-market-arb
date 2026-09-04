@@ -409,7 +409,7 @@ def test_whale_panel_on_the_task_8_fixture_tape(whale_cfg, tmp_path):
     # the fixture's prints are $500 notional, below discovery_min_notional_usd,
     # so no wallet is TRACKED — they are still scored and still qualify
     assert panel["wallets"]["tracked"] == 0
-    assert panel["signals"]["evaluated_24h"] == 4        # V1, V2, V3, V4
+    assert panel["signals"]["evaluated_24h"] == 5        # V1, V2, V3, V4, V6
     assert panel["collector"]["status"] == "ok" and panel["collector"]["rows"] == 3
     assert panel["qualifying"]["n"] == 3
 
@@ -427,7 +427,8 @@ def test_api_whale_and_positions_and_lanes_are_json_over_http(whale_cfg, tmp_pat
         assert whale["tape_ok"] is True and whale["collector"]["rows"] == 3
         assert len(whale["kill"]["rules"]) == 4
         rows = _get(base, "/api/positions")["positions"]
-        assert {r["variant"] for r in rows} == {"V1/flat", "V1/conf"}
+        assert {r["variant"] for r in rows} == {"V1/flat", "V1/conf",
+                                                "V6/flat", "V6/conf"}
         assert _get(base, "/api/lanes")["lanes"] == []
     finally:
         httpd.shutdown()

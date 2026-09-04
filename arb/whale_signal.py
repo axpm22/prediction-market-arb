@@ -18,10 +18,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from statistics import median
 
+from arb import whale_dominance
 from arb.models import q6
 from arb.whale_merge import d, merge_windows, qualifying, ts
 
-VARIANTS = ("V1", "V2", "V3", "V4")
+VARIANTS = ("V1", "V2", "V3", "V4", "V6")
 YES, NO = 0, 1
 
 
@@ -57,18 +58,24 @@ class Signal:
 
 # -------------------------------------------------------------------- points
 
-def point_of(variant, whale, cfg, ranked=frozenset()) -> Decimal:
+def point_of(variant, whale, cfg, ranked=frozenset(), ctx=None) -> Decimal:
     """Spec §7's variant table for one whale dict (`lb`, `open_notional`).
 
     `ranked` is the latest leaderboard snapshot's wallets (§7, amended
     2026-09-04). V4 is a FILTER on top of the same qualification bar every
     other variant uses, never a score input: a whale is only in `whales` at
     all because `qualifying` cleared it on our own realized-edge scores, and
-    rank then decides whether it carries its one vote."""
+    rank then decides whether it carries its one vote.
+
+    `ctx` is V6's market context (`volume`, `now_ts`, `ask` per side, all
+    optional — arb/whale_dominance.py) and is ignored by every other
+    variant."""
     if variant == "V1":
         return Decimal(1)
     if variant == "V4":
         return Decimal(1) if whale["wallet"] in ranked else Decimal(0)
+    if variant == "V6":
+        return whale_dominance.point(whale, cfg, ctx)
     excess = d(whale["lb"]) - d(cfg["whale"]["min_score_lb"])
     if variant == "V2":
         return q6(excess)
@@ -77,11 +84,11 @@ def point_of(variant, whale, cfg, ranked=frozenset()) -> Decimal:
     return q6(excess * weight)
 
 
-def points(variant, whales_on_side, cfg, ranked=frozenset()) -> Decimal:
+def points(variant, whales_on_side, cfg, ranked=frozenset(), ctx=None) -> Decimal:
     """One side's total. Sybil-dropped whales contribute nothing, so this
     agrees with `Signal.points_yes/points_no` — but the caller must hand in ONE
     side: `Signal.whales` carries both, each with its own `side`."""
-    return q6(sum((point_of(variant, w, cfg, ranked) for w in whales_on_side
+    return q6(sum((point_of(variant, w, cfg, ranked, ctx) for w in whales_on_side
                    if not w.get("sybil_dropped")), Decimal(0)))
 
 
@@ -126,7 +133,7 @@ def sybil(whales, gap) -> None:
             x["sybil_dropped"] = x is not keep
 
 
-def tally(variant, whales, cfg, ranked=frozenset()) -> tuple[dict, dict]:
+def tally(variant, whales, cfg, ranked=frozenset(), ctx=None) -> tuple[dict, dict]:
     """Side split -> sybil collapse -> points -> per-side totals: the one
     computation `evaluate` and `exit_reason` both run. `whales` is a
     `qualifying` list carrying both sides; the returned `scored` rows are
@@ -137,7 +144,7 @@ def tally(variant, whales, cfg, ranked=frozenset()) -> tuple[dict, dict]:
         side = [x for x in whales if x["side"] == s]
         sybil(side, gap)
         scored[s] = [dict(x, points=(Decimal(0) if x["sybil_dropped"]
-                                     else point_of(variant, x, cfg, ranked)))
+                                     else point_of(variant, x, cfg, ranked, ctx)))
                      for x in side]
     return ({s: q6(sum((x["points"] for x in ws), Decimal(0)))
              for s, ws in scored.items()}, scored)
@@ -146,7 +153,7 @@ def tally(variant, whales, cfg, ranked=frozenset()) -> tuple[dict, dict]:
 # ------------------------------------------------------- holders (§7 item 1b)
 
 def holders_share(variant, condition_id, open_positions, score_lookup, side,
-                  now, cfg, ranked=frozenset()) -> tuple:
+                  now, cfg, ranked=frozenset(), ctx=None) -> tuple:
     """(`side`'s share, its points, both sides' points) over the whales still
     HOLDING this market — `qualifying(..., fresh_only=False)`, every qualifying
     wallet's merged net pregame position whatever the age of the print that
@@ -159,7 +166,7 @@ def holders_share(variant, condition_id, open_positions, score_lookup, side,
     """
     holding = qualifying(condition_id, open_positions, score_lookup, now, cfg,
                          fresh_only=False)
-    by_side, _ = tally(variant, holding, cfg, ranked)
+    by_side, _ = tally(variant, holding, cfg, ranked, ctx)
     total = by_side[YES] + by_side[NO]
     return ((q6(by_side[side] / total) if total > 0 else None),
             by_side[side], total)
@@ -168,22 +175,26 @@ def holders_share(variant, condition_id, open_positions, score_lookup, side,
 # ------------------------------------------------------------------ evaluate
 
 def evaluate(market, open_positions, score_lookup, touch, now, cfg, m0,
-             ranked=frozenset()) -> list[Signal]:
-    """The four pre-registered variants per market (§7; V4 added 2026-09-04).
-    Empty when no whale qualifies on either side — nothing to persist, nothing
-    left on the table. `ranked` is V4's leaderboard filter and is ignored by
-    every other variant."""
+             ranked=frozenset(), volume=None) -> list[Signal]:
+    """The pre-registered variants per market (§7; V4 added 2026-09-04, V6
+    2026-09-04). Empty when no whale qualifies on either side — nothing to
+    persist, nothing left on the table. `ranked` is V4's leaderboard filter,
+    `volume` the market's own 24h venue volume for V6's denominator (None =
+    unknown, read as `dominance.min_volume_usd`); each is ignored by every
+    other variant."""
     whales = qualifying(market["condition_id"], open_positions, score_lookup, now, cfg)
     if not whales:
         return []
+    ctx = {"volume": volume, "now_ts": ts(now),
+           "ask": {s: t.ask for s, t in touch.items()}}
     return [_signal(v, market, whales, open_positions, score_lookup, touch,
-                    now, cfg, m0, ranked) for v in VARIANTS]
+                    now, cfg, m0, ranked, ctx) for v in VARIANTS]
 
 
 def _signal(variant, market, whales, open_positions, score_lookup, touch, now,
-            cfg, m0, ranked) -> Signal:
+            cfg, m0, ranked, ctx=None) -> Signal:
     w, f = cfg["whale"], cfg["whale"]["fire"]
-    total, scored = tally(variant, whales, cfg, ranked)
+    total, scored = tally(variant, whales, cfg, ranked, ctx)
     side = YES if total[YES] >= total[NO] else NO      # a tie fails `ratio` below
     denom = total[YES] + total[NO]
     ratio = q6(total[side] / denom) if denom > 0 else Decimal(0)
@@ -203,7 +214,7 @@ def _signal(variant, market, whales, open_positions, score_lookup, touch, now,
     # agree. Always computed, so the share is on every row for the report even
     # when an earlier gate is the one reported.
     held, _, _ = holders_share(variant, market["condition_id"], open_positions,
-                               score_lookup, side, now, cfg, ranked)
+                               score_lookup, side, now, cfg, ranked, ctx)
 
     if ratio < d(f["ratio"]):
         reason = "ratio"

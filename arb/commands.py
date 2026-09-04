@@ -1051,7 +1051,8 @@ def cmd_whale_score(cfg, store, args):
     # every key the loader requires, including the literal ones: pasting a line
     # that omitted V4 would drop a required key and fail startup.
     print(f"    min_points: {{ V1: {fire['min_points']['V1']}, V2: {out['V2']}, "
-          f"V3: {out['V3']}, V4: {fire['min_points']['V4']} }}")
+          f"V3: {out['V3']}, V4: {fire['min_points']['V4']}, "
+          f"V6: {fire['min_points']['V6']} }}")
     return 0
 
 

@@ -69,10 +69,10 @@ MARKET = {"condition_id": CID, "start_utc": START.isoformat(),
 
 
 def _ev(cfg, positions, scores, touch=None, now=NOW, market=None, m0=M0,
-        ranked=frozenset()):
+        ranked=frozenset(), volume=None):
     sigs = whale_signal.evaluate(market or MARKET, positions, _lookup(scores),
                                  _touch() if touch is None else touch,
-                                 now, cfg, m0, ranked)
+                                 now, cfg, m0, ranked, volume)
     return {s.variant: s for s in sigs}
 
 
@@ -136,6 +136,72 @@ def test_v4_fires_at_three_ranked_qualifying_whales(cfg):
     assert (s.fired, s.suppressed_reason, s.points_yes) == (True, None, Decimal(3))
     two = _ev(cfg, pos, scores, ranked=frozenset({"w0", "w1"}))["V4"]
     assert (two.fired, two.suppressed_reason) == (False, "min-points")
+
+
+def _dom(lb="0.05", notional="50000", last=N, price="0.50", side=0):
+    """One whale dict as `qualifying` shapes it, for V6's four factors."""
+    return {"wallet": "w0", "side": side, "lb": Decimal(lb), "last_ts": last,
+            "open_notional": Decimal(notional), "fresh_avg_price": Decimal(price),
+            "avg_price": Decimal(price), "sybil_dropped": False}
+
+
+def _ctx6(volume="50000", ask="0.50", now_ts=N):
+    return {"volume": None if volume is None else Decimal(volume),
+            "now_ts": now_ts, "ask": {0: Decimal(ask) if ask else None}}
+
+
+def test_v6_ranks_50k_in_a_60k_market_above_50k_in_a_5m_market(cfg):
+    """§7 V6: the same money is dominance in a small market and noise in a big
+    one. q 0.05 x $50,000 = 2,500 point-dollars over each market's own volume."""
+    thin = whale_signal.point_of("V6", _dom(), cfg, ctx=_ctx6(volume="60000"))
+    deep = whale_signal.point_of("V6", _dom(), cfg, ctx=_ctx6(volume="5000000"))
+    assert thin == Decimal("0.041667") and deep == Decimal("0.000500")
+
+
+def test_v6_recency_halves_a_print_after_half_life_secs(cfg):
+    """R_w: a print made `dominance.half_life_secs` ago carries half the weight
+    of one made now — recency is what "the money just moved" means."""
+    half = int(cfg["whale"]["dominance"]["half_life_secs"])
+    assert whale_signal.point_of("V6", _dom(), cfg, ctx=_ctx6()) == Decimal("0.050000")
+    aged = whale_signal.point_of("V6", _dom(last=N - half), cfg, ctx=_ctx6())
+    assert aged == Decimal("0.025000")
+
+
+def test_v6_price_factor_is_zero_at_max_drift_points_below_the_ask(cfg):
+    """F_w: a whale that bought at the current touch is fresh information; one
+    that bought `fire.max_drift_points` (0.03) below it bought a move that has
+    already happened, and carries no dominance at all."""
+    assert cfg["whale"]["fire"]["max_drift_points"] == Decimal("0.03")
+    at = whale_signal.point_of("V6", _dom(), cfg, ctx=_ctx6(ask="0.53"))
+    half = whale_signal.point_of("V6", _dom(), cfg, ctx=_ctx6(ask="0.515"))
+    under = whale_signal.point_of("V6", _dom(), cfg, ctx=_ctx6(ask="0.49"))
+    assert (at, half, under) == (Decimal(0), Decimal("0.025000"), Decimal("0.050000"))
+
+
+def test_v6_falls_back_to_min_volume_usd_when_volume_is_unknown(cfg):
+    """An unknown venue volume must never read as "tiny market => unbounded
+    dominance": it reads as `dominance.min_volume_usd`, exactly like a market
+    sitting at the floor. Zero reads the same way."""
+    floor = whale_signal.point_of("V6", _dom(), cfg, ctx=_ctx6(volume="5000"))
+    assert floor == Decimal("0.500000")
+    for volume in (None, "0", "1"):
+        assert whale_signal.point_of("V6", _dom(), cfg,
+                                     ctx=_ctx6(volume=volume)) == floor
+
+
+def test_v6_does_not_buy_the_side_the_whales_money_is_against(cfg):
+    """The measurement V6 exists for (§0.2, 2026-09-04): 12 of the 56 fired V1
+    signals had the whales' net dollars on the side the head count did not buy.
+    Four $250 whales on YES against one $50,000 whale on NO: V1 fires YES at
+    exactly `fire.ratio`, V6 reads the money and takes the other side."""
+    pos = [_pos(f"w{i}", size="500", last=T0 - 30 * i) for i in range(4)]
+    scores = {f"w{i}": _score("0.05") for i in range(4)}
+    pos.append(_pos("big", idx=1, size="100000", last=T0))
+    scores["big"] = _score("0.05")
+    sigs = _ev(cfg, pos, scores)
+    assert (sigs["V1"].side, sigs["V1"].fired) == (0, True)
+    assert (sigs["V6"].side, sigs["V6"].fired) == (1, True)
+    assert sigs["V6"].points_no > sigs["V6"].points_yes
 
 
 def test_two_whales_three_seconds_apart_count_once(cfg):
@@ -440,7 +506,7 @@ def test_null_min_points_evaluates_but_never_fires(cfg):
 
 def test_evaluate_returns_one_signal_per_variant(cfg):
     pos, scores = _three()
-    assert sorted(_ev(cfg, pos, scores)) == ["V1", "V2", "V3", "V4"]
+    assert sorted(_ev(cfg, pos, scores)) == ["V1", "V2", "V3", "V4", "V6"]
 
 
 def test_no_qualifying_whale_returns_no_signals(cfg):
@@ -541,6 +607,23 @@ def test_a_v4_exit_recomputes_the_flip_over_ranked_whales_only(cfg):
     assert (v1.reason, v1.detail["ratio"]) == ("flip", Decimal("0.400000"))
     assert whale_exit.exit_reason(_ctx("V4"), pos, _lookup(scores), NOW, cfg,
                                   ranked) is None
+
+
+def test_a_v6_bet_flips_on_dollars_not_on_head_count(cfg):
+    """§9 under the sixth variant: three $250 holders on our side are not a
+    consensus against one whale holding $50,000 on the other. The same book
+    leaves a V1 bet held (3-1 by head count) and flips the V6 bet."""
+    pos = [_pos(f"w{i}", size="500", last=T0 - 30 * i) for i in range(3)]
+    scores = {f"w{i}": _score("0.05") for i in range(3)}
+    pos.append(_pos("big", idx=1, size="100000", last=T0))
+    scores["big"] = _score("0.05")
+    booked = [{"wallet": f"w{i}", "lb": Decimal("0.05"), "side": 0,
+               "open_size": Decimal("500")} for i in range(3)]
+    v6 = whale_exit.exit_reason(_ctx("V6", whales=booked), pos, _lookup(scores),
+                                NOW, cfg)
+    assert (v6.reason, v6.detail["ratio"] < Decimal("0.10")) == ("flip", True)
+    assert whale_exit.exit_reason(_ctx("V1", whales=booked), pos,
+                                  _lookup(scores), NOW, cfg) is None
 
 
 def test_exit_left_when_the_signal_whales_sold_half(cfg):
@@ -760,7 +843,7 @@ def test_conf_stake_spans_min_to_max_and_clips(cfg):
 
 # --------------------------------------------------------------------- purity
 
-@pytest.mark.parametrize("module", ["whale_signal", "whale_exit"])
+@pytest.mark.parametrize("module", ["whale_signal", "whale_exit", "whale_dominance"])
 def test_module_is_pure(module):
     src = (ROOT / "arb" / f"{module}.py").read_text()
     for banned in ("sqlite3", "requests", "utcnow", "now()", "time.time", "open("):

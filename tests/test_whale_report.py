@@ -278,11 +278,12 @@ def test_an_exited_bet_whose_market_resolved_gets_a_hold_counterfactual(cfg, tmp
     exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
                                      con=con)["exits"]
 
-    assert exits["flip"]["n"] == 2 and exits["flip"]["n_hold"] == 2
-    # exit: two bets at the 0.49 bid; hold: the YES side won, so each bet's
+    # four bets: V1 and V6 (added 2026-09-04) each book flat and conf
+    assert exits["flip"]["n"] == 4 and exits["flip"]["n_hold"] == 4
+    # exit: four bets at the 0.49 bid; hold: the YES side won, so each bet's
     # contracts pay $1 (contracts = stake / (0.51 + 0.007497))
-    assert abs(exits["flip"]["exit_pnl"] - Decimal("-0.091500")) < Decimal("0.001")
-    assert abs(exits["flip"]["hold_pnl"] - Decimal("1.261581")) < Decimal("0.001")
+    assert abs(exits["flip"]["exit_pnl"] - Decimal("-0.183000")) < Decimal("0.001")
+    assert abs(exits["flip"]["hold_pnl"] - Decimal("2.523162")) < Decimal("0.001")
 
 
 def test_left_exits_are_broken_down_by_the_reading_that_fired_them(cfg, tmp_path):
@@ -300,7 +301,7 @@ def test_left_exits_are_broken_down_by_the_reading_that_fired_them(cfg, tmp_path
                                      con=con)["exits"]
 
     assert set(exits) == {"left (positions)"}
-    assert exits["left (positions)"]["n"] == 2
+    assert exits["left (positions)"]["n"] == 4
 
 
 def test_an_exited_bet_whose_market_later_voided_gets_a_zero_hold(cfg, tmp_path):
@@ -319,7 +320,7 @@ def test_an_exited_bet_whose_market_later_voided_gets_a_zero_hold(cfg, tmp_path)
     exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
                                      con=con)["exits"]
 
-    assert exits["flip"]["n_hold"] == 2
+    assert exits["flip"]["n_hold"] == 4
     assert exits["flip"]["hold_pnl"] == Decimal("0.000000")
 
 
@@ -337,7 +338,7 @@ def test_a_losing_hold_counterfactual_is_negative(cfg, tmp_path):
     exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
                                      con=con)["exits"]
 
-    assert exits["flip"]["hold_pnl"] == Decimal("-1.353080")     # both stakes lost
+    assert exits["flip"]["hold_pnl"] == Decimal("-2.706160")     # all four stakes lost
 
 
 # ------------------------------------------------------------- the bootstrap
@@ -812,7 +813,9 @@ def test_whale_score_calibrate_prints_the_yaml_to_paste(cfg, tmp_path, capsys):
     assert "V2: 0.150000" in out and "V3: " in out
     assert "min_points:" in out                     # the YAML lines to paste
     assert "V4: 3" in out                # the literal thresholds come along, or
-                                         # pasting the line drops a required key
+    assert "V6: 0.0020" in out           # pasting the line drops a required key
+    assert "V6 =" not in out             # ... but V6 is never CALIBRATED: its
+                                         # threshold is a measured literal (§7)
 
     # and the CLI knows the subcommand + flag (--help exits before any DB open)
     from arb import cli
@@ -928,7 +931,7 @@ def test_the_report_parses_no_signal_the_ledger_never_booked(cfg, tmp_path):
     """Discriminating on the parse itself: an unbooked row the report has no
     use for is never read, so even a corrupt one cannot break the daily."""
     store, con = _ledger(tmp_path), _tape(tmp_path)
-    _run(cfg, store, con)                         # books two bets on one signal
+    _run(cfg, store, con)                         # books V1 and V6, two bets each
     con.execute("INSERT INTO signals (id, evaluated_at, condition_id, side, variant,"
                 " fired, whale_ids_json) VALUES (99, ?, ?, '0', 'V2', 1, '{not json')",
                 (NOW.isoformat(), CID))
@@ -936,4 +939,4 @@ def test_the_report_parses_no_signal_the_ledger_never_booked(cfg, tmp_path):
 
     frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
 
-    assert frame["native"]["signals"] == {"native": 1, "transfer": 0}
+    assert frame["native"]["signals"] == {"native": 2, "transfer": 0}

@@ -722,7 +722,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   (48%), < 0.80 in 34 (61%); at 0.6667 the lane's ~21
                                       #   fires/24h become ~11/day, ~77/week, against the
                                       #   starvation alarm of 10/week.
-          min_points: { V1: 3, V2: null, V3: null, V4: 3 },
+          min_points: { V1: 3, V2: null, V3: null, V4: 3, V6: 0.0020 },
           calibration_days: 3, calibration_min_whales: 10,
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
                                       # entry-fire trigger: ratio + variant thresholds; V2/V3
@@ -732,6 +732,17 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   threshold, so V4 fires from day one — its filter is
                                       #   leaderboard membership on top of the SAME min_score_lb
                                       #   bar, never a score input.
+                                      #   V6 (dominance, added 2026-09-04) is 0.0020, also a
+                                      #   LITERAL and never null: the V2/V3 null blocked the
+                                      #   primary variant for a week and had to be patched by
+                                      #   amendment. Measured before registration on the 56
+                                      #   fired V1 signals against the tape's own 6h print
+                                      #   volume: median +0.00236, p75 +0.0138. Re-measured on
+                                      #   the production denominator (venue volume_24h) at the
+                                      #   >=14-day V2/V3 re-calibration; a change is a dated
+                                      #   amendment naming both values. There is no V5: the
+                                      #   percentile variant of the same proposal was not
+                                      #   shipped (operator decision 2026-09-04).
                                       #   Invariant: fire.ratio > 0.5; sybil_gap_secs
                                       #   collapses same-side prints within the gap to one whale
                                       #   (spec §7.3); max_drift_points caps the ask's drift above
@@ -741,6 +752,18 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   calibration_days 14 -> 3 (amended 2026-09-04): provisional
                                       #   calibration of V2/V3 on the first day signals span >= 3
                                       #   UTC days; re-run and replaced at >= 14 days (PREREGISTRATION.md)
+  dominance:                          # V6 (amendment 2026-09-04)
+    half_life_secs: 1800              # R_w: a print at the edge of signal_window_secs (7200)
+                                      #   carries 0.06 of a print made now. Recency is what
+                                      #   "the money just moved" means.
+    min_volume_usd: 5000              # floor on the normalising denominator, so a market with
+                                      #   almost no flow cannot produce an unbounded ratio.
+                                      #   Measured 2026-09-04: the 10th percentile of the 6h
+                                      #   print volume at a fired signal is $5,948, the median
+                                      #   $39,962, the 90th $320,501.
+                                      #   An UNKNOWN volume (no watch row for the market) reads
+                                      #   as this floor too, never as zero — a zero denominator
+                                      #   would make every signal maximally dominant.
   size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10 }
                                       # paper stake sizing for whale-lane fills
   exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01,

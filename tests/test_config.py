@@ -148,6 +148,10 @@ def test_whale_config_loads_with_spec_values():
     # L14 amendment 2026-09-04 (§7 item 1b): entry needs the whales still
     # HOLDING to agree too, between exit.flip_ratio (0.50) and fire.ratio (0.80)
     assert w["fire"]["holders_ratio"] == Decimal("0.6667")
+    # L14 amendment 2026-09-04 (§7 V6 dominance): a LITERAL threshold, never
+    # null — the V2/V3 null blocked the primary variant for a week
+    assert w["fire"]["min_points"]["V6"] == Decimal("0.0020")
+    assert w["dominance"] == {"half_life_secs": 1800, "min_volume_usd": 5000}
     assert w["leaderboard"]["time_periods"] == ["DAY", "WEEK", "MONTH", "ALL"]
     assert w["leaderboard"]["pages"] == 20        # offset cap 1000 / page size 50
     # esports prefixes stay unmapped until an `esports` hierarchy root exists:
