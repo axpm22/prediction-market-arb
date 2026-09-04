@@ -344,6 +344,14 @@ def test_shipped_dashboard_cache_secs():
     assert cfg["dashboard"]["cache_secs"] == cfg["dashboard"]["refresh_secs"]
 
 
+def test_shipped_dashboard_cache_max_entries():
+    # review of 9e5951a: /api/whale/traders folds the unvalidated `wallet=`
+    # query param into the cache key, so an unbounded cache grows one
+    # permanent entry+lock per distinct wallet ever queried. Bound it.
+    cfg = load(SHIPPED)
+    assert cfg["dashboard"]["cache_max_entries"] == 256
+
+
 def test_shipped_supervisor_lanes_are_whale_only():
     """Operator decision 2026-09-04: run only the Polymarket whale lane. watch
     stays on because the whale lane's universe comes from watch's Polymarket

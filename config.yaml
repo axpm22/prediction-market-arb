@@ -409,7 +409,7 @@ db_backup: { time: "04:10", dest: "backups/", keep_last: 2 }    # sqlite3 .backu
 canary: { enabled: true, day_of_month: 1, time: "05:30" }   # monthly synthetic
                                                  #   end-to-end fixture, tagged lane
 dashboard: { host: 127.0.0.1, port: 8722, pnl_days: 30, bench_stale_days: 7,
-             refresh_secs: 60, cache_secs: 60 }
+             refresh_secs: 60, cache_secs: 60, cache_max_entries: 256 }
                                                  # read-only local panel (§14.3); GETs only,
                                                  #   never bound beyond localhost
                                                  # pnl_days: window of the cumulative settled
@@ -423,6 +423,12 @@ dashboard: { host: 127.0.0.1, port: 8722, pnl_days: 30, bench_stale_days: 7,
                                                  #   memo (arb/dashboard_cache.py) — matches
                                                  #   refresh_secs, so the panel lags the tape
                                                  #   by at most one refresh, never a stampede
+                                                 # cache_max_entries: LRU cap on that memo —
+                                                 #   /api/whale/traders?wallet= folds the
+                                                 #   unvalidated wallet into the cache key, so
+                                                 #   this bounds memory for wallet-scoped
+                                                 #   lookups instead of one permanent row per
+                                                 #   wallet ever queried (review of 9e5951a)
 notify:                             # outbound webhook to the operator's OWN endpoint; never market data
   enabled: false                    # flip true after pasting the URL; nothing posts while false
   webhook_url: ""                   # JSON POST target; one JSON object per event (Slack/Discord adapters are the endpoint's concern)

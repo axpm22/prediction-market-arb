@@ -197,10 +197,14 @@ def _section(cfg, store, path: str, query: dict) -> dict:
     The two whale sections are the expensive ones (a frame over ~200k tape
     prints); they go through dashboard_cache's TTL memo (dashboard.cache_secs)
     so concurrent pollers share one computation instead of each starting
-    their own (live 2026-09-04: that pileup outran the page's own refresh)."""
+    their own (live 2026-09-04: that pileup outran the page's own refresh).
+    `/api/whale/traders?wallet=` folds the wallet into the cache key, so the
+    memo is LRU-capped at dashboard.cache_max_entries (review of 9e5951a) —
+    otherwise every distinct wallet ever queried adds a permanent entry."""
     from arb import dashboard_cache, dashboard_whale
     from arb import dashboard_data as dd
     ttl = float(cfg["dashboard"]["cache_secs"])
+    max_entries = int(cfg["dashboard"]["cache_max_entries"])
     try:
         if path == "/api/state":
             return state(cfg, store)
@@ -219,9 +223,11 @@ def _section(cfg, store, path: str, query: dict) -> dict:
             key = ("whale_traders", level, top, min_n, wallet)
             return dashboard_cache.get_or_compute(
                 key, ttl, lambda: dashboard_whale.whale_traders(
-                    cfg, level=level, top=top, min_n=min_n, wallet=wallet))
+                    cfg, level=level, top=top, min_n=min_n, wallet=wallet),
+                max_entries=max_entries)
         return {"whale": dashboard_cache.get_or_compute(
-            ("whale_panel",), ttl, lambda: dashboard_whale.whale_panel(cfg, store))}
+            ("whale_panel",), ttl, lambda: dashboard_whale.whale_panel(cfg, store),
+            max_entries=max_entries)}
     except Exception as e:  # noqa: BLE001 — see docstring
         log.warning("dashboard section %s failed: %s", path, e, exc_info=True)
         return {"error": f"{type(e).__name__}: {e}"}

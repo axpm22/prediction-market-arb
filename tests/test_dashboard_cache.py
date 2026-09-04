@@ -76,3 +76,75 @@ def test_fresh_hit_is_not_recomputed_and_carries_age_secs():
     assert len(calls) == 1
     assert hit["v"] == 1
     assert hit["age_secs"] >= 0
+
+
+def test_lru_evicts_least_recently_used_entry_on_insert():
+    # review of 9e5951a: /api/whale/traders folds the unvalidated `wallet=`
+    # query param into the cache key, so every distinct wallet used to add a
+    # permanent _entries row and a permanent _locks row. Cap it: past
+    # max_entries, inserting a new key evicts the least-recently-used one —
+    # entry AND lock — so a never-expiring TTL still can't make the tables
+    # grow without bound.
+    calls = {}
+
+    def compute(tag):
+        calls[tag] = calls.get(tag, 0) + 1
+        return {"v": calls[tag]}
+
+    dc.get_or_compute(("lru-key", "a"), 3600, lambda: compute("a"), max_entries=2)
+    dc.get_or_compute(("lru-key", "b"), 3600, lambda: compute("b"), max_entries=2)
+    # "a" is now the least-recently-used of the two; inserting "c" evicts it
+    dc.get_or_compute(("lru-key", "c"), 3600, lambda: compute("c"), max_entries=2)
+
+    # "a" was evicted -> still "fresh" by TTL alone, but the entry (and its
+    # lock) are gone, so this call must recompute rather than hit the cache
+    hit_a = dc.get_or_compute(("lru-key", "a"), 3600, lambda: compute("a"), max_entries=2)
+    assert calls["a"] == 2
+
+    # "c" was the most recently inserted -> still cached, no recompute
+    hit_c = dc.get_or_compute(("lru-key", "c"), 3600, lambda: compute("c"), max_entries=2)
+    assert calls["c"] == 1
+    assert hit_c["age_secs"] >= 0
+    assert hit_a["v"] == 2
+
+
+def test_lru_touches_recency_on_hit_not_just_insert():
+    calls = {}
+
+    def compute(tag):
+        calls[tag] = calls.get(tag, 0) + 1
+        return {"v": calls[tag]}
+
+    dc.get_or_compute(("lru-touch", "a"), 3600, lambda: compute("a"), max_entries=2)
+    dc.get_or_compute(("lru-touch", "b"), 3600, lambda: compute("b"), max_entries=2)
+    # re-fetch "a" (a cache hit) so it becomes the most-recently-used
+    dc.get_or_compute(("lru-touch", "a"), 3600, lambda: compute("a"), max_entries=2)
+    # now "b" is the least-recently-used; inserting "c" should evict "b", not "a"
+    dc.get_or_compute(("lru-touch", "c"), 3600, lambda: compute("c"), max_entries=2)
+
+    dc.get_or_compute(("lru-touch", "a"), 3600, lambda: compute("a"), max_entries=2)
+    assert calls["a"] == 1  # "a" was never evicted, so still one compute
+
+    dc.get_or_compute(("lru-touch", "b"), 3600, lambda: compute("b"), max_entries=2)
+    assert calls["b"] == 2  # "b" was evicted, so this is a recompute
+
+
+def test_exception_in_compute_is_not_cached_and_releases_lock():
+    calls = []
+
+    def compute():
+        calls.append(1)
+        if len(calls) == 1:
+            raise ValueError("boom")
+        return {"v": len(calls)}
+
+    try:
+        dc.get_or_compute(("error-key",), 60, compute)
+        assert False, "expected the ValueError to propagate"
+    except ValueError:
+        pass
+
+    # nothing was cached from the failed call
+    second = dc.get_or_compute(("error-key",), 60, compute)
+    assert len(calls) == 2
+    assert second["v"] == 2
