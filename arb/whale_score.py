@@ -82,10 +82,19 @@ class Score:
 
 
 def root_of(sport, market_type) -> str | None:
-    """None means unmappable — such a market never forms a scored position."""
+    """None means unmappable — such a market never forms a scored position.
+
+    Non-sports amendment 2026-09-04: the root IS the Polymarket fee category,
+    so `politics` and `crypto` are DISJOINT roots rather than one pooled
+    `nonsports` one. One field then prices the leg (`leg_fee_cost`), segregates
+    the report and isolates the score — and because `_agg_keys` already carries
+    `root` in position 1 of every key, that isolation is structural.
+    """
     if not sport:
         return None
-    return "nonsports" if (sport in NONSPORTS or market_type in NONSPORTS) else "sports"
+    if sport in NONSPORTS:
+        return sport
+    return market_type if market_type in NONSPORTS else "sports"
 
 
 def _epoch(iso) -> int | None:

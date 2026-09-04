@@ -302,8 +302,10 @@ def test_a_nonsports_position_never_changes_a_sports_score(cfg):
     both = _score(cfg, sports + nons, res)
     key = ("0xw", "sports", "baseball_mlb", "baseball_mlb:WINNER")
     assert both[key] == alone[key]
-    assert ("0xw", "nonsports", "politics", "politics:BINARY") in both
-    assert all(k[1] in ("sports", "nonsports") for k in both)
+    # amended 2026-09-04: the non-sports root IS the fee category, so this key
+    # reads `politics`, not the pooled `nonsports` of the pre-amendment lane
+    assert ("0xw", "politics", "politics", "politics:BINARY") in both
+    assert all(k[1] in ("sports", "politics") for k in both)
 
 
 # ---------------------------------------------------------------- hygiene
@@ -352,6 +354,54 @@ def test_a_token_second_side_is_within_the_both_sides_tolerance(cfg):
     pos = whale_score.positions_from_prints(prints, {"0xt1": _market()}, cfg)
     hyg = whale_hygiene.hygiene_flags(prints, pos, cfg)
     assert hyg.markets == {}                    # 500 / 10000 = 0.05 <= 0.10
+
+
+# --------------------------------------------------- non-sports roots (2026-09-04)
+
+def test_root_of_returns_the_category_so_two_nonsports_roots_never_pool(cfg):
+    """L14 non-sports amendment 2026-09-04: the root IS the Polymarket fee
+    category, so `politics` and `crypto` are DISJOINT roots — one field prices
+    the leg, segregates the report and isolates the score."""
+    assert whale_score.root_of("politics", "BINARY") == "politics"
+    assert whale_score.root_of("crypto", "LADDER") == "crypto"
+    assert whale_score.root_of("geopolitics", "BINARY") == "geopolitics"
+    assert whale_score.root_of("baseball_mlb", "WINNER") == "sports"
+    assert whale_score.root_of(None, "BINARY") is None
+
+    resolutions = {}
+    pos = (_positions("0xw", "politics", "BINARY", [0.30], resolutions)
+           + _positions("0xw", "crypto", "BINARY", [-0.30], resolutions))
+    outcomes = whale_score.resolved_outcomes(pos, resolutions, AS_OF)
+    agg = whale_score.aggregate(outcomes)
+    assert {k[1] for k in agg} == {"politics", "crypto"}
+    # no key is shared, so no sum can cross the two roots
+    assert all(n == 1 for n, _ in agg.values())
+
+
+def test_a_politics_edge_never_moves_the_same_wallets_sports_lower_bound(cfg):
+    """Scoring isolation, stated as the operator asked it: no transfer between
+    roots (operator decision 2026-09-04)."""
+    rates = {"sports": Decimal("-0.02"), "politics": Decimal("-0.02")}
+    resolutions = {}
+    sports = _positions("0xw", "baseball_mlb", "WINNER", [0.2, 0.2, 0.2], resolutions)
+    key = ("0xw", "sports", "baseball_mlb", "baseball_mlb:WINNER")
+    alone = whale_score.scores(sports, resolutions, AS_OF, cfg, rates)[key]
+    politics = _positions("0xw", "politics", "BINARY", [0.9] * 50, resolutions)
+    both = whale_score.scores(sports + politics, resolutions, AS_OF, cfg, rates)[key]
+    assert both.lb == alone.lb
+    assert both.n_root == alone.n_root == 3
+
+
+def test_each_root_carries_its_own_base_rate_and_starts_at_the_default(cfg):
+    """A new root falls back to `base_rate_default` until it has
+    `base_rate_min_n` resolved positions of ITS OWN — never the sports one."""
+    resolutions = {}
+    pos = (_positions("0xw", "baseball_mlb", "WINNER", [0.5] * 3, resolutions)
+           + _positions("0xw", "politics", "BINARY", [0.1] * 2, resolutions))
+    outcomes = whale_score.resolved_outcomes(pos, resolutions, AS_OF)
+    default = q6(Decimal(str(cfg["whale"]["score"]["base_rate_default"])))
+    assert whale_score.base_rate(outcomes, "politics", AS_OF, cfg) == (default, 2)
+    assert whale_score.base_rate(outcomes, "sports", AS_OF, cfg) == (default, 3)
 
 
 # ---------------------------------------------------------------- structure
