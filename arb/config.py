@@ -132,7 +132,7 @@ SCHEMA = {
     "db_backup": {"time": STR, "dest": STR, "keep_last": NUM},
     "canary": {"enabled": BOOL, "day_of_month": NUM, "time": STR},
     "dashboard": {"host": STR, "port": NUM, "pnl_days": NUM,
-                  "bench_stale_days": NUM, "refresh_secs": NUM},
+                  "bench_stale_days": NUM, "refresh_secs": NUM, "cache_secs": NUM},
     "notify": {"enabled": BOOL, "webhook_url": STR, "min_interval_secs": NUM,
                "timeout_secs": NUM, "events": LIST},
     "zombie_spread_min": NUM, "max_lead_hours": NUM,

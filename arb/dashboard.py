@@ -192,9 +192,15 @@ def state(cfg, store) -> dict:
 def _section(cfg, store, path: str, query: dict) -> dict:
     """One JSON section (Task 12). A section that raises returns its own error
     instead of 500-ing the page: a broken whale tape must not take the P&L
-    curves down with it."""
+    curves down with it.
+
+    The two whale sections are the expensive ones (a frame over ~200k tape
+    prints); they go through dashboard_cache's TTL memo (dashboard.cache_secs)
+    so concurrent pollers share one computation instead of each starting
+    their own (live 2026-09-04: that pileup outran the page's own refresh)."""
+    from arb import dashboard_cache, dashboard_whale
     from arb import dashboard_data as dd
-    from arb import dashboard_whale
+    ttl = float(cfg["dashboard"]["cache_secs"])
     try:
         if path == "/api/state":
             return state(cfg, store)
@@ -206,12 +212,16 @@ def _section(cfg, store, path: str, query: dict) -> dict:
         if path == "/api/lanes":
             return {"lanes": dd.lane_verdicts(cfg, store)}
         if path == "/api/whale/traders":
-            return dashboard_whale.whale_traders(
-                cfg, level=query.get("level", ["bucket"])[0],
-                top=query.get("top", [None])[0],
-                min_n=query.get("min_n", [None])[0],
-                wallet=query.get("wallet", [None])[0])
-        return {"whale": dashboard_whale.whale_panel(cfg, store)}
+            level = query.get("level", ["bucket"])[0]
+            top = query.get("top", [None])[0]
+            min_n = query.get("min_n", [None])[0]
+            wallet = query.get("wallet", [None])[0]
+            key = ("whale_traders", level, top, min_n, wallet)
+            return dashboard_cache.get_or_compute(
+                key, ttl, lambda: dashboard_whale.whale_traders(
+                    cfg, level=level, top=top, min_n=min_n, wallet=wallet))
+        return {"whale": dashboard_cache.get_or_compute(
+            ("whale_panel",), ttl, lambda: dashboard_whale.whale_panel(cfg, store))}
     except Exception as e:  # noqa: BLE001 — see docstring
         log.warning("dashboard section %s failed: %s", path, e, exc_info=True)
         return {"error": f"{type(e).__name__}: {e}"}

@@ -336,6 +336,14 @@ def test_dead_config_blocks_removed():
     assert "exit" not in cfg
 
 
+def test_shipped_dashboard_cache_secs():
+    # live 2026-09-04: /api/whale recompute pileup fix. TTL == refresh_secs —
+    # a read-only panel may lag the tape by one refresh, never more.
+    cfg = load(SHIPPED)
+    assert cfg["dashboard"]["cache_secs"] == 60
+    assert cfg["dashboard"]["cache_secs"] == cfg["dashboard"]["refresh_secs"]
+
+
 def test_shipped_supervisor_lanes_are_whale_only():
     """Operator decision 2026-09-04: run only the Polymarket whale lane. watch
     stays on because the whale lane's universe comes from watch's Polymarket
