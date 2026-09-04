@@ -193,8 +193,9 @@ SCHEMA = {
               "hygiene": {"mm_window_secs": NUM, "mm_market_share": NUM, "mm_max_avg_usd": NUM,
                           "both_sides_tolerance": NUM, "wash_gap_secs": NUM},
               "fire": {"ratio": NUM, "holders_ratio": NUM,
-                       "min_points": {"V1": NUM, "V2": NUM_OPT,
-                                      "V3": NUM_OPT, "V4": NUM, "V6": NUM},
+                       "min_points": {"V1": NUM, "V2": NUM_OPT, "V3": NUM_OPT,
+                                      "V4": NUM, "V5": NUM, "V6": NUM},
+                       "elite_pct": NUM,
                        "calibration_days": NUM, "calibration_min_whales": NUM,
                        "sybil_gap_secs": NUM, "max_drift_points": NUM,
                        "min_secs_to_start": NUM},
@@ -281,6 +282,13 @@ def _check_invariants(cfg):
             f"whale.fire.ratio ({whale['fire']['ratio']}) — the entry holders gate (§7 item "
             "1b) must sit strictly above the flip ratio, or a signal fires straight into a "
             "flip, and never above the fire ratio it qualifies")
+    if not Decimal(0) < Decimal(whale["fire"]["elite_pct"]) <= Decimal(100):
+        raise ConfigError(
+            f"whale.fire.elite_pct ({whale['fire']['elite_pct']}) must be in (0, 100] "
+            "— it is a percentage of the reference population (§7 V5). The loader "
+            "cannot see the tape, so the other half of this check — a cutoff that "
+            "falls below whale.min_score_lb makes V5 a copy of V1 — is a WARNING "
+            "from the lane cycle (arb/whale_elite.py) and a line in the daily report")
     if not Decimal(whale["size"]["min_stake_usd"]) <= Decimal(whale["size"]["max_stake_usd"]):
         raise ConfigError(
             f"whale.size.min_stake_usd ({whale['size']['min_stake_usd']}) must be <= "

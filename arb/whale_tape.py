@@ -122,6 +122,12 @@ CREATE INDEX IF NOT EXISTS idx_holdings_wallet
     ON holdings(proxy_wallet, observed_at);
 CREATE TABLE IF NOT EXISTS base_rates (
     root TEXT, as_of TEXT, value TEXT, n INTEGER, PRIMARY KEY (root, as_of));
+-- V5's percentile bar, per bucket per cycle (§7 V5, 2026-09-04): the cutoff
+-- and the size of the population behind it. The elite set moves week to week,
+-- so the bar itself has to be on the record — arb/whale_elite.py.
+CREATE TABLE IF NOT EXISTS elite_cutoffs (
+    root TEXT, bucket TEXT, as_of TEXT, cutoff TEXT, n INTEGER,
+    PRIMARY KEY (bucket, as_of));
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 

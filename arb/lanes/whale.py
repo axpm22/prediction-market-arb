@@ -24,7 +24,7 @@ import time
 from datetime import datetime
 from decimal import Decimal
 
-from arb import whale_backfill, whale_dominance, whale_exit, whale_holdings
+from arb import whale_backfill, whale_dominance, whale_elite, whale_exit, whale_holdings
 from arb import whale_resolve, whale_score, whale_signal, whale_tape, whale_universe
 from arb.lanes.whale_book import (_bet_ctx, _event_key, _fetch_books,
                                   _from_prints, _persist_signal, _tape_market,
@@ -149,8 +149,11 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     tokens, slugs = _from_prints(prints)
     # V4 (§7, amended 2026-09-04): one read per cycle, shared by the signals
     # this cycle evaluates and the exits it re-evaluates, so both sides of a
-    # V4 position are judged against the same board.
+    # V4 position are judged against the same board. V5's elite cutoff is the
+    # same idea over the scoring pass above — one bar per bucket per cycle,
+    # computed on first use and persisted below.
     ranked = ranked_wallets(con)
+    elite = whale_elite.index(cfg, state)
 
     # 8-9 share one fetch: the same books price a new signal and an exit, and
     # §8 wants a quotes row every cycle for a market with an open WHALE bet so
@@ -194,7 +197,8 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
             # watch rows the zombie guard below reads (§7, 2026-09-04).
             for sig in whale_signal.evaluate(
                     market, open_pos, lookup, touch, now, cfg, m0, ranked,
-                    whale_dominance.market_volume(volumes, tokens, cid)):
+                    whale_dominance.market_volume(volumes, tokens, cid),
+                    elite(m.sport, m.market_type)):
                 token = tokens.get((cid, sig.side))
                 sig = _zombied(cfg, sig, volumes.get(f"{cid}:{token}"))
                 signal_id = _persist_signal(con, sig, cid, now)
@@ -231,10 +235,15 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     res["booked"] = store.query(
         "SELECT COUNT(*) c FROM flat_bets WHERE poll_id=?", (poll_id,))[0]["c"]
 
-    # 9: exits, on the books this cycle already fetched.
+    # 9: exits, on the books this cycle already fetched. A V5 bet is re-read
+    # against THIS cycle's elite bar, from the same index the signals used.
     for bet in bets:
-        _exit(cfg, store, con, bet, ctxs[bet["id"]], open_pos, lookup, books,
-              venue_ok, now, res, ranked, tokens, volumes)
+        ctx = ctxs[bet["id"]]
+        mk = tape_markets.get(ctx["condition_id"], {}) if ctx else {}
+        _exit(cfg, store, con, bet, ctx, open_pos, lookup, books, venue_ok, now,
+              res, ranked, tokens, volumes,
+              elite(mk.get("sport"), mk.get("market_type")))
+    whale_elite.persist(con, elite, cfg, now)
 
     # collector health for the daily report (§12): `polls` has no column for a
     # cycle's status/rows/bad_rows and rule 9 forbids inventing one, so the
@@ -278,11 +287,12 @@ def _persist(cfg, store, rows, cands, on_table, venue_ok, latency_ms, now) -> in
 
 
 def _exit(cfg, store, con, bet, ctx, open_pos, lookup, books, venue_ok, now, res,
-          ranked, tokens, volumes) -> None:
+          ranked, tokens, volumes, elite_cut=None) -> None:
     """§9 for one open bet. `exit_reason` returns None post-start (a bet is
     held to resolution then), so there is nothing extra to re-check here. A V6
     bet is re-read against THIS cycle's market — the books just fetched and the
-    volume the signals above used (§7 V6, 2026-09-04)."""
+    volume the signals above used (§7 V6, 2026-09-04) — and a V5 bet against
+    this cycle's elite cutoff for its own bucket (§7 V5)."""
     if ctx is None:
         return
     cid = ctx["condition_id"]
@@ -290,6 +300,7 @@ def _exit(cfg, store, con, bet, ctx, open_pos, lookup, books, venue_ok, now, res
         ctx, open_pos, lookup, now, cfg, ranked,
         holdings=whale_holdings.for_bet(cfg, con, ctx, now),
         ctx={"volume": whale_dominance.market_volume(volumes, tokens, cid),
+             "elite": elite_cut,
              "ask": {s: t.ask for s, t in _touch(books, tokens, cid).items()}})
     if decision is None:
         return

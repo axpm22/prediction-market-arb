@@ -69,10 +69,10 @@ MARKET = {"condition_id": CID, "start_utc": START.isoformat(),
 
 
 def _ev(cfg, positions, scores, touch=None, now=NOW, market=None, m0=M0,
-        ranked=frozenset(), volume=None):
+        ranked=frozenset(), volume=None, elite=None):
     sigs = whale_signal.evaluate(market or MARKET, positions, _lookup(scores),
                                  _touch() if touch is None else touch,
-                                 now, cfg, m0, ranked, volume)
+                                 now, cfg, m0, ranked, volume, elite)
     return {s.variant: s for s in sigs}
 
 
@@ -126,6 +126,36 @@ def test_a_ranked_wallet_below_the_bar_is_never_a_v4_point(cfg):
     s = _ev(cfg, pos, scores, ranked=frozenset({"w0", "w1", "cold"}))["V4"]
     assert s.points_yes == Decimal(2)
     assert "cold" not in {w["wallet"] for w in s.whales}
+
+
+def test_v5_counts_only_whales_above_the_elite_cutoff(cfg):
+    """§7 V5 (registered 2026-09-04): 1 point per qualifying whale whose
+    `score_lb` in THIS bucket is in the top `fire.elite_pct` of the reference
+    population, 0 for one below it. The cutoff reaches `evaluate` the way V6's
+    market context does — one number per (root, bucket) per cycle."""
+    pos, scores = _three(lbs=("0.05", "0.04", "0.03"))
+    s = _ev(cfg, pos, scores, elite=Decimal("0.04"))["V5"]
+    assert s.points_yes == Decimal(2) and s.points_no == Decimal(0)
+    assert {w["wallet"]: w["points"] for w in s.whales} == {
+        "w0": Decimal(1), "w1": Decimal(1), "w2": Decimal(0)}
+
+
+def test_v5_fires_at_two_elite_qualifying_whales(cfg):
+    """`fire.min_points.V5` is 2, literal — measured, never calibrated."""
+    pos, scores = _three(lbs=("0.05", "0.04", "0.03"))
+    assert cfg["whale"]["fire"]["min_points"]["V5"] == 2
+    s = _ev(cfg, pos, scores, elite=Decimal("0.04"))["V5"]
+    assert (s.fired, s.suppressed_reason, s.points_yes) == (True, None, Decimal(2))
+    one = _ev(cfg, pos, scores, elite=Decimal("0.05"))["V5"]
+    assert (one.fired, one.suppressed_reason) == (False, "min-points")
+
+
+def test_without_a_cutoff_v5_evaluates_but_never_fires(cfg):
+    """No cutoff at all — an empty population, or a caller with no scoring
+    state — is NO consensus reading, never a free point for every whale."""
+    pos, scores = _three()
+    s = _ev(cfg, pos, scores)["V5"]
+    assert (s.points_yes, s.fired, s.suppressed_reason) == (Decimal(0), False, "ratio")
 
 
 def test_v4_fires_at_three_ranked_qualifying_whales(cfg):
@@ -506,7 +536,7 @@ def test_null_min_points_evaluates_but_never_fires(cfg):
 
 def test_evaluate_returns_one_signal_per_variant(cfg):
     pos, scores = _three()
-    assert sorted(_ev(cfg, pos, scores)) == ["V1", "V2", "V3", "V4", "V6"]
+    assert sorted(_ev(cfg, pos, scores)) == ["V1", "V2", "V3", "V4", "V5", "V6"]
 
 
 def test_no_qualifying_whale_returns_no_signals(cfg):
@@ -607,6 +637,32 @@ def test_a_v4_exit_recomputes_the_flip_over_ranked_whales_only(cfg):
     assert (v1.reason, v1.detail["ratio"]) == ("flip", Decimal("0.400000"))
     assert whale_exit.exit_reason(_ctx("V4"), pos, _lookup(scores), NOW, cfg,
                                   ranked) is None
+
+
+def test_a_v5_bet_is_never_flipped_by_non_elite_opposition(cfg):
+    """§9 under the fifth variant: the flip recount runs the BET'S OWN variant,
+    so whales below the elite cutoff were never a V5 consensus and cannot flip
+    a V5 position. One book, two answers: V1 flips at 2-of-5, V5 holds."""
+    pos, scores = _held()
+    for i in range(3):
+        pos.append(_pos(f"a{i}", idx=1, last=T0 - 60 - 30 * i))
+        scores[f"a{i}"] = _score("0.01")               # qualifying, not elite
+    ctx = {"elite": Decimal("0.05")}
+    v1 = whale_exit.exit_reason(_ctx("V1"), pos, _lookup(scores), NOW, cfg, ctx=ctx)
+    assert (v1.reason, v1.detail["ratio"]) == ("flip", Decimal("0.400000"))
+    assert whale_exit.exit_reason(_ctx("V5"), pos, _lookup(scores), NOW, cfg,
+                                  ctx=ctx) is None
+
+
+def test_v5_confidence_exit_is_none_when_no_remaining_whale_is_elite(cfg):
+    """The V4 fix, extended to V5 (§3 implementation notes): a V5 whale's
+    points are 1/0 percentile membership, not a score, so once every remaining
+    whale has fallen out of the elite set `wmean`'s zero-weight fallback would
+    average their raw `lb` back in unweighted — a `confidence` verdict computed
+    over a crowd V5 itself says does not count."""
+    pos, scores = _held(scores={"w0": _score("-0.05"), "w1": _score("-0.05")})
+    assert whale_exit.exit_reason(_ctx("V5"), pos, _lookup(scores), NOW, cfg,
+                                  ctx={"elite": Decimal("0.05")}) is None
 
 
 def test_a_v6_bet_flips_on_dollars_not_on_head_count(cfg):

@@ -251,7 +251,7 @@ def test_every_variant_is_persisted_to_signals_fired_or_not(cfg, tmp_path):
     res = _run(cfg, store, con)
 
     rows = {r["variant"]: dict(r) for r in con.execute("SELECT * FROM signals")}
-    assert set(rows) == {"V1", "V2", "V3", "V4", "V6"}
+    assert set(rows) == {"V1", "V2", "V3", "V4", "V5", "V6"}
     assert rows["V1"]["fired"] == 1 and rows["V1"]["suppressed_reason"] is None
     assert rows["V2"]["fired"] == 0
     assert rows["V2"]["suppressed_reason"] == "uncalibrated"   # min_points null
@@ -259,9 +259,12 @@ def test_every_variant_is_persisted_to_signals_fired_or_not(cfg, tmp_path):
     assert Decimal(rows["V1"]["points_yes"]) == 3
     assert len(json.loads(rows["V1"]["whale_ids_json"])) == 3
     assert Decimal(rows["V1"]["touch_ask"]) == Decimal("0.51")
-    assert res["signals_evaluated"] == 5
+    assert res["signals_evaluated"] == 6
     assert res["suppressed"]["uncalibrated"] == 2
-    assert res["suppressed"]["ratio"] == 1          # V4: no wallet is ranked here
+    # V4 (nobody ranked) and V5 (no scored population on an empty tape, so no
+    # cutoff and nobody elite) both score zero on both sides
+    assert res["suppressed"]["ratio"] == 2
+    assert rows["V5"]["suppressed_reason"] == "ratio"
     assert rows["V6"]["fired"] == 1                 # money, not heads (2026-09-04)
     bet = _bets(store)[0]
     assert bet["signal_id"] == rows["V1"]["id"]
@@ -546,6 +549,37 @@ def test_the_lane_books_v6_flat_and_conf_from_the_markets_own_volume(cfg, tmp_pa
     assert [b["variant"] for b in _bets(deep)] == ["V1/flat", "V1/conf"]
     row = deep_con.execute("SELECT * FROM signals WHERE variant='V6'").fetchone()
     assert (row["fired"], row["suppressed_reason"]) == (0, "min-points")
+
+
+def test_the_lane_books_v5_flat_and_conf_for_an_elite_consensus(cfg, tmp_path):
+    """§7/§8 V5 (registered 2026-09-04): the cutoff is the top `elite_pct` (20)
+    of every scored wallet in the root — here ten, of which the two signal
+    whales with a real record are the top two — so V5 reaches its literal
+    `min_points` 2 and books its own two rows. The cycle records the cutoff and
+    the population size it used, because the elite set moves week to week."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _resolved_history(con, ["w0", "w1"], n=3, edge="0.30")
+    _resolved_history(con, [f"o{i}" for i in range(8)], n=3, edge="0.01")
+
+    res = _run(cfg, store, con)
+
+    v5 = [b for b in _bets(store) if b["variant"].startswith("V5")]
+    assert [b["variant"] for b in v5] == ["V5/flat", "V5/conf"]
+    assert len({b["fingerprint"] for b in v5}) == 2
+    assert len({b["position_key"] for b in v5}) == 2
+    assert len({b["signal_id"] for b in v5}) == 1
+    rows = {r["variant"]: dict(r) for r in con.execute("SELECT * FROM signals")}
+    assert (rows["V5"]["fired"], Decimal(rows["V5"]["points_yes"])) == (1, Decimal(2))
+    assert Decimal(rows["V1"]["points_yes"]) == 3     # the third whale has no record
+    assert v5[0]["signal_id"] == rows["V5"]["id"]
+    assert res["fired"] == 3                          # V1, V5, V6
+    cut = con.execute("SELECT * FROM elite_cutoffs").fetchone()
+    assert (cut["root"], cut["bucket"], cut["n"]) == ("sports",
+                                                      "baseball_mlb:WINNER", 10)
+    # the bar sits above the whale with no record (its prior) and at the level
+    # of the two with one — that gap IS the filter
+    lbs = [Decimal(w["lb"]) for w in json.loads(rows["V1"]["whale_ids_json"])]
+    assert min(lbs) < Decimal(cut["cutoff"]) == max(lbs)
 
 
 def test_ranked_wallets_unions_every_window_from_the_latest_snapshot_date(tmp_path):

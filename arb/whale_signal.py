@@ -18,11 +18,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from statistics import median
 
-from arb import whale_dominance
+from arb import whale_dominance, whale_elite
 from arb.models import q6
 from arb.whale_merge import d, merge_windows, qualifying, ts
 
-VARIANTS = ("V1", "V2", "V3", "V4", "V6")
+VARIANTS = ("V1", "V2", "V3", "V4", "V5", "V6")
 YES, NO = 0, 1
 
 
@@ -67,13 +67,16 @@ def point_of(variant, whale, cfg, ranked=frozenset(), ctx=None) -> Decimal:
     all because `qualifying` cleared it on our own realized-edge scores, and
     rank then decides whether it carries its one vote.
 
-    `ctx` is V6's market context (`volume`, `now_ts`, `ask` per side, all
-    optional — arb/whale_dominance.py) and is ignored by every other
-    variant."""
+    `ctx` is the cycle's per-market context: V6's market facts (`volume`,
+    `now_ts`, `ask` per side — arb/whale_dominance.py) and V5's `elite` cutoff
+    for this bucket (arb/whale_elite.py). Every key is optional and each
+    variant reads only its own."""
     if variant == "V1":
         return Decimal(1)
     if variant == "V4":
         return Decimal(1) if whale["wallet"] in ranked else Decimal(0)
+    if variant == "V5":
+        return whale_elite.point(whale, ctx)
     if variant == "V6":
         return whale_dominance.point(whale, cfg, ctx)
     excess = d(whale["lb"]) - d(cfg["whale"]["min_score_lb"])
@@ -175,17 +178,18 @@ def holders_share(variant, condition_id, open_positions, score_lookup, side,
 # ------------------------------------------------------------------ evaluate
 
 def evaluate(market, open_positions, score_lookup, touch, now, cfg, m0,
-             ranked=frozenset(), volume=None) -> list[Signal]:
-    """The pre-registered variants per market (§7; V4 added 2026-09-04, V6
+             ranked=frozenset(), volume=None, elite=None) -> list[Signal]:
+    """The pre-registered variants per market (§7; V4, V5 and V6 all added
     2026-09-04). Empty when no whale qualifies on either side — nothing to
     persist, nothing left on the table. `ranked` is V4's leaderboard filter,
     `volume` the market's own 24h venue volume for V6's denominator (None =
-    unknown, read as `dominance.min_volume_usd`); each is ignored by every
-    other variant."""
+    unknown, read as `dominance.min_volume_usd`), `elite` V5's percentile
+    cutoff for this market's bucket (None = no population, so nobody is
+    elite); each is ignored by every other variant."""
     whales = qualifying(market["condition_id"], open_positions, score_lookup, now, cfg)
     if not whales:
         return []
-    ctx = {"volume": volume, "now_ts": ts(now),
+    ctx = {"volume": volume, "now_ts": ts(now), "elite": elite,
            "ask": {s: t.ask for s, t in touch.items()}}
     return [_signal(v, market, whales, open_positions, score_lookup, touch,
                     now, cfg, m0, ranked, ctx) for v in VARIANTS]

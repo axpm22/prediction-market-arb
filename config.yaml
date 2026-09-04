@@ -722,7 +722,21 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   (48%), < 0.80 in 34 (61%); at 0.6667 the lane's ~21
                                       #   fires/24h become ~11/day, ~77/week, against the
                                       #   starvation alarm of 10/week.
-          min_points: { V1: 3, V2: null, V3: null, V4: 3, V6: 0.0020 },
+          min_points: { V1: 3, V2: null, V3: null, V4: 3, V5: 2, V6: 0.0020 },
+          elite_pct: 20,              # V5: a whale votes only if its score_lb, in THIS signal's
+                                      #   bucket, is in the top 20% of the reference population
+                                      #   (operator decision 2026-09-04: ALL scored wallets in
+                                      #   the root — every wallet with >=1 resolved position
+                                      #   there, point-in-time, hygiene-excluded wallets
+                                      #   removed — NOT the qualifying roster). Measured
+                                      #   2026-09-04 over 6,088 evaluations / 56 fires,
+                                      #   population 170 wallets x 6 buckets: top 5% and top 10%
+                                      #   retain ZERO fires (never two qualifying whales that
+                                      #   high on one side); top 20% (cutoff +0.0118) retains
+                                      #   15/56; top 30% (+0.0014) retains 35/56; top 40%
+                                      #   (-0.0046) is BELOW min_score_lb and therefore a no-op
+                                      #   that degenerates V5 into V1. 30 is the documented
+                                      #   fallback if the lane starves.
           calibration_days: 3, calibration_min_whales: 10,
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
                                       # entry-fire trigger: ratio + variant thresholds; V2/V3
@@ -740,9 +754,12 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   volume: median +0.00236, p75 +0.0138. Re-measured on
                                       #   the production denominator (venue volume_24h) at the
                                       #   >=14-day V2/V3 re-calibration; a change is a dated
-                                      #   amendment naming both values. There is no V5: the
-                                      #   percentile variant of the same proposal was not
-                                      #   shipped (operator decision 2026-09-04).
+                                      #   amendment naming both values.
+                                      #   V5 (elite, added 2026-09-04, superseding the same
+                                      #   day's "not shipped" note) is 2, also a LITERAL and
+                                      #   never null — measured, not calibrated; the V2/V3 null
+                                      #   cost the lane a week. See elite_pct above for the
+                                      #   population definition and the measured retention.
                                       #   Invariant: fire.ratio > 0.5; sybil_gap_secs
                                       #   collapses same-side prints within the gap to one whale
                                       #   (spec §7.3); max_drift_points caps the ask's drift above
@@ -820,7 +837,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   returned, it is simply not ranked. It is never
                                       #   a scoring floor, never gates qualification or
                                       #   firing, and no number under `rank:` reaches
-                                      #   V1-V4. `top` is how many rows the report and
+                                      #   V1-V6. `top` is how many rows the report and
                                       #   the dashboard show by default.
   primary_variant: V2                 # which fire variant the lane reports as its headline
   kill: { decision_n: 100, null_n: 1200, fast_kill_min_marked: 50,

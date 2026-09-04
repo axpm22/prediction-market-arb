@@ -151,6 +151,11 @@ def test_whale_config_loads_with_spec_values():
     # L14 amendment 2026-09-04 (§7 V6 dominance): a LITERAL threshold, never
     # null — the V2/V3 null blocked the primary variant for a week
     assert w["fire"]["min_points"]["V6"] == Decimal("0.0020")
+    # L14 amendment 2026-09-04 (§7 V5 elite): both LITERAL, set from the
+    # measurement before registration — top 5%/10% retain zero of the 56 fires,
+    # top 40% has a cutoff below min_score_lb and degenerates into V1.
+    assert w["fire"]["min_points"]["V5"] == 2
+    assert w["fire"]["elite_pct"] == 20
     assert w["dominance"] == {"half_life_secs": 1800, "min_volume_usd": 5000}
     assert w["leaderboard"]["time_periods"] == ["DAY", "WEEK", "MONTH", "ALL"]
     assert w["leaderboard"]["pages"] == 20        # offset cap 1000 / page size 50
@@ -200,6 +205,18 @@ def test_holders_ratio_must_sit_between_flip_ratio_and_fire_ratio(tmp_path):
         bad.write_text(SHIPPED.read_text().replace("holders_ratio: 0.6667,",
                                                    f"holders_ratio: {value},"))
         with pytest.raises(ConfigError, match="holders_ratio"):
+            load(bad)
+
+
+def test_elite_pct_must_be_a_percentage(tmp_path):
+    """L14 amendment 2026-09-04 (§7 V5): `0 < elite_pct <= 100`. At 0 nobody is
+    ever elite and the variant is dead; above 100 the cutoff index is
+    meaningless."""
+    for value in ("0", "120"):
+        bad = tmp_path / f"config-{value}.yaml"
+        bad.write_text(SHIPPED.read_text().replace("elite_pct: 20,",
+                                                   f"elite_pct: {value},"))
+        with pytest.raises(ConfigError, match="elite_pct"):
             load(bad)
 
 

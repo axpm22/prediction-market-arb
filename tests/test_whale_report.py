@@ -570,6 +570,31 @@ def test_the_report_never_polls_the_network(cfg, tmp_path, monkeypatch):
     report_whale.whale_frame(cfg, store, now=NOW, con=con)
 
 
+def test_the_report_prints_the_v5_elite_bar_and_its_population(cfg, tmp_path):
+    """§3's stated instability: the elite set moves week to week, so the daily
+    report prints the per-bucket cutoff and the population size behind it —
+    a step change in either is attributable, not inferred. A cutoff at or below
+    `min_score_lb` is called out: V5 is then a copy of V1."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    cfg["whale"]["min_score_lb"] = Decimal("0.0")            # the shipped bar
+    for bucket, cutoff, at in (("baseball_mlb:WINNER", "0.0118", NOW - timedelta(hours=2)),
+                               ("baseball_mlb:WINNER", "0.0118", NOW),
+                               ("baseball_mlb:TOTAL", "-0.0046", NOW)):
+        con.execute("INSERT INTO elite_cutoffs (root, bucket, as_of, cutoff, n)"
+                    " VALUES ('sports',?,?,?,170)", (bucket, at.isoformat(), cutoff))
+    con.commit()
+
+    frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+    md = "\n".join(report_whale.whale_md(frame))
+
+    assert frame["elite"]["pct"] == 20
+    assert [r["bucket"] for r in frame["elite"]["cutoffs"]] == [
+        "baseball_mlb:TOTAL", "baseball_mlb:WINNER"]        # newest per bucket
+    assert "top 20%" in md
+    assert "baseball_mlb:WINNER 0.0118 (pop 170)" in md
+    assert "copy of V1" in md                                # the degenerate bucket
+
+
 def test_the_report_writes_nothing_to_the_tape(cfg, tmp_path):
     """Rule 9's spirit: the section is a read. Base rates are the LANE's write."""
     store, con = _ledger(tmp_path), _tape(tmp_path)

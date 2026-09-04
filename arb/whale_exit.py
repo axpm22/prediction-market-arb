@@ -37,8 +37,9 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
     prints-based size; None or empty disables that test entirely. This module
     stays pure — the tape read and the staleness bound live in the caller.
 
-    `ctx` is V6's market context for THIS cycle — `volume` and the current
-    `ask` per side, from the lane's own books (arb/whale_dominance.py). "The
+    `ctx` is the market context for THIS cycle — V6's `volume` and current
+    `ask` per side from the lane's own books (arb/whale_dominance.py), and
+    V5's `elite` cutoff for this market's bucket (arb/whale_elite.py). "The
     consensus decayed" is a statement about now, not about booking time. Every
     key is optional and a caller with no book (the read-only dashboard) may
     omit it entirely; `now_ts` is always this call's own `now`.
@@ -125,13 +126,14 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
         remaining.append(cur)
     if not remaining:
         return None
-    # V4 fix (V4 review of 3a455fd): a V4 whale's points are 1/0 rank
-    # membership, not a score — once every remaining whale has fallen off
-    # the leaderboard, `wmean`'s zero-weight fallback would otherwise average
-    # their raw `lb` back in unweighted, exactly the leak V4's rank filter
-    # exists to close. No ranked whale left to weigh is no verdict, not a
-    # mean computed over the unranked crowd.
-    if variant == "V4" and all(x["points"] <= 0 for x in remaining):
+    # V4 fix (V4 review of 3a455fd), extended to V5 (§3, 2026-09-04): a V4
+    # whale's points are 1/0 rank membership and a V5 whale's 1/0 percentile
+    # membership, not a score — once every remaining whale has fallen off the
+    # leaderboard (or out of the elite set), `wmean`'s zero-weight fallback
+    # would otherwise average their raw `lb` back in unweighted, exactly the
+    # leak those filters exist to close. No member left to weigh is no verdict,
+    # not a mean computed over the crowd the variant says does not count.
+    if variant in ("V4", "V5") and all(x["points"] <= 0 for x in remaining):
         return None
     S = wmean(remaining, "lb")
     if S < d(ex["min_score_lb"]):

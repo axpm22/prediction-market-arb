@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from arb import whale_rank
+from arb import whale_elite, whale_rank
 from arb.models import q6
 from arb.replay import open_ro
 from arb.whale_kill import kill_status
@@ -95,6 +95,12 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
                     for v in sorted({r["variant"] for r in rows})},
             "markouts": markout_stats(store),
             "exits": exit_stats(store, con, signals),
+            # §7 V5: the percentile bar this lane is currently firing on, and
+            # the population behind it. Printed because the elite set moves
+            # week to week (§3) — a step change must be attributable.
+            "elite": {"pct": int(fire["elite_pct"]),
+                      "min_score_lb": cfg["whale"]["min_score_lb"],
+                      "cutoffs": whale_elite.latest(con) if con else []},
             "base_rates": [dict(r) for r in con.execute(
                 "SELECT root, as_of, value, n FROM base_rates b WHERE as_of = "
                 "(SELECT MAX(as_of) FROM base_rates x WHERE x.root=b.root) "
@@ -207,6 +213,22 @@ def _n(v, dash="—") -> str:
     return dash if v is None else str(v)
 
 
+def _elite_line(elite: dict) -> str:
+    """V5's bar per bucket, with the population behind it. A cutoff at or below
+    `min_score_lb` selects EVERY qualifying whale — V5 is then a copy of V1,
+    which is a result about the config, not about the whales, and is said here
+    as well as logged by the cycle."""
+    bar = Decimal(str(elite["min_score_lb"]))
+    cells = []
+    for r in elite["cutoffs"]:
+        cut = r["cutoff"]
+        cells.append(f"{r['bucket']} {_n(cut)} (pop {r['n']})"
+                     + ("" if cut is None or Decimal(cut) > bar
+                        else f" **<= min_score_lb {bar}: V5 is a copy of V1**"))
+    return (f"- V5 elite bar (top {elite['pct']}% of every scored wallet in the "
+            f"root): " + (", ".join(cells) or "—"))
+
+
 def whale_md(frame: dict) -> list[str]:
     """The section, as markdown. Cumulative lane-to-date except where a line
     names its own window — the class table above it is the day's."""
@@ -236,6 +258,7 @@ def whale_md(frame: dict) -> list[str]:
           "- base rate: " + (", ".join(
               f"{r['root']} {r['value']} (n={r['n']})" for r in frame["base_rates"])
               or "—"),
+          _elite_line(frame["elite"]),
           # last cycle status/rows/bad_rows/at and backoff_until are LIVE
           # collector facts, not a function of the report day — the
           # dashboard shows them (frame["collector"] still carries them);

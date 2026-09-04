@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from arb import report_whale, whale_exit, whale_holdings
+from arb import report_whale, whale_elite, whale_exit, whale_holdings
 from arb.lanes.whale_book import _bet_ctx
 from arb.whale_state import score_state
 
@@ -79,6 +79,7 @@ def whale_positions(cfg, store, bets, now, con=None) -> dict[int, dict]:
         return {}                     # no tape: the panel says so, per bet
     try:
         state = score_state(cfg, con, now)
+        elite = whale_elite.index(cfg, state)
         pseudonym = {r["proxy_wallet"]: r["pseudonym"]
                      for r in con.execute("SELECT proxy_wallet, pseudonym FROM wallets")}
         out = {}
@@ -86,8 +87,13 @@ def whale_positions(cfg, store, bets, now, con=None) -> dict[int, dict]:
             ctx = _bet_ctx(con, bet)
             if ctx is None:
                 continue              # booked without a signal row: nothing to say
+            # the same elite bar the next cycle would use (§7 V5), off the tape
+            # market's own bucket — without it a V5 bet would read as "held"
+            # here whatever the consensus did.
+            mk = state.markets.get(ctx["condition_id"], {})
             decision = whale_exit.exit_reason(
                 ctx, state.open_positions, state.lookup, now, cfg,
+                ctx={"elite": elite(mk.get("sport"), mk.get("market_type"))},
                 # the same second `left` reading the lane runs (§9 item C,
                 # 2026-09-04) — read-only, off the snapshots the lane polled,
                 # so the panel cannot say "held" about a bet the next cycle
