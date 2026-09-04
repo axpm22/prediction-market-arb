@@ -41,6 +41,17 @@ class Market:
     # denominator for a market with no watch quote — non-sports roots, 2026-09-04)
     volume_24h: str | None = None
 
+    @property
+    def root(self) -> str | None:
+        """This market's whale ROOT, which is also the Polymarket fee CATEGORY
+        its leg is priced at (non-sports roots amendment 2026-09-04): `sports`
+        for every mapped sport, else the fee category itself. `None` for an
+        unmappable market — such a market forms no scored position, so the lane
+        never books one, and `leg_fee_cost` would fall back to the venue's
+        default `fee_rate` (0.05), dearer than every mapped category."""
+        from arb.whale_score import root_of      # local: whale_score imports fees
+        return root_of(self.sport, self.market_type)
+
 
 def _iso(value) -> str | None:
     """Normalise a venue timestamp to the ledger's own ISO form. Gamma sends

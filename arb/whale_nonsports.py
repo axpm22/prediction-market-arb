@@ -212,3 +212,19 @@ def tape_universe(con, cfg, now) -> list[Market]:
                    tokens=tuple((t[0], t[1])
                                 for t in json.loads(r["tokens_json"] or "[]")),
                    volume_24h=r["volume_24h"]) for r in rows]
+
+
+def seed_volumes(volumes, markets) -> dict:
+    """Fill V6's denominator for a market the watch lane never quotes.
+
+    The lane builds `volumes` from the ledger's own watch quotes, which cover
+    Polymarket SPORTS only — a non-sports market would then read `None`, which
+    `whale_dominance.point` treats as `dominance.min_volume_usd` ($5,000) and a
+    $20M/day politics market would come out maximally dominant. `setdefault`
+    keeps the ledger authoritative wherever it has an answer; this only fills
+    the gap, from the Gamma figure `markets.volume_24h` already stores."""
+    for m in markets:
+        if m.volume_24h is not None:
+            for token, _ in m.tokens:
+                volumes.setdefault(f"{m.condition_id}:{token}", Decimal(m.volume_24h))
+    return volumes

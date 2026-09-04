@@ -63,11 +63,11 @@ def _market(**over):
     return m
 
 
-def _tape(tmp_path, start=START):
+def _tape(tmp_path, start=START, sport="baseball_mlb", mtype="WINNER"):
     con = whale_tape.open_tape(tmp_path / "tape.sqlite")
     con.execute("INSERT INTO markets (condition_id, sport, market_type, start_utc, "
                 "tokens_json, first_seen, last_seen) VALUES (?,?,?,?,?,?,?)",
-                (COND, "baseball_mlb", "WINNER", start.isoformat() if start else None,
+                (COND, sport, mtype, start.isoformat() if start else None,
                  json.dumps([[t, o] for t, o in zip(TOKENS, LABELS)]),
                  START.isoformat(), START.isoformat()))
     con.commit()
@@ -75,16 +75,17 @@ def _tape(tmp_path, start=START):
 
 
 def _bet(store, *, kind="WHALE", token=TOKENS[0], outcome=None, created_at=None,
-         start=START, cost="0.50", legs=1, side="YES"):
+         start=START, cost="0.50", legs=1, side="YES", category="sports",
+         sport="baseball_mlb", market_type="WINNER"):
     return store.insert("flat_bets", {
         "created_at": (created_at or START - timedelta(hours=1)).isoformat(),
         "poll_id": 1, "poll_kind": "whale", "fingerprint": f"fp-{token[:8]}",
-        "kind": kind, "category": "sports", "sport": "baseball_mlb",
+        "kind": kind, "category": category, "sport": sport,
         "event_key": "pm:" + COND, "event_start_utc": start.isoformat(),
         "start_grade": "verified", "lane": "review", "trusted": 0,
         "stake_usd": "1", "payout": "1", "status": "OPEN",
         "legs_json": json.dumps([{
-            "venue": "polymarket", "market_type": "WINNER", "line": None,
+            "venue": "polymarket", "market_type": market_type, "line": None,
             "outcome": outcome or LABELS[TOKENS.index(token)], "side": side,
             "cost": cost, "fee_cost": "0",
             "venue_market_id": f"{COND}:{token}"}] * legs)})
@@ -194,6 +195,28 @@ def test_leg_convention_winner_decided_by_token_identity(
     assert whale_resolve.settle_auto_pm(cfg, store, con, NOW, get=get) == 1
     events = _settled(store, bid)
     assert events[0]["per_leg"] == [expected]
+
+
+@pytest.mark.parametrize("category,sport,mtype", [
+    ("crypto", "crypto", "BINARY"), ("politics", "politics", "LADDER")])
+def test_a_nonsports_whale_bet_settles_through_the_same_pm_native_reader(
+        cfg, tmp_path, category, sport, mtype):
+    """Non-sports roots amendment 2026-09-04: settlement is category-agnostic
+    and needs no change at all. The recorded fixture this whole module runs on
+    is ITSELF a non-sports market — a closed 5-minute BTC up/down — so the
+    settler was verified on crypto before it was ever used on a sports bet;
+    what this pins is that a bet CARRYING a non-sports category and a
+    BINARY/LADDER market_type settles identically, with no `sports` branch
+    anywhere on the path."""
+    con = _tape(tmp_path, sport=sport, mtype=mtype)
+    store = Store(tmp_path / "arb.sqlite")
+    bid = _bet(store, token=TOKENS[1], category=category, sport=sport,
+               market_type=mtype)          # "Down" (index 1) wins in the fixture
+    get = FakeGet([_market()])
+    assert whale_resolve.settle_auto_pm(cfg, store, con, NOW, get=get) == 1
+    assert _settled(store, bid)[0]["per_leg"] == ["WON"]
+    assert _settled(store, bid)[0]["source"] == f"pm-gamma:{COND}"
+    assert "sports" not in (ROOT / "arb" / "whale_resolve.py").read_text()
 
 
 def test_settle_auto_pm_counts_only_appended_settled_events(cfg, tmp_path):

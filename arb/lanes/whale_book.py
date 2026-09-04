@@ -30,7 +30,7 @@ from arb.whale_signal import Signal, Touch, conf_stake
 from arb import whale_universe
 
 log = get_logger("arb.whale", "logs/whale.log")
-VENUE, CATEGORY = "polymarket", "sports"
+VENUE = "polymarket"
 # tape `signals` DDL: arb/whale_tape.py SCHEMA (kept in sync by hand, as the
 # collector's own row modules are).
 SIGNAL_COLS = ("evaluated_at, condition_id, side, variant, points_yes, points_no,"
@@ -105,10 +105,10 @@ def quote_rows(cfg, market, books, event_key, now) -> list[dict]:
         ask, bid, depth = best
         rows.append({
             "fetched_at": now.isoformat(), "event_key": event_key,
-            "category": CATEGORY, "sport": market.sport, "venue": VENUE,
+            "category": market.root, "sport": market.sport, "venue": VENUE,
             "book": VENUE, "market_type": market.market_type, "line": market.line,
             "outcome": label, "side": "YES", "raw_price": ask, "cost": ask,
-            "fee_cost": leg_fee_cost(cfg, VENUE, CATEGORY, ask),
+            "fee_cost": leg_fee_cost(cfg, VENUE, market.root, ask),
             "depth_usd": depth, "ladder_json": None, "live": False, "bid": bid,
             # unknown at fetch time: /books carries no 24h volume, and copying
             # the watch lane's number onto our timestamp would date a fact we
@@ -133,7 +133,7 @@ def candidate(cfg, market, sig, sizing, signal_id, event_key, token, label,
     Opportunity is built). The price IS the touch the fire rule scored, so the
     booked cost can never drift from the signal that justified it."""
     ask, bid, depth = sig.touch_ask, sig.touch_bid, sig.depth_usd
-    fee = leg_fee_cost(cfg, VENUE, CATEGORY, ask)
+    fee = leg_fee_cost(cfg, VENUE, market.root, ask)
     stake = Decimal(1) if sizing == "flat" else conf_stake(sig.S, cfg)
     cost_sum = q6(ask + fee)
     leg = {"venue": VENUE, "book": VENUE, "market_type": market.market_type,
@@ -145,7 +145,7 @@ def candidate(cfg, market, sig, sizing, signal_id, event_key, token, label,
            "venue_market_id": f"{market.condition_id}:{token}",
            "fetched_at": now.isoformat()}
     return {
-        "kind": "WHALE", "category": CATEGORY, "sport": market.sport,
+        "kind": "WHALE", "category": market.root, "sport": market.sport,
         "event_key": event_key, "event_start_utc": start,
         "start_grade": "nominal", "gamepk": None, "venue_pair": f"{VENUE}:self",
         "fingerprint": fingerprint(event_key, market, label, sig.variant, sizing),
@@ -191,7 +191,7 @@ def exit_payload(cfg, bet, decision, bid, contracts) -> dict:
     """§9's terminal `settled` payload. `result='EXITED'` and a `source` with
     the `exit:` prefix, which metrics.bet_pnl_optimistic reads for its pnl and
     the instant-settle tripwire exempts."""
-    fee = leg_fee_cost(cfg, VENUE, CATEGORY, bid)
+    fee = leg_fee_cost(cfg, VENUE, bet["category"], bid)
     stake = Decimal(str(bet["stake_usd"]))
     return {"result": "EXITED", "source": f"exit:{decision.reason}",
             "exit_price": str(bid), "exit_fee": str(fee),

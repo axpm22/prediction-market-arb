@@ -25,7 +25,8 @@ from datetime import datetime
 from decimal import Decimal
 
 from arb import whale_backfill, whale_dominance, whale_elite, whale_exit, whale_holdings
-from arb import whale_resolve, whale_score, whale_signal, whale_tape, whale_universe
+from arb import (whale_nonsports, whale_resolve, whale_score, whale_signal,
+                 whale_tape, whale_universe)
 from arb.lanes.whale_book import (_bet_ctx, _event_key, _fetch_books,
                                   _from_prints, _persist_signal, _tape_market,
                                   _touch, _zombied, best_bid, candidate,
@@ -110,14 +111,16 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     # unconditionally) and advance the watermark past an unfiltered window, a
     # gap the 120s overlap can't fully recover — skip it, watermark untouched.
     # discover_wallets reads the tape only (no network), so it runs regardless.
-    markets = whale_universe.universe(ro, cfg, now, res=res)
+    markets = (whale_universe.universe(ro, cfg, now, res=res)
+               + whale_nonsports.tape_universe(con, cfg, now))
     if markets:
         poll = whale_tape.poll_prints(cfg, con, markets, now, get=get)
         res.update(status=poll["status"], markets=len(markets), prints=poll["rows"],
                    bad_rows=poll["bad_rows"])
     else:
         log.warning("whale cycle: empty market universe (no watch poll in the "
-                    "lookback window had Polymarket sports rows) — skipping "
+                    "lookback window had Polymarket sports rows, and no "
+                    "non-sports market inside nonsports_max_days) — skipping "
                     "poll_prints, watermark untouched")
         res["status"] = "no-universe"
     res["wallets"] = whale_backfill.discover_wallets(cfg, con, now)
@@ -181,6 +184,7 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     vol_poll = res["poll_id"]
     volumes = ({r["venue_market_id"]: _d(r["volume_24h"])
                for r in ro.execute(VOLUME_SQL, (vol_poll,))} if vol_poll is not None else {})
+    whale_nonsports.seed_volumes(volumes, markets)   # non-sports: off the tape
     blocked = _calibration_blocked(con, cfg)
     cands = []
     for cid, m in live.items():

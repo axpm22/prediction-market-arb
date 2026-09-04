@@ -7,6 +7,7 @@ own `closed`, `conditionId`, `slug`, `outcomes`, `clobTokenIds`, `endDate`,
 `startDate`, `createdAt` and `volume24hr` are what the builder filters on.
 """
 import copy
+import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -194,3 +195,171 @@ def test_every_configured_root_is_a_polymarket_fee_category(cfg):
     roots = set(cfg["whale"]["nonsports"]["tags"].values())
     assert roots and roots <= set(_PM_CATEGORY_RATE_KEY) - {"sports"}
     assert Decimal(str(cfg["whale"]["nonsports"]["min_lifetime_hours"])) == 6
+
+
+# ------------------------------------------------- fees, lane and rule 11
+
+PSLUG = "will-x-happen-by-friday"
+PCID, PYES, PNO = "0xpol", "0xpyes", "0xpno"
+
+
+@pytest.fixture(autouse=True)
+def _fresh_bucket():
+    whale_tape._BUCKET = None
+    yield
+    whale_tape._BUCKET = None
+
+
+def _pm_market(sport="politics", mtype="BINARY", volume="25000"):
+    from arb.whale_universe import Market
+    return Market(condition_id=PCID, sport=sport, market_type=mtype, line=None,
+                  start_utc=(NOW + timedelta(days=3)).isoformat(),
+                  event_key=f"pm:{PSLUG}", tokens=((PYES, "Yes"), (PNO, "No")),
+                  volume_24h=volume)
+
+
+def _fee(cfg, key, price):
+    price = Decimal(str(price))
+    return cfg["polymarket"][key] * 1 * price * (1 - price)
+
+
+def test_a_politics_whale_leg_is_priced_at_the_politics_fee_rate(cfg):
+    """The proposal's single most likely silent bug: pricing a politics leg at
+    the sports rate (0.03 against 0.04) understates the cost of the very thing
+    under test."""
+    from arb.lanes import whale_book
+    from arb.whale_signal import Signal
+
+    market = _pm_market()
+    books = {PYES: {"asks": [{"price": "0.51", "size": "1000"}],
+                    "bids": [{"price": "0.49", "size": "1000"}]}}
+    rows = whale_book.quote_rows(cfg, market, books, f"pm:{PSLUG}", NOW)
+    assert [r["category"] for r in rows] == ["politics"]
+    assert rows[0]["fee_cost"] == _fee(cfg, "politics_fee_rate", "0.51")
+
+    sig = Signal(variant="V1", side=0, points_yes=Decimal(3), points_no=Decimal(0),
+                 ratio=Decimal(1), whales=[], vwap=Decimal("0.50"),
+                 touch_ask=Decimal("0.51"), touch_bid=Decimal("0.49"),
+                 depth_usd=Decimal("500"), fired=True, suppressed_reason=None,
+                 flagged_edge=Decimal("0.05"), S=Decimal("0.05"))
+    cand = whale_book.candidate(cfg, market, sig, "flat", 1, f"pm:{PSLUG}", PYES,
+                                "Yes", NOW + timedelta(days=3), NOW)
+    assert cand["category"] == "politics"
+    assert Decimal(cand["legs"][0]["fee_cost"]) == _fee(cfg, "politics_fee_rate", "0.51")
+    # ... and a sports market still prices at the sports rate
+    sports = _pm_market(sport="baseball_mlb", mtype="WINNER")
+    assert whale_book.candidate(cfg, sports, sig, "flat", 1, "pm:x", PYES, "Yes",
+                                None, NOW)["category"] == "sports"
+
+
+def test_a_crypto_exit_is_priced_at_the_crypto_fee_rate(cfg):
+    """The exit sells into the bid and pays the same category's fee — read off
+    the bet's own stored `category`, since no Market is in scope there."""
+    from arb.lanes import whale_book
+    from arb.whale_exit import ExitDecision
+    bet = {"category": "crypto", "stake_usd": "1"}
+    payload = whale_book.exit_payload(cfg, bet, ExitDecision("flip", {}),
+                                      Decimal("0.49"), Decimal(2))
+    assert Decimal(payload["exit_fee"]) == _fee(cfg, "crypto_fee_rate", "0.49")
+
+
+def test_a_nonsports_whale_row_is_review_whale_signal_never_ai_matched(cfg):
+    """Rule 11 governs CROSS-VENUE matching. This lane is `polymarket:self`,
+    keys on Polymarket's own event slug and never calls the matcher, so a
+    non-sports WHALE row must read `whale-signal`, never `ai-matched` and never
+    `nonsports-segregated`."""
+    from arb.eligibility import classify
+    for category in ("politics", "geopolitics", "crypto", "sports"):
+        assert classify({"kind": "WHALE", "category": category, "sport": category,
+                         "venue_pair": "polymarket:self", "status": "OK",
+                         "quality_flag": "none", "ai_matched": False}, cfg) \
+            == (False, "whale-signal", "review")
+    # the pin that makes the caller side true: process_poll sets ai_matched
+    # False for every candidate it classifies
+    tracker = (ROOT / "arb" / "tracker.py").read_text()
+    assert '"ai_matched": False' in tracker
+    # ... and no whale module can reach rule 11's AI matcher (arb/nonsports/)
+    for name in ("whale.py", "whale_book.py"):
+        src = (ROOT / "arb" / "lanes" / name).read_text()
+        for banned in ("arb.nonsports", "from arb import nonsports", "ai_match",
+                       "nonsports_map", "verdict"):
+            assert banned not in src, f"{name}: {banned}"
+
+
+# ------------------------------------------------------------- the cycle
+
+def _trade(wallet, idx=0, price="0.50", size="1000", age=60):
+    return {"proxyWallet": wallet, "pseudonym": wallet, "conditionId": PCID,
+            "asset": (PYES, PNO)[idx], "outcome": ("Yes", "No")[idx],
+            "outcomeIndex": idx, "side": "BUY", "price": price, "size": size,
+            "timestamp": int((NOW - timedelta(seconds=age)).timestamp()),
+            "transactionHash": f"0x{wallet}", "eventSlug": PSLUG,
+            "slug": f"{PSLUG}-yes", "title": "Will X happen by Friday?"}
+
+
+class _Get:
+    def __init__(self, rows):
+        self.rows, self.urls = list(rows), []
+
+    def __call__(self, url, cfg, **kw):
+        self.urls.append(url)
+        return list(self.rows) if "/trades" in url else []
+
+
+def _fetch(cfg, token_ids, deadline=None):
+    book = {"asks": [{"price": "0.51", "size": "1000"}],
+            "bids": [{"price": "0.49", "size": "1000"}]}
+    return {t: dict(book) for t in token_ids}
+
+
+def test_the_cycle_books_a_politics_consensus_off_the_tape_universe(cfg, con, tmp_path):
+    """End to end, one cycle, no watch poll at all: the non-sports half of the
+    universe comes from the tape, the leg is priced at the politics rate, and
+    the row keys on Polymarket's own event slug."""
+    from arb.lanes.whale import run_whale_cycle
+    from arb.store import Store
+    from arb.whale_universe import persist_markets
+
+    cfg["whale"]["min_score_lb"] = Decimal("-0.10")   # see tests/test_whale_lane.py
+    persist_markets(con, [_pm_market()], NOW, first_sight_wins=True)
+    store = Store(tmp_path / "arb.sqlite")
+    rows = [_trade(f"w{i}", age=60 + 30 * i) for i in range(3)]
+    res = run_whale_cycle(cfg, store, con, NOW, get=_Get(rows), fetch=_fetch)
+
+    assert res["markets"] == 1 and res["fired"] >= 1
+    bets = [dict(r) for r in store.query("SELECT * FROM flat_bets ORDER BY id")]
+    assert bets, res["suppressed"]
+    assert {b["category"] for b in bets} == {"politics"}
+    assert {b["event_key"] for b in bets} == {f"pm:{PSLUG}"}
+    leg = json.loads(bets[0]["legs_json"])[0]
+    assert Decimal(leg["fee_cost"]) == _fee(cfg, "politics_fee_rate", "0.51")
+    assert {b["lane"] for b in bets} == {"review"}
+    # rule 7: the books this cycle fetched are quotes rows under the same key
+    quotes = [dict(r) for r in store.query("SELECT * FROM quotes")]
+    assert {q["category"] for q in quotes} == {"politics"}
+
+
+def _v6(cfg, tmp_path, name, volume):
+    from arb.lanes.whale import run_whale_cycle
+    from arb.store import Store
+    from arb.whale_universe import persist_markets
+    con = whale_tape.open_tape(tmp_path / f"{name}.sqlite")
+    persist_markets(con, [_pm_market(volume=volume)], NOW, first_sight_wins=True)
+    run_whale_cycle(cfg, Store(tmp_path / f"{name}-arb.sqlite"), con, NOW,
+                    get=_Get([_trade(f"w{i}", age=60 + 30 * i) for i in range(3)]),
+                    fetch=_fetch)
+    return dict(con.execute("SELECT points_yes, fired FROM signals "
+                            "WHERE variant='V6'").fetchone())
+
+
+def test_the_cycle_prices_v6_off_the_tapes_own_volume_not_the_floor(cfg, tmp_path):
+    """A non-sports market has no watch quote, so without `markets.volume_24h`
+    V6's denominator falls to `dominance.min_volume_usd` ($5,000) — on a
+    $20M/day politics market that reads as maximal dominance and fires."""
+    cfg["whale"]["min_score_lb"] = Decimal("-0.10")
+    unknown = _v6(cfg, tmp_path, "unknown", None)
+    known = _v6(cfg, tmp_path, "known", "20000000")
+    assert unknown["fired"] and Decimal(unknown["points_yes"]) >= \
+        Decimal(str(cfg["whale"]["fire"]["min_points"]["V6"]))
+    assert not known["fired"]
+    assert Decimal(known["points_yes"]) < Decimal(unknown["points_yes"])
