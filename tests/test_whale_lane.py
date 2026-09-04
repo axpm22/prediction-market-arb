@@ -533,10 +533,10 @@ def test_heartbeat_knows_both_whale_processes(cfg):
         == float(cfg["whale"]["backfill"]["cadence_secs"])
     assert POLL_KIND["whale"] == "whale"
     assert "whale-backfill" not in POLL_KIND      # it writes no polls (like verify)
-    # wired but OFF by default: enabling is Task 11's deliberate commit after
-    # the operator's terms-of-use decision (spec §3, plan Task 11)
-    assert cfg["supervisor"]["processes"]["whale"] is False
-    assert cfg["supervisor"]["processes"]["whale-backfill"] is False
+    # enabled by the operator on 2026-09-04 (Task 11; ToS decision recorded in
+    # KNOWN_ISSUES.md #32) — both processes run under the supervisor
+    assert cfg["supervisor"]["processes"]["whale"] is True
+    assert cfg["supervisor"]["processes"]["whale-backfill"] is True
     assert cfg["supervisor"]["commands"]["whale"] == "whale --once"
     assert cfg["supervisor"]["commands"]["whale-backfill"] == "whale-backfill --once"
     assert cfg["supervisor"]["max_child_runtime_secs"]["whale"] == 120

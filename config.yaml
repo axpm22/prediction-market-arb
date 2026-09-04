@@ -315,8 +315,8 @@ supervisor:
                                                   #   Implemented since Phase 7 and never
                                                   #   run: 1 annotation in 21 days. Keyless
                                                   #   Kalshi/PM reads only (rule 2 safe).
-               whale: false,                       # L14 whale-consensus lane (60s cycle)
-               whale-backfill: false }             # its leaderboard + per-wallet history
+               whale: true,                        # L14 whale-consensus lane (60s cycle) — enabled 2026-09-04 (Task 11)
+               whale-backfill: true }              # its leaderboard + per-wallet history
                                                   #   process: ~11 min of paced calls per
                                                   #   cycle, so NEVER inside the 60s lane
   commands:  { watch: "watch --once", live: "live --once",

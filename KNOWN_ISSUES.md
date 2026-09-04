@@ -285,3 +285,5 @@ config default.
 
 Everything above is why the honest answer to "how much does it make" is zero, and
 why the number is now trustworthy rather than merely low.
+
+*Decision 2026-09-04 (operator):* proceed. The operator instructed "start the instrument, start everything" after the open question above; `supervisor.processes.whale` and `whale-backfill` were enabled in the Task 11 commit. Standing mitigations: the collector self-limits to `whale.max_calls_per_min` (30) and backs off `whale.backoff_secs` (300) on any non-200; all reads are unauthenticated public GETs; nothing is placed. If Polymarket signals otherwise (429s, challenge pages, a block), set `supervisor.processes.whale: false` and `whale-backfill: false` and restart.
