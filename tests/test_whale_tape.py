@@ -1091,7 +1091,7 @@ def test_map_markets_bounds_new_ids_and_revisit_rows_together(tmp_path):
     con.commit()
     cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
                          "page_size": 50, "map_per_cycle": 2})
-    get = FakeGet([])                                 # one call covers both (2 ids/call)
+    get = FakeGet([])                                 # one call covers both (GAMMA_IDS_PER_CALL=20 >= map_per_cycle=2)
 
     res = whale_backfill.map_markets(cfg, con, NOW, get=get)
 
