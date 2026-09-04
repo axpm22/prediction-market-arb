@@ -134,7 +134,11 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
 3. **Discover.** Any wallet whose cumulative pregame BUY notional in tracked
    markets exceeds `whale.discovery_min_notional_usd` (1,000) enters
    `wallets` with `source='tape'`. Leaderboard wallets enter with
-   `source='leaderboard'` from a daily snapshot. Source never enters the score.
+   `source='leaderboard'` from a daily snapshot of every window in
+   `whale.leaderboard.time_periods` (DAY, WEEK, MONTH, ALL; amended
+   2026-09-04 from MONTH only) up to `whale.leaderboard.pages` (20, the
+   documented offset cap 1000 / limit 50) each. Source never enters the
+   score; membership in the latest snapshot is what V4 reads.
 4. **Backfill.** For wallets not yet backfilled, FIFO by discovery time, up
    to `whale.backfill.wallets_per_cycle` (5): pull `/activity?type=TRADE`
    pages up to `whale.backfill.pages_per_wallet` (40 × `page_size` 50 =
@@ -311,6 +315,7 @@ re-review). Three pre-registered variants:
 | V1 flat | 1 |
 | V2 excess | `score_lb − min_score_lb` |
 | V3 size | `(score_lb − min_score_lb) × log10(1 + open_notional / whale.size.unit_usd)`, `size.unit_usd` = 100; `open_notional = (size − sold_size) × avg_price`, the whale's live exposure on that side (pinned 2026-09-03, Task 6) |
+| V4 ranked (added 2026-09-04, operator request) | 1 per qualifying whale that appears in the latest leaderboard snapshot (any window: DAY/WEEK/MONTH/ALL, category SPORTS), 0 otherwise. Same qualification bar as V1 (a whale must still clear `min_score_lb` on our own scores); rank is a filter, never a score input. `fire.min_points.V4` = 3, literal. Secondary, never promotable under this registration; its purpose is to test whether leaderboard rank adds information over our realized-edge scores — the literature's 12%-overlap finding says it should not |
 
 **Fire** when all hold for a side s:
 
@@ -645,7 +650,7 @@ whale:
   page_size: 10000                  # trades rows per call (10,000 verified 2026-09-03); paging stops on age, never on `start`
   max_offset: 10000                 # the feed 400s past this (observed 2026-09-04); beyond it we record a gap and move on
   taker_only: true                  # Task 1 probe 3: one row per fill; `false` returns every leg (2.2x rows)
-  leaderboard: { enabled: true, category: SPORTS, time_period: MONTH, order_by: PNL, pages: 4 }
+  leaderboard: { enabled: true, category: SPORTS, time_periods: [DAY, WEEK, MONTH, ALL], order_by: PNL, pages: 20 }   # amended 2026-09-04: all windows, full depth (80 calls/day)
   resolve_after_hours: 4
   resolve_giveup_days: 14
   position_window_secs: 300
@@ -662,7 +667,7 @@ whale:
     eb_min_wallets: 200
   hygiene: { mm_window_secs: 600, mm_market_share: 0.30, mm_max_avg_usd: 50,
              both_sides_tolerance: 0.10, wash_gap_secs: 2 }
-  fire: { ratio: 0.80, min_points: { V1: 3, V2: null, V3: null },
+  fire: { ratio: 0.80, min_points: { V1: 3, V2: null, V3: null, V4: 3 },
           calibration_days: 14, calibration_min_whales: 10,
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
   size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10 }
