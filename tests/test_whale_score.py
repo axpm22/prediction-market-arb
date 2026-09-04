@@ -167,6 +167,177 @@ def test_an_unmappable_market_never_forms_a_scored_position(cfg):
     assert pos == [] and res["unmapped"] == 1
 
 
+# --------------------------------------------------- positions_from_prints perf
+#
+# Regrade 2026-09-04 (report: .superpowers/sdd/retention-report.md, "score_state
+# read trim" section): positions_from_prints is the largest self-time consumer
+# of score_state at 400k rows (~2-3.5s of it, depending on tape shape), from a
+# full-tape Python sorted() up front plus notional_usd parsed to Decimal twice
+# per non-dust print. The whale cycle rebuilds score_state every 60s under a
+# 120s child cap and the tape grows ~700k rows/day.
+#
+# `_REFERENCE_positions_from_prints` below is the function EXACTLY as it stood
+# before this fix (frozen here, not imported, so refactoring the real module
+# can never silently rot the ground truth this compares against). The property
+# test proves the fast path returns the identical position set; the timing
+# test is the regression guard.
+
+def _REFERENCE_positions_from_prints(prints, markets, cfg, res=None):
+    """positions_from_prints, byte-for-byte as it stood pre-posperf-fix:
+    a full-tape `sorted(prints, key=ts)` up front, and notional_usd parsed to
+    Decimal twice per non-dust print (once for the dust check, again into
+    cur["notional"])."""
+    w = cfg["whale"]
+    window, min_usd = int(w["position_window_secs"]), Decimal(str(w["min_print_usd"]))
+    res = {} if res is None else res
+    groups = defaultdict(list)
+    for p in sorted(prints, key=lambda r: int(r["ts"])):
+        if p["outcome_index"] is None:
+            res["no_outcome_index"] = res.get("no_outcome_index", 0) + 1
+            continue
+        groups[(p["proxy_wallet"], p["condition_id"], p["outcome_index"])].append(p)
+
+    out = []
+    for (wallet, cid, idx), rows in groups.items():
+        mk = markets.get(cid) or {}
+        root = whale_score.root_of(mk.get("sport"), mk.get("market_type"))
+        if root is None:
+            res["unmapped"] = res.get("unmapped", 0) + len(rows)
+            continue
+        start = whale_score._epoch(mk.get("start_utc"))
+        opens, cur = [], None
+        for p in rows:
+            price, size = Decimal(str(p["price"])), Decimal(str(p["size"]))
+            ts = int(p["ts"])
+            if Decimal(str(p["notional_usd"])) < min_usd:
+                res["dust"] = res.get("dust", 0) + 1
+                continue
+            if p["side"] == whale_score.SELL:
+                left = size
+                for o in opens:                       # oldest first
+                    take = min(left, o["size"] - o["sold"])
+                    if take > 0:
+                        o["sold"] += take
+                        o["value"] += take * price
+                        left -= take
+                    if left <= 0:
+                        break
+                if left >= size:
+                    res["orphan_sell"] = res.get("orphan_sell", 0) + 1
+                continue
+            if cur is None or ts - cur["last"] > window:
+                cur = {"first": ts, "last": ts, "size": Decimal(0), "cost": Decimal(0),
+                       "notional": Decimal(0), "sold": Decimal(0), "value": Decimal(0),
+                       "source": p.get("source", "tape")}
+                opens.append(cur)
+            cur["last"] = ts
+            cur["size"] += size
+            cur["cost"] += price * size
+            cur["notional"] += Decimal(str(p["notional_usd"]))
+        for o in opens:
+            out.append(whale_score.Position(
+                wallet=wallet, condition_id=cid, outcome_index=idx,
+                avg_price=q6(o["cost"] / o["size"]), size=o["size"],
+                notional_usd=q6(o["notional"]), entry_ts=o["first"], last_ts=o["last"],
+                pregame=start is not None and o["last"] < start,
+                sport=mk.get("sport"), market_type=mk.get("market_type"), root=root,
+                source=o["source"], sold_size=o["sold"], sell_value=q6(o["value"])))
+    return out
+
+
+def _random_prints_full(rng, n, n_wallets=6, n_markets=5, n_unmapped=2, ts_span=2000):
+    """Random-ish, seeded prints covering every branch positions_from_prints
+    has: BUY/SELL (so FIFO runs), a price/size mix that lands on both sides of
+    min_print_usd=200 (so dust is exercised), a couple of cids never given a
+    `markets` entry (unmapped), and both outcome_index legs. ts is drawn
+    independently of group, so a fair share of groups land out of ts order —
+    exactly the case the fallback per-group sort has to catch."""
+    wallets = [f"0xw{i}" for i in range(n_wallets)]
+    cids = [f"0xc{i}" for i in range(n_markets)]
+    unmapped = [f"0xu{i}" for i in range(n_unmapped)]
+    prices = ["0.05", "0.10", "0.35", "0.50", "0.65", "0.90"]
+    sizes = ["5", "50", "300", "2000", "8000"]
+    out = []
+    for _ in range(n):
+        idx = None if rng.random() < 0.03 else rng.choice((0, 1))
+        out.append(_print(wallet=rng.choice(wallets), cid=rng.choice(cids + unmapped),
+                          idx=idx, side=rng.choice(("BUY", "SELL")),
+                          ts=T + rng.randint(0, ts_span),
+                          price=rng.choice(prices), size=rng.choice(sizes)))
+    return out, {c: _market() for c in cids}
+
+
+def test_positions_from_prints_matches_the_reference_on_random_print_sets(cfg):
+    """Equivalence: dropping the full-tape sorted() and parsing notional_usd
+    once instead of twice must not move a single Position. Position order
+    across GROUPS is incidental and stated as changed (the reference iterates
+    groups in ts-sorted first-seen order; the real function now iterates in
+    whatever order it receives prints, since it no longer sorts up front) —
+    both sides always emit one group's own opens oldest-first, so sorting the
+    returned lists by (wallet, condition_id, outcome_index, entry_ts) before
+    comparing is order-insensitive only where the old order was incidental."""
+    rng = random.Random(20260905)
+    key = lambda p: (p.wallet, p.condition_id, p.outcome_index, p.entry_ts)
+    for trial in range(200):
+        n = rng.randint(1, 150)
+        prints, markets = _random_prints_full(rng, n)
+        res_got, res_want = {}, {}
+        got = whale_score.positions_from_prints(prints, markets, cfg, res_got)
+        want = _REFERENCE_positions_from_prints(prints, markets, cfg, res_want)
+        assert sorted(got, key=key) == sorted(want, key=key), f"trial {trial}, n={n}"
+        assert res_got == res_want, f"trial {trial}, n={n}: {res_got} != {res_want}"
+
+
+def _big_prints(rng, n, n_wallets=500, n_markets=2000, n_unmapped=40):
+    """Realistic tape shape (posperf 2026-09-04 bench, see bench_pfp2.py/
+    gen_tape.py in the report): 500 wallets x 2,000 markets so most groups
+    are 1-2 rows (a dense-group shape spends most of its time in the FIFO/
+    window loop regardless of the sort/parse fix and hides the improvement —
+    checked). 5% dust, 15% SELL, ~2% unmapped markets. Sorted by (wallet,
+    condition_id, outcome_index, ts) — the order `arb/whale_state.py` now
+    asks SQLite for (idx_prints_score) — so this measures the fast path the
+    fix targets, not the fallback sort."""
+    wallets = [f"0xw{i}" for i in range(n_wallets)]
+    cids = [f"0xc{i}" for i in range(n_markets)]
+    unmapped = [f"0xu{i}" for i in range(n_unmapped)]
+    all_cids = cids + unmapped
+    prices = ["0.10", "0.35", "0.50", "0.65", "0.90"]
+    real_sizes = ["500", "1000", "3000", "8000"]
+    dust_sizes = ["10", "50"]
+    out = []
+    for _ in range(n):
+        dust = rng.random() < 0.05
+        out.append(_print(wallet=rng.choice(wallets), cid=rng.choice(all_cids),
+                          idx=rng.choice((0, 1)),
+                          side="SELL" if rng.random() < 0.15 else "BUY",
+                          ts=T + rng.randint(0, 20 * 24 * 3600),
+                          price=rng.choice(prices),
+                          size=rng.choice(dust_sizes if dust else real_sizes)))
+    out.sort(key=lambda p: (p["proxy_wallet"], p["condition_id"], p["outcome_index"], p["ts"]))
+    return out, {c: _market() for c in cids}
+
+
+def test_positions_from_prints_completes_in_bounded_time_on_a_200k_tape(cfg):
+    # Regression guard (posperf 2026-09-04), not a tight RED/GREEN gate: the
+    # sort/parse fix's win on a *sparse-group* 200k tape (this shape) is real
+    # but modest (~10-30%, most of the cost is the per-row FIFO/window loop
+    # and Decimal arithmetic itself, not the removed sort/re-parse) and this
+    # dev machine's background load swings enough to blur a tight bound —
+    # measured (bench_pfp2.py, a controlled load-a-fixed-list-once/run-N-times
+    # harness, see the report): pre-fix 0.99-1.22s median ~1.03s, post-fix
+    # 0.87-1.01s median ~0.98s, 15 runs each. 1.3s is generous headroom over
+    # every post-fix sample from any session measured (worst seen 1.27s) —
+    # loose by design, same tradeoff the hygiene perf guard already made
+    # (test_hygiene_flags_completes_in_bounded_time_on_a_concentrated_tape's
+    # own comment) rather than one that flakes under load.
+    rng = random.Random(1)
+    prints, markets = _big_prints(rng, 200_000)
+    t0 = time.perf_counter()
+    whale_score.positions_from_prints(prints, markets, cfg)
+    dt = time.perf_counter() - t0
+    assert dt < 1.3, f"positions_from_prints took {dt:.3f}s on 200k rows"
+
+
 # ---------------------------------------------------------------- scoring
 
 @pytest.mark.parametrize("n,mu,sd,lb80,lb90", [

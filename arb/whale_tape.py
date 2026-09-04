@@ -91,6 +91,19 @@ CREATE TABLE IF NOT EXISTS prints (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prints_key
     ON prints(tx_hash, proxy_wallet, asset, side, price, size, ts);
 CREATE INDEX IF NOT EXISTS idx_prints_market ON prints(condition_id, ts);
+-- posperf (2026-09-04): whale_score.positions_from_prints groups by
+-- (proxy_wallet, condition_id, outcome_index) and needs each group's rows in
+-- ascending ts. Neither existing index covers that; EXPLAIN QUERY PLAN on
+-- `SELECT ... FROM prints ORDER BY proxy_wallet, condition_id, outcome_index,
+-- ts` without this index still used idx_prints_wallet for the scan but added
+-- "USE TEMP B-TREE FOR LAST 3 TERMS OF ORDER BY". With it, the same query is
+-- a single `SCAN prints USING INDEX idx_prints_score` — arb/whale_state.py's
+-- score_state now asks for exactly this order, so positions_from_prints no
+-- longer has to sort the whole tape in Python. CREATE INDEX IF NOT EXISTS is
+-- self-migrating (open_tape's executescript runs it on every open, old tapes
+-- included) — no arb/whale_migrate.py entry needed, unlike an ADD COLUMN.
+CREATE INDEX IF NOT EXISTS idx_prints_score
+    ON prints(proxy_wallet, condition_id, outcome_index, ts);
 CREATE INDEX IF NOT EXISTS idx_prints_wallet ON prints(proxy_wallet, ts);
 -- `volume_24h` (non-sports roots amendment 2026-09-04): the venue's own 24h
 -- volume, V6's denominator. The lane reads it from the ledger's watch quotes

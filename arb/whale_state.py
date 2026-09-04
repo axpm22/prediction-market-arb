@@ -23,6 +23,38 @@ score_state's own reads+dict() and ~1.3s in hygiene_flags' own time), from the
 full-tape `sorted()` up front plus a `Decimal(str(...))` conversion of
 `notional_usd` done twice per non-dust print (once for the dust check, again
 into `cur["notional"]`).
+
+posperf (2026-09-04): fixed exactly that — see `whale_score.positions_from_prints`'s
+own docstring for the change. `arb/whale_tape.py`'s SCHEMA gained
+idx_prints_score(proxy_wallet, condition_id, outcome_index, ts) and `score_state`
+now asks for that order (PRINT_ORDER below), so positions_from_prints groups
+in whatever order SQLite hands it and only re-sorts a group whose own ts goes
+backwards, instead of sorting the whole tape. `notional_usd` is parsed to
+Decimal once per row (was up to 3x for a dust row: once for price, once for
+size, once for notional itself — dust is checked first now, off notional
+alone, before price/size are touched at all).
+
+Measured (tests/../scratchpad bench scripts, not committed; same 400k-print/
+2,000-market/500-wallet synthetic tape as above, same machine):
+  positions_from_prints alone, isolated (bench_pfp2.py: one sqlite read, N
+  in-process calls, min/median/max reported to damp this host's load jitter):
+    200k rows: before 0.99-1.58s (median ~1.25s) -> after 0.83-1.04s (median ~0.93s)
+    400k rows: before 2.33-3.26s (median ~2.74s) -> after 1.66-2.06s (median ~1.82s)
+  score_state end-to-end (bench_score_state.py), 400k rows, 6 runs each side:
+    before 4.67-5.75s, after 4.49-6.30s — this host's background load swings
+    wider than the isolated function's own win at the whole-cycle grain (I/O +
+    hygiene_flags dominate the noise budget here), so this number alone does
+    NOT show the fix; the isolated positions_from_prints numbers above and the
+    cProfile split below do.
+Still > 4s at 400k: cProfile'd once more (not fixed here). positions_from_prints
+dropped from the largest self-time consumer to the second-largest: a fresh
+cProfile run (instrumentation inflates absolute seconds, not the ratios) put
+score_state's OWN body (the SQL fetch + dict() conversion across all three
+tables) at 3.43s tottime, positions_from_prints at 2.04s, hygiene_flags at
+0.62s own / 2.09s cumulative. The next hot spot, if this ever needs a third
+pass, is score_state's own read+dict() body — already column-trimmed (the
+2026-09-04 regrade above); further reduction would mean not materializing a
+`dict` per sqlite3.Row at all, a bigger read-path change than this pass.
 """
 from __future__ import annotations
 
@@ -37,6 +69,13 @@ from arb.whale_hygiene import hygiene_flags
 # print ever collected — into memory on every 60 s cycle.
 PRINT_COLS = ("ts, proxy_wallet, condition_id, outcome_index, side, price, size,"
               " notional_usd, source, asset, event_slug")
+
+# posperf (2026-09-04): positions_from_prints groups by (proxy_wallet,
+# condition_id, outcome_index) and needs each group's own rows in ascending
+# ts. Ordering here, off idx_prints_score (arb/whale_tape.py SCHEMA), means
+# SQLite delivers rows already in that order — positions_from_prints no
+# longer sorts the whole tape in Python.
+PRINT_ORDER = "ORDER BY proxy_wallet, condition_id, outcome_index, ts"
 
 # Retention regrade 2026-09-04 (§ score_state read trim): everything
 # positions_from_prints, _tape_market/_event_key (arb/lanes/whale_book.py,
@@ -75,7 +114,7 @@ def score_state(cfg, con, now) -> WhaleState:
     # every 60 s. If a backfilled tape ever makes this outrun the report, cache
     # the aggregation per wallet — not a second, divergent assembly.
     """
-    prints = [dict(r) for r in con.execute(f"SELECT {PRINT_COLS} FROM prints")]
+    prints = [dict(r) for r in con.execute(f"SELECT {PRINT_COLS} FROM prints {PRINT_ORDER}")]
     markets = {r["condition_id"]: dict(r)
                for r in con.execute(f"SELECT {MARKET_COLS} FROM markets")}
     resolutions = {r["condition_id"]: dict(r)

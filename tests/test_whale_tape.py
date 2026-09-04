@@ -232,6 +232,46 @@ class _RacyCon:
         self._real.rollback()
 
 
+def test_open_tape_adds_idx_prints_score_to_a_pre_posperf_tape(tmp_path):
+    """posperf (2026-09-04): idx_prints_score(proxy_wallet, condition_id,
+    outcome_index, ts) is new — a tape opened before this fix has a `prints`
+    table (and its three older indexes) but not this one. Unlike the
+    holders_ratio column above, an index needs no arb/whale_migrate.py ALTER
+    entry: `CREATE INDEX IF NOT EXISTS` in SCHEMA is already self-migrating,
+    since `open_tape` runs the whole SCHEMA script (not just `_migrate`) on
+    every open, old tapes included."""
+    path = tmp_path / "w.sqlite"
+    old = sqlite3.connect(str(path))
+    old.execute("""CREATE TABLE prints (
+        id INTEGER PRIMARY KEY, observed_at TEXT, ts INTEGER, tx_hash TEXT,
+        proxy_wallet TEXT, pseudonym TEXT, condition_id TEXT, asset TEXT, outcome TEXT,
+        outcome_index INTEGER, side TEXT, price TEXT, size TEXT, notional_usd TEXT,
+        event_slug TEXT, slug TEXT, title TEXT, source TEXT, raw_json TEXT)""")
+    old.execute("CREATE UNIQUE INDEX idx_prints_key "
+                "ON prints(tx_hash, proxy_wallet, asset, side, price, size, ts)")
+    old.execute("CREATE INDEX idx_prints_market ON prints(condition_id, ts)")
+    old.execute("CREATE INDEX idx_prints_wallet ON prints(proxy_wallet, ts)")
+    old.execute("INSERT INTO prints (observed_at, ts, tx_hash, proxy_wallet, condition_id,"
+                " outcome_index, side, price, size, notional_usd) VALUES"
+                " ('2026-09-01T00:00:00+00:00', 1, '0xold', '0xw', '0xc', 0, 'BUY',"
+                " '0.500000', '100.000000', '50.000000')")
+    old.commit()
+    old.close()
+
+    con = whale_tape.open_tape(path)
+
+    names = {r[0] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE tbl_name='prints' AND type='index'")}
+    assert "idx_prints_score" in names
+    plan = [tuple(r) for r in con.execute(
+        "EXPLAIN QUERY PLAN SELECT * FROM prints ORDER BY proxy_wallet,"
+        " condition_id, outcome_index, ts")]
+    assert any("idx_prints_score" in str(row) for row in plan), plan
+    assert not any("TEMP B-TREE" in str(row) for row in plan), plan
+    # the pre-existing row survives the index add untouched
+    assert con.execute("SELECT COUNT(*) FROM prints").fetchone()[0] == 1
+
+
 def test_migrate_treats_a_concurrent_add_column_as_already_done(tmp_path):
     """I2(b): the real table already has `holders_ratio` (this process's own
     earlier `open_tape` added it) by the time the stale PRAGMA read above

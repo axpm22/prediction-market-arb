@@ -117,19 +117,41 @@ def positions_from_prints(prints, markets, cfg, res=None) -> list[Position]:
     """BUY windows per (wallet, condition_id, outcome_index); SELLs reduce the
     wallet's open positions FIFO and never form one (Polymarket has no native
     short). `res` is an optional diagnostics dict — dust, unmapped, orphan_sell.
+
+    posperf (2026-09-04): each group's own rows must land here in ascending
+    ts, but the whole tape does not — the old `sorted(prints, key=ts)` up
+    front sorted 400k rows to guarantee an order only ~2-3 rows/group need.
+    `arb/whale_state.py` now asks SQLite for `ORDER BY proxy_wallet,
+    condition_id, outcome_index, ts` (idx_prints_score, arb/whale_tape.py),
+    so this groups in whatever order it receives prints and only re-sorts a
+    group whose own ts sequence goes backwards — free (a single per-row
+    comparison) when the caller already delivers order, still correct for a
+    caller (tests included) that hands in prints in any order. `notional_usd`
+    is also parsed to Decimal exactly once per row now (was: once for the
+    dust check, again into `cur["notional"]`) and checked BEFORE price/size
+    are parsed at all, so a dust row costs one Decimal() call, not three.
     """
     w = cfg["whale"]
     window, min_usd = int(w["position_window_secs"]), Decimal(str(w["min_print_usd"]))
     res = {} if res is None else res
     groups = defaultdict(list)
-    for p in sorted(prints, key=lambda r: int(r["ts"])):
+    last_ts = {}
+    unordered = set()
+    for p in prints:
         if p["outcome_index"] is None:
             # a venue row with no `outcomeIndex` names no side, so no resolution
             # can ever match it — `winner_outcome_index == None` is false for
             # every winner, which would have scored it as a LOSS.
             res["no_outcome_index"] = res.get("no_outcome_index", 0) + 1
             continue
-        groups[(p["proxy_wallet"], p["condition_id"], p["outcome_index"])].append(p)
+        key = (p["proxy_wallet"], p["condition_id"], p["outcome_index"])
+        ts = int(p["ts"])
+        if key in last_ts and ts < last_ts[key]:
+            unordered.add(key)
+        last_ts[key] = ts
+        groups[key].append(p)
+    for key in unordered:
+        groups[key].sort(key=lambda r: int(r["ts"]))
 
     out = []
     for (wallet, cid, idx), rows in groups.items():
@@ -141,11 +163,15 @@ def positions_from_prints(prints, markets, cfg, res=None) -> list[Position]:
         start = _epoch(mk.get("start_utc"))
         opens, cur = [], None
         for p in rows:
-            price, size = Decimal(str(p["price"])), Decimal(str(p["size"]))
-            ts = int(p["ts"])
-            if Decimal(str(p["notional_usd"])) < min_usd:
+            # notional first and alone: a dust row never needs price/size/ts
+            # parsed at all, and every row that clears the floor still parses
+            # notional only once (was: once here, again into cur["notional"]).
+            notional = Decimal(str(p["notional_usd"]))
+            if notional < min_usd:
                 res["dust"] = res.get("dust", 0) + 1
                 continue
+            price, size = Decimal(str(p["price"])), Decimal(str(p["size"]))
+            ts = int(p["ts"])
             if p["side"] == SELL:
                 left = size
                 for o in opens:                       # oldest first
@@ -169,7 +195,7 @@ def positions_from_prints(prints, markets, cfg, res=None) -> list[Position]:
             cur["last"] = ts
             cur["size"] += size
             cur["cost"] += price * size
-            cur["notional"] += Decimal(str(p["notional_usd"]))
+            cur["notional"] += notional
         for o in opens:
             out.append(Position(
                 wallet=wallet, condition_id=cid, outcome_index=idx,
