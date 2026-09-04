@@ -8,6 +8,22 @@ import time
 from arb import dashboard_cache as dc
 
 
+import pytest as _pytest
+
+
+@_pytest.fixture(autouse=True)
+def _isolate_cache():
+    # the memo is process-global; tests with tiny max_entries would otherwise
+    # evict each other's rows and depend on run order (flaked under full-suite
+    # load, 2026-09-04)
+    import arb.dashboard_cache as dc
+    with dc._lock:
+        dc._entries.clear()
+    yield
+    with dc._lock:
+        dc._entries.clear()
+
+
 def test_concurrent_requests_share_one_computation():
     calls = []
 
