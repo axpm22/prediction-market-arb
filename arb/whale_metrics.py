@@ -24,6 +24,13 @@ from arb.models import q6
 # (30, 120, 600, 1800) — no second copy of the numbers to drift out of sync.
 H_2M, H_10M = HORIZONS[1], HORIZONS[2]
 UB90, LB80 = (0.10, 0.90), (0.20, 0.80)     # one-sided percentile pairs (§12)
+
+# The lane's ROOT is the bet's own `category` (§8, amended 2026-09-04) and
+# `sports` is the PRIMARY one: the registration keeps the primary metric on the
+# sports figure, each non-sports root accumulates its own n against the same
+# kill rules, and "rows from different roots are never pooled". Every table
+# below is therefore keyed by root before it is keyed by anything else.
+SPORTS_ROOT = "sports"
 SETTLED_SQL = """
     SELECT b.* FROM flat_bets b WHERE b.kind='WHALE' AND EXISTS
       (SELECT 1 FROM bet_events e WHERE e.bet_id=b.id AND e.kind='settled')
@@ -32,6 +39,14 @@ SETTLED_SQL = """
 
 def _d(v) -> Decimal:
     return Decimal(str(v or 0))
+
+
+def roots_first(*keyed) -> list[str]:
+    """Every root present across `keyed` dicts, `sports` leading — the primary
+    root heads every table, and the rest are alphabetical so a report re-run
+    reproduces its own bytes (rule 9)."""
+    keys = {k for d in keyed for k in d}
+    return ([SPORTS_ROOT] if SPORTS_ROOT in keys else []) + sorted(keys - {SPORTS_ROOT})
 
 
 def cluster_ci(cfg, by_event: dict) -> dict:
@@ -67,9 +82,21 @@ def roi_rows(store) -> list[dict]:
         stake = _d(bet["stake_usd"])
         if pnl is None or not stake:
             continue
-        out.append({"variant": bet["variant"] or "-", "event_key": bet["event_key"],
+        out.append({"root": bet["category"] or "-",
+                    "variant": bet["variant"] or "-", "event_key": bet["event_key"],
                     "signal_id": bet["signal_id"], "roi": pnl / stake, "bet": bet})
     return out
+
+
+def roi_by_root(cfg, rows: list[dict]) -> dict:
+    """{root: {variant: cell}}, sports first. Keying by root BEFORE variant is
+    what makes pooling across roots impossible: no bootstrap ever sees two
+    roots' ROIs in one `by_event`."""
+    grouped: dict = {}
+    for r in rows:
+        grouped.setdefault(r["root"], {}).setdefault(r["variant"], []).append(r)
+    return {root: {v: roi_cell(cfg, rs) for v, rs in sorted(grouped[root].items())}
+            for root in roots_first(grouped)}
 
 
 def roi_cell(cfg, rows: list[dict]) -> dict:
@@ -84,19 +111,23 @@ def roi_cell(cfg, rows: list[dict]) -> dict:
 
 DRIFT_SQL = """
     SELECT m.horizon_secs h, m.mark_cost, b.id bet_id, b.legs_json, b.event_key,
-           b.edge_points
+           b.edge_points, b.category
       FROM markouts m JOIN flat_bets b ON b.id = m.bet_id
      WHERE b.kind='WHALE' AND m.in_play=0 AND m.leg_index=0"""
 
 
-def pregame_drifts(store, horizons, since=None, until=None) -> list[dict]:
+def pregame_drifts(store, horizons, since=None, until=None, root=None) -> list[dict]:
     """D_h = mark mid - mid0 on leg 0, one row per (bet, horizon) that carries a
     mid0. THE definition of the pregame drift — `markout_stats` and the §12
     fast-kill window read it from here rather than each writing the JOIN.
     `until` bounds the BOOKING and the MARK: a day's window may only see what
-    that day could see."""
+    that day could see. `root` bounds it to one root — §7 item 5 reports the
+    markout per root and runs kill rule 2 per root, because a non-sports close
+    gate excludes far less than a sports kickoff does."""
     sql = DRIFT_SQL + f" AND m.horizon_secs IN ({','.join('?' * len(horizons))})"
     params = list(horizons)
+    if root is not None:
+        sql, params = sql + " AND b.category = ?", params + [root]
     if since is not None:
         sql, params = sql + " AND b.created_at >= ?", params + [since]
     if until is not None:
@@ -109,26 +140,33 @@ def pregame_drifts(store, horizons, since=None, until=None) -> list[dict]:
             out.append({"bet_id": r["bet_id"], "h": r["h"],
                         "drift": _d(r["mark_cost"]) - _d(mid0),
                         "event_key": r["event_key"],
+                        "root": r["category"] or "-",
                         "edge_points": _d(r["edge_points"])})
     return out
 
 
 def markout_stats(store) -> dict:
-    """+2m and +10m PREGAME coverage and mean drift, plus the clusters the bench
-    needs for the one-sided bound."""
-    n_bets = store.query(
-        "SELECT COUNT(*) c FROM flat_bets WHERE kind='WHALE'")[0]["c"]
-    out = {h: {"n": 0, "coverage": Decimal(0), "mean_drift": None, "by_event": {}}
-           for h in (H_2M, H_10M)}
+    """{root: {+2m, +10m}} PREGAME coverage and mean drift, plus the clusters
+    the bench needs for the one-sided bound. Per root (§7 item 5): a root's
+    coverage is its OWN marks over its OWN bets, so one root's thin marking
+    never dilutes another's number."""
+    n_bets = {r["category"] or "-": r["c"] for r in store.query(
+        "SELECT category, COUNT(*) c FROM flat_bets WHERE kind='WHALE' "
+        "GROUP BY category")}
+    out = {root: {h: {"n": 0, "coverage": Decimal(0), "mean_drift": None,
+                      "by_event": {}} for h in (H_2M, H_10M)}
+           for root in roots_first(n_bets)}
     for r in pregame_drifts(store, (H_2M, H_10M)):
-        cell = out[r["h"]]
+        cell = out[r["root"]][r["h"]]
         cell["n"] += 1
         cell["by_event"].setdefault(r["event_key"], []).append(float(r["drift"]))
-    for cell in out.values():
-        drifts = [v for vs in cell["by_event"].values() for v in vs]
-        cell["coverage"] = q6(Decimal(cell["n"]) / n_bets) if n_bets else Decimal(0)
-        if drifts:
-            cell["mean_drift"] = q6(Decimal(sum(drifts) / len(drifts)))
+    for root, cells in out.items():
+        for cell in cells.values():
+            drifts = [v for vs in cell["by_event"].values() for v in vs]
+            cell["coverage"] = (q6(Decimal(cell["n"]) / n_bets[root])
+                                if n_bets.get(root) else Decimal(0))
+            if drifts:
+                cell["mean_drift"] = q6(Decimal(sum(drifts) / len(drifts)))
     return out
 
 
@@ -170,8 +208,9 @@ def is_native(sig: dict) -> bool | None:
 
 
 def exit_stats(store, con, signals: dict) -> dict:
-    """Exits by reason with the exit-vs-hold counterfactual: hold = what the
-    market's own resolution would have paid the same contracts (§12)."""
+    """{root: {reason: cell}} — exits by reason with the exit-vs-hold
+    counterfactual: hold = what the market's own resolution would have paid the
+    same contracts (§12). Per root, like every other table here."""
     resolutions = {r["condition_id"]: dict(r) for r in
                    con.execute("SELECT * FROM resolutions")} if con else {}
     out: dict = {}
@@ -189,8 +228,9 @@ def exit_stats(store, con, signals: dict) -> dict:
         # a rule that turns out to be worse than holding is visible on its own.
         via = (payload.get("detail") or {}).get("via")
         reason = source.split(":", 1)[1]
-        cell = out.setdefault(f"{reason} ({via})" if via else reason, {
-            "n": 0, "exit_pnl": Decimal(0), "hold_pnl": Decimal(0), "n_hold": 0})
+        cell = out.setdefault(bet["category"] or "-", {}).setdefault(
+            f"{reason} ({via})" if via else reason,
+            {"n": 0, "exit_pnl": Decimal(0), "hold_pnl": Decimal(0), "n_hold": 0})
         cell["n"] += 1
         cell["exit_pnl"] = q6(cell["exit_pnl"] + _d(payload.get("pnl")))
         sig = signals.get(bet["signal_id"])
@@ -207,4 +247,4 @@ def exit_stats(store, con, signals: dict) -> dict:
             hold = payout * contracts - stake
         cell["hold_pnl"] = q6(cell["hold_pnl"] + hold)
         cell["n_hold"] += 1
-    return out
+    return {root: out[root] for root in roots_first(out)}

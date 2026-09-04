@@ -188,7 +188,13 @@ def _gamma_row(cond, m, prefixes, now) -> tuple:
     if m:
         mtype = SPORTS_MARKET_TYPE.get(str(m.get("sportsMarketType") or "").lower())
         sport = _sport_of(str(m.get("slug") or ""), prefixes)
-        start = _iso(m.get("gameStartTime"))
+        # `gameStartTime` is a KICKOFF, and only a sports row wants one (I2,
+        # fix pass). For a market this mapper cannot root, `start_utc` belongs
+        # to the tag builder, which writes the Gamma `endDate` so the pregame
+        # gate reads "before resolution" (§7 item 5) — and `first_sight_wins`
+        # would then keep whichever landed first, so a kickoff pinned here
+        # would stand forever.
+        start = _iso(m.get("gameStartTime")) if sport else None
         tokens = [[t, o] for t, o in zip(_json_list(m.get("clobTokenIds")),
                                          _json_list(m.get("outcomes")))]
     # `volume24hr` is a verified market-level field of this same Gamma answer

@@ -264,9 +264,22 @@ def _from_prints(prints) -> tuple[dict, dict]:
 def _event_key(cid, slugs, tape_markets) -> str:
     """§8: `pm:<event_slug>` always — one game's moneyline and total share it,
     so it doubles as the cluster key for every CI. Falls back to the market's
-    own slug, then to the condition id, when no print carried an event slug."""
+    own slug, then to the row's own `event_key` when that is already in
+    `pm:` form, then to the condition id.
+
+    The `pm:` step is the non-sports one (M1, fix pass): a tag-builder row has
+    no `slug` (Gamma's by-tag answer never fills it) but does carry the
+    finished `pm:<event_slug>`, so without it a market whose prints have aged
+    out — every open non-sports bet waiting on a markout — keyed its quotes on
+    the condition id and stopped clustering with its own bet. A SPORTS row's
+    stored `event_key` is the ledger's CROSS-VENUE key, which §8 says never to
+    use, and the prefix test is exactly what excludes it."""
     row = tape_markets.get(cid) or {}
-    return f"pm:{slugs.get(cid) or row.get('slug') or cid}"
+    slug = slugs.get(cid) or row.get("slug")
+    if slug:
+        return f"pm:{slug}"
+    stored = str(row.get("event_key") or "")
+    return stored if stored.startswith("pm:") else f"pm:{cid}"
 
 
 def _persist_signal(con, sig, cid, now) -> int:

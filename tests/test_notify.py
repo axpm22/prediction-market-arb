@@ -222,7 +222,8 @@ def test_notify_daily_posts_the_summary(cfg, tmp_path, monkeypatch):
     payload = calls[0]["payload"]
     assert payload["day"] == DAY
     assert payload["headline_pnl"] == "0"
-    assert payload["whale"]["bets"] == {"V2/flat": 1}
+    # keyed by ROOT first since the 2026-09-04 non-sports amendment
+    assert payload["whale"]["bets"] == {"sports": {"V2/flat": 1}}
 
 
 def test_notify_daily_posts_kill_rule_fired_when_a_rule_fires(cfg, tmp_path, monkeypatch):

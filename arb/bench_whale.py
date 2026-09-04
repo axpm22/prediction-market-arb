@@ -31,8 +31,8 @@ the registration counts ("at n >= 100 signals"), not the row count, and never
 from __future__ import annotations
 
 from arb.bench import LaneResult, verdict_for
-from arb.whale_metrics import (H_10M, cluster_ci, is_native, markout_stats,
-                               roi_cell, roi_rows, signals_by_id)
+from arb.whale_metrics import (H_10M, SPORTS_ROOT, cluster_ci, is_native,
+                               markout_stats, roi_cell, roi_rows, signals_by_id)
 
 
 class _S:                            # metrics/whale_metrics want a Store-like reader
@@ -49,10 +49,13 @@ def l14_whale(cfg, con, hist) -> LaneResult:
     w = cfg["whale"]
     primary = f"{w['primary_variant']}/flat"
     r = LaneResult(lane="L14", name="whale-consensus follower", unit="signal",
-                   primary=f"mean settled ROI per $ staked, {primary}, "
-                           f"event_key-clustered, one-sided 90% bounds")
+                   primary=f"mean settled ROI per $ staked, {primary}, sports "
+                           f"root, event_key-clustered, one-sided 90% bounds")
     store = _S(con)
-    rows = roi_rows(store)
+    # SPORTS only, both here and in every detail line below: the registered
+    # primary metric IS the sports-root figure, and rows from different roots
+    # are never pooled (amendment 2026-09-04).
+    rows = [x for x in roi_rows(store) if x["root"] == SPORTS_ROOT]
     mine = [x for x in rows if x["variant"] == primary]
     if not mine:
         r.note = (f"no settled {primary} booking yet — the lane collects before "
@@ -92,8 +95,8 @@ def l14_whale(cfg, con, hist) -> LaneResult:
 def _markout_detail(cfg, store) -> str:
     """§12's powered early metric: the +10m pregame markout, one-sided adverse
     (the upper 90% bound below zero is what 'significantly adverse' means)."""
-    cell = markout_stats(store)[H_10M]
-    if not cell["n"]:
+    cell = markout_stats(store).get(SPORTS_ROOT, {}).get(H_10M)
+    if not cell or not cell["n"]:
         return "+10m pregame markout: no marks yet"
     ci = cluster_ci(cfg, cell["by_event"])
     adverse = " ADVERSE" if ci["ub90"] < 0 else ""

@@ -110,6 +110,19 @@ def reappearance_cap(cfg) -> int:
     return max(1, round(int(cfg["tracker"]["max_reappearances"]) * ref / interval))
 
 
+def _horizon_days(cfg, cand) -> int:
+    """How far ahead of `now` a resolution-settled candidate may settle.
+
+    A NON-SPORTS WHALE row reads the L14 lane's own `whale.nonsports.max_days`
+    (shipped at the shared value, so nothing moves until the operator raises
+    it); every other kind keeps the ledger's shared `nonsports_max_days`, and a
+    sports row keeps `max_days_to_settlement`."""
+    if cand["category"] == "sports":
+        return int(cfg["max_days_to_settlement"])
+    return int(cfg["whale"]["nonsports"]["max_days"] if cand["kind"] == "WHALE"
+               else cfg["nonsports_max_days"])
+
+
 def _lot(store, poll_id, cand, reason):
     store.insert("left_on_table", {
         "poll_id": poll_id, "fingerprint": cand["fingerprint"], "kind": cand["kind"],
@@ -258,9 +271,8 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
             _lot(store, poll_id, cand, "blacklisted")
             continue
         if cand["kind"] in RESOLUTION_SETTLED_KINDS and cand["event_start_utc"]:
-            horizon = int(cfg["nonsports_max_days"] if cand["category"] != "sports"
-                          else cfg["max_days_to_settlement"])
-            if cand["event_start_utc"] > now + timedelta(days=horizon):
+            if cand["event_start_utc"] > now + timedelta(
+                    days=_horizon_days(cfg, cand)):
                 _lot(store, poll_id, cand, "too-far-to-settlement")
                 continue
         elif cand["kind"] in RESOLUTION_SETTLED_KINDS \
@@ -273,7 +285,7 @@ def process_poll(cfg, store, poll_id: int, poll_kind: str, opps: list,
                     str(cand["resolution_date"]).replace("Z", "+00:00"))
             except ValueError:
                 res = None
-            if res and res > now + timedelta(days=int(cfg["nonsports_max_days"])):
+            if res and res > now + timedelta(days=_horizon_days(cfg, cand)):
                 _lot(store, poll_id, cand, "resolution-horizon")
                 continue
         pos = active_positions.get(cand["position_key"])

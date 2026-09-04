@@ -43,13 +43,16 @@ def _legacy(store, kind="EV", lane="clean", fp="fp-legacy", created=NOW):
 
 
 def _whale_row(store, variant, signal_id, event_key, pnl=None, stake="1",
-               created=NOW, cost="0.50", fee="0.01"):
-    """One booked WHALE row; `pnl` not None also appends its settled event."""
+               created=NOW, cost="0.50", fee="0.01", category="sports"):
+    """One booked WHALE row; `pnl` not None also appends its settled event.
+    `category` IS the root (§8, amended 2026-09-04) — rows from different roots
+    are never pooled."""
     fp = f"fp-{variant}-{signal_id}-{event_key}"
     bet_id = store.insert("flat_bets", {
         "created_at": created.isoformat(), "poll_id": 1, "poll_kind": "whale",
         "fingerprint": fp, "position_key": fp, "kind": "WHALE",
-        "category": "sports", "sport": "baseball_mlb",
+        "category": category,
+        "sport": "baseball_mlb" if category == "sports" else category,
         "venue_pair": "polymarket:self", "event_key": event_key,
         "event_start_utc": (created + timedelta(hours=3)).isoformat(),
         "start_grade": "nominal",
@@ -122,7 +125,7 @@ def test_the_variant_table_reports_v4_beside_the_other_variants(cfg, tmp_path):
 
     frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
 
-    assert set(frame["roi"]) == {"V2/flat", "V4/flat"}
+    assert set(frame["roi"]["sports"]) == {"V2/flat", "V4/flat"}
     assert frame["primary_variant"] == "V2/flat"
     md = "\n".join(report_whale.whale_md(frame))
     assert "| V4/flat |" in md and "| V2/flat **(primary)** |" in md
@@ -276,7 +279,7 @@ def test_an_exited_bet_whose_market_resolved_gets_a_hold_counterfactual(cfg, tmp
     con.commit()
 
     exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
-                                     con=con)["exits"]
+                                     con=con)["exits"]["sports"]
 
     # four bets: V1 and V6 (added 2026-09-04) each book flat and conf
     assert exits["flip"]["n"] == 4 and exits["flip"]["n_hold"] == 4
@@ -298,7 +301,7 @@ def test_left_exits_are_broken_down_by_the_reading_that_fired_them(cfg, tmp_path
          positions=holdings)
 
     exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
-                                     con=con)["exits"]
+                                     con=con)["exits"]["sports"]
 
     assert set(exits) == {"left (positions)"}
     assert exits["left (positions)"]["n"] == 4
@@ -318,7 +321,7 @@ def test_an_exited_bet_whose_market_later_voided_gets_a_zero_hold(cfg, tmp_path)
     con.commit()
 
     exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
-                                     con=con)["exits"]
+                                     con=con)["exits"]["sports"]
 
     assert exits["flip"]["n_hold"] == 4
     assert exits["flip"]["hold_pnl"] == Decimal("0.000000")
@@ -336,7 +339,7 @@ def test_a_losing_hold_counterfactual_is_negative(cfg, tmp_path):
     con.commit()
 
     exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
-                                     con=con)["exits"]
+                                     con=con)["exits"]["sports"]
 
     assert exits["flip"]["hold_pnl"] == Decimal("-2.706160")     # all four stakes lost
 
@@ -372,7 +375,7 @@ def test_roi_is_reported_per_variant_with_one_sided_bounds(cfg, tmp_path):
         _whale_row(store, "V2/flat", i + 1, f"pm:e{i}", pnl=Decimal("0.20"))
         _whale_row(store, "V1/flat", i + 1, f"pm:e{i}", pnl=Decimal("-0.10"))
 
-    roi = report_whale.whale_frame(cfg, store, now=NOW, con=con)["roi"]
+    roi = report_whale.whale_frame(cfg, store, now=NOW, con=con)["roi"]["sports"]
 
     assert roi["V2/flat"]["n"] == 8 and roi["V2/flat"]["n_events"] == 8
     assert roi["V2/flat"]["mean"] == Decimal("0.200000")
@@ -391,7 +394,7 @@ def test_the_roi_bounds_are_the_one_sided_percentiles_spec_12_names(cfg, tmp_pat
     for i, v in enumerate(vals):
         _whale_row(store, "V2/flat", i + 1, f"pm:e{i}", pnl=Decimal(str(v)))
 
-    roi = report_whale.whale_frame(cfg, store, now=NOW, con=con)["roi"]["V2/flat"]
+    roi = report_whale.whale_frame(cfg, store, now=NOW, con=con)["roi"]["sports"]["V2/flat"]
 
     by_event = {f"pm:e{i}": [v] for i, v in enumerate(vals)}
     seed, n_boot = (int(cfg["regrade"]["bootstrap_seed"]),
@@ -410,7 +413,7 @@ def test_two_bets_on_one_event_are_one_bootstrap_cluster(cfg, tmp_path):
     for i in range(6):
         _whale_row(store, "V2/flat", 2 * i + 1, "pm:same", pnl=Decimal("0.10"))
 
-    roi = report_whale.whale_frame(cfg, store, now=NOW, con=con)["roi"]["V2/flat"]
+    roi = report_whale.whale_frame(cfg, store, now=NOW, con=con)["roi"]["sports"]["V2/flat"]
 
     assert roi["n"] == 6 and roi["n_events"] == 1
     assert roi["lb80"] == roi["ub90"] == roi["mean"]   # one cluster: no spread
@@ -475,12 +478,98 @@ def test_markout_coverage_and_mean_drift_are_reported_pregame_only(cfg, tmp_path
                               "actual_offset_secs": 600.0, "mark_cost": "0.40",
                               "marked_at": NOW.isoformat(), "in_play": 1})
 
-    marks = report_whale.whale_frame(cfg, store, now=NOW, con=con)["markouts"]
+    marks = report_whale.whale_frame(cfg, store, now=NOW, con=con)["markouts"]["sports"]
 
     assert marks[120]["n"] == 2 and marks[120]["coverage"] == Decimal("1.000000")
     assert marks[120]["mean_drift"] == Decimal("0.030000")   # (0.02 + 0.04)/2
     assert marks[600]["n"] == 0                              # in_play excluded
     assert marks[600]["coverage"] == Decimal("0")
+
+
+# ------------------------------------------------------------ roots (C1)
+
+def test_settled_rows_from_two_roots_are_never_pooled(cfg, tmp_path):
+    """PREREGISTRATION 2026-09-04 (non-sports roots): "rows from different
+    roots are never pooled". The ROI table is keyed (root, variant), sports
+    first, and one root's bets never enter another's cell."""
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    for i in range(4):
+        _whale_row(store, "V2/flat", i + 1, f"pm:s{i}", pnl=Decimal("0.20"))
+        _whale_row(store, "V2/flat", 100 + i, f"pm:p{i}", pnl=Decimal("-0.30"),
+                   category="politics")
+
+    frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+
+    assert list(frame["roi"]) == ["sports", "politics"]          # sports first
+    assert frame["roi"]["sports"]["V2/flat"]["n"] == 4
+    assert frame["roi"]["sports"]["V2/flat"]["mean"] == Decimal("0.200000")
+    assert frame["roi"]["politics"]["V2/flat"]["n"] == 4
+    assert frame["roi"]["politics"]["V2/flat"]["mean"] == Decimal("-0.300000")
+    assert frame["bets"] == {"sports": {"V2/flat": 4}, "politics": {"V2/flat": 4}}
+    md = "\n".join(report_whale.whale_md(frame))
+    assert md.index("### sports root") < md.index("### politics root")
+
+
+def test_the_sports_primary_metric_is_bit_for_bit_unchanged_by_a_politics_row(
+        cfg, tmp_path):
+    """The registration keeps the primary metric on the SPORTS root, so adding
+    the first non-sports settled bet must not move a single digit of it."""
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    for i in range(6):
+        _whale_row(store, "V2/flat", i + 1, f"pm:s{i}", pnl=Decimal(str(0.1 * i - 0.2)))
+    before = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+
+    _whale_row(store, "V2/flat", 99, "pm:p0", pnl=Decimal("5"), category="politics")
+    after = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+
+    assert after["roi"]["sports"] == before["roi"]["sports"]
+    assert after["markouts"].get("sports") == before["markouts"].get("sports")
+    assert after["kill"]["rules"] == before["kill"]["rules"]
+    # and the printed sports block reproduces its own bytes
+    assert report_whale._root_md(after, "sports") == report_whale._root_md(before, "sports")
+
+
+def test_the_primary_kill_decision_counts_the_sports_root_only(cfg, tmp_path):
+    """§12 amended: `kill_status`' four rules decide on the sports root; each
+    non-sports root accumulates its own n beside them and never in them."""
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    for i in range(3):
+        _whale_row(store, "V2/flat", i + 1, f"pm:s{i}", pnl=Decimal("0.20"))
+    for i in range(5):
+        _whale_row(store, "V2/flat", 100 + i, f"pm:p{i}", pnl=Decimal("-0.30"),
+                   category="politics")
+
+    kill = report_whale.whale_frame(cfg, store, now=NOW, con=con)["kill"]
+
+    assert kill["root"] == "sports"
+    assert kill["rules"][0]["n"] == 3                     # rule 1: sports only
+    assert kill["rules"][3]["fired_7d"] == 3              # rule 4: sports only
+    assert kill["roots"]["politics"]["n"] == 5
+    assert kill["roots"]["politics"]["ub90"] == Decimal("-0.300000")
+    assert kill["roots"]["politics"]["streak"] == 0
+    assert "sports" not in kill["roots"]
+
+
+def test_markouts_and_exits_are_reported_per_root(cfg, tmp_path):
+    """§7 item 5: "the +2m/+10m markout is reported per root". Coverage is a
+    root's own marks over a root's own bets, never a pooled denominator."""
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    s = _whale_row(store, "V2/flat", 1, "pm:s0", pnl=Decimal("0.10"))
+    p = _whale_row(store, "V2/flat", 2, "pm:p0", pnl=Decimal("-0.10"),
+                   category="politics")
+    for bet_id, cost in ((s, "0.52"), (p, "0.60")):        # mid0 = 0.50
+        store.insert("markouts", {"bet_id": bet_id, "leg_index": 0,
+                                  "horizon_secs": 120, "actual_offset_secs": 120.0,
+                                  "mark_cost": cost, "marked_at": NOW.isoformat(),
+                                  "in_play": 0})
+
+    frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+
+    assert frame["markouts"]["sports"][120]["mean_drift"] == Decimal("0.020000")
+    assert frame["markouts"]["politics"][120]["mean_drift"] == Decimal("0.100000")
+    assert frame["markouts"]["sports"][120]["coverage"] == Decimal("1.000000")
+    assert frame["exits"]["sports"]["flip"]["n"] == 1
+    assert frame["exits"]["politics"]["flip"]["n"] == 1
 
 
 # -------------------------------------------------------- collector health

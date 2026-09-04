@@ -23,9 +23,14 @@ from pathlib import Path
 from arb import whale_elite, whale_rank
 from arb.models import q6
 from arb.replay import open_ro
+# the RENDER half, split out on size (every §12 table gained a per-root block):
+# re-exported so `report_whale.whale_md` / `.whale_line` keep working for every
+# existing caller.
+from arb.report_whale_md import _root_md, whale_line, whale_md  # noqa: F401
 from arb.whale_kill import kill_status
-from arb.whale_metrics import (exit_stats, is_native, markout_stats, roi_cell,
-                               roi_rows, signals_by_id)
+from arb.whale_metrics import (SPORTS_ROOT, exit_stats, is_native,
+                               markout_stats, roi_by_root, roi_cell, roi_rows,
+                               roots_first, signals_by_id)
 
 
 def open_tape_ro(cfg) -> sqlite3.Connection | None:
@@ -75,7 +80,10 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
         classed = {"native": [], "transfer": []}
         for r in rows:
             cls = native_of.get(r["signal_id"])
-            if cls is not None:
+            # SPORTS only: this diagnostic split is a property of the primary
+            # root's figure, and pooling roots into it is exactly what the
+            # 2026-09-04 registration forbids.
+            if cls is not None and r["root"] == SPORTS_ROOT:
                 classed["native" if cls else "transfer"].append(r)
         counts = _signal_counts(store, con, day_ago, week_ago)
         return {
@@ -89,11 +97,12 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
             # good, and where. Never an input to points, sizing or firing.
             "traders": whale_rank.traders_frame(cfg, state, now),
             "signals": counts,
-            "bets": {r["variant"] or "-": r["c"] for r in store.query(
-                "SELECT variant, COUNT(*) c FROM flat_bets WHERE kind='WHALE' "
-                "GROUP BY variant ORDER BY variant")},
-            "roi": {v: roi_cell(cfg, [r for r in rows if r["variant"] == v])
-                    for v in sorted({r["variant"] for r in rows})},
+            # every table below is keyed by ROOT first (registration
+            # 2026-09-04): the primary metric stays the sports figure and rows
+            # from different roots are never pooled.
+            "primary_root": SPORTS_ROOT,
+            "bets": _bets_by_root(store),
+            "roi": roi_by_root(cfg, rows),
             "markouts": markout_stats(store),
             "exits": exit_stats(store, con, signals),
             # §7 V5: the percentile bar this lane is currently firing on, and
@@ -122,17 +131,29 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
                     "SELECT COUNT(DISTINCT substr(evaluated_at, 1, 10)) d FROM signals"
                 ).fetchone()["d"] if con else 0,
                 "calibration_days": int(fire["calibration_days"])},
-            # rule 4's 7d count is `counts` own — computed once, printed twice
+            # rule 4's count is the SPORTS root's own (whale_kill), while the
+            # signals line above prints the lane-wide one — two different
+            # questions, so they are two different reads.
             "kill": {"decision_n": int(cfg["whale"]["kill"]["decision_n"]),
                      "null_n": int(cfg["whale"]["kill"]["null_n"]),
                      "min_signals_per_week_alarm":
                          int(cfg["whale"]["kill"]["min_signals_per_week_alarm"]),
                      **kill_status(cfg, store, con, now, hashes_log_path,
-                                   counts["fired_7d"], producing_day)},
+                                   producing_day)},
         }
     finally:
         if opened:
             con.close()
+
+
+def _bets_by_root(store) -> dict:
+    """{root: {variant: bets}}, sports first — the booked count behind each
+    cell of the per-root variant table."""
+    out: dict = {}
+    for r in store.query("SELECT category, variant, COUNT(*) c FROM flat_bets "
+                         "WHERE kind='WHALE' GROUP BY category, variant"):
+        out.setdefault(r["category"] or "-", {})[r["variant"] or "-"] = r["c"]
+    return {root: dict(sorted(out[root].items())) for root in roots_first(out)}
 
 
 def _wallets(con) -> dict:
@@ -233,131 +254,3 @@ def _collector(cfg, con, now) -> dict:
         out["bytes_per_day"] = int(Decimal(out["tape_bytes"]) * 86400 / secs)
     return out
 
-
-# ------------------------------------------------------------------ render
-
-def _n(v, dash="—") -> str:
-    return dash if v is None else str(v)
-
-
-def _mb(b) -> str:
-    return "—" if b is None else f"{Decimal(b) / 1000000:.1f}"
-
-
-def _elite_line(elite: dict) -> str:
-    """V5's bar per bucket, with the population behind it. A cutoff at or below
-    `min_score_lb` selects EVERY qualifying whale — V5 is then a copy of V1,
-    which is a result about the config, not about the whales, and is said here
-    as well as logged by the cycle."""
-    bar = Decimal(str(elite["min_score_lb"]))
-    cells = []
-    for r in elite["cutoffs"]:
-        cut = r["cutoff"]
-        cells.append(f"{r['bucket']} {_n(cut)} (pop {r['n']})"
-                     + ("" if cut is None or Decimal(cut) > bar
-                        else f" **<= min_score_lb {bar}: V5 is a copy of V1**"))
-    return (f"- V5 elite bar (top {elite['pct']}% of every scored wallet in the "
-            f"root): " + (", ".join(cells) or "—"))
-
-
-def whale_md(frame: dict) -> list[str]:
-    """The section, as markdown. Cumulative lane-to-date except where a line
-    names its own window — the class table above it is the day's."""
-    w, s, c = frame["wallets"], frame["signals"], frame["collector"]
-    cal, q = frame["calibration"], frame["qualifying"]
-    md = ["## L14 whale-consensus lane (REVIEW lane, never headline)",
-          f"- as of {frame['as_of']}"
-          + ("" if frame["tape_ok"] else "  — **whale tape unavailable**: "
-                                         "collector never ran here, or the file "
-                                         "could not be opened read-only"),
-          f"- wallets: {w['tracked']} tracked, {w['backfilled']} backfilled, "
-          f"{w['hygiene_excluded']} positions hygiene-excluded",
-          f"- whales scored >= lb80 (ungated roster): {q['n']} "
-          + (", ".join(f"{k} {v}" for k, v in sorted(q["by_root"].items())) or "—")
-          + " | by sport: "
-          + (", ".join(f"{k} {v}" for k, v in sorted(q["by_sport"].items())) or "—"),
-          f"- signals 24h: {s['evaluated_24h']} evaluated, {s['fired_24h']} fired "
-          f"(distinct signal_id booked); 7d fired {s['fired_7d']} "
-          f"(starvation alarm below {frame['kill']['min_signals_per_week_alarm']}/week)",
-          "- suppressed 24h: " + (", ".join(
-              f"{reason or '—'}/{variant} {n}"
-              for (reason, variant), n in sorted(s["suppressed"].items(),
-                                                 key=lambda kv: -kv[1])) or "none"),
-          f"- calibration: min_points "
-          + " ".join(f"{k}={_n(v, 'null')}" for k, v in sorted(cal["min_points"].items()))
-          + f"; {cal['signal_days']} of {cal['calibration_days']} signal days",
-          "- base rate: " + (", ".join(
-              f"{r['root']} {r['value']} (n={r['n']})" for r in frame["base_rates"])
-              or "—"),
-          _elite_line(frame["elite"]),
-          # last cycle status/rows/bad_rows/at and backoff_until are LIVE
-          # collector facts, not a function of the report day — the
-          # dashboard shows them (frame["collector"] still carries them);
-          # this hashed line only prints what a re-run of a past day must
-          # always reproduce (rule 9).
-          f"- collector: newest print {_n(c['last_seen_age_secs'])}s ago; "
-          f"{c['prints_per_min']} prints/min (1h)"
-          + (f"; **gap** {c['last_gap'].get('secs')}s at {c['last_gap'].get('at')}"
-             if c["last_gap"] else "; no recorded gap"),
-          # the file size and MB/day are live (see _collector): whale_line
-          f"- tape: {c['prints_24h']} prints/day, {c['holdings_24h']} holdings "
-          "rows/day (24h to as-of)",
-          "",
-          "| kill rule (§12) | state | numbers |", "|---|---|---|"]
-    for r in frame["kill"]["rules"]:
-        md.append(f"| {r['rule']} {r['name']} | "
-                  + (f"**{r['state']}**" if r["state"] == "FIRED" else r["state"])
-                  + f" | {r['says']} |")
-    md += ["",
-           f"Primary: mean settled ROI per $, {frame['primary_variant']}, clustered "
-           f"by event_key. Bounds are ONE-SIDED (§12): lb80 = 20th percentile, "
-           f"ub90 = 90th. Decision at n >= {frame['kill']['decision_n']} signals; "
-           f"upper 90% bound < 0 kills the lane.",
-           "",
-           "| variant | bets | settled | events | ROI/$ | lb80 | ub90 | win rate |",
-           "|---|---|---|---|---|---|---|---|"]
-    for variant in sorted(set(frame["bets"]) | set(frame["roi"])):
-        r = frame["roi"].get(variant)
-        star = " **(primary)**" if variant == frame["primary_variant"] else ""
-        md.append(f"| {variant}{star} | {frame['bets'].get(variant, 0)} | "
-                  + (f"{r['n']} | {r['n_events']} | {r['mean']} | {r['lb80']} | "
-                     f"{r['ub90']} | {r['win_rate']} |" if r else "0 | 0 | — | — | — | — |"))
-    if not frame["bets"] and not frame["roi"]:
-        md.append("| — | 0 | 0 | 0 | — | — | — | — |")
-    md += ["", "| markout (pregame) | coverage | marks | mean drift |", "|---|---|---|---|"]
-    for h, cell in sorted(frame["markouts"].items()):
-        md.append(f"| +{h // 60}m | {cell['coverage']} | {cell['n']} | "
-                  f"{_n(cell['mean_drift'])} |")
-    md += ["", "| exit reason | exits | exit P&L | hold P&L (counterfactual) | resolved |",
-           "|---|---|---|---|---|"]
-    for reason, cell in sorted(frame["exits"].items()):
-        md.append(f"| {reason} | {cell['n']} | ${cell['exit_pnl']} | "
-                  f"${cell['hold_pnl']} | {cell['n_hold']} |")
-    if not frame["exits"]:
-        md.append("| — | 0 | $0 | $0 | 0 |")
-    md += ["", "| whales on the fired side | signals booked | ROI/$ | lb80 | ub90 |",
-           "|---|---|---|---|---|"]
-    for k in ("native", "transfer"):
-        r = frame["native"]["roi"].get(k)
-        md.append(f"| {k} | {frame['native']['signals'][k]} | "
-                  + (f"{r['mean']} | {r['lb80']} | {r['ub90']} |" if r else "— | — | — |"))
-    if q["top"]:
-        md += ["", "| whale | bucket | lb80 | n_bucket | evidence |", "|---|---|---|---|---|"]
-        for row in q["top"]:
-            md.append(f"| {row['wallet']} | {row['bucket']} | {row['lb']} | "
-                      f"{row['n_bucket']} | "
-                      f"{'native' if row['native'] else 'transfer'} |")
-    return md + whale_rank.traders_md(frame["traders"])
-
-
-def whale_line(frame: dict) -> str:
-    """One console line for `arb report --daily` (the md carries the section)."""
-    primary = frame["roi"].get(frame["primary_variant"])
-    roi = (f"{primary['mean']} [lb80 {primary['lb80']}, ub90 {primary['ub90']}] "
-           f"n={primary['n']}/{primary['n_events']} events" if primary else "no sample")
-    c = frame["collector"]
-    return (f"L14 whale: {frame['signals']['evaluated_24h']} signals/24h, "
-            f"{frame['signals']['fired_24h']} fired; {frame['primary_variant']} "
-            f"ROI/$ {roi}; collector {_n(c['status'])}; tape {_mb(c['tape_bytes'])} MB, "
-            f"~{_mb(c['bytes_per_day'])} MB/day"
-            + ("" if frame["tape_ok"] else "; TAPE UNAVAILABLE"))

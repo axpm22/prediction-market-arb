@@ -157,28 +157,36 @@ def universe(store_ro, cfg, now, res=None) -> list[Market]:
 
 
 def persist_markets(con, markets, now, first_sight_wins=False):
-    """`first_sight_wins` (non-sports roots, 2026-09-04) pins `sport` and
-    `start_utc` to whatever the row already holds instead of letting this
-    call's answer win.
+    """`first_sight_wins` (non-sports roots, 2026-09-04) pins `sport`,
+    `market_type` and `start_utc` to whatever the row already holds instead of
+    letting this call's answer win.
 
-    The non-sports universe needs both. `start_utc` for a non-sports market is
-    Gamma's own `endDate`, and Gamma can EDIT an endDate after the fact — a
-    moving `start_utc` retroactively changes which of a whale's positions were
-    "pregame", which is look-ahead straight into the score (proposal §1 Risks).
+    The non-sports universe needs all three. `start_utc` for a non-sports
+    market is Gamma's own `endDate`, and Gamma can EDIT an endDate after the
+    fact — a moving `start_utc` retroactively changes which of a whale's
+    positions were "pregame", which is look-ahead straight into the score
+    (proposal §1 Risks).
     `sport` because a market already mapped to a real sport must never be
-    re-labelled `politics` by a tag page that happens to list it.
+    re-labelled `politics` by a tag page that happens to list it — and
+    `market_type` for the same reason and with the same consequence (I1, fix
+    pass): the tag builder derives it from the EVENT's `negRisk` alone, so an
+    already-mapped MLB market surfacing on a tag page used to have its WINNER
+    rewritten to BINARY, inventing a phantom `baseball_mlb:BINARY` bucket in
+    every aggregation keyed on the pair.
 
     The sports universe keeps the original excluded-wins behaviour: there the
-    watch poll IS the authority on both fields."""
+    watch poll IS the authority on all three fields."""
     sport = "COALESCE(sport, excluded.sport)" if first_sight_wins \
         else "COALESCE(excluded.sport, sport)"
     start = "COALESCE(start_utc, excluded.start_utc)" if first_sight_wins \
         else "COALESCE(excluded.start_utc, start_utc)"
+    mtype = "COALESCE(market_type, excluded.market_type)" if first_sight_wins \
+        else "COALESCE(excluded.market_type, market_type)"
     con.executemany(
         f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 11)}) "
         "ON CONFLICT(condition_id) DO UPDATE SET last_seen=excluded.last_seen, "
         f"sport={sport}, "
-        "market_type=COALESCE(excluded.market_type, market_type), "
+        f"market_type={mtype}, "
         f"start_utc={start}, "
         "tokens_json=excluded.tokens_json, "
         "volume_24h=COALESCE(excluded.volume_24h, volume_24h)",

@@ -169,6 +169,48 @@ def test_migrate_adds_holders_ratio_to_a_pre_1b_tape(tmp_path):
     assert new_row["holders_ratio"] == "0.750000"
 
 
+def test_migrate_adds_volume_24h_to_a_pre_nonsports_tape(tmp_path):
+    """I4 (fix pass): the non-sports amendment added `markets.volume_24h`, and
+    a tape written before it has the 10-column DDL. `open_tape` must ALTER the
+    column in, leave the pre-existing row NULL, and let `persist_markets`'
+    11-column INSERT work — without it the whole non-sports universe write
+    fails on every cycle against a live tape."""
+    path = tmp_path / "w.sqlite"
+    old = sqlite3.connect(str(path))
+    old.execute("""CREATE TABLE markets (
+        condition_id TEXT PRIMARY KEY, sport TEXT, market_type TEXT, line TEXT,
+        start_utc TEXT, event_key TEXT, tokens_json TEXT, slug TEXT,
+        first_seen TEXT, last_seen TEXT)""")            # pre-nonsports DDL: no volume_24h
+    old.execute("""CREATE TABLE signals (
+        id INTEGER PRIMARY KEY, evaluated_at TEXT, condition_id TEXT, side TEXT, variant TEXT,
+        points_yes TEXT, points_no TEXT, ratio TEXT, whale_ids_json TEXT, vwap TEXT,
+        touch_ask TEXT, touch_bid TEXT, depth_usd TEXT, fired INTEGER, suppressed_reason TEXT,
+        bet_ids_json TEXT, flagged_edge TEXT)""")       # pre-1b DDL: no holders_ratio
+    old.execute("INSERT INTO markets (condition_id, sport) VALUES ('0xold', 'politics')")
+    old.execute("INSERT INTO signals (evaluated_at, condition_id, variant) "
+                "VALUES ('2026-09-01T00:00:00+00:00', '0xold', 'V1')")
+    old.commit()
+    old.close()
+
+    con = whale_tape.open_tape(path)
+
+    assert "volume_24h" in {r[1] for r in con.execute("PRAGMA table_info(markets)")}
+    assert "holders_ratio" in {r[1] for r in con.execute("PRAGMA table_info(signals)")}
+    assert con.execute("SELECT volume_24h FROM markets WHERE condition_id='0xold'"
+                       ).fetchone()["volume_24h"] is None
+    assert con.execute("SELECT holders_ratio FROM signals WHERE condition_id='0xold'"
+                       ).fetchone()["holders_ratio"] is None
+    from arb.whale_universe import Market, persist_markets
+    persist_markets(con, [Market(condition_id="0xnew", sport="politics",
+                                 market_type="BINARY", line=None,
+                                 start_utc="2026-09-05T00:00:00+00:00",
+                                 event_key="pm:e", tokens=(("t0", "Yes"), ("t1", "No")),
+                                 volume_24h="25000")],
+                    datetime(2026, 9, 4, tzinfo=timezone.utc))
+    assert con.execute("SELECT volume_24h FROM markets WHERE condition_id='0xnew'"
+                       ).fetchone()["volume_24h"] == "25000"
+
+
 class _RacyCon:
     """Wraps a real, already-migrated connection so its PRAGMA table_info
     reports `holders_ratio` missing exactly once — simulating the other

@@ -161,9 +161,25 @@ def test_a_kept_market_lands_in_the_tape_and_the_lane_reads_it_back(cfg, con):
 
 def test_the_lane_universe_is_bounded_by_the_nonsports_horizon(cfg, con):
     _persist(cfg, con, [_event(tags=("politics",), markets=[_market("0xp")])])
-    late = NOW + timedelta(days=int(cfg["nonsports_max_days"]) + 1)
+    late = NOW + timedelta(days=int(cfg["whale"]["nonsports"]["max_days"]) + 1)
     assert whale_nonsports.tape_universe(con, cfg, late) == []
     assert whale_nonsports.tape_universe(con, cfg, NOW - timedelta(days=10)) == []
+
+
+def test_the_universe_reads_the_lanes_own_horizon_key(cfg, con):
+    """H (fix pass): `whale.nonsports.max_days` is the lane's OWN booking
+    horizon, shipped at today's shared `nonsports_max_days` (7) so nothing
+    moves. A politics market 20 days out is excluded at 7 and admitted at 30 —
+    in the builder and in the tape read alike."""
+    ev = _event(tags=("politics",), markets=[_market("0xfar", ends_in_days=20)])
+    assert whale_nonsports.markets_of(cfg, ev, NOW) == []
+    cfg["whale"]["nonsports"]["max_days"] = 30
+    assert [m.condition_id for m in whale_nonsports.markets_of(cfg, ev, NOW)] == ["0xfar"]
+    _persist(cfg, con, [ev])
+    assert [m.condition_id for m in whale_nonsports.tape_universe(con, cfg, NOW)] \
+        == ["0xfar"]
+    cfg["whale"]["nonsports"]["max_days"] = 7
+    assert whale_nonsports.tape_universe(con, cfg, NOW) == []
 
 
 def test_a_moved_end_date_never_rewrites_a_stored_start(cfg, con):
@@ -179,13 +195,39 @@ def test_a_moved_end_date_never_rewrites_a_stored_start(cfg, con):
 
 
 def test_a_market_already_mapped_to_a_sport_is_never_relabelled(cfg, con):
+    """I1 (fix pass): `market_type` is protected by `first_sight_wins` exactly
+    as `sport` and `start_utc` are. A tag page that happens to list an
+    already-mapped MLB market used to rewrite WINNER -> BINARY, which invents a
+    phantom `baseball_mlb:BINARY` bucket in every aggregation keyed on it."""
     con.execute("INSERT INTO markets (condition_id, sport, market_type, first_seen,"
                 " last_seen) VALUES ('0xp','baseball_mlb','WINNER',?,?)",
                 (NOW.isoformat(), NOW.isoformat()))
     con.commit()
     _persist(cfg, con, [_event(tags=("politics",), markets=[_market("0xp")])])
-    assert con.execute("SELECT sport FROM markets WHERE condition_id='0xp'"
-                       ).fetchone()["sport"] == "baseball_mlb"
+    row = con.execute("SELECT sport, market_type FROM markets "
+                      "WHERE condition_id='0xp'").fetchone()
+    assert (row["sport"], row["market_type"]) == ("baseball_mlb", "WINNER")
+
+
+def test_the_mapper_never_pins_a_start_on_a_market_it_cannot_root(cfg, con):
+    """I2 (fix pass): `whale_map._gamma_row` used to write `start_utc` from
+    Gamma's `gameStartTime` for ANY market. A non-sports market carrying that
+    field would have a wrong `start_utc` pinned before the tag builder ever saw
+    it, and `first_sight_wins` then keeps the wrong one forever — the pregame
+    gate would read a kickoff instead of the resolution deadline."""
+    from arb import whale_map
+    row = whale_map._gamma_row(
+        "0xp", {"slug": "will-x-happen-by-friday", "gameStartTime": "2026-09-05T00:00:00Z",
+                "clobTokenIds": '["t0", "t1"]', "outcomes": '["Yes", "No"]'},
+        cfg["whale"]["slug_sport_prefixes"], NOW)
+    assert row[1] is None                      # sport: no league prefix
+    assert row[4] is None                      # start_utc: never pinned without one
+    sports = whale_map._gamma_row(
+        "0xs", {"slug": "mlb-tb-nyy-2026-09-05", "gameStartTime": "2026-09-05T00:00:00Z",
+                "sportsMarketType": "winner", "clobTokenIds": '["t0", "t1"]',
+                "outcomes": '["Rays", "Yankees"]'},
+        cfg["whale"]["slug_sport_prefixes"], NOW)
+    assert sports[1] == "baseball_mlb" and sports[4] == "2026-09-05T00:00:00+00:00"
 
 
 def test_every_configured_root_is_a_polymarket_fee_category(cfg):
@@ -363,3 +405,22 @@ def test_the_cycle_prices_v6_off_the_tapes_own_volume_not_the_floor(cfg, tmp_pat
         Decimal(str(cfg["whale"]["fire"]["min_points"]["V6"]))
     assert not known["fired"]
     assert Decimal(known["points_yes"]) < Decimal(unknown["points_yes"])
+
+
+def test_a_tag_builder_market_keys_its_quotes_on_its_own_event_slug(cfg):
+    """M1 (fix pass): §8 wants `pm:<event_slug>` on the quotes AND the bets of
+    one market. A tag-builder row has no `slug` (Gamma's by-tag answer never
+    fills it) but does carry the finished `pm:<event_slug>` in `event_key`, so
+    without it in the chain a market whose prints have aged out of the window
+    — every open non-sports bet awaiting a markout — keys its quotes on the
+    condition id and stops clustering with its own bet."""
+    from arb.lanes.whale_book import _event_key
+    tape = {PCID: {"slug": None, "event_key": f"pm:{PSLUG}"},
+            "0xs": {"slug": "mlb-tb-nyy-2026-09-05",
+                    "event_key": "baseball_mlb:2026-09-05:TB:NYY"}}
+    assert _event_key(PCID, {}, tape) == f"pm:{PSLUG}"
+    assert _event_key(PCID, {PCID: "live-slug"}, tape) == "pm:live-slug"
+    # a SPORTS row's stored event_key is the ledger's cross-venue key, which §8
+    # says never to use — that row still falls back to slug, then condition id
+    assert _event_key("0xs", {}, tape) == "pm:mlb-tb-nyy-2026-09-05"
+    assert _event_key("0xn", {}, {"0xn": {"slug": None, "event_key": "mlb:x"}}) == "pm:0xn"

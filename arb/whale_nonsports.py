@@ -106,7 +106,10 @@ def markets_of(cfg, event, now) -> list[Market]:
     `volume24hr` clears `min_volume_24h_usd`; its lifetime clears
     `min_lifetime_hours`; and its own `endDate` — never the event's, which
     differs from it (verified 2026-09-04) — lies inside
-    `[now, now + nonsports_max_days]`.
+    `[now, now + whale.nonsports.max_days]` — the LANE's own horizon key,
+    shipped at the ledger's shared `nonsports_max_days` (7) and read by
+    `arb/tracker.py` for WHALE rows, so the lane never prices a market it
+    could not book.
 
     Lifetime is `endDate` minus the LATEST of the market's `startDate`, its
     `createdAt` and the event's `startDate`: the shortest of the measurable
@@ -119,7 +122,7 @@ def markets_of(cfg, event, now) -> list[Market]:
         return []
     floor = Decimal(str(ns["min_volume_24h_usd"]))
     life = timedelta(hours=float(ns["min_lifetime_hours"]))
-    horizon = now + timedelta(days=int(cfg["nonsports_max_days"]))
+    horizon = now + timedelta(days=int(ns["max_days"]))
     # design §5 step 1b: LADDER when the EVENT's negRisk is true (the
     # temperature and strike ladders), else BINARY.
     market_type = "LADDER" if event.get("negRisk") else "BINARY"
@@ -196,14 +199,15 @@ def nonsports_universe(cfg, con, now, get=get_json) -> dict:
 
 def tape_universe(con, cfg, now) -> list[Market]:
     """The 60 s cycle's non-sports half: the rows `nonsports_universe` already
-    wrote, whose resolution deadline is still ahead of us and inside the
-    ledger's `nonsports_max_days` — the same horizon `arb/tracker.py` applies
-    at booking, so the lane never prices a market it could not book."""
+    wrote, whose resolution deadline is still ahead of us and inside
+    `whale.nonsports.max_days` — the same horizon `arb/tracker.py` applies to a
+    WHALE row at booking, so the lane never prices a market it could not
+    book."""
     ns = cfg["whale"]["nonsports"]
     roots = sorted(set(ns["tags"].values()))
     if not ns["enabled"] or not roots:
         return []
-    hi = now + timedelta(days=int(cfg["nonsports_max_days"]))
+    hi = now + timedelta(days=int(ns["max_days"]))
     rows = con.execute(TAPE_SQL.format(roots=",".join("?" * len(roots))),
                        (*roots, int(now.timestamp()), int(hi.timestamp())))
     return [Market(condition_id=r["condition_id"], sport=r["sport"],

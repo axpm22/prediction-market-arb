@@ -359,3 +359,36 @@ def test_shipped_supervisor_lanes_are_whale_only():
     cfg = load(SHIPPED)
     on = {name for name, enabled in cfg["supervisor"]["processes"].items() if enabled}
     assert on == {"watch", "whale", "whale-backfill"}
+
+
+# --- L14 non-sports roots (I3, fix pass) ------------------------------------
+
+TAGS = "tags: { politics: politics, geopolitics: geopolitics, crypto: crypto }"
+
+
+def test_a_root_that_is_not_a_polymarket_fee_category_is_a_boot_error(tmp_path):
+    """The amendment's own "single most likely silent bug": a root IS the fee
+    category that prices the leg, so an unknown one is priced at the default
+    `polymarket.fee_rate` with nothing logged."""
+    bad = tmp_path / "config.yaml"
+    bad.write_text(SHIPPED.read_text().replace(
+        TAGS, "tags: { politics: elections, geopolitics: geopolitics, crypto: crypto }"))
+    with pytest.raises(ConfigError, match="nonsports.tags"):
+        load(bad)
+
+
+def test_sports_as_a_nonsports_root_is_a_boot_error(tmp_path):
+    """`sports` as a value would pool a politics record with the sports one and
+    defeat the no-transfer decision (operator, 2026-09-03 item 4)."""
+    bad = tmp_path / "config.yaml"
+    bad.write_text(SHIPPED.read_text().replace(
+        TAGS, "tags: { politics: sports, geopolitics: geopolitics, crypto: crypto }"))
+    with pytest.raises(ConfigError, match="nonsports.tags"):
+        load(bad)
+
+
+def test_the_whale_lane_ships_its_own_nonsports_horizon(tmp_path):
+    """H (fix pass): pre-plumbed at today's shared `nonsports_max_days`, so the
+    key exists for the operator to raise without moving every other lane."""
+    cfg = load(SHIPPED)
+    assert cfg["whale"]["nonsports"]["max_days"] == cfg["nonsports_max_days"] == 7

@@ -213,3 +213,52 @@ def test_bet_confirmed_returns_exit_pnl_for_an_exited_bet(cfg, tmp_path):
                                     "exit_price": "0.30", "pnl": "-0.5"})})
     bet = dict(store.query("SELECT * FROM flat_bets WHERE id=?", (bet_id,))[0])
     assert bet_confirmed(store, bet) == (True, Decimal("-0.500000"))
+
+
+# --- H (fix pass): the whale lane's own non-sports booking horizon ----------
+
+def _politics_cand(days_out, fp):
+    cand = _whale_cand(fp=fp)
+    cand.update(category="politics", sport="politics", event_key="pm:pol-1",
+                event_start_utc=NOW + timedelta(days=days_out))
+    cand["position_key"] = f"pk-{fp}"
+    return cand
+
+
+def _book_politics(cfg, tmp_path, days_out, fp):
+    store = Store(tmp_path / f"{fp}.sqlite")
+    poll = store.insert("polls", {"started_at": NOW.isoformat(), "kind": "whale",
+                                  "n_quotes": 1, "n_opps": 1})
+    process_poll(cfg, store, poll, "whale", [_politics_cand(days_out, fp)],
+                 WHALE_VENUE_OK, now=NOW)
+    return store
+
+
+def test_a_whale_nonsports_row_reads_the_lanes_own_horizon_key(cfg, tmp_path):
+    """The lane's non-sports horizon is `whale.nonsports.max_days`, shipped at
+    today's shared `nonsports_max_days` (7) so nothing moves. Raising it must
+    widen the WHALE lane and nothing else."""
+    assert cfg["whale"]["nonsports"]["max_days"] == cfg["nonsports_max_days"]
+    store = _book_politics(cfg, tmp_path, 20, "fp-pol-7")
+    assert store.query("SELECT COUNT(*) c FROM flat_bets")[0]["c"] == 0
+    assert store.query("SELECT reason FROM left_on_table ORDER BY id DESC LIMIT 1"
+                       )[0]["reason"] == "too-far-to-settlement"
+
+    cfg["whale"]["nonsports"]["max_days"] = 30
+    store = _book_politics(cfg, tmp_path, 20, "fp-pol-30")
+    assert store.query("SELECT COUNT(*) c FROM flat_bets")[0]["c"] == 1
+
+
+def test_a_nonsports_row_of_another_kind_keeps_the_shared_horizon(cfg, tmp_path):
+    """Only WHALE rows read the whale key: raising it must not widen the
+    political/negrisk lanes, which stay on `nonsports_max_days`."""
+    cfg["whale"]["nonsports"]["max_days"] = 30
+    store = Store(tmp_path / "ev.sqlite")
+    poll = store.insert("polls", {"started_at": NOW.isoformat(), "kind": "watch",
+                                  "n_quotes": 1, "n_opps": 1})
+    cand = _politics_cand(20, "fp-ev-1")
+    cand["kind"] = "NEGRISK"
+    process_poll(cfg, store, poll, "watch", [cand], WHALE_VENUE_OK, now=NOW)
+    assert store.query("SELECT COUNT(*) c FROM flat_bets")[0]["c"] == 0
+    assert store.query("SELECT reason FROM left_on_table ORDER BY id DESC LIMIT 1"
+                       )[0]["reason"] == "too-far-to-settlement"
