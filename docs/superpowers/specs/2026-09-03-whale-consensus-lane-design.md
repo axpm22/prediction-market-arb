@@ -321,7 +321,7 @@ re-review). Three pre-registered variants:
 
 1. `points_s / (points_s + points_other) ≥ whale.fire.ratio` (0.80).
 2. `points_s ≥ whale.fire.min_points.<variant>`; V1 = 3 literally. V2 and V3
-   are null for the first `whale.fire.calibration_days` (14) of `signals`
+   are null for the first `whale.fire.calibration_days` (14) of `signals` (amended 2026-09-04: provisional calibration on the first day signals span ≥ 3 UTC days, re-run and replaced at ≥ 14 days — PREREGISTRATION.md row 2026-09-04 'provisional early calibration'; `calibration_days` is now 3)
    rows: they are evaluated and persisted but never fire. On day 14 the
    value is computed by one formula, written as a dated amendment, and
    frozen: take every whale that qualified in at least one evaluated signal
@@ -669,7 +669,7 @@ whale:
   hygiene: { mm_window_secs: 600, mm_market_share: 0.30, mm_max_avg_usd: 50,
              both_sides_tolerance: 0.10, wash_gap_secs: 2 }
   fire: { ratio: 0.80, min_points: { V1: 3, V2: null, V3: null, V4: 3 },
-          calibration_days: 14, calibration_min_whales: 10,
+          calibration_days: 3, calibration_min_whales: 10,   # calibration_days 14 -> 3 amended 2026-09-04 (provisional calibration)
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
   size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10 }
   exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01 }

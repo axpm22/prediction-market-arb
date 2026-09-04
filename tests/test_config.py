@@ -111,7 +111,7 @@ def test_whale_config_loads_with_spec_values():
     # esports prefixes stay unmapped until an `esports` hierarchy root exists:
     # `root_of` would otherwise pool CS2 skill into the sports root
     assert not {"cs2", "lol", "dota2", "val"} & set(w["slug_sport_prefixes"])
-    assert w["fire"]["calibration_days"] == 14
+    assert w["fire"]["calibration_days"] == 3   # 14 -> 3 amended 2026-09-04 (provisional calibration)
     assert w["fire"]["calibration_min_whales"] == 10
     assert w["primary_variant"] == "V2"
 

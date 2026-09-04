@@ -686,7 +686,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
              both_sides_tolerance: 0.10, wash_gap_secs: 2 }
                                       # market-maker / wash-trade exclusion filters
   fire: { ratio: 0.80, min_points: { V1: 3, V2: null, V3: null, V4: 3 },
-          calibration_days: 14, calibration_min_whales: 10,
+          calibration_days: 3, calibration_min_whales: 10,
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
                                       # entry-fire trigger: ratio + variant thresholds; V2/V3
                                       #   stay null until the calibration window (Task 8) sets
@@ -701,6 +701,9 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   the whale VWAP before a signal is stale (spec §7.4);
                                       #   min_secs_to_start is the pregame floor before kickoff
                                       #   (spec §7.5)
+                                      #   calibration_days 14 -> 3 (amended 2026-09-04): provisional
+                                      #   calibration of V2/V3 on the first day signals span >= 3
+                                      #   UTC days; re-run and replaced at >= 14 days (PREREGISTRATION.md)
   size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10 }
                                       # paper stake sizing for whale-lane fills
   exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01 }
