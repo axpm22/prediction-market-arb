@@ -313,6 +313,42 @@ def test_a_held_market_is_priced_even_when_nothing_qualifies(cfg, tmp_path):
     assert len(rows) == 4                           # both tokens, both cycles
 
 
+def test_a_variant_that_first_fires_on_a_later_cycle_is_still_booked(cfg, tmp_path):
+    """§8 (pinned 2026-09-04): `position_key` carries `|<variant>/<sizing>`.
+    The tracker dedups active bets by position_key, so a variant whose first
+    fire lands on a later cycle than another's would otherwise be absorbed as
+    a re-sighting of that other variant and never booked at all."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)                      # V1 only: V2/V3 min_points null
+    v1 = _bets(store)
+    assert [b["variant"] for b in v1] == ["V1/flat", "V1/conf"]
+
+    cfg["whale"]["fire"]["min_points"]["V2"] = Decimal("0.01")
+    res = _run(cfg, store, con, now=NOW + timedelta(seconds=60))
+
+    bets = _bets(store)
+    assert res["booked"] == 2
+    assert [b["variant"] for b in bets] == ["V1/flat", "V1/conf",
+                                            "V2/flat", "V2/conf"]
+    assert len({b["position_key"] for b in bets}) == 4
+    assert bets[:2] == v1                      # rule 9: V1's rows untouched
+
+
+def test_every_variant_of_one_cycle_gets_its_own_position_key(cfg, tmp_path):
+    """The same-cycle case, which passed only because `process_poll` snapshots
+    active positions before its loop: six rows, six distinct position keys."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    cfg["whale"]["fire"]["min_points"].update(V2=Decimal("0.01"), V3=Decimal("0.01"))
+    res = _run(cfg, store, con)
+
+    bets = _bets(store)
+    assert res["booked"] == 6 and len(bets) == 6
+    assert len({b["position_key"] for b in bets}) == 6
+    assert {b["variant"] for b in bets} == {f"{v}/{s}" for v in ("V1", "V2", "V3")
+                                            for s in ("flat", "conf")}
+    assert all(b["position_key"].endswith("|" + b["variant"]) for b in bets)
+
+
 # -------------------------------------------------------------------- exits
 
 def _flip(con):

@@ -98,9 +98,15 @@ def candidate(cfg, market, sig, sizing, signal_id, event_key, token, label,
         "event_key": event_key, "event_start_utc": start,
         "start_grade": "nominal", "gamepk": None, "venue_pair": f"{VENUE}:self",
         "fingerprint": fingerprint(event_key, market, label, sig.variant, sizing),
+        # §8 (pinned 2026-09-04): the generic key with a `|<variant>/<sizing>`
+        # suffix. Each variant x sizing is its own paper position by design, and
+        # the tracker dedups active bets by position_key — without the suffix a
+        # variant whose first fire lands on a later cycle than another's is
+        # absorbed as a re-sighting of it and never booked.
         "position_key": position_key("WHALE", market.sport, event_key,
                                      market.market_type, market.line,
-                                     outcome=label, side="YES"),
+                                     outcome=label, side="YES")
+                        + f"|{sig.variant}/{sizing}",
         "legs": [leg], "edge_points": sig.flagged_edge, "cost_sum": cost_sum,
         "payout": Decimal(1), "roi": q6(Decimal(1) / cost_sum - 1),
         "status": "OK", "quality_flag": "none", "leg_skew_secs": 0.0,

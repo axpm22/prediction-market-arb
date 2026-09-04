@@ -218,6 +218,53 @@ def test_a_full_page_older_than_the_overlap_window_stops_paging(tmp_path):
     assert len(get.urls) == 1
 
 
+def _pages(n, per_page, cond):
+    """`n` full pages of distinct rows on one condition id, newest-first across
+    pages (the global feed's own order), 10 s apart."""
+    base = _fixture("whale_trades_global")[0]
+    ts = int(NOW.timestamp())
+    pages = []
+    for p in range(n):
+        page = []
+        for i in range(per_page):
+            page.append(dict(base, conditionId=cond, timestamp=ts,
+                             transactionHash=f"0x{p}-{i}"))
+            ts -= 10
+        pages.append(page)
+    return pages
+
+
+def test_paging_stops_at_max_offset_and_records_a_gap(tmp_path):
+    """The feed 400s past `offset=max_offset` (observed live 2026-09-04), so a
+    watermark far enough behind used to page into a 400 every cycle forever.
+    The cap stops one page short, records the unfetched span, and advances the
+    watermark past it — a recorded gap, never a wedged collector."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    mk = _global_markets(1)
+    pages = _pages(4, 5, mk[0].condition_id)
+    cfg = _cfg(page_size=5, max_offset=5, overlap_secs=120)
+    last_seen = int(NOW.timestamp()) - 100_000          # every row is "fresh"
+    con.execute("INSERT INTO meta (key, value) VALUES ('last_seen_ts', ?)",
+                (str(last_seen),))
+    con.commit()
+    # the fifth response is the live venue's own answer past the cap
+    get = FakeGet(*pages, VenueError("400 from https://data-api.polymarket.com/trades"))
+    res = whale_tape.poll_prints(cfg, con, mk, NOW, get=get)
+
+    assert len(get.urls) == 2 and "offset=5" in get.urls[1]
+    assert not any("offset=10" in u for u in get.urls)   # page 3 never requested
+    assert res["status"] == "ok" and whale_tape._meta(con, "backoff_until") is None
+    oldest = min(int(r["timestamp"]) for r in pages[1])
+    assert res["gap_secs"] == oldest - last_seen > 0
+    gap = json.loads(whale_tape._meta(con, "last_gap"))
+    assert gap == {"from_ts": last_seen, "to_ts": oldest,
+                   "secs": oldest - last_seen, "at": NOW.isoformat()}
+    # the watermark is the OLDEST row fetched, not the newest: everything above
+    # it is on the tape, everything below it is the recorded gap
+    assert whale_tape._meta(con, "last_seen_ts") == str(oldest)
+    assert con.execute("SELECT COUNT(*) FROM prints").fetchone()[0] == 10
+
+
 def test_a_failed_call_records_a_backoff_and_the_next_poll_short_circuits(tmp_path):
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     mk = _global_markets(1)

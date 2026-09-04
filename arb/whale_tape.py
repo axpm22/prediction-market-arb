@@ -255,6 +255,7 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
     w = cfg["whale"]
     res = {"calls": 0, "rows": 0, "dupes": 0, "bad_rows": 0,
            "status_counts": {}, "status": "ok"}
+    gap_to = None
     if _backoff_active(con, now):
         res["status"] = "backoff"
         return res
@@ -278,12 +279,7 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
             # stop, or the age rule would walk the venue's whole history.
             last_seen = int(_meta(con, "last_seen_ts") or 0)
             floor = last_seen - int(w["overlap_secs"])
-            offset = 0
-            # ponytail: the catch-up walk after an outage is bounded only by
-            # the token bucket — at ~1,515 rows/min a 24h gap is ~218 pages of
-            # 10,000, i.e. ~7 min at max_calls_per_min=30, and `offset` beyond
-            # the verified 10,000 is UNPROBED. Cap it (or use the now-verified
-            # start/end window) if an outage ever outruns a cycle.
+            cap, offset, oldest = int(w["max_offset"]), 0, None
             while True:
                 url = f"{DATA_API}/trades?takerOnly={taker}&limit={size}"
                 body = _call(bucket, get, url + (f"&offset={offset}" if offset else ""),
@@ -296,7 +292,24 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
                 if body and not stamps:
                     raise VenueError(f"whale poll: {len(body)} rows, 0 parsed")
                 newest = max([newest] + stamps)
+                if stamps:
+                    oldest = min(stamps) if oldest is None else min(oldest, *stamps)
                 if len(body) < size or not stamps or not last_seen or min(stamps) <= floor:
+                    break
+                if offset + size > cap:
+                    # The feed 400s past max_offset (observed 2026-09-04): the
+                    # rows behind this page are unreachable, so record the span
+                    # we will never fetch and move past it. Walking back into
+                    # that 400 every cycle is how the collector wedged (Task 8).
+                    if oldest > last_seen:   # else the overlap already covers it
+                        gap_to = oldest
+                        res["gap_secs"] = oldest - last_seen
+                        _set_meta(con, "last_gap", json.dumps(
+                            {"from_ts": last_seen, "to_ts": oldest,
+                             "secs": res["gap_secs"], "at": now.isoformat()}))
+                        log.warning("whale poll capped at offset=%d (max_offset=%d):"
+                                    " %ds of prints unfetched, recorded as a gap",
+                                    offset, cap, res["gap_secs"])
                     break
                 offset += size
     except Exception as e:
@@ -305,6 +318,10 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
         res["status"] = "error"
     # ONLY on a completed poll: on an abort the pages behind the failure were
     # never fetched, and advancing the watermark would strand that gap forever.
-    if newest and res["status"] == "ok":
-        _set_meta(con, "last_seen_ts", newest)
+    # A CAPPED poll is completed, but its watermark is the oldest row fetched,
+    # not the newest: the span below it is the recorded gap, and only moving
+    # past it stops the next cycle walking back into the same 400.
+    mark = gap_to if gap_to is not None else newest
+    if mark and res["status"] == "ok":
+        _set_meta(con, "last_seen_ts", mark)
     return res
