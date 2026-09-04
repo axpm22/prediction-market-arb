@@ -182,8 +182,12 @@ def test_cap_is_hard_even_while_a_compute_is_in_flight():
     t = threading.Thread(target=lambda: dc.get_or_compute(("hard", "slow"), 3600, slow, max_entries=2))
     t.start()
     assert started.wait(20)
-    for i in range(6):                       # six inserts while the slow compute holds its stripe
-        dc.get_or_compute(("hard", i), 3600, lambda i=i: {"v": i}, max_entries=2)
+    # keys on the SAME stripe as the slow key would block behind it (stripes
+    # are hash-based and hash seeds vary per process) — pick six that do not
+    slow_stripe = dc._stripe(("hard", "slow"))
+    keys = [k for k in (("hard", i) for i in range(200)) if dc._stripe(k) is not slow_stripe][:6]
+    for k in keys:                           # six inserts while the slow compute holds its stripe
+        dc.get_or_compute(k, 3600, lambda k=k: {"v": k[1]}, max_entries=2)
     with dc._lock:
         assert sum(1 for k in dc._entries if k[0] == "hard") <= 2
     release.set()
@@ -211,7 +215,9 @@ def test_single_flight_survives_eviction_of_the_key():
     a = threading.Thread(target=lambda: dc.get_or_compute(key, 3600, compute, max_entries=1))
     a.start()
     assert started.wait(20)
-    dc.get_or_compute(("sf", "other"), 3600, lambda: {"v": 0}, max_entries=1)   # evicts anything else
+    other = next(k for k in (("sf", f"other{i}") for i in range(200))
+                 if dc._stripe(k) is not dc._stripe(key))   # must not share the slow key's stripe
+    dc.get_or_compute(other, 3600, lambda: {"v": 0}, max_entries=1)   # evicts anything else
     b = threading.Thread(target=lambda: dc.get_or_compute(key, 3600, compute, max_entries=1))
     b.start()
     release.set()
