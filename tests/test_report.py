@@ -143,6 +143,40 @@ def test_headline_sql_agrees_on_unresolved_leg(cfg, tmp_path):
     assert row["headline_pnl"] == 0
 
 
+def test_write_daily_deterministic_across_wall_clock(cfg, fixture_db, tmp_path,
+                                                      monkeypatch):
+    # §H14 flake fix: a day's report is a pure function of the stored data and
+    # `day` (rule 9) — nothing on the write_daily path may read the wall clock.
+    # A `datetime.now()` that ticks forward on every call poisons the hash if
+    # anything still reads real time; after the fix it is never called, so two
+    # calls with different mocked clocks must still render byte-identical md.
+    import arb.report as report_mod
+    import arb.report_whale as report_whale_mod
+    import arb.whale_kill as whale_kill_mod
+
+    calls = {"n": 0}
+    base = datetime(2099, 1, 1, tzinfo=timezone.utc)  # far from any real "now" use
+
+    class TickingDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            calls["n"] += 1
+            return base + timedelta(seconds=2 * calls["n"])
+
+    for mod in (report_mod, report_whale_mod, whale_kill_mod):
+        monkeypatch.setattr(mod, "datetime", TickingDatetime)
+
+    write_daily(cfg, fixture_db, "2026-07-08", outdir=tmp_path)
+    md1 = (tmp_path / "2026-07-08.md").read_text()
+    write_daily(cfg, fixture_db, "2026-07-08", outdir=tmp_path)
+    md2 = (tmp_path / "2026-07-08.md").read_text()
+
+    assert calls["n"] == 0, "write_daily read the wall clock instead of day_bounds"
+    assert md1 == md2
+    lines = (tmp_path / "HASHES.log").read_text().strip().splitlines()
+    assert len(lines) == 2 and lines[0] == lines[1]
+
+
 def test_write_daily_appends_hash_chain(cfg, fixture_db, tmp_path):
     # verifiability: every write appends (never rewrites) the day's report
     # hashes; an idempotent recompute reproduces the same hash

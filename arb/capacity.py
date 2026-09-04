@@ -17,6 +17,25 @@ from arb.models import LOCKED_KINDS, q6
 INSUFFICIENT = "INSUFFICIENT_DEPTH_DATA"
 
 
+def capacity_md(cap: dict) -> list[str]:
+    """§13.4 parallel section — clearly labeled, never blended into headline."""
+    md = ["## PROJECTIONS — sizing/capacity (§13.4, never headline)",
+          f"- capacity: **{cap['status']}** — ladder capture "
+          f"{cap['n_with_ladders']}/{cap['n_feasible']} feasible positions "
+          f"({cap['ladder_fraction']:.0%})"]
+    if cap["status"] == "OK" and cap["positions"]:
+        md.append(f"- projected P&L at min(Kelly-cap, depth/5, q*) sizing, "
+                  f"VWAP fills: ${cap['projected_pnl']} over "
+                  f"{len(cap['positions'])} trusted clean positions")
+        md.append("")
+        md.append("| position | kind | contracts | stake | net edge | projected P&L |")
+        md.append("|---|---|---|---|---|---|")
+        for p in cap["positions"]:
+            md.append(f"| {p['position_key']} | {p['kind']} | {p['contracts']} | "
+                      f"${p['stake_usd']} | {p['net_edge']} | ${p['pnl_usd']} |")
+    return md
+
+
 def _leg_quote(store, poll_id, event_key, leg) -> dict | None:
     sql = """SELECT ladder_json, depth_usd FROM quotes
              WHERE poll_id=? AND venue=? AND event_key=? AND market_type=?

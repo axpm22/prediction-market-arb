@@ -203,7 +203,10 @@ def cmd_report(cfg, store, args):
     # otherwise the printed streak lags the dashboard's live view by one, because
     # this call happens before write_daily appends today's HASHES.log line.
     outdir = Path(str(cfg["report_dir"]))
-    whale = whale_frame(cfg, store, hashes_log_path=outdir / HASHES_LOG,
+    # report day's end, not wall clock (§H14): matches write_daily's own now,
+    # so the hashed md is a pure function of the stored data and `day`.
+    now = _dt.fromisoformat(end)
+    whale = whale_frame(cfg, store, now=now, hashes_log_path=outdir / HASHES_LOG,
                         producing_day=day)
     frame = write_daily(cfg, store, day, outdir=outdir, whale_frame=whale)
     print_daily(cfg, store, day, whale_frame=whale)

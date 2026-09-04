@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.table import Table
 
 from arb import metrics, report_whale
-from arb.capacity import capacity_frame
+from arb.capacity import capacity_frame, capacity_md
 from arb.venues.fees import fee_is_stale
 from arb.whale_kill import HASHES_LOG
 
@@ -99,7 +99,8 @@ def _live_section(cfg, store, day: str) -> dict:
             "coverage_mean": statistics.mean(cov) if cov else None}
 
 
-def daily_frame(cfg, store, day: str) -> dict:
+def daily_frame(cfg, store, day: str, now: datetime | None = None) -> dict:
+    now = now or datetime.now(timezone.utc)
     start, end = metrics.day_bounds(cfg, day)
     bets = [dict(r) for r in store.query(
         "SELECT * FROM flat_bets WHERE created_at >= ? AND created_at < ? "
@@ -144,7 +145,7 @@ def daily_frame(cfg, store, day: str) -> dict:
            WHERE p.started_at >= ? AND p.started_at < ?
            GROUP BY pv.venue, hour""", (start, end))
     newest = store.query("SELECT MAX(fetched_at) t FROM quotes")[0]["t"]
-    age = (datetime.now(timezone.utc) - datetime.fromisoformat(newest)
+    age = (now - datetime.fromisoformat(newest)
            ).total_seconds() if newest else None
     hl, hl_n = headline(cfg, store)
     demoted = [r["pair"] for r in store.query(
@@ -165,28 +166,13 @@ def daily_frame(cfg, store, day: str) -> dict:
     }
 
 
-def _capacity_md(cap: dict) -> list[str]:
-    """§13.4 parallel section — clearly labeled, never blended into headline."""
-    md = ["## PROJECTIONS — sizing/capacity (§13.4, never headline)",
-          f"- capacity: **{cap['status']}** — ladder capture "
-          f"{cap['n_with_ladders']}/{cap['n_feasible']} feasible positions "
-          f"({cap['ladder_fraction']:.0%})"]
-    if cap["status"] == "OK" and cap["positions"]:
-        md.append(f"- projected P&L at min(Kelly-cap, depth/5, q*) sizing, "
-                  f"VWAP fills: ${cap['projected_pnl']} over "
-                  f"{len(cap['positions'])} trusted clean positions")
-        md.append("")
-        md.append("| position | kind | contracts | stake | net edge | projected P&L |")
-        md.append("|---|---|---|---|---|---|")
-        for p in cap["positions"]:
-            md.append(f"| {p['position_key']} | {p['kind']} | {p['contracts']} | "
-                      f"${p['stake_usd']} | {p['net_edge']} | ${p['pnl_usd']} |")
-    return md
-
-
 def write_daily(cfg, store, day: str, outdir: str | Path | None = None,
                 whale_frame: dict | None = None) -> dict:
-    frame = daily_frame(cfg, store, day)
+    # a day's report is a pure function of the stored data and `day` (rule 9):
+    # `now` here is the report day's END, never the wall clock, so a re-run of
+    # a past day reproduces the same hash (§H14 flake fix).
+    now = datetime.fromisoformat(metrics.day_bounds(cfg, day)[1])
+    frame = daily_frame(cfg, store, day, now=now)
     outdir = Path(outdir if outdir is not None else cfg["report_dir"])
     outdir.mkdir(parents=True, exist_ok=True)
     csv_path = outdir / f"{day}.csv"
@@ -223,11 +209,11 @@ def write_daily(cfg, store, day: str, outdir: str | Path | None = None,
     # §12 kill rule 2 counts consecutive PRODUCED daily reports; the record of
     # which days those are is the HASHES chain below, read back (never written).
     frame["whale"] = whale_frame if whale_frame is not None else \
-        report_whale.whale_frame(cfg, store, hashes_log_path=outdir / HASHES_LOG,
+        report_whale.whale_frame(cfg, store, now=now, hashes_log_path=outdir / HASHES_LOG,
                                  producing_day=day)
     md.extend(report_whale.whale_md(frame["whale"]))
     md.append("")
-    md.extend(_capacity_md(frame["capacity"]))
+    md.extend(capacity_md(frame["capacity"]))
     md.append("")
     live = frame["live_lane"]
     md.append("## LIVE lane (in-play, review-lane forever — never headline)")
