@@ -111,12 +111,15 @@ def test_whale_config_loads_with_spec_values():
     # item C of the same amendment: the authoritative holdings check reads
     # data-api `positions?user=` for the wallets behind an open bet.
     # `holdings_keep` added by the 2026-09-04 retention amendment: a poll keeps
-    # the positions in markets we track plus one summary row, not the whole page
+    # the positions in a tracked set plus one summary row, not the whole page.
+    # `universe` (2026-09-05 fix, new default): the tracked set is the lane's
+    # own current-cycle set, not the `markets` table (which had grown to
+    # every market backfill ever mapped and kept a whale's whole history).
     assert w["exit"] == {"flip_ratio": Decimal("0.50"), "sold_fraction": Decimal("0.50"),
                          "min_score_lb": Decimal("-0.01"), "holdings_poll_secs": 300,
                          "holdings_calls_per_cycle": 10, "holdings_page_size": 500,
                          "holdings_max_age_polls": 3, "holdings_max_pages": 4,
-                         "holdings_keep": "markets"}
+                         "holdings_keep": "universe"}
     # retention amendment 2026-09-04: prints are kept platform-wide, in full
     # inside the universes and at or above the global floor outside them
     assert w["retention"] == {"scope": "global", "global_min_print_usd": 1000,
@@ -274,7 +277,7 @@ def test_retention_and_holdings_modes_must_be_ones_the_code_implements(tmp_path)
     loader refuses a value the code does not implement."""
     for old, new, match in (("scope: global", "scope: universal", "retention.scope"),
                             ("raw_json: universe", "raw_json: yes", "retention.raw_json"),
-                            ("holdings_keep: markets", "holdings_keep: tracked",
+                            ("holdings_keep: universe", "holdings_keep: tracked",
                              "holdings_keep")):
         bad = tmp_path / f"config-{new}.yaml".replace(" ", "-").replace(":", "")
         bad.write_text(SHIPPED.read_text().replace(old, new))

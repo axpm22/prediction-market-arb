@@ -1917,6 +1917,82 @@ def test_holdings_a_page_holding_none_of_our_markets_is_still_a_real_zero(tmp_pa
     assert whale_holdings.for_bet(_cfg(), con, _ctx(["0xw0"]), NOW) == {"0xw0": Decimal(0)}
 
 
+# --- holdings retention fix (2026-09-05): tracked set is the LANE's, not ----
+# --- the `markets` table (which grew to every market backfill ever mapped) -
+
+def test_holdings_universe_mode_keeps_only_the_callers_explicit_tracked_set(tmp_path):
+    """`holdings_keep: universe` (2026-09-05 fix, new shipped default): the
+    tracked set is whatever the CALLER passes — the lane's current-cycle
+    universe union open bets' markets — never the `markets` table, which had
+    grown to every market backfill EVER mapped (14k+ rows) and made a signal
+    whale's whole historical portfolio 'tracked' (measured: +57,844
+    holdings rows in one hour). Same shape as the 2026-09-04 `markets`-mode
+    test above, but the 12 kept rows come from the explicit set, not a table
+    read — proven by a BARE tape whose `markets` table is empty."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")     # no _market(): table is empty
+    cfg = _cfg()
+    cfg["whale"]["exit"] = {**cfg["whale"]["exit"], "holdings_keep": "universe"}
+    page = ([_position_row("0xw0", 10, asset=f"f{i}", cid=f"0xuntracked{i}", value=2)
+             for i in range(488)]
+            + [_position_row("0xw0", 10, asset=f"t{i}", value=3) for i in range(12)])
+    get = FakeGet(page, [])                       # a full page, then a short one
+
+    res = whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW, {MAKER_CID}, get=get)
+
+    assert (res["wallets"], res["rows"], res["calls"]) == (1, 12, 2)
+    kept = [dict(r) for r in con.execute("SELECT * FROM holdings")]
+    assert len(kept) == 12 and {r["condition_id"] for r in kept} == {MAKER_CID}
+    summary = con.execute("SELECT * FROM holdings_snapshots").fetchone()
+    assert (summary["observed_at"], summary["proxy_wallet"]) == (NOW.isoformat(), "0xw0")
+    assert summary["n_positions"] == 500                    # the whole page, both calls
+    assert summary["total_value_usd"] == "1012.000000"      # 488 x 2 + 12 x 3
+    assert summary["partial"] == 0
+
+
+def test_holdings_universe_mode_keeps_an_open_bets_market_outside_the_universe(tmp_path):
+    """for_bet reads a bet's own market regardless of whether that market is
+    still in THIS cycle's live universe — a market can drop out of the watch
+    feed (game started, delisted) while a bet on it stays open. The lane
+    folds every open bet's condition_id into the set it passes (§9 amendment
+    2026-09-05); here the explicit set is JUST the bet's market, with no live
+    universe at all, and its holding still survives because it is an open
+    bet, not because it is in `markets`."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")     # bare: no live universe either
+    cfg = _cfg()
+    cfg["whale"]["exit"] = {**cfg["whale"]["exit"], "holdings_keep": "universe"}
+    off_universe_cid = "0xoffuniverse"
+    get = FakeGet([_position_row("0xw0", 400, cid=off_universe_cid)])
+
+    res = whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW, {off_universe_cid}, get=get)
+
+    assert res["rows"] == 1
+    kept = con.execute("SELECT condition_id FROM holdings").fetchone()
+    assert kept[0] == off_universe_cid
+    ctx = _ctx(["0xw0"], token="tokyes")
+    ctx["condition_id"] = off_universe_cid
+    held = whale_holdings.for_bet(cfg, con, ctx, NOW)
+    assert held == {"0xw0": Decimal("400.000000")}
+
+
+def test_holdings_universe_mode_a_page_with_none_of_the_tracked_set_still_summarises(tmp_path):
+    """Same three-way reading as the `markets`-mode test above, under
+    `universe` mode: a wallet whose page holds nothing in the caller's
+    tracked set has still been READ — a real zero, not an absent reading —
+    and that is what the summary row (not a `holdings` row) has to carry."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cfg = _cfg()
+    cfg["whale"]["exit"] = {**cfg["whale"]["exit"], "holdings_keep": "universe"}
+    page = [_position_row("0xw0", 10, asset=f"f{i}", cid=f"0xuntracked{i}")
+            for i in range(300)]
+
+    whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW, {MAKER_CID}, get=FakeGet(page))
+
+    assert con.execute("SELECT COUNT(*) FROM holdings").fetchone()[0] == 0
+    summary = con.execute("SELECT * FROM holdings_snapshots").fetchone()
+    assert (summary["n_positions"], summary["partial"]) == (300, 0)
+    assert whale_holdings.for_bet(cfg, con, _ctx(["0xw0"]), NOW) == {"0xw0": Decimal(0)}
+
+
 # --- holdings paging fix (2026-09-04): a full page keeps going ---------------
 
 def test_holdings_poll_pages_past_one_page_until_a_short_page(tmp_path):

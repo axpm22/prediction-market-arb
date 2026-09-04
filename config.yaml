@@ -913,7 +913,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
   exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01,
           holdings_poll_secs: 300, holdings_calls_per_cycle: 10,
           holdings_page_size: 500, holdings_max_age_polls: 3, holdings_max_pages: 4,
-          holdings_keep: markets }
+          holdings_keep: universe }
                                       # signal-driven exit: consensus flip / sell-off thresholds —
                                       #   invariant: exit.flip_ratio < fire.ratio.
                                       #   The four holdings_* keys are the L14 amendment of
@@ -978,6 +978,25 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   `markets` by construction: a bet's own market is in the
                                       #   universe. `holdings` was the bigger of the two storage
                                       #   hogs — more rows/day than the global print tape above.
+                                      #   `universe` (retention FIX 2026-09-05, new default): the
+                                      #   2026-09-04 amendment above assumed a bet's market is
+                                      #   always IN `markets` at the size `markets` was measured
+                                      #   at — but that table is every market backfill has EVER
+                                      #   mapped (14k+ rows and growing), so `markets` mode kept a
+                                      #   signal whale's whole HISTORICAL portfolio, not just this
+                                      #   cycle's. MEASURED live 2026-09-05 ~00:10Z: +57,844
+                                      #   holdings rows in one hour (~1.4M rows/day, ~400 MB/day) —
+                                      #   the tape's fastest-growing table, worse than the bug this
+                                      #   amendment fixed. `universe` keeps the SAME shape (rows in
+                                      #   the tracked set plus one summary row) but the tracked set
+                                      #   is passed explicitly by the lane each cycle
+                                      #   (arb/lanes/whale.py: this cycle's live universe union
+                                      #   every open bet's own market) instead of read from
+                                      #   `markets` — bounded by construction to what one cycle can
+                                      #   actually book or hold, so it cannot accumulate history.
+                                      #   Expected after: back to the `markets`-mode estimate above
+                                      #   (~5,760 summary rows/day plus a live cycle's worth of
+                                      #   position rows, not 14k+ markets' worth).
   rank: { min_n: 5, top: 15 }         # read-time trader ranking (`arb whale-rank`,
                                       #   /api/whale/traders, the daily "Top traders"
                                       #   table — design §12 "Trader profiles").

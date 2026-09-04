@@ -137,8 +137,16 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     # exit.holdings_calls_per_cycle wallets a cycle and paced by the same
     # bucket as every other call here; it must run BEFORE the exits below, so
     # this cycle's exits read this cycle's snapshot.
+    # `tracked`: retention fix 2026-09-05 — this cycle's live universe union
+    # every open bet's own market, so `for_bet` below still finds a bet's
+    # holding even for a market that has since dropped out of the live
+    # universe. Passed explicitly (`holdings_keep: universe`) rather than
+    # left to derive from the tape's `markets` table, which is every market
+    # backfill has EVER mapped (14k+ rows) and made a signal whale's whole
+    # HISTORICAL portfolio "tracked" (measured: +57,844 holdings rows/hour).
+    tracked = {m.condition_id for m in markets} | {c["condition_id"] for c in ctxs.values() if c}
     res["holdings"] = whale_holdings.poll_holdings(
-        cfg, con, whale_holdings.wallets_of(ctxs.values()), now, get=get)
+        cfg, con, whale_holdings.wallets_of(ctxs.values()), now, tracked, get=get)
 
     # 6: score. Hygiene is applied by the LANE, before scoring and signalling
     # (Task 5 decision), so an excluded wallet never becomes a vote. The

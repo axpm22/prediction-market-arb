@@ -19,9 +19,12 @@ Rule 4: the cadence, the per-cycle cap, the page size, the page cap, the
 Rule 5: size, avg_price, total_bought and the summary's total_value_usd are
         6-place Decimal strings.
 Rule 7: every poll is persisted, whether or not it moves an exit — the
-        positions in markets this tape tracks as `holdings` rows, and the page
+        positions in the CALLER's tracked set as `holdings` rows, and the page
         as a whole as one `holdings_snapshots` row (retention addendum
-        2026-09-04: storing every row of every page was ~374k rows/day).
+        2026-09-04: storing every row of every page was ~374k rows/day.
+        2026-09-05: the addendum's own `markets`-table tracked set had grown
+        to every market backfill ever mapped, ~1.4M rows/day; `holdings_keep:
+        universe` fixes it by tracking the lane's OWN current-cycle set).
 Rule 9: writes go to the whale tape only — flat_bets is unreachable from here.
 """
 from __future__ import annotations
@@ -108,14 +111,23 @@ def _warn_truncated_once(con, wallet, observed_at, n) -> None:
                 wallet, n)
 
 
-def _tracked(con, cfg) -> set[str] | None:
-    """The condition_ids this tape follows — the polled universe plus every
-    market backfill has mapped. `None` under `holdings_keep: all`, which stores
-    the page whole. One read per cycle: `markets` is tens of thousands of rows
-    against the hundreds of thousands the same cycle already loads from
-    `prints`, and it is read once for every wallet and page of the cycle."""
-    if str(cfg["whale"]["exit"]["holdings_keep"]) == "all":
+def _tracked(con, cfg, tracked) -> set[str] | None:
+    """Which condition_ids a poll keeps rows for (retention fix 2026-09-05).
+    `all` keeps the whole page (`None`). `universe` trusts the CALLER's own
+    set — `poll_holdings`'s `tracked` argument, which the lane assembles as
+    this cycle's live universe union every open bet's market (arb/lanes/
+    whale.py) — never the `markets` table: that table is every market
+    backfill has EVER mapped (14k+ rows), so under the pre-fix `markets` mode
+    a signal whale's whole HISTORICAL portfolio still qualified as "tracked"
+    (measured live 2026-09-05: +57,844 holdings rows in one hour, ~1.4M
+    rows/day, ~400 MB/day — the tape's fastest-growing table). `markets` is
+    that pre-fix behaviour, kept for rollback and for a caller that passes no
+    explicit set: one read of the `markets` table per cycle."""
+    keep = str(cfg["whale"]["exit"]["holdings_keep"])
+    if keep == "all":
         return None
+    if keep == "universe" and tracked is not None:
+        return set(tracked)
     return {r[0] for r in con.execute("SELECT condition_id FROM markets")}
 
 
@@ -162,11 +174,17 @@ def _persist_summary(con, wallet, observed_at, n, value, partial) -> None:
     con.commit()
 
 
-def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
+def poll_holdings(cfg, con, wallets, now, tracked=None, get=get_json) -> dict:
     """One cycle's holdings refresh. A wallet the venue refuses costs only
     itself: no watermark, no backoff (that guard belongs to the print feed,
     which is a different endpoint), and no `holdings_at` stamp, so it is
     retried next cycle rather than silently believed to hold what it did.
+
+    `tracked`: the condition_ids worth PERSISTING, under `holdings_keep:
+    universe` — the lane's own set (this cycle's live universe union every
+    open bet's market). Ignored under `markets`/`all` (see `_tracked`); a
+    caller that passes nothing falls back to the pre-2026-09-05 `markets`
+    table read either way, so every existing caller is unaffected.
 
     A full page pages by `offset` (verified live 2026-09-04) until a short
     page or `holdings_max_pages`, each extra page spending one call of this
@@ -184,7 +202,7 @@ def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
     res = {"wallets": 0, "rows": 0, "calls": 0, "errors": 0}
     bucket, observed_at = _bucket(cfg), now.isoformat()
     todo = due(cfg, con, wallets, now)
-    tracked = _tracked(con, cfg) if todo else None
+    tracked = _tracked(con, cfg, tracked) if todo else None
     for wallet in todo:
         if res["calls"] >= cap:
             break

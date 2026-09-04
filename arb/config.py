@@ -312,7 +312,8 @@ def _check_invariants(cfg):
             ("whale.retention.scope", whale["retention"]["scope"], ("global", "universe")),
             ("whale.retention.raw_json", whale["retention"]["raw_json"],
              ("universe", "all", "none")),
-            ("whale.exit.holdings_keep", whale["exit"]["holdings_keep"], ("markets", "all")),
+            ("whale.exit.holdings_keep", whale["exit"]["holdings_keep"],
+             ("markets", "universe", "all")),
             # 2026-09-04: the whale-first face of the instrument (dashboard.py,
             # report.py, cmd_status all read this one flag) — a typo would
             # silently keep the arb-first layout, so it fails at boot too.
