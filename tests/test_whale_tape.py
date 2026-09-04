@@ -1633,3 +1633,65 @@ def test_holdings_truncation_warns_once_per_wallet_per_day(tmp_path, caplog):
         whale_holdings.poll_holdings(cfg, con, ["0xw0"],
                                      NOW + timedelta(days=1), get=FakeGet(full_page()))
         assert len(caplog.records) == 1                 # a new day: warns again
+
+
+# --- holdings-paging fix, part 2 (2026-09-04): cap checked per page, --------
+# --- each page persisted as it lands (review of 489bb3e/c4bbd92) -----------
+
+def test_holdings_cap_is_checked_before_every_page_not_just_between_wallets(tmp_path):
+    """Item 1: the OLD code checked holdings_calls_per_cycle only between
+    wallets, so an admitted wallet ran every page of holdings_max_pages
+    regardless — worst case cap - 1 + max_pages calls, not the cap. Cap 3,
+    two wallets each needing 2 pages to finish: 0xa finishes (2 calls), 0xb
+    is cut after its first page (the 3rd call) — exactly 3 calls total. 0xb
+    is left unmarked (no POLLED stamp) so it stays the stalest and the very
+    next cycle finishes it, starting over from offset 0."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cfg = _cfg()
+    cfg["whale"]["exit"] = {**cfg["whale"]["exit"], "holdings_page_size": 2,
+                            "holdings_calls_per_cycle": 3, "holdings_max_pages": 4}
+    a1 = [_position_row("0xa", 1, asset="a1"), _position_row("0xa", 1, asset="a2")]
+    a2 = [_position_row("0xa", 1, asset="a3")]                       # short: 0xa done
+    b1 = [_position_row("0xb", 1, asset="b1"), _position_row("0xb", 1, asset="b2")]
+    get = FakeGet(a1, a2, b1)
+
+    res = whale_holdings.poll_holdings(cfg, con, ["0xa", "0xb"], NOW, get=get)
+
+    assert res["calls"] == 3                                # the cap, not 1 + max_pages
+    assert whale_tape._meta(con, "holdings_at:0xa") == NOW.isoformat()     # 0xa: done
+    assert whale_tape._meta(con, "holdings_at:0xb") is None                # 0xb: cut, still due
+    b_rows = {r[0] for r in con.execute(
+        "SELECT asset FROM holdings WHERE proxy_wallet='0xb'")}
+    assert b_rows == {"b1", "b2"}                            # what it fetched is kept
+
+    # stays the stalest: round-robin picks it first, and the very next cycle
+    # (well inside the same cadence) finishes it.
+    assert whale_holdings.due(cfg, con, ["0xa", "0xb"], NOW + timedelta(seconds=60)) == ["0xb"]
+    get2 = FakeGet([_position_row("0xb", 1, asset="b1")])       # short: completes in one call
+    res2 = whale_holdings.poll_holdings(cfg, con, ["0xa", "0xb"],
+                                        NOW + timedelta(seconds=60), get=get2)
+    assert res2["calls"] == 1 and "offset=0" in get2.urls[0]    # starts over, not resumed
+    assert whale_tape._meta(con, "holdings_at:0xb") == (NOW + timedelta(seconds=60)).isoformat()
+
+
+def test_holdings_a_page_2_failure_keeps_page_1s_rows(tmp_path):
+    """Item 2: `body` used to accumulate across pages and persist only after
+    the whole per-wallet loop — a page-2 failure discarded page 1's real,
+    already-fetched rows, contradicting the module's own rule-7 docstring
+    ("every snapshot is persisted"). Each page is now written as it lands, so
+    page 1 survives a page-2 VenueError; the wallet is left unmarked (no
+    POLLED stamp) so it is retried whole, not half-believed, next cycle."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cfg = _cfg()
+    cfg["whale"]["exit"] = {**cfg["whale"]["exit"], "holdings_page_size": 2}
+    page1 = [_position_row("0xw0", "5", asset="tokyes"), _position_row("0xw0", 1, asset="b")]
+    get = FakeGet(page1, VenueError("polymarket 503"))
+
+    res = whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW, get=get)
+
+    assert (res["calls"], res["errors"]) == (2, 1)
+    rows = {r[0] for r in con.execute(
+        "SELECT asset FROM holdings WHERE proxy_wallet='0xw0'")}
+    assert rows == {"tokyes", "b"}                            # page 1 kept, not discarded
+    assert whale_tape._meta(con, "holdings_at:0xw0") is None  # not half-believed
+    assert whale_holdings.due(cfg, con, ["0xw0"], NOW) == ["0xw0"]   # still due, immediately

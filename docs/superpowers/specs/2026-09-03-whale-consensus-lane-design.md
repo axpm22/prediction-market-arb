@@ -674,6 +674,16 @@ position that `whale_score.resolved_outcomes` says is scorable as of `as_of`:
 | `excess_vs_base` | `edge_mean − m0` for the row's root |
 | `notional`, `last_resolved_at`, `native`, `hygiene_flag` | Σ notional; latest resolution; bucket rows are the wallet's own record, sport/root rows are aggregates; hygiene-excluded |
 
+**Decision (controller, 2026-09-04):** every statistic above — `win_rate`,
+`implied`, `excess_win_rate`, `edge_mean`/`edge_sd`, `roi_at_risk`, `t_stat`,
+`lb80` — is computed over CLEAN positions only (`state.open_positions`,
+exactly what the lane's own score uses), so a `partial` cell's `lb80` is the
+`lb80` the fire rule actually reads, never diluted by its hygiene-excluded
+positions. Those still count into `flagged_n` (`n = clean_n + flagged_n`,
+shown as `clean_n/n`). A wholly excluded wallet (`full`, `clean_n = 0`) shows
+its stats over its OWN flagged positions instead of going blank — a market
+maker stays ranked and visible, never hidden.
+
 Surfaces: `arb whale-rank [--level|--wallet|--top|--min-n]`,
 `/api/whale/traders?level=&top=&min_n=&wallet=` with a sortable Traders table on
 the dashboard, and a "Top traders" + "where X is good" block in the daily

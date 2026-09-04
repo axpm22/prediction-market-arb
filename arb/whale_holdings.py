@@ -101,6 +101,21 @@ def _warn_truncated_once(con, wallet, observed_at, n) -> None:
                 wallet, n)
 
 
+def _persist(con, chunk, wallet, observed_at, res) -> int:
+    """One page's rows, written now — not batched with later pages, so a
+    later page's failure or cap-cut can never discard what already landed
+    (rule 7; 2026-09-04 holdings-paging fix item 2)."""
+    rows = []
+    for r in chunk:
+        try:
+            rows.append(_row(r, wallet, observed_at))
+        except BAD_ROW as e:
+            res["bad_rows"] = res.get("bad_rows", 0) + 1
+            log.warning("whale skipped an unreadable holdings row: %s", e)
+    con.executemany(f"INSERT INTO holdings ({COLS}) VALUES ({','.join('?' * 10)})", rows)
+    return len(rows)
+
+
 def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
     """One cycle's holdings refresh. A wallet the venue refuses costs only
     itself: no watermark, no backoff (that guard belongs to the print feed,
@@ -109,9 +124,14 @@ def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
 
     A full page pages by `offset` (verified live 2026-09-04) until a short
     page or `holdings_max_pages`, each extra page spending one call of this
-    cycle's own `holdings_calls_per_cycle` budget — so once that budget is
-    spent, no further wallet in `due()`'s list is started this cycle (it
-    simply rotates to the front next time, same as an unpolled wallet)."""
+    cycle's own `holdings_calls_per_cycle` budget. That cap is checked before
+    EVERY page, not just between wallets (2026-09-04 holdings-paging fix
+    item 1: checking only between wallets let one admitted wallet run all
+    `holdings_max_pages` regardless, cap - 1 + max_pages calls in the worst
+    case). A wallet the cap cuts mid-way keeps whatever pages it already
+    fetched (item 2: each page is persisted as it lands) but gets no
+    `holdings_at` stamp — same as an unpolled wallet, so it sorts first in
+    `due()` and the very next cycle retries it whole."""
     ex = cfg["whale"]["exit"]
     page, max_pages = int(ex["holdings_page_size"]), int(ex["holdings_max_pages"])
     cap = int(ex["holdings_calls_per_cycle"])
@@ -120,36 +140,34 @@ def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
     for wallet in due(cfg, con, wallets, now):
         if res["calls"] >= cap:
             break
-        body, partial, offset = [], False, 0
+        offset, n_seen, cut_by_cap, still_full = 0, 0, False, False
         try:
             for _ in range(max_pages):
+                if res["calls"] >= cap:
+                    cut_by_cap = True            # this cycle's own budget, not the data
+                    break
                 chunk = _call(bucket, get, f"{DATA_API}/positions?user={wallet}"
                               f"&limit={page}&offset={offset}", cfg, res)
-                body += chunk
+                n_seen += len(chunk)
+                res["rows"] += _persist(con, chunk, wallet, observed_at, res)
                 if len(chunk) < page:
                     break
                 offset += page
             else:
-                partial = True                  # still full after holdings_max_pages
+                still_full = True                # still full after holdings_max_pages
         except Exception as e:  # noqa: BLE001 — one wallet, not the cycle
             res["errors"] += 1
             log.warning("whale holdings poll failed for %s: %s", wallet, e)
-            continue
-        if partial:
-            _warn_truncated_once(con, wallet, observed_at, len(body))
-        rows = []
-        for r in body:
-            try:
-                rows.append(_row(r, wallet, observed_at))
-            except BAD_ROW as e:
-                res["bad_rows"] = res.get("bad_rows", 0) + 1
-                log.warning("whale skipped an unreadable holdings row: %s", e)
-        con.executemany(f"INSERT INTO holdings ({COLS}) VALUES ({','.join('?' * 10)})",
-                        rows)
+            continue                              # earlier pages this loop already
+                                                   # persisted; no stamp, so still due
+        if cut_by_cap:
+            continue                              # cut by the budget: same as unpolled,
+                                                   # retried whole next cycle
+        if still_full:
+            _warn_truncated_once(con, wallet, observed_at, n_seen)
         _set_meta(con, POLLED + wallet, observed_at)
-        _set_meta(con, PARTIAL + wallet, observed_at if partial else "")  # commits both
+        _set_meta(con, PARTIAL + wallet, observed_at if still_full else "")  # commits both
         res["wallets"] += 1
-        res["rows"] += len(rows)
     return res
 
 

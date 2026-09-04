@@ -231,10 +231,18 @@ def test_a_partly_flagged_bucket_reports_clean_n_and_flagged_n_not_one_bool(cfg)
     p = _find(rows, "wP", "bucket", "basketball_nba:WINNER")
     assert (p["n"], p["clean_n"], p["flagged_n"]) == (7, 5, 2)
     assert p["hygiene"] == "partial"
+    # 2026-09-04 fix (item 3): every stat is over the clean 5 only — the
+    # flagged 2 (1 win at 0.50) would otherwise pull win_rate to 4/7 and the
+    # lb80 off the lane's own score.
+    assert p["win_rate"] == q6(Decimal("0.6"))                # 3 wins / 5 clean
+    assert p["lb80"] == state.lookup("wP", "basketball_nba", "WINNER").lb
 
     f = _find(rows, "wF", "bucket", "basketball_nba:WINNER")
     assert (f["n"], f["clean_n"], f["flagged_n"]) == (2, 0, 2)
     assert f["hygiene"] == "full"
+    # a wholly-excluded wallet keeps its stats, over its own flagged
+    # positions — market makers stay ranked and visible, never blanked out.
+    assert f["win_rate"] == q6(Decimal("0.5"))                # 1 win / 2 flagged
 
 
 def test_best_markets_names_where_the_wallet_is_actually_good(cfg):

@@ -777,8 +777,17 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   `positions?user=<w>` says each signal whale still holds
                                       #   (endpoint + fields verified live 2026-09-04,
                                       #   data/verified_facts.md). holdings_calls_per_cycle bounds
-                                      #   the extra GETs to 10 wallets per 60 s cycle (well inside
-                                      #   max_calls_per_min 30, which the shared bucket enforces);
+                                      #   the extra GETs to 10 CALLS per 60 s cycle (well inside
+                                      #   max_calls_per_min 30, which the shared bucket enforces) —
+                                      #   not 10 wallets: paging means one wallet can spend several
+                                      #   of those calls, so fewer than 10 may be read in a cycle.
+                                      #   The cap is checked before every page, not just between
+                                      #   wallets (2026-09-04 holdings-paging fix item 1 — checking
+                                      #   only between wallets let one admitted wallet run all
+                                      #   holdings_max_pages regardless, cap - 1 + max_pages calls
+                                      #   in the worst case, not the cap); a wallet the cap cuts
+                                      #   mid-page keeps what it already fetched and is retried
+                                      #   whole next cycle, same as an unpolled wallet.
                                       #   holdings_poll_secs is the per-wallet cadence, so a
                                       #   roster of <=50 wallets is fully refreshed inside it, and
                                       #   wallets are taken stalest-first so a bigger roster is

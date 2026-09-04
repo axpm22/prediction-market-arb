@@ -11,6 +11,15 @@ Every wallet is profiled, hygiene-excluded ones included: they are FLAGGED, not
 hidden, because "which of my whales is actually a market maker" is exactly the
 question this table exists to answer.
 
+Decision (controller, 2026-09-04): every statistic in a profile row —
+win_rate, implied, excess, edge, roi, t_stat, lb80 — is computed over CLEAN
+positions only (`state.open_positions`, exactly what the lane's own score
+uses), so the table's lb80 is the lb80 the lane acts on. Flagged positions
+contribute only to `flagged_n` (`n = clean_n + flagged_n` stays visible as
+`clean_n/n`). A wholly excluded wallet ("full", clean_n = 0) shows its stats
+over its OWN flagged positions instead — never blanked — so a market maker is
+still ranked and visible, never hidden.
+
 Rule 4: `whale.rank.min_n` (display floor) and `whale.rank.top` are the only
         numbers here; every model constant comes from `whale.score`.
 Rule 5: prices, edges and money are Decimal, quantized q6. The posterior and
@@ -55,15 +64,24 @@ def profiles(state, cfg, as_of) -> list[dict]:
     says it is scorable as of `as_of` — the ONE scorability predicate, called
     here rather than restated, so a profile can never count a position the
     score cannot see.
+
+    Every descriptive stat and `agg` (which feeds `_chain`'s posterior, hence
+    lb80) come from CLEAN positions only — same population as `state.lookup`
+    — with a per-key fallback to a wallet's own flagged positions wherever it
+    has no clean contribution at that key at all (module docstring, 2026-09-04
+    decision). `n`/`clean_n`/`flagged_n` still count every position, clean or
+    not: that bookkeeping is the whole point of the tri-state `hygiene` flag.
     """
     open_ids = {id(p) for p in state.open_positions}
-    cells, outcomes = defaultdict(_blank), []
+    cells, flag_only = defaultdict(_blank), defaultdict(_blank)
+    clean_outcomes, flagged_outcomes = [], []
     for p in state.positions:
         got = whale_score.resolved_outcomes([p], state.resolutions, as_of)
         if not got:
             continue
         o = got[0]
-        outcomes.append(o)
+        clean = id(p) in open_ids
+        (clean_outcomes if clean else flagged_outcomes).append(o)
         # "win" is the payout's own definition: 1 on the side actually held.
         won = (state.resolutions[p.condition_id].get("winner_outcome_index")
                == p.outcome_index)
@@ -71,21 +89,37 @@ def profiles(state, cfg, as_of) -> list[dict]:
             c = cells[(p.wallet, level, key)]
             c["root"] = p.root
             c["n"] += 1
-            c["wins"] += int(won)
-            c["size"] += p.size
-            c["cost"] += p.avg_price * p.size
-            # `o.e` is realized edge per share, which IS payout - avg_price for
-            # a position held to resolution and the sell-aware generalisation
-            # when part of it was sold first (whale_score.realized_edge).
-            c["gain"] += o.e * p.size
-            c["notional"] += p.notional_usd
-            c["e"].append(o.e)
-            c["last"] = max(c["last"] or o.resolved_at, o.resolved_at)
-            if id(p) in open_ids:
+            if clean:
                 c["clean_n"] += 1
             else:
                 c["flagged_n"] += 1
-    agg = whale_score.aggregate(outcomes)
+            # the clean population accumulates straight into the cell; a
+            # flagged position accumulates into its own shadow cell instead,
+            # so it can never blend into a partial cell's stats — only stand
+            # in, wholesale, for a wholly-excluded one (below).
+            stat = c if clean else flag_only[(p.wallet, level, key)]
+            stat["wins"] += int(won)
+            stat["size"] += p.size
+            stat["cost"] += p.avg_price * p.size
+            # `o.e` is realized edge per share, which IS payout - avg_price for
+            # a position held to resolution and the sell-aware generalisation
+            # when part of it was sold first (whale_score.realized_edge).
+            stat["gain"] += o.e * p.size
+            stat["notional"] += p.notional_usd
+            stat["e"].append(o.e)
+            stat["last"] = max(stat["last"] or o.resolved_at, o.resolved_at)
+    # clean-only agg matches the lane's own score; a key with zero clean
+    # contribution (a wholly-excluded wallet's own keys) falls back to that
+    # wallet's flagged outcomes instead of going dark. dict.update semantics:
+    # applying the clean pass second replaces any flagged entry at the same
+    # key wholesale, never blends the two.
+    agg = {**whale_score.aggregate(flagged_outcomes), **whale_score.aggregate(clean_outcomes)}
+    for key, c in cells.items():
+        if c["clean_n"] == 0:
+            fo = flag_only.get(key)
+            if fo:
+                for field in ("wins", "size", "cost", "gain", "notional", "e", "last"):
+                    c[field] = fo[field]
     return [_row(wallet, level, key, cell, agg, state, cfg)
             for (wallet, level, key), cell in cells.items()]
 
@@ -113,14 +147,18 @@ def _chain(agg, wallet, root, level, key) -> list[tuple[int, float]]:
 
 def _row(wallet, level, key, c, agg, state, cfg) -> dict:
     n, root = c["n"], c["root"]
+    # the population the STATS below are actually drawn from: clean when any,
+    # else (a wholly-excluded "full" cell) the wallet's own flagged positions
+    # — never the displayed `n`, which stays clean_n + flagged_n regardless.
+    stat_n = c["clean_n"] or c["flagged_n"]
     s = cfg["whale"]["score"]
     m0 = state.rates.get(root, Decimal(str(s["base_rate_default"])))
     mu, var = whale_score.posterior(cfg, m0, _chain(agg, wallet, root, level, key))
     # sample sd is undefined at n = 1; 0 keeps the column typed and t_stat null
-    sd = statistics.stdev([float(e) for e in c["e"]]) if n >= 2 else 0.0
-    raw_mean = sum(c["e"], Decimal(0)) / n
+    sd = statistics.stdev([float(e) for e in c["e"]]) if stat_n >= 2 else 0.0
+    raw_mean = sum(c["e"], Decimal(0)) / stat_n
     edge_mean = q6(raw_mean)
-    win_rate, implied = q6(Decimal(c["wins"]) / n), q6(c["cost"] / c["size"])
+    win_rate, implied = q6(Decimal(c["wins"]) / stat_n), q6(c["cost"] / c["size"])
     # Three-valued, not one bool (review of ecb7e8a): "" no exclusion in this
     # cell, "partial" some positions excluded and some not (a single wallet
     # market maker looks identical to a mostly-clean wallet with one bad
@@ -136,7 +174,7 @@ def _row(wallet, level, key, c, agg, state, cfg) -> dict:
         # dollar-weighted return on the capital actually put at risk; a
         # zero-cost book has no denominator, which is a null, not a zero
         "roi_at_risk": q6(c["gain"] / c["cost"]) if c["cost"] > 0 else None,
-        "t_stat": q6(Decimal(float(raw_mean) / (sd / math.sqrt(n)))) if sd > 0 else None,
+        "t_stat": q6(Decimal(float(raw_mean) / (sd / math.sqrt(stat_n)))) if sd > 0 else None,
         "lb80": q6(Decimal(mu - float(s["z"]) * math.sqrt(var))),
         "excess_vs_base": q6(edge_mean - m0),
         "notional": q6(c["notional"]),
