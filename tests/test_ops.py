@@ -105,6 +105,8 @@ NY = ZoneInfo("America/New_York")
 def test_startup_grace_marks_only_stale_slots(cfg):
     from arb.heartbeat import initial_last_fired
     cfg["supervisor"]["schedule_catchup_grace_mins"] = 30
+    cfg["scan_times"] = ["06:15"]     # the shipped list is empty in whale-only mode (2026-09-04);
+                                      # this test needs a scan slot to be meaningful
     now = datetime(2026, 7, 8, 6, 20, tzinfo=NY)  # 06:20 ET
     marks = initial_last_fired(cfg, now)
     assert "backup" in marks          # 04:10 -> >30min ago -> suppressed
