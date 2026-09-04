@@ -677,12 +677,63 @@ def test_the_sweep_skips_markets_past_resolve_giveup_days_and_the_unresolved(tmp
     _resolvable(con, "0xnowhale", NOW - timedelta(days=1), side="SELL")
     _resolvable(con, "0xdone", NOW - timedelta(days=1))
     con.execute("INSERT INTO resolutions (condition_id, status) VALUES ('0xdone','resolved')")
+    # unmappable: sport/market_type both NULL, exactly what a Gamma miss
+    # writes (_gamma_row) — never scored, so never worth a sweep slot either.
+    unmapped_start = NOW - timedelta(days=6)
+    con.execute(
+        "INSERT INTO markets (condition_id, sport, market_type, line, start_utc,"
+        " event_key, tokens_json, first_seen, last_seen) VALUES (?,?,?,?,?,?,?,?,?)",
+        ("0xnowhere", None, None, None, unmapped_start.isoformat(), None, "[]",
+         NOW.isoformat(), NOW.isoformat()))
+    _print(con, "0xw", "0xnowhere", "BUY", "900", int(unmapped_start.timestamp()) - 60)
     con.commit()
     get = FakeGet([])
 
     whale_backfill.resolve_sweep(cfg, con, NOW, get=get)
 
     assert _asked(get) == []
+
+
+def test_the_sweep_writes_a_per_day_skip_marker_so_the_fifo_advances(tmp_path):
+    """Head-of-line blocking (final review fix pass): `read_resolutions`
+    persists nothing for a market Gamma reports open or omits, so without a
+    marker the same oldest `resolve_per_cycle` ids get re-asked every cycle
+    forever and nothing past them is ever swept. A `swept:<condition_id>`
+    meta row dated today lets the FIFO advance within one day's cycle budget,
+    and resets the next day; a resolved market is never swept again."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    resolved = dict(_fixture("whale_gamma_resolved"))
+    ids = [resolved["conditionId"]] + [f"0xm{i}" for i in range(1, 6)]
+    for i, days in enumerate(range(6, 0, -1)):          # ids[0] oldest .. ids[5] newest
+        _resolvable(con, ids[i], NOW - timedelta(days=days))
+    cfg = _cfg(backfill={"wallets_per_cycle": 5, "pages_per_wallet": 40,
+                         "page_size": 50, "resolve_per_cycle": 2})
+    get = FakeGet([])
+
+    for _ in range(3):                                  # three 40 s cycles, same day
+        whale_backfill.resolve_sweep(cfg, con, NOW, get=get)
+
+    assert _asked(get) == ids                           # every id asked once, FIFO order
+
+    # nothing left to sweep the same day: a 4th cycle makes no Gamma call
+    get2 = FakeGet([])
+    whale_backfill.resolve_sweep(cfg, con, NOW, get=get2)
+    assert get2.urls == []
+
+    # the next day: stale markers, the FIFO starts over from the oldest two —
+    # and this time Gamma resolves the oldest
+    tomorrow = NOW + timedelta(days=1)
+    get3 = FakeGet([resolved])
+    whale_backfill.resolve_sweep(cfg, con, tomorrow, get=get3)
+    assert _asked(get3) == [ids[0], ids[1]]
+    row = con.execute("SELECT * FROM resolutions WHERE condition_id=?",
+                      (ids[0],)).fetchone()
+    assert row["status"] == "resolved"
+
+    # ... and a resolved market is never asked again
+    get4 = FakeGet([])
+    whale_backfill.resolve_sweep(cfg, con, tomorrow, get=get4)
+    assert _asked(get4) == [ids[2], ids[3]]
 
 
 def test_whale_backfill_command_runs_the_sweep(tmp_path, monkeypatch):
@@ -703,6 +754,38 @@ def test_whale_backfill_command_runs_the_sweep(tmp_path, monkeypatch):
     cmd_whale_backfill(cfg, Store(tmp_path / "arb.sqlite"), None)
 
     assert len(calls) == 1
+
+
+def test_whale_backfill_sweeps_on_a_fresh_clock_after_printing_the_backfill_line(
+        tmp_path, monkeypatch, capsys):
+    """Minors (final review fix pass): `backfill` runs ~11 min against
+    resolve_after_hours/resolve_giveup_days windows measured in hours/days, so
+    the sweep must call its own fresh `datetime.now`, never reuse the
+    command-start `now` — and its line prints after the backfill line."""
+    from arb.commands import cmd_whale_backfill
+    from arb.store import Store
+    cfg = _cfg()
+    cfg["whale"]["tape_db"] = str(tmp_path / "w.sqlite")
+    backfill_nows, sweep_nows = [], []
+    monkeypatch.setattr(whale_backfill, "snapshot_leaderboard", lambda *a, **k: 0)
+
+    def fake_backfill(cfg, con, now, **k):
+        backfill_nows.append(now)
+        return {"wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0,
+                "mapped": 0, "unmappable": 0, "status_counts": {}, "status": "ok"}
+
+    def fake_sweep(cfg, con, now, **k):
+        sweep_nows.append(now)
+        return 0
+
+    monkeypatch.setattr(whale_backfill, "backfill", fake_backfill)
+    monkeypatch.setattr(whale_backfill, "resolve_sweep", fake_sweep)
+
+    cmd_whale_backfill(cfg, Store(tmp_path / "arb.sqlite"), None)
+
+    assert sweep_nows[0] is not backfill_nows[0]    # a fresh call, not the stale start `now`
+    out = capsys.readouterr().out
+    assert out.index("backfill:") < out.index("resolutions swept:")
 
 
 # --- the leg convention on a 3-way proposition (final review I2) -------------

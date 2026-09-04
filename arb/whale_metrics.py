@@ -142,13 +142,17 @@ def signals_by_id(con, ids) -> dict:
     if con is None:
         return {}
     if ids is None:
-        rows = con.execute("SELECT * FROM signals")
+        rows = con.execute("SELECT * FROM signals").fetchall()
     else:
         ids = [i for i in ids if i is not None]
         if not ids:
             return {}
-        rows = con.execute(f"SELECT * FROM signals WHERE id IN "
-                           f"({','.join('?' * len(ids))})", list(ids))
+        from arb.dashboard_data import CHUNK      # local: avoids the report* import cycle
+        rows = []
+        for i in range(0, len(ids), CHUNK):          # SQLite's variable limit
+            chunk = ids[i:i + CHUNK]
+            rows += con.execute(f"SELECT * FROM signals WHERE id IN "
+                                f"({','.join('?' * len(chunk))})", chunk).fetchall()
     return {r["id"]: {"side": r["side"], "variant": r["variant"],
                       "fired": r["fired"], "condition_id": r["condition_id"],
                       "whales": json.loads(r["whale_ids_json"] or "[]")}

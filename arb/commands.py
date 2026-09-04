@@ -939,12 +939,29 @@ def cmd_whale_score(cfg, store, args):
     """`--calibrate`: design §7.2's one-shot run at the end of the calibration
     window. Reads the tape's `signals` rows, prints the proposed thresholds and
     the YAML to paste — and never writes config.yaml itself: the amendment is a
-    human commit (rule 4)."""
+    human commit (rule 4). Without `--calibrate`: the current qualifying-whale
+    roster (or a usage line, when the tape has never been collected here).
+
+    Read-only per the subcommand's own help text: opens via `open_tape_ro`,
+    never `whale_tape.open_tape`, which creates the file on first touch."""
+    from arb.report_whale import open_tape_ro
+    con = open_tape_ro(cfg)
+    if not getattr(args, "calibrate", False):
+        if con is None:
+            print("whale tape unavailable: collector has never run here. "
+                  "usage: whale-score --calibrate")
+            return 0
+        from collections import Counter
+        from datetime import datetime, timezone
+        from arb.whale_state import qualifying_whales, score_state
+        whales = qualifying_whales(cfg, score_state(cfg, con, datetime.now(timezone.utc)))
+        by_root = Counter(w["root"] for w in whales)
+        print(f"roster: {len(whales)} whale(s) scored >= lb80 ("
+              + (", ".join(f"{k} {v}" for k, v in sorted(by_root.items())) or "—") + ")")
+        return 0
     from arb.whale_metrics import signals_by_id
     from arb.whale_signal import calibrate_min_points
-    from arb.whale_tape import open_tape
     fire = cfg["whale"]["fire"]
-    con = open_tape(cfg["whale"]["tape_db"])
     rows = list(signals_by_id(con, None).values())
     out = calibrate_min_points(rows, cfg)
     wallets = len({x["wallet"] for r in rows for x in r["whales"]})
@@ -971,10 +988,13 @@ def cmd_whale_backfill(cfg, store, args):
     con = whale_tape.open_tape(cfg["whale"]["tape_db"])
     print(f"leaderboard: {whale_backfill.snapshot_leaderboard(cfg, con, now)} new wallets")
     res = whale_backfill.backfill(cfg, con, now)
-    # spec §5 step 5: the 60s cycle only ever resolves its own universe, so
-    # every backfilled market's verdict has to be swept here or no wallet
-    # can ever score.
-    print(f"  resolutions swept: {whale_backfill.resolve_sweep(cfg, con, now)}")
     print(f"  backfill: {res['status']} wallets={res['wallets']} calls={res['calls']} "
           f"rows={res['rows']} dupes={res['dupes']} bad_rows={res['bad_rows']} "
           f"mapped={res['mapped']} unmappable={res['unmappable']}")
+    # spec §5 step 5: the 60s cycle only ever resolves its own universe, so
+    # every backfilled market's verdict has to be swept here or no wallet
+    # can ever score. Fresh clock, not the command-start `now`: `backfill`
+    # above runs ~11 min against resolve_after_hours/resolve_giveup_days
+    # windows, so `now` is stale enough by this point to matter.
+    sweep_now = datetime.now(timezone.utc)
+    print(f"  resolutions swept: {whale_backfill.resolve_sweep(cfg, con, sweep_now)}")

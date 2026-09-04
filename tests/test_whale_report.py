@@ -764,6 +764,40 @@ def test_whale_score_calibrate_says_how_far_short_the_window_is(cfg, tmp_path, c
     assert "None" in out and "3" in out and "10" in out
 
 
+# ---------------------------------- `whale-score` without `--calibrate` (I2)
+
+def test_whale_score_without_calibrate_never_creates_the_tape(cfg, tmp_path, capsys):
+    """The subcommand's own help text says read-only, but `whale_tape.open_tape`
+    creates the file on first touch — a bare `whale-score` used to leave a tape
+    database behind that the collector had never written. `open_tape_ro`
+    reports the tape unavailable instead of creating it."""
+    from arb.commands import cmd_whale_score
+    tape_path = tmp_path / "tape.sqlite"
+    cfg["whale"]["tape_db"] = str(tape_path)
+
+    cmd_whale_score(cfg, Store(tmp_path / "arb.sqlite"),
+                    type("A", (), {"calibrate": False})())
+
+    assert not tape_path.exists()
+    assert "unavailable" in capsys.readouterr().out
+
+
+def test_whale_score_without_calibrate_prints_the_roster(cfg, tmp_path, capsys):
+    """Without `--calibrate`: the lane's own qualifying-whale roster (same
+    scoring assembly the daily report reads, arb/whale_state.py), never the
+    calibration YAML."""
+    from arb.commands import cmd_whale_score
+    cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)                          # books the cycle's three whales
+
+    cmd_whale_score(cfg, store, type("A", (), {"calibrate": False})())
+
+    out = capsys.readouterr().out
+    assert "roster: 3 whale" in out and "sports 3" in out
+    assert "min_points" not in out                  # never the calibration branch
+
+
 # ------------------------------------------- per-cycle whole-tape work (I5)
 
 def test_score_state_reads_only_the_print_columns_it_uses(cfg, tmp_path):
@@ -797,6 +831,27 @@ def test_signals_by_id_loads_only_the_ids_it_was_asked_for(cfg, tmp_path):
 
     assert set(signals_by_id(con, [1])) == {1}
     assert set(signals_by_id(con, [])) == set()
+
+
+def test_signals_by_id_chunks_past_sqlites_variable_limit(cfg, tmp_path):
+    """I1 (final review fix pass): an unchunked `IN (...)` over enough ids
+    raises `OperationalError: too many SQL variables` once a single statement's
+    bound parameters exceed SQLite's per-statement limit (32766 on this build).
+    Chunked at the codebase's own CHUNK=400 (arb/dashboard_data.py) — the same
+    bound `_marks_by_bet` already uses for `flat_bets`/`markouts` id lookups —
+    no single call ever gets near it."""
+    from arb.whale_metrics import signals_by_id
+    con = _tape(tmp_path)
+    n = 33000                                   # over this build's variable limit
+    con.executemany(
+        "INSERT INTO signals (id, evaluated_at, condition_id, side, variant, "
+        "fired, whale_ids_json) VALUES (?,?,?,?,?,?,?)",
+        [(i, NOW.isoformat(), CID, "0", "V2", 1, "[]") for i in range(1, n + 1)])
+    con.commit()
+
+    out = signals_by_id(con, list(range(1, n + 1)))
+
+    assert set(out) == set(range(1, n + 1))
 
 
 def test_the_report_parses_no_signal_the_ledger_never_booked(cfg, tmp_path):
