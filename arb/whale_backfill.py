@@ -7,6 +7,7 @@ nothing here can reach data/arb.sqlite.
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from decimal import Decimal
 
 from arb.venues.base import get_json
@@ -16,6 +17,47 @@ from arb.whale_tape import (DATA_API, GAMMA, GAMMA_IDS_PER_CALL, LEADERBOARD_PAG
                             _json_list, _meta, _set_backoff, _set_meta, log)
 from arb.whale_universe import MARKET_COLS, _iso
 from arb.models import q6
+
+
+# Markets a whale actually traded that still have no verdict, oldest start
+# first. Epoch comparison, never string compare: `start_utc` is whatever ISO
+# form the venue sent (`discover_wallets` reads it the same way).
+SWEEP_SQL = """
+    SELECT m.condition_id FROM markets m
+     WHERE m.start_utc IS NOT NULL
+       AND CAST(strftime('%s', m.start_utc) AS INTEGER) <= ?
+       AND CAST(strftime('%s', m.start_utc) AS INTEGER) > ?
+       AND NOT EXISTS (SELECT 1 FROM resolutions r
+                       WHERE r.condition_id = m.condition_id)
+       AND EXISTS (SELECT 1 FROM prints p
+                   WHERE p.condition_id = m.condition_id AND p.side = 'BUY')
+     ORDER BY CAST(strftime('%s', m.start_utc) AS INTEGER), m.condition_id
+     LIMIT ?"""
+
+
+def resolve_sweep(cfg, con, now, get=get_json) -> int:
+    """Spec §5 step 5 (final review 2026-09-04): the 60 s cycle reads
+    resolutions only for its CURRENT universe (`start_utc` within
+    [-lookback_hours, +lookahead_hours]) and for its open bets, so a market a
+    whale traded that has aged out — every backfilled one — was never read at
+    all and no wallet could ever score. This sweeps them, FIFO by start,
+    `backfill.resolve_per_cycle` a cycle, through the SAME reader: the shared
+    token bucket, the shared backoff, two ids per Gamma call.
+
+    # ponytail: no watermark. `resolutions` is itself the "done" marker and a
+    # market past resolve_giveup_days drops out of the query, so the backlog
+    # drains without a second piece of state to get out of sync.
+    """
+    from arb import whale_resolve                # tape reader; no import cycle
+    w = cfg["whale"]
+    due = int((now - timedelta(hours=float(w["resolve_after_hours"]))).timestamp())
+    floor = int((now - timedelta(days=int(w["resolve_giveup_days"]))).timestamp())
+    ids = [r[0] for r in con.execute(
+        SWEEP_SQL, (due, floor, int(w["backfill"]["resolve_per_cycle"])))]
+    if not ids:
+        return 0
+    log.info("whale resolution sweep: %d market(s) due", len(ids))
+    return whale_resolve.read_resolutions(cfg, con, ids, now, get=get)
 
 
 def _add_wallets(con, pairs, now, source) -> int:

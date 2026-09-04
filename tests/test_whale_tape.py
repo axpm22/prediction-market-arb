@@ -618,3 +618,88 @@ def test_a_cold_start_takes_one_page_and_does_not_walk_the_venues_history(tmp_pa
     get = FakeGet(page)                                # a full page, every time
     whale_tape.poll_prints(_cfg(page_size=len(page)), con, _global_markets(1), NOW, get=get)
     assert len(get.urls) == 1
+
+
+# --- the resolution sweep (final review C1) ---------------------------------
+
+def _resolvable(con, cond, start, wallet="0xw", side="BUY"):
+    """A tape market a whale traded, aged past resolve_after_hours."""
+    _market(con, cond, start.isoformat())
+    _print(con, wallet, cond, side, "900", int(start.timestamp()) - 60)
+    con.commit()
+
+
+def _asked(get):
+    ids = []
+    for url in get.urls:
+        ids += [p.split("=", 1)[1] for p in url.split("?", 1)[-1].split("&")
+                if p.startswith("condition_ids=")]
+    return ids
+
+
+def test_the_sweep_resolves_a_backfilled_market_the_60s_cycle_never_reads(tmp_path):
+    """C1 (final review 2026-09-04): the lane's own read_resolutions call only
+    ever covers the CURRENT universe (start in [now-6h, now+48h]) plus open-bet
+    markets, so a backfilled market is never read at all and no wallet can ever
+    score. `whale-backfill --once` sweeps them."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    old = NOW - timedelta(days=3)                      # long out of the universe
+    resolved = dict(_fixture("whale_gamma_resolved"))
+    _resolvable(con, resolved["conditionId"], old)
+    get = FakeGet([resolved])
+
+    n = whale_backfill.resolve_sweep(_cfg(), con, NOW, get=get)
+
+    assert n == 1
+    row = con.execute("SELECT * FROM resolutions").fetchone()
+    assert row["condition_id"] == resolved["conditionId"] and row["status"] == "resolved"
+
+
+def test_the_sweep_is_fifo_by_start_and_bounded_by_resolve_per_cycle(tmp_path):
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    for i, days in enumerate((1, 3, 2)):               # insertion order != age
+        _resolvable(con, f"0xm{i}", NOW - timedelta(days=days))
+    cfg = _cfg(backfill={"wallets_per_cycle": 5, "pages_per_wallet": 40,
+                         "page_size": 50, "resolve_per_cycle": 2})
+    get = FakeGet([])
+
+    whale_backfill.resolve_sweep(cfg, con, NOW, get=get)
+
+    assert _asked(get) == ["0xm1", "0xm2"]             # oldest two starts, in order
+
+
+def test_the_sweep_skips_markets_past_resolve_giveup_days_and_the_unresolved(tmp_path):
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cfg = _cfg()
+    give = int(cfg["whale"]["resolve_giveup_days"])
+    _resolvable(con, "0xgaveup", NOW - timedelta(days=give + 1))
+    _resolvable(con, "0xfresh", NOW - timedelta(hours=1))     # inside resolve_after_hours
+    _resolvable(con, "0xnowhale", NOW - timedelta(days=1), side="SELL")
+    _resolvable(con, "0xdone", NOW - timedelta(days=1))
+    con.execute("INSERT INTO resolutions (condition_id, status) VALUES ('0xdone','resolved')")
+    con.commit()
+    get = FakeGet([])
+
+    whale_backfill.resolve_sweep(cfg, con, NOW, get=get)
+
+    assert _asked(get) == []
+
+
+def test_whale_backfill_command_runs_the_sweep(tmp_path, monkeypatch):
+    """The sweep is part of `whale-backfill --once` (spec §5 step 5), never of
+    the 60 s cycle: at 2 ids a call it is minutes of paced Gamma reads."""
+    from arb.commands import cmd_whale_backfill
+    from arb.store import Store
+    cfg = _cfg()
+    cfg["whale"]["tape_db"] = str(tmp_path / "w.sqlite")
+    calls = []
+    monkeypatch.setattr(whale_backfill, "snapshot_leaderboard", lambda *a, **k: 0)
+    monkeypatch.setattr(whale_backfill, "backfill", lambda *a, **k: {
+        "wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0,
+        "mapped": 0, "unmappable": 0, "status_counts": {}, "status": "ok"})
+    monkeypatch.setattr(whale_backfill, "resolve_sweep",
+                        lambda *a, **k: calls.append(a) or 0)
+
+    cmd_whale_backfill(cfg, Store(tmp_path / "arb.sqlite"), None)
+
+    assert len(calls) == 1

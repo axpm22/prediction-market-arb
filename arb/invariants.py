@@ -13,6 +13,15 @@ log = get_logger("arb.invariants", "logs/scan.log")
 EXCLUSION_ANNOTATIONS = ("settle-tripwire", "INVALID_AFTER_FINAL")
 
 
+def _exited(payload_json) -> bool:
+    """A `settled` row written by a lane's own exit, not by an oracle."""
+    try:
+        return str(json.loads(payload_json or "{}").get("source") or "") \
+            .startswith("exit:")
+    except (ValueError, AttributeError):
+        return False
+
+
 def check(cfg, store) -> list[str]:
     v: list[str] = []
 
@@ -42,11 +51,18 @@ def check(cfg, store) -> list[str]:
     # (3) resolution-settled rows: event in the past at settle; locked rows:
     # pregame at placement
     for r in store.query(
-            """SELECT fb.id, fb.kind, fb.created_at, fb.event_start_utc, be.created_at settled_at
+            """SELECT fb.id, fb.kind, fb.created_at, fb.event_start_utc,
+                      be.created_at settled_at, be.payload_json
                FROM flat_bets fb JOIN bet_events be
                  ON be.bet_id = fb.id AND be.kind = 'settled'
                WHERE fb.event_start_utc IS NOT NULL"""):
         start = datetime.fromisoformat(r["event_start_utc"])
+        if _exited(r["payload_json"]):
+            # L14 §9: an exit settles a bet PREGAME by design — that is the
+            # whole point of the exit rule. Only an ORACLE settlement before
+            # the event can be early, so this row is not invariant 3's business
+            # (the tripwire exempts the same `exit:` prefix).
+            continue
         if r["kind"] in RESOLUTION_SETTLED_KINDS:
             if datetime.fromisoformat(r["settled_at"]) < start:
                 v.append(f"invariant-3: bet {r['id']} resolution-settled before start")

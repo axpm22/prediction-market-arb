@@ -401,3 +401,19 @@ def test_cmd_settle_survives_a_whale_import_failure(cfg, tmp_path, monkeypatch):
     rc = commands.cmd_settle(cfg, store, SimpleNamespace(manual=None, dry_run=False,
                                                          yes=True))
     assert ran == [1] and rc == 0
+
+
+def test_invariant_3_ignores_an_exit_settled_bet(cfg, tmp_path):
+    """I1 (final review 2026-09-04): an EXITED WHALE bet is settled PREGAME by
+    design (§9), so invariant 3 fired on every one of them at every daily
+    `settle` — a CRITICAL log and an `invariant-violation` annotation per bet
+    per day. Only ORACLE settlements can be early."""
+    store = Store(tmp_path / "arb.sqlite")
+    bid = _bet(store, token=TOKENS[0])
+    store.insert("bet_events", {
+        "bet_id": bid, "created_at": (START - timedelta(minutes=30)).isoformat(),
+        "kind": "settled", "payload_json": json.dumps(
+            {"result": "EXITED", "source": "exit:flip", "pnl": "-0.07"})})
+
+    assert [v for v in invariants.check(cfg, store) if "invariant-3" in v] == []
+    assert store.query("SELECT 1 FROM annotations WHERE kind='invariant-violation'") == []

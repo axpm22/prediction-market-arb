@@ -943,6 +943,10 @@ def cmd_whale_backfill(cfg, store, args):
     con = whale_tape.open_tape(cfg["whale"]["tape_db"])
     print(f"leaderboard: {whale_backfill.snapshot_leaderboard(cfg, con, now)} new wallets")
     res = whale_backfill.backfill(cfg, con, now)
+    # spec §5 step 5: the 60s cycle only ever resolves its own universe, so
+    # every backfilled market's verdict has to be swept here or no wallet
+    # can ever score.
+    print(f"  resolutions swept: {whale_backfill.resolve_sweep(cfg, con, now)}")
     print(f"  backfill: {res['status']} wallets={res['wallets']} calls={res['calls']} "
           f"rows={res['rows']} dupes={res['dupes']} bad_rows={res['bad_rows']} "
           f"mapped={res['mapped']} unmappable={res['unmappable']}")

@@ -4,12 +4,17 @@ No network and no clock: `get` (prints/resolutions) and `fetch` (books) are
 injected, `now` is an argument, the ledger is a tmp `Store` and the tape a tmp
 `open_tape` file.
 
-`whale.min_score_lb` is lowered to -0.10 in the test config: with no resolved
+`whale.min_score_lb` is lowered to -0.10 in the `cfg` fixture: with no resolved
 positions in a tmp tape every wallet scores the prior (mu = base_rate_default
-= -0.02, sd = 0.0616 -> lb80 = -0.0719), and seeding enough resolved history
-to clear the shipped 0.00 bar would be a scoring test, which
-tests/test_whale_score.py already is. The bar itself is config (rule 4); what
-this file tests is the wiring around it.
+= -0.02, sd = 0.0616 -> lb80 = -0.0719), so every test below can exercise the
+WIRING around the bar without seeding a scoring corpus first.
+
+That crutch masked C1 (final review 2026-09-04) — nothing ever resolved a
+backfilled market, so `agg` stayed empty in production too and no wallet could
+have qualified at the shipped 0.00 — so
+`test_the_lane_books_at_the_shipped_min_score_lb` (bottom of this file) runs
+the SHIPPED config against seeded resolved history. The -0.10 tests are kept:
+each pins a different piece of wiring, not the bar.
 """
 import copy
 import json
@@ -578,3 +583,90 @@ def test_last_cycle_meta_survives_a_markout_failure(cfg, tmp_path, monkeypatch):
 
     last = json.loads(whale_tape._meta(con, "last_cycle"))
     assert last["status"] == "ok" and last["booked"] == 2
+
+
+# --------------------------------------------- the position-held guard (C2)
+
+def _fresh(now, tag):
+    """`_three()`, but printed relative to `now` so the prints are inside
+    max_print_age_secs on a later cycle."""
+    rows = []
+    for i in range(3):
+        r = _trade(f"w{i}", age=60 + 30 * i, tx=f"0x{tag}{i}")
+        r["timestamp"] = int((now - timedelta(seconds=60 + 30 * i)).timestamp())
+        rows.append(r)
+    return rows
+
+
+def test_a_held_position_is_never_re_booked_after_its_lifetime_closed(cfg, tmp_path):
+    """§9 (final review 2026-09-04): the tracker's dedupe only sees ACTIVE bets,
+    and `lifetime_closed` drops a WHALE bet from that set after `dead_checks`
+    quiet cycles — while we still hold it. Fresh prints then re-book the same
+    variant/sizing on top of the open one."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+    assert len(_bets(store)) == 2
+    cycles = int(cfg["tracker"]["dead_checks"]) + 5
+    for i in range(1, cycles + 1):
+        _run(cfg, store, con, now=NOW + timedelta(seconds=60 * i), rows=[])
+    assert len(_events(store, "lifetime_closed")) == 2
+    assert _events(store) == []                       # still held: nothing settled
+
+    later = NOW + timedelta(seconds=60 * (cycles + 1))
+    res = _run(cfg, store, con, now=later, rows=_fresh(later, "b"))
+
+    assert res["fired"] == 1                          # the signal still fires ...
+    assert res["booked"] == 0                         # ... but we already hold it
+    assert len(_bets(store)) == 2
+    lots = [dict(r) for r in store.query("SELECT * FROM left_on_table ORDER BY id")]
+    assert [r["reason"] for r in lots] == ["position-held", "position-held"]
+    assert len({r["fingerprint"] for r in lots}) == 2   # flat and conf, one each
+
+
+# ------------------------------------------- the SHIPPED bar (final review C1)
+
+def _resolved_history(con, wallets, n=400, edge="0.08"):
+    """tests/test_whale_score.py's `_positions` seeding, as TAPE rows: one
+    resolved market per position, bought pregame at `1 - edge` and paid out, so
+    the wallet's realized edge is exactly `edge` at every level of the
+    hierarchy. This is the history the resolution sweep (spec §5 step 5) is
+    there to accumulate."""
+    price = Decimal(1) - Decimal(edge)
+    for w in wallets:
+        for i in range(n):
+            cid, start = f"0xh{w}{i}", NOW - timedelta(days=2)
+            con.execute(
+                "INSERT INTO markets (condition_id, sport, market_type, start_utc,"
+                " tokens_json, first_seen, last_seen) VALUES (?,?,?,?,?,?,?)",
+                (cid, "baseball_mlb", "WINNER", start.isoformat(), "[]",
+                 start.isoformat(), start.isoformat()))
+            con.execute(
+                "INSERT INTO prints (observed_at, ts, tx_hash, proxy_wallet, pseudonym,"
+                " condition_id, asset, outcome, outcome_index, side, price, size,"
+                " notional_usd, event_slug, slug, title, source, raw_json)"
+                " VALUES (?,?,?,?,?,?,?,?,0,'BUY',?,?,?,?,?,?,'tape','{}')",
+                (start.isoformat(), int(start.timestamp()) - 3600, f"0x{w}{i}", w, w,
+                 cid, "tok", "Yes", str(price), "1000", str(price * 1000), "e", "s", "t"))
+            con.execute(
+                "INSERT INTO resolutions (condition_id, resolved_at, winner_outcome_index,"
+                " status, source, raw_json, fetched_at) VALUES (?,?,0,'resolved','gamma','{}',?)",
+                (cid, (NOW - timedelta(days=1)).isoformat(), NOW.isoformat()))
+    con.commit()
+
+
+def test_the_lane_books_at_the_shipped_min_score_lb(tmp_path):
+    """The -0.10 bar every other test in this file uses is a CRUTCH: with an
+    empty tape every wallet scores the prior (lb80 = -0.0719) and nothing could
+    clear the shipped 0.00. That masked C1 — no resolution sweep meant `agg`
+    stayed empty in production too, so no wallet could ever qualify and the
+    lane would have booked nothing forever. This one runs the shipped config
+    against real resolved history."""
+    cfg = copy.deepcopy(load(ROOT / "config.yaml"))
+    assert cfg["whale"]["min_score_lb"] == Decimal("0.0")        # the shipped bar
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _resolved_history(con, [f"w{i}" for i in range(3)])
+
+    res = _run(cfg, store, con)
+
+    assert res["fired"] == 1 and res["booked"] == 2
+    assert [b["variant"] for b in _bets(store)] == ["V1/flat", "V1/conf"]

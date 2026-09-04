@@ -76,7 +76,10 @@ def test_whale_config_loads_with_spec_values():
     assert w["page_size"] == 10000
     assert w["taker_only"] is True
     assert w["backfill"] == {"wallets_per_cycle": 5, "pages_per_wallet": 40,
-                             "page_size": 50, "cadence_secs": 600}
+                             "page_size": 50, "cadence_secs": 600,
+                             # spec §14, amended 2026-09-04: the resolution
+                             # sweep's per-cycle bound (final review C1)
+                             "resolve_per_cycle": 40}
     assert w["fire"]["min_points"]["V1"] == 3
     assert w["fire"]["min_points"]["V2"] is None
     assert w["fire"]["min_points"]["V3"] is None

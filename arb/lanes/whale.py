@@ -187,7 +187,20 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
             res["market_errors"] += 1
             log.warning("whale market %s skipped: %s", cid, e, exc_info=True)
 
-    poll_id = _persist(cfg, store, rows, cands, venue_ok, latency_ms, now)
+    # §9 (final review 2026-09-04): a position we still hold is never booked
+    # again, whatever the tracker's lifetime bookkeeping says. Its own position
+    # dedup only sees ACTIVE bets, and `lifetime_closed` drops a WHALE bet from
+    # that set after `dead_checks` quiet cycles — while we are still in it — so
+    # the next print re-books the same variant/sizing on top of the open one.
+    # A candidate the tracker DOES still see is left in `cands` on purpose: it
+    # absorbs that one as a re-sighting, which is where the confirmation price
+    # and the lifetime bookkeeping come from (§8).
+    from arb.tracker import _active_bets
+    held = ({b["position_key"] for b in bets}
+            - {b["position_key"] for b in _active_bets(store, "whale")})
+    cands, on_table = ([c for c in cands if c["position_key"] not in held],
+                       [c for c in cands if c["position_key"] in held])
+    poll_id = _persist(cfg, store, rows, cands, on_table, venue_ok, latency_ms, now)
     res["booked"] = store.query(
         "SELECT COUNT(*) c FROM flat_bets WHERE poll_id=?", (poll_id,))[0]["c"]
 
@@ -228,13 +241,17 @@ def _fetch_books(cfg, fetch, priced) -> tuple[dict, bool, float | None]:
         return {}, False, (time.monotonic() - t0) * 1000
 
 
-def _persist(cfg, store, rows, cands, venue_ok, latency_ms, now) -> int:
+def _persist(cfg, store, rows, cands, on_table, venue_ok, latency_ms, now) -> int:
     """arb.cycle.persist_poll's sequence, on dict quotes and dict candidates
     (that function needs Quote/Opportunity objects; the political lane's
-    command mirrors it the same way)."""
-    from arb.tracker import process_poll
+    command mirrors it the same way). `on_table` are the candidates this cycle
+    refused to book; they are recorded through the tracker's own `_lot`, so
+    they land in `left_on_table` with every other refusal."""
+    from arb.tracker import _lot, process_poll
     poll_id = store.insert("polls", {"started_at": now.isoformat(), "kind": "whale",
                                      "n_quotes": len(rows), "n_opps": len(cands)})
+    for cand in on_table:
+        _lot(store, poll_id, cand, "position-held")
     store.insert_many("poll_venues", [{"poll_id": poll_id, "venue": "polymarket",
                                        "ok": venue_ok, "n_quotes": len(rows),
                                        "latency_ms": latency_ms}])
