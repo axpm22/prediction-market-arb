@@ -544,7 +544,11 @@ and can only confirm a modest one at the EV lane's `target_n` scale.
 2. Fast kill: mean `D_2m` (pregame marks) < −0.5 × mean `flagged_edge` over
    a rolling 30-day window with ≥ `kill.fast_kill_min_marked` (50) marked
    bets, on two consecutive *produced* daily reports. A day with no report
-   (outage) pauses the streak; it does not reset it. The same rule applies to
+   (outage) pauses the streak; it does not reset it. "Produced" means the
+   day has a line in the append-only `reports/daily/HASHES.log` chain that
+   `write_daily` appends; the streak is derived read-time by re-evaluating
+   the condition as of each produced day's end, never stored (pinned
+   2026-09-04, Task 12 review). The same rule applies to
    the calibration window: outage days do not count toward its 14 days.
 3. At n = 1,200 without the lower 80% bound above zero: NULL, kill.
 4. Starvation: fewer than `whale.kill.min_signals_per_week_alarm` (10) fired
