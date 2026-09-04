@@ -115,7 +115,13 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    per cycle with no `market`, rows kept only when their `conditionId` is in
    the universe. Pages advance by `offset` only when a page is full and its
    oldest row is still newer than `last_seen − whale.overlap_secs` (120);
-   they stop on a short page or on age. `start` is never relied on. The
+   they stop on a short page or on age, and never page past
+   `whale.max_offset` (10,000: the feed returns 400 beyond it, observed
+   2026-09-04); when the cap is hit with rows still newer than the bound,
+   the collector records a `gap` (`meta.last_gap`, seconds and cycle) and
+   advances the watermark to the oldest row it did fetch, so a long outage
+   costs a recorded gap, never a wedged collector. `start` is never relied
+   on. The
    `batched` fallback polls the universe in groups of `whale.markets_per_call`
    using `market=<a>,<b>,<c>` (comma CSV, verified for `/trades` in Task 1
    probe 1; note Gamma's `condition_ids` is the opposite and needs the
@@ -371,7 +377,12 @@ the ledger's complement-inversion flag and is never used for WHALE legs;
 settlement decides by token identity (`venue_market_id` vs the winning
 `clobTokenIds` entry), and the label is only used to name the losing side.
 `kind = WHALE`, `category = sports`, `event_key = pm:<event_slug>` always,
-never the cross-venue matched key: `event_slug` from the print feed groups
+never the cross-venue matched key; `position_key` is the generic
+`sport|event_key|outcome|market_type|line|YES` with a `|<variant>/<sizing>`
+suffix, because each variant × sizing is its own paper position by design
+and the tracker's position dedup would otherwise absorb a variant that
+fires on a later cycle as a re-sighting of another (pinned 2026-09-04,
+Task 8): `event_slug` from the print feed groups
 every market of one game (moneyline and total share it) even when our
 matcher has no cross-venue event, so `event_key` doubles as the cluster key
 for every CI without a new column. The lane's own `quotes` rows carry the
@@ -609,6 +620,7 @@ whale:
   backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50,
               cadence_secs: 600 }     # own supervisor process; ~7 min of calls per cycle
   page_size: 10000                  # trades rows per call (10,000 verified 2026-09-03); paging stops on age, never on `start`
+  max_offset: 10000                 # the feed 400s past this (observed 2026-09-04); beyond it we record a gap and move on
   taker_only: true                  # Task 1 probe 3: one row per fill; `false` returns every leg (2.2x rows)
   leaderboard: { enabled: true, category: SPORTS, time_period: MONTH, order_by: PNL, pages: 4 }
   resolve_after_hours: 4
