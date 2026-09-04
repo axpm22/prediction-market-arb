@@ -109,6 +109,9 @@ scan_times: ["06:15", "10:30", "13:30", "18:30"]
                                     #   10:00/15:00/19:00 grid left 13:00-15:00 and
                                     #   18:00-19:00 dead (§13.1 booking rule)
 daily_report_time: "23:59"
+report_dir: "reports/daily"         # where write_daily writes the day's .md/.csv and appends
+                                    #   HASHES.log — which is also the record of WHICH days a
+                                    #   report was produced, and so §12 kill rule 2's streak
 settle_time: "09:30"
 archive_time: "04:40"               # daily; after the backup (04:10) so the day's data is copied first
 archive_after_days: 7               # quotes older than this move to data/archive/ (H8, §13.3).

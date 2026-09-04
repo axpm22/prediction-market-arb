@@ -104,14 +104,13 @@ def state(cfg, store) -> dict:
     backup_age_h = (now.timestamp() - backups[-1].stat().st_mtime) / 3600 \
         if backups else None
 
+    from arb.dashboard_data import OPEN_WHERE     # one "open position" predicate
     open_bets = store.query(
-        """SELECT fb.id, fb.kind, fb.event_key, fb.venue_pair, fb.edge_points,
+        f"""SELECT fb.id, fb.kind, fb.event_key, fb.venue_pair, fb.edge_points,
                   fb.lane, fb.created_at, fb.stake_usd, fb.status,
                   EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id=fb.id
                           AND be.kind='confirmed') confirmed
-           FROM flat_bets fb
-           WHERE NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id=fb.id
-                             AND be.kind IN ('settled','void','lifetime_closed'))
+           FROM flat_bets fb WHERE {OPEN_WHERE}
            ORDER BY fb.id DESC LIMIT 20""")
     consensus_at = store.query("SELECT MAX(computed_at) t FROM consensus")[0]["t"]
     consensus_today = store.query(

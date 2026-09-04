@@ -120,7 +120,12 @@ def whale_cfg(tmp_path):
 
 def test_pnl_series_end_where_daily_frame_says_they_end(tmp_path):
     """Two classes settled today: each series' last cumulative value IS
-    report.daily_frame's settled_pnl for that class — one number, one source."""
+    report.daily_frame's settled_pnl for that class — one number, one source.
+
+    The equality holds because these bets are booked AND settled inside the same
+    window: `daily_frame` aggregates by booking day, the curve by settlement day,
+    so a bet booked before the window and settled in it appears only on the
+    curve (which is the point of the curve — see the next test)."""
     cfg = _cfg()
     now = datetime.now(timezone.utc)
     store = Store(tmp_path / "p.sqlite")
@@ -408,6 +413,22 @@ def test_the_script_references_every_element_id():
     assert {"pnl", "bases", "positions", "bench", "whale", "kill"} <= ids
     for element_id in ids:
         assert f"'{element_id}'" in script, element_id
+
+
+def test_the_refresh_timer_is_armed_before_the_page_awaits_anything():
+    """A slow or failing /api/state must not freeze every section forever: the
+    interval used to be set only after that await resolved."""
+    script = (ROOT / "arb" / "dashboard.html").read_text().split("<script>")[1]
+    body = script[script.index("async function refresh()"):]
+    assert body.index("scheduleRefresh(") < body.index("await fetch")
+    assert script.count("setInterval(") == 1        # only scheduleRefresh arms it
+
+
+def test_a_broken_whale_section_says_so_in_the_kill_block_too():
+    """#kill renders from the same /api/whale payload; blank reads as 'no rules'."""
+    script = (ROOT / "arb" / "dashboard.html").read_text().split("<script>")[1]
+    draw = script[script.index("function drawWhale("):]
+    assert "section('kill', w)" in draw[:draw.index("$('whale').innerHTML")]
 
 
 def test_the_page_draws_its_own_charts_and_loads_nothing_remote():

@@ -14,9 +14,7 @@ from __future__ import annotations
 
 import json
 import statistics
-from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from arb import metrics, regrade
 from arb.markout import HORIZONS
@@ -84,25 +82,48 @@ def roi_cell(cfg, rows: list[dict]) -> dict:
     return cell
 
 
+DRIFT_SQL = """
+    SELECT m.horizon_secs h, m.mark_cost, b.id bet_id, b.legs_json, b.event_key,
+           b.edge_points
+      FROM markouts m JOIN flat_bets b ON b.id = m.bet_id
+     WHERE b.kind='WHALE' AND m.in_play=0 AND m.leg_index=0"""
+
+
+def pregame_drifts(store, horizons, since=None, until=None) -> list[dict]:
+    """D_h = mark mid - mid0 on leg 0, one row per (bet, horizon) that carries a
+    mid0. THE definition of the pregame drift — `markout_stats` and the §12
+    fast-kill window read it from here rather than each writing the JOIN.
+    `until` bounds the BOOKING and the MARK: a day's window may only see what
+    that day could see."""
+    sql = DRIFT_SQL + f" AND m.horizon_secs IN ({','.join('?' * len(horizons))})"
+    params = list(horizons)
+    if since is not None:
+        sql, params = sql + " AND b.created_at >= ?", params + [since]
+    if until is not None:
+        sql += " AND b.created_at < ? AND m.marked_at < ?"
+        params += [until, until]
+    out = []
+    for r in store.query(sql, tuple(params)):
+        mid0 = (json.loads(r["legs_json"])[0] or {}).get("mid0")
+        if mid0 is not None:
+            out.append({"bet_id": r["bet_id"], "h": r["h"],
+                        "drift": _d(r["mark_cost"]) - _d(mid0),
+                        "event_key": r["event_key"],
+                        "edge_points": _d(r["edge_points"])})
+    return out
+
+
 def markout_stats(store) -> dict:
-    """+2m and +10m PREGAME coverage and mean drift (D_h = mark mid - mid0 on
-    the leg), plus the clusters the bench needs for the one-sided bound."""
+    """+2m and +10m PREGAME coverage and mean drift, plus the clusters the bench
+    needs for the one-sided bound."""
     n_bets = store.query(
         "SELECT COUNT(*) c FROM flat_bets WHERE kind='WHALE'")[0]["c"]
     out = {h: {"n": 0, "coverage": Decimal(0), "mean_drift": None, "by_event": {}}
            for h in (H_2M, H_10M)}
-    for r in store.query(
-            """SELECT m.horizon_secs h, m.mark_cost, b.legs_json, b.event_key
-               FROM markouts m JOIN flat_bets b ON b.id = m.bet_id
-               WHERE b.kind='WHALE' AND m.in_play=0 AND m.leg_index=0
-                 AND m.horizon_secs IN (?, ?)""", (H_2M, H_10M)):
-        mid0 = (json.loads(r["legs_json"])[0] or {}).get("mid0")
-        if mid0 is None:
-            continue
+    for r in pregame_drifts(store, (H_2M, H_10M)):
         cell = out[r["h"]]
         cell["n"] += 1
-        cell["by_event"].setdefault(r["event_key"], []).append(
-            float(_d(r["mark_cost"]) - _d(mid0)))
+        cell["by_event"].setdefault(r["event_key"], []).append(float(r["drift"]))
     for cell in out.values():
         drifts = [v for vs in cell["by_event"].values() for v in vs]
         cell["coverage"] = q6(Decimal(cell["n"]) / n_bets) if n_bets else Decimal(0)
@@ -164,148 +185,3 @@ def exit_stats(store, con, signals: dict) -> dict:
         cell["hold_pnl"] = q6(cell["hold_pnl"] + hold)
         cell["n_hold"] += 1
     return out
-
-
-# ------------------------------------------------------------- kill rules
-
-FAST_KILL_KIND = "whale-fast-kill"      # one annotation per PRODUCED daily report
-FAST_KILL_DAYS = 30                     # §12 rule 2's rolling window
-FAST_KILL_STREAK = 2                    # "on two consecutive produced daily reports"
-
-
-def _state(fired: bool, armed: bool) -> str:
-    return "FIRED" if fired else ("armed" if armed else "not yet")
-
-
-def _or(v, dash="—"):
-    return dash if v is None else v
-
-
-def _fast_kill_window(store, now) -> dict:
-    """§12 rule 2's inputs over the rolling 30 days: mean pregame D_2m, mean
-    `flagged_edge` of the same marked bets, and how many bets those are."""
-    since = (now - timedelta(days=FAST_KILL_DAYS)).isoformat()
-    per_bet: dict = {}
-    for r in store.query(
-            """SELECT b.id, b.legs_json, b.edge_points, m.mark_cost
-               FROM markouts m JOIN flat_bets b ON b.id = m.bet_id
-               WHERE b.kind='WHALE' AND m.in_play=0 AND m.leg_index=0
-                 AND m.horizon_secs=? AND b.created_at >= ?""", (H_2M, since)):
-        mid0 = (json.loads(r["legs_json"])[0] or {}).get("mid0")
-        if mid0 is None:
-            continue
-        per_bet[r["id"]] = (_d(r["mark_cost"]) - _d(mid0), _d(r["edge_points"]))
-    n = len(per_bet)
-    if not n:
-        return {"n_marked": 0, "mean_d2m": None, "mean_flagged_edge": None,
-                "threshold": None}
-    drift = q6(sum(v[0] for v in per_bet.values()) / n)
-    edge = q6(sum(v[1] for v in per_bet.values()) / n)
-    return {"n_marked": n, "mean_d2m": drift, "mean_flagged_edge": edge,
-            "threshold": q6(Decimal("-0.5") * edge)}
-
-
-def _held(fk: dict, min_marked: int) -> bool:
-    """Rule 2's condition on ONE day's rolling window: enough marked bets, and
-    mean pregame D_2m below -0.5 x mean flagged_edge."""
-    return bool(fk["n_marked"] >= min_marked and fk["mean_d2m"] is not None
-                and fk["mean_d2m"] < fk["threshold"])
-
-
-def fast_kill_streak(store, before_day: str | None = None) -> int:
-    """Consecutive produced daily reports on which rule 2's condition held,
-    counting back from `before_day` (exclusive). Only produced reports have a
-    row, so an outage day PAUSES the streak instead of resetting it (§12), and
-    a re-run of a day cannot extend it: the caller excludes today and adds
-    today's live verdict itself, so the count is the same however often a
-    report is regenerated. Latest row per day wins."""
-    streak, seen = 0, set()
-    for r in store.query(
-            "SELECT target_id day, detail FROM annotations WHERE kind=? "
-            "ORDER BY target_id DESC, id DESC", (FAST_KILL_KIND,)):
-        if r["day"] in seen or (before_day is not None and r["day"] >= before_day):
-            continue
-        seen.add(r["day"])
-        if r["detail"] != "held":
-            break
-        streak += 1
-    return streak
-
-
-def record_fast_kill(cfg, store, day: str, now=None) -> bool | None:
-    """Append this PRODUCED daily report's rule-2 verdict and return it.
-    Append-only (rule 9): the streak is DERIVED from these rows, never stored
-    as a counter. Re-running an OLD day records nothing — the window is
-    today's, and dating it back would rewrite a streak out of data that day
-    never saw."""
-    now = now or datetime.now(timezone.utc)
-    if day != now.astimezone(ZoneInfo(str(cfg["timezone"]))).date().isoformat():
-        return None
-    held = _held(_fast_kill_window(store, now),
-                 int(cfg["whale"]["kill"]["fast_kill_min_marked"]))
-    store.insert("annotations", {
-        "created_at": now.isoformat(), "target_kind": "report-day",
-        "target_id": day, "kind": FAST_KILL_KIND,
-        "detail": "held" if held else "clear"})
-    return held
-
-
-def kill_status(cfg, store, con=None, now=None) -> dict:
-    """§12's four kill rules, each `armed` / `not yet` / `FIRED` with the
-    numbers behind it. Pure read; the daily whale section and the dashboard
-    print the same block from this one computation."""
-    w, now = cfg["whale"], now or datetime.now(timezone.utc)
-    kill, primary = w["kill"], f"{w['primary_variant']}/flat"
-    rows = [r for r in roi_rows(store) if r["variant"] == primary]
-    cell = roi_cell(cfg, rows) if rows else None
-    n = len({r["signal_id"] for r in rows})
-    decision_n, null_n = int(kill["decision_n"]), int(kill["null_n"])
-    ub90 = cell["ub90"] if cell else None
-    lb80 = cell["lb80"] if cell else None
-
-    fk = _fast_kill_window(store, now)
-    min_marked = int(kill["fast_kill_min_marked"])
-    held = _held(fk, min_marked)
-    # today's row may or may not be written yet (the report appends it as it is
-    # produced), so the streak is counted STRICTLY BEFORE today and today's live
-    # verdict is added here — the same answer before and after a re-run.
-    today = now.astimezone(ZoneInfo(str(cfg["timezone"]))).date().isoformat()
-    streak = fast_kill_streak(store, before_day=today) + (1 if held else 0)
-
-    week_ago = (now - timedelta(days=7)).isoformat()
-    per_week = store.query(
-        "SELECT COUNT(DISTINCT signal_id) c FROM flat_bets WHERE kind='WHALE' "
-        "AND signal_id IS NOT NULL AND created_at >= ?", (week_ago,))[0]["c"]
-    oldest = con.execute("SELECT MIN(observed_at) t FROM prints").fetchone()["t"] \
-        if con is not None else None
-    collecting = (now - datetime.fromisoformat(oldest)) if oldest else timedelta(0)
-    starving_armed = collecting >= timedelta(weeks=4)
-    alarm = int(kill["min_signals_per_week_alarm"])
-
-    return {"as_of": now.isoformat(timespec="seconds"), "variant": primary,
-            "rules": [
-        {"rule": 1, "name": "decision", "n": n, "target_n": decision_n,
-         "ub90": ub90, "mean": cell["mean"] if cell else None,
-         "state": _state(n >= decision_n and ub90 is not None and ub90 < 0,
-                         n >= decision_n),
-         "says": f"n={n}/{decision_n} settled {primary} signals; "
-                 f"upper 90% bound {_or(ub90)} (< 0 kills)"},
-        {"rule": 2, "name": "fast kill", "streak": streak,
-         "streak_target": FAST_KILL_STREAK, "held_today": held,
-         "n_marked": fk["n_marked"], "min_marked": min_marked,
-         "mean_d2m": fk["mean_d2m"], "threshold": fk["threshold"],
-         "state": _state(streak >= FAST_KILL_STREAK, fk["n_marked"] >= min_marked),
-         "says": f"mean D_2m {_or(fk['mean_d2m'])} vs {_or(fk['threshold'])} over "
-                 f"{fk['n_marked']}/{min_marked} marked bets ({FAST_KILL_DAYS}d); "
-                 f"streak {streak}/{FAST_KILL_STREAK} produced reports"},
-        {"rule": 3, "name": "null", "n": n, "target_n": null_n, "lb80": lb80,
-         "state": _state(n >= null_n and not (lb80 is not None and lb80 > 0),
-                         n >= null_n),
-         "says": f"n={n}/{null_n}; lower 80% bound {_or(lb80)} "
-                 f"(not > 0 at n retires the lane)"},
-        {"rule": 4, "name": "starvation", "fired_7d": per_week, "alarm": alarm,
-         "collecting_days": collecting.days,
-         "state": _state(starving_armed and per_week < alarm, starving_armed),
-         "says": f"{per_week} fired signals in 7d vs {alarm}/week floor; "
-                 f"{collecting.days}d of collection (armed at 28d)"},
-    ]}

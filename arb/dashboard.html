@@ -294,7 +294,19 @@ function money(v){ return v == null ? '—' : `$${Number(v).toFixed(4)}`; }
 function killCls(state){ return state === 'FIRED' ? 'lane-invalid'
   : (state === 'armed' ? 'lane-review' : ''); }
 
+// the auto-refresh is armed BEFORE the first fetch and re-armed only when the
+// server names a different interval: a /api/state that fails (or takes 40s) once
+// used to leave the whole page frozen forever, because the timer was set after it
+let timer = null, timerSecs = 0;
+function scheduleRefresh(secs){
+  if(secs === timerSecs) return;
+  if(timer) clearInterval(timer);
+  timerSecs = secs;
+  timer = setInterval(refresh, secs*1000);
+}
+
 async function refresh(){
+  scheduleRefresh(timerSecs || 60);        // bootstrap default; /api/state adjusts
   // each section paints as its own endpoint answers: /api/state runs the whole
   // daily frame and takes tens of seconds on the real ledger, and the P&L curves
   // must not wait on it
@@ -308,7 +320,7 @@ async function refresh(){
     const s = await (await fetch('/api/state')).json();
     $('updated').textContent = `head ${s.head_sha||'?'} · refreshed ${ago(s.generated_at)}`
       + ` · auto ${s.refresh_secs}s`;
-    if(!timer) timer = setInterval(refresh, (s.refresh_secs||60)*1000);
+    scheduleRefresh(s.refresh_secs||60);
     const supCls = s.supervisor==='ALIVE'?'ok':(s.supervisor==='STALE'?'warn':'bad');
     const dataCls = s.data_age_secs==null?'bad':(s.data_stale?'bad':'ok');
     const dataTxt = s.data_age_secs==null?'no quotes':`${Math.round(s.data_age_secs)}s old`;
@@ -462,6 +474,9 @@ function drawBench(b){
 }
 
 function drawWhale(w){
+  // the kill block lives in its own section, so it must say the same thing when
+  // /api/whale is the thing that broke — an empty #kill reads as "no rules"
+  if(w && w.error) section('kill', w);
   if(!section('whale', w)) return;
   const f = w.whale;
   if(!f){ $('whale').innerHTML = '<div class="empty">whale lane not configured</div>';
@@ -499,7 +514,6 @@ function drawWhale(w){
     `in ${roi.n_events} events</div>`);
 }
 
-let timer = null;
 refresh();
 </script>
 </body>

@@ -516,24 +516,27 @@ def test_the_report_writes_nothing_to_the_tape(cfg, tmp_path):
 
 # ------------------------------------------------- §12 kill rules (Task 12)
 
-def _mark(store, bet_id, mark_cost="0.40", horizon=None, in_play=0):
+def _mark(store, bet_id, mark_cost="0.40", horizon=None, in_play=0, marked_at=NOW):
     from arb.whale_metrics import H_2M
     return store.insert("markouts", {
         "bet_id": bet_id, "leg_index": 0, "horizon_secs": horizon or H_2M,
         "actual_offset_secs": 121.0, "mark_cost": mark_cost,
-        "marked_at": NOW.isoformat(), "in_play": in_play})
+        "marked_at": marked_at.isoformat(), "in_play": in_play})
 
 
-def _report_day(store, day, detail="held"):
-    from arb.whale_metrics import FAST_KILL_KIND
-    return store.insert("annotations", {
-        "created_at": f"{day}T23:00:00+00:00", "target_kind": "report-day",
-        "target_id": day, "kind": FAST_KILL_KIND, "detail": detail})
+def _hashes(tmp_path, *days):
+    """`write_daily`'s append-only chain: one line per PRODUCED daily report,
+    which is the only record rule 2's streak is counted from."""
+    path = tmp_path / "HASHES.log"
+    path.write_text("".join(f"{d} md:deadbeef csv:deadbeef\n" for d in days))
+    return path
 
 
-def _rules(cfg, store, con=None):
-    from arb.whale_metrics import kill_status
-    return {r["rule"]: r for r in kill_status(cfg, store, con, NOW)["rules"]}
+def _rules(cfg, store, con=None, hashes=None):
+    from arb.whale_kill import kill_status
+    # no chain = no report was ever produced here; the rule-2 tests bring theirs
+    return {r["rule"]: r for r in kill_status(
+        cfg, store, con, NOW, hashes or "/nonexistent/HASHES.log")["rules"]}
 
 
 def test_every_kill_rule_starts_at_not_yet_on_an_empty_ledger(cfg, tmp_path):
@@ -576,20 +579,21 @@ def test_rule_1_is_armed_but_unfired_while_the_bound_straddles_zero(cfg, tmp_pat
 
 def test_rule_2_needs_two_consecutive_produced_reports(cfg, tmp_path):
     """Drift of -0.10 against a flagged_edge of 0.05 clears -0.5 x edge, so the
-    condition holds today; alone that is one report, not two."""
+    condition holds; one produced report is still not two."""
     cfg["whale"]["kill"]["fast_kill_min_marked"] = 1
     store = Store(tmp_path / "t.sqlite")
-    _mark(store, _whale_row(store, "V2/flat", 1, "pm:1"))
+    yesterday = NOW - timedelta(days=1)
+    _mark(store, _whale_row(store, "V2/flat", 1, "pm:1", created=yesterday),
+          marked_at=yesterday)
 
-    today_only = _rules(cfg, store)[2]
-    _report_day(store, "2026-09-02")                     # yesterday held too
-    fired = _rules(cfg, store)[2]
+    one = _rules(cfg, store, hashes=_hashes(tmp_path, DAY))[2]
+    two = _rules(cfg, store, hashes=_hashes(tmp_path, "2026-09-02", DAY))[2]
 
-    assert today_only["mean_d2m"] == Decimal("-0.100000")
-    assert today_only["threshold"] == Decimal("-0.025000")
-    assert today_only["held_today"] is True
-    assert today_only["streak"] == 1 and today_only["state"] == "armed"
-    assert fired["streak"] == 2 and fired["state"] == "FIRED"
+    assert one["mean_d2m"] == Decimal("-0.100000")
+    assert one["threshold"] == Decimal("-0.025000")
+    assert one["held_today"] is True
+    assert one["streak"] == 1 and one["state"] == "armed"
+    assert two["streak"] == 2 and two["state"] == "FIRED"
 
 
 def test_rule_2_stays_not_yet_below_the_marked_bet_floor(cfg, tmp_path):
@@ -603,46 +607,62 @@ def test_rule_2_stays_not_yet_below_the_marked_bet_floor(cfg, tmp_path):
     assert rule["state"] == "not yet"
 
 
-def test_an_outage_day_pauses_the_streak_and_a_clear_day_breaks_it(cfg, tmp_path):
-    """§12: a day with no report pauses the streak; a produced report on which
-    the condition did NOT hold ends it."""
-    from arb.whale_metrics import fast_kill_streak
-    store = Store(tmp_path / "t.sqlite")
-    _report_day(store, "2026-08-20")                     # ... a week of outage
-    _report_day(store, "2026-08-28")
-
-    assert fast_kill_streak(store) == 2                  # gap did not reset it
-
-    _report_day(store, "2026-08-29", detail="clear")
-    _report_day(store, "2026-08-30")
-
-    assert fast_kill_streak(store) == 1                  # the clear day ended it
-
-
-def test_re_running_a_days_report_cannot_inflate_the_streak(cfg, tmp_path):
-    """The row for today is appended as the report is produced, so the count
-    must be the same however many times that day is regenerated."""
+def test_the_streak_stops_at_the_first_produced_day_that_was_clear(cfg, tmp_path):
+    """The condition is re-evaluated AS OF each produced day's end, not with
+    today's window dated backwards: yesterday's booking did not exist the day
+    before, so that report was clear and the run stops there."""
+    from arb.whale_kill import fast_kill_streak
     cfg["whale"]["kill"]["fast_kill_min_marked"] = 1
     store = Store(tmp_path / "t.sqlite")
-    _mark(store, _whale_row(store, "V2/flat", 1, "pm:1"))
+    yesterday = NOW - timedelta(days=1)
+    _mark(store, _whale_row(store, "V2/flat", 1, "pm:1", created=yesterday),
+          marked_at=yesterday)
+    log = _hashes(tmp_path, "2026-08-31", "2026-09-01", "2026-09-02", DAY)
 
-    before = _rules(cfg, store)[2]["streak"]
-    for _ in range(3):
-        write_daily(cfg, store, DAY, outdir=tmp_path / "out")
-
-    assert _rules(cfg, store)[2]["streak"] == before == 1
-    assert len(store.query("SELECT * FROM annotations WHERE target_id=?", (DAY,))) == 3
+    assert fast_kill_streak(cfg, store, log, NOW) == {
+        "streak": 2, "last_produced": DAY}
 
 
-def test_write_daily_records_only_the_day_it_actually_produced(cfg, tmp_path):
-    """Re-running an OLD day records nothing: the 30-day window is today's."""
-    from arb.whale_metrics import FAST_KILL_KIND
+def test_an_outage_day_pauses_the_streak_instead_of_resetting_it(cfg, tmp_path):
+    """§12: a day with no report is not counted AND does not break the run —
+    the streak counts produced reports, and an outage produced none."""
+    from arb.whale_kill import fast_kill_streak
+    cfg["whale"]["kill"]["fast_kill_min_marked"] = 1
     store = Store(tmp_path / "t.sqlite")
+    booked = NOW - timedelta(days=2)
+    _mark(store, _whale_row(store, "V2/flat", 1, "pm:1", created=booked),
+          marked_at=booked)
+    log = _hashes(tmp_path, "2026-08-31", "2026-09-01", DAY)   # 09-02: outage
 
-    write_daily(cfg, store, "2026-08-01", outdir=tmp_path / "out")
+    assert fast_kill_streak(cfg, store, log, NOW)["streak"] == 2
 
-    assert store.query("SELECT * FROM annotations WHERE kind=?",
-                       (FAST_KILL_KIND,)) == []
+
+def test_re_running_a_days_report_changes_neither_the_streak_nor_the_ledger(
+        cfg, tmp_path):
+    """Rule 9's prose — the report is recomputed from the raw log. The verdict
+    is derived from the hash chain at read time, so regenerating a day writes
+    nothing to the ledger and the count is unchanged."""
+    cfg["whale"]["kill"]["fast_kill_min_marked"] = 1
+    store, out = Store(tmp_path / "t.sqlite"), tmp_path / "out"
+    yesterday = NOW - timedelta(days=1)
+    _mark(store, _whale_row(store, "V2/flat", 1, "pm:1", created=yesterday),
+          marked_at=yesterday)
+    write_daily(cfg, store, DAY, outdir=out)
+
+    changes = store.conn.total_changes
+    first = report_whale.whale_frame(cfg, store, now=NOW,
+                                     hashes_log_path=out / "HASHES.log")
+    for _ in range(3):
+        write_daily(cfg, store, DAY, outdir=out)
+    again = report_whale.whale_frame(cfg, store, now=NOW,
+                                     hashes_log_path=out / "HASHES.log")
+
+    assert store.conn.total_changes == changes           # the report is a READ
+    assert store.query("SELECT * FROM annotations") == []
+    rule = {r["rule"]: r for r in again["kill"]["rules"]}[2]
+    assert rule["streak"] == 1
+    assert rule["streak"] == {r["rule"]: r for r in first["kill"]["rules"]}[2]["streak"]
+    assert len((out / "HASHES.log").read_text().splitlines()) == 4
 
 
 def test_rule_4_arms_only_after_four_weeks_of_collection(cfg, tmp_path):

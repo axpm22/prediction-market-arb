@@ -6,6 +6,13 @@ percentiles of the cluster bootstrap. Everything is read from the ledger the
 bench already opened read-only; the tape is opened read-only too, and only for
 the native/transfer split, which lives nowhere else.
 
+With ZERO settled V2/flat rows the lane is BLOCKED, not UNDERPOWERED: on the
+shared ladder BLOCKED means "cannot be computed at all" (arb/bench.py), and with
+no sample there is no interval to report. `LaneResult.verdict` defaults to
+BLOCKED, so the early return below leaves it there with the reason in `note`.
+UNDERPOWERED is the 0 < n < `decision_n` case: an interval exists, it is
+reported, and the registration says not to read it yet.
+
 Three pre-registered rules decide the verdict, in this order:
 
 1. `n < whale.kill.decision_n` -> UNDERPOWERED, whatever the interval says. The

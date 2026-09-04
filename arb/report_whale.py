@@ -21,8 +21,9 @@ from pathlib import Path
 
 from arb.models import q6
 from arb.replay import open_ro
-from arb.whale_metrics import (exit_stats, is_native, kill_status,
-                               markout_stats, roi_cell, roi_rows, signals_by_id)
+from arb.whale_kill import kill_status
+from arb.whale_metrics import (exit_stats, is_native, markout_stats, roi_cell,
+                               roi_rows, signals_by_id)
 
 
 def open_tape_ro(cfg) -> sqlite3.Connection | None:
@@ -41,66 +42,74 @@ def open_tape_ro(cfg) -> sqlite3.Connection | None:
 
 
 
-def whale_frame(cfg, store, now: datetime | None = None, con=None) -> dict:
+def whale_frame(cfg, store, now: datetime | None = None, con=None,
+                hashes_log_path=None) -> dict:
     """Everything §12 asks the daily report to print about L14. `con` is a tape
     handle for tests and callers that already hold one; otherwise the tape is
-    opened read-only here and closed before returning."""
+    opened read-only here and closed before returning — on the error path too.
+    `hashes_log_path` is the report chain rule 2's streak is derived from
+    (default: the configured `report_dir`; `write_daily` passes its own outdir,
+    so a report written elsewhere counts the days written there)."""
     now = now or datetime.now(timezone.utc)
     opened = con is None and (con := open_tape_ro(cfg)) is not None
-    fire = cfg["whale"]["fire"]
-    day_ago, week_ago = now - timedelta(days=1), now - timedelta(days=7)
-    signals = signals_by_id(con)
-    booked = {r["signal_id"] for r in store.query(
-        "SELECT DISTINCT signal_id FROM flat_bets WHERE kind='WHALE' "
-        "AND signal_id IS NOT NULL")}
-    rows = roi_rows(store)
-    qualifying = _qualifying(cfg, con, now)
-    native_of = {sid: is_native(sig) for sid, sig in signals.items()}
-    classed = {"native": [], "transfer": []}
-    for r in rows:
-        cls = native_of.get(r["signal_id"])
-        if cls is not None:
-            classed["native" if cls else "transfer"].append(r)
-    frame = {
-        "as_of": now.isoformat(timespec="seconds"),
-        "tape_ok": con is not None,
-        "primary_variant": f"{cfg['whale']['primary_variant']}/flat",
-        "wallets": {**_wallets(con),
-                    "hygiene_excluded": qualifying.pop("hygiene_excluded", 0)},
-        "qualifying": qualifying,
-        "signals": _signal_counts(store, con, day_ago, week_ago),
-        "bets": {r["variant"] or "-": r["c"] for r in store.query(
-            "SELECT variant, COUNT(*) c FROM flat_bets WHERE kind='WHALE' "
-            "GROUP BY variant ORDER BY variant")},
-        "roi": {v: roi_cell(cfg, [r for r in rows if r["variant"] == v])
-                for v in sorted({r["variant"] for r in rows})},
-        "markouts": markout_stats(store),
-        "exits": exit_stats(store, con, signals),
-        "base_rates": [dict(r) for r in con.execute(
-            "SELECT root, as_of, value, n FROM base_rates b WHERE as_of = "
-            "(SELECT MAX(as_of) FROM base_rates x WHERE x.root=b.root) "
-            "ORDER BY root")] if con else [],
-        "native": {
-            "signals": {k: sum(1 for sid, cls in native_of.items()
-                               if sid in booked and cls is (k == "native"))
-                        for k in ("native", "transfer")},
-            "roi": {k: roi_cell(cfg, v) for k, v in classed.items() if v}},
-        "collector": _collector(con, now),
-        "calibration": {
-            "min_points": dict(fire["min_points"]),
-            "signal_days": con.execute(
-                "SELECT COUNT(DISTINCT substr(evaluated_at, 1, 10)) d FROM signals"
-            ).fetchone()["d"] if con else 0,
-            "calibration_days": int(fire["calibration_days"])},
-        "kill": {"decision_n": int(cfg["whale"]["kill"]["decision_n"]),
-                 "null_n": int(cfg["whale"]["kill"]["null_n"]),
-                 "min_signals_per_week_alarm":
-                     int(cfg["whale"]["kill"]["min_signals_per_week_alarm"]),
-                 **kill_status(cfg, store, con, now)},
-    }
-    if opened:
-        con.close()
-    return frame
+    try:
+        fire = cfg["whale"]["fire"]
+        day_ago, week_ago = now - timedelta(days=1), now - timedelta(days=7)
+        signals = signals_by_id(con)
+        booked = {r["signal_id"] for r in store.query(
+            "SELECT DISTINCT signal_id FROM flat_bets WHERE kind='WHALE' "
+            "AND signal_id IS NOT NULL")}
+        rows = roi_rows(store)
+        qualifying = _qualifying(cfg, con, now)
+        native_of = {sid: is_native(sig) for sid, sig in signals.items()}
+        classed = {"native": [], "transfer": []}
+        for r in rows:
+            cls = native_of.get(r["signal_id"])
+            if cls is not None:
+                classed["native" if cls else "transfer"].append(r)
+        counts = _signal_counts(store, con, day_ago, week_ago)
+        return {
+            "as_of": now.isoformat(timespec="seconds"),
+            "tape_ok": con is not None,
+            "primary_variant": f"{cfg['whale']['primary_variant']}/flat",
+            "wallets": {**_wallets(con),
+                        "hygiene_excluded": qualifying.pop("hygiene_excluded", 0)},
+            "qualifying": qualifying,
+            "signals": counts,
+            "bets": {r["variant"] or "-": r["c"] for r in store.query(
+                "SELECT variant, COUNT(*) c FROM flat_bets WHERE kind='WHALE' "
+                "GROUP BY variant ORDER BY variant")},
+            "roi": {v: roi_cell(cfg, [r for r in rows if r["variant"] == v])
+                    for v in sorted({r["variant"] for r in rows})},
+            "markouts": markout_stats(store),
+            "exits": exit_stats(store, con, signals),
+            "base_rates": [dict(r) for r in con.execute(
+                "SELECT root, as_of, value, n FROM base_rates b WHERE as_of = "
+                "(SELECT MAX(as_of) FROM base_rates x WHERE x.root=b.root) "
+                "ORDER BY root")] if con else [],
+            "native": {
+                "signals": {k: sum(1 for sid, cls in native_of.items()
+                                   if sid in booked and cls is (k == "native"))
+                            for k in ("native", "transfer")},
+                "roi": {k: roi_cell(cfg, v) for k, v in classed.items() if v}},
+            "collector": _collector(con, now),
+            "calibration": {
+                "min_points": dict(fire["min_points"]),
+                "signal_days": con.execute(
+                    "SELECT COUNT(DISTINCT substr(evaluated_at, 1, 10)) d FROM signals"
+                ).fetchone()["d"] if con else 0,
+                "calibration_days": int(fire["calibration_days"])},
+            # rule 4's 7d count is `counts` own — computed once, printed twice
+            "kill": {"decision_n": int(cfg["whale"]["kill"]["decision_n"]),
+                     "null_n": int(cfg["whale"]["kill"]["null_n"]),
+                     "min_signals_per_week_alarm":
+                         int(cfg["whale"]["kill"]["min_signals_per_week_alarm"]),
+                     **kill_status(cfg, store, con, now, hashes_log_path,
+                                   counts["fired_7d"])},
+        }
+    finally:
+        if opened:
+            con.close()
 
 
 def _wallets(con) -> dict:

@@ -10,22 +10,21 @@ serialised as a string and formatted by the page (rule 5).
 from __future__ import annotations
 
 import json
-from datetime import date as _date
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from arb import metrics
+from arb import metrics, report
 from arb.models import q6
 from arb.venues.fees import leg_fee_cost
 
-# §9 (same predicate the panel's existing "open positions" tile uses): open
-# means no TERMINAL event. `lifetime_closed` counts here — a position we stopped
-# tracking is not a position we still hold.
-OPEN_SQL = """
-    SELECT fb.* FROM flat_bets fb
-     WHERE NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id = fb.id
-                       AND be.kind IN ('settled','void','lifetime_closed'))
+# §9, ONE definition (arb/dashboard.py's open-positions tile selects its own
+# columns with the same clause): open means no TERMINAL event. `lifetime_closed`
+# counts — a position we stopped tracking is not a position we still hold.
+OPEN_WHERE = """NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id = fb.id
+                       AND be.kind IN ('settled','void','lifetime_closed'))"""
+OPEN_SQL = f"""
+    SELECT fb.* FROM flat_bets fb WHERE {OPEN_WHERE}
      ORDER BY fb.event_start_utc IS NULL, fb.event_start_utc, fb.created_at"""
 BASES = ("optimistic", "confirmed", "markout")
 CHUNK = 400                                  # SQLite's parameter limit is 999
@@ -53,15 +52,6 @@ def _marks_by_bet(store, ids: list[int]) -> dict[int, list]:
     return out
 
 
-def _headline_class(bet: dict) -> bool:
-    """report.headline's population, on a row already read: trusted + sports +
-    pregame + clean. Stored columns only, never a re-derivation (rule 12)."""
-    return bool(bet["trusted"] and bet["category"] == "sports"
-                and bet["lane"] == "clean"
-                and (bet["event_start_utc"] is None
-                     or bet["created_at"] < bet["event_start_utc"]))
-
-
 def pnl_series(cfg, store, days: int, now=None) -> dict:
     """Cumulative settled P&L per (kind, lane, variant) over the last `days`
     config-timezone days, plus the three bases side by side for the headline
@@ -73,16 +63,17 @@ def pnl_series(cfg, store, days: int, now=None) -> dict:
     today = now.astimezone(_tz(cfg)).date()
     day_list = [(today - timedelta(days=i)).isoformat()
                 for i in range(days - 1, -1, -1)]
-    since = (datetime.combine(_date.fromisoformat(day_list[0]),
-                              datetime.min.time(), tzinfo=_tz(cfg))
-             .astimezone(timezone.utc).isoformat())
+    since = metrics.day_bounds(cfg, day_list[0])[0]
     settled_at = {r["bet_id"]: r["at"] for r in store.query(
         "SELECT bet_id, MIN(created_at) at FROM bet_events "
         "WHERE kind IN ('settled','void') AND created_at >= ? GROUP BY bet_id",
         (since,))}
     ids = sorted(settled_at)
+    # `headline_class` is report.headline's own WHERE, evaluated by SQLite on
+    # the row — one predicate, never a second Python copy of it (rule 12)
     bets = [dict(r) for chunk in _chunks(ids) for r in store.query(
-        f"SELECT * FROM flat_bets WHERE id IN ({','.join('?' * len(chunk))})", chunk)]
+        f"""SELECT fb.*, ({report.HEADLINE_WHERE}) headline_class FROM flat_bets fb
+             WHERE fb.id IN ({','.join('?' * len(chunk))})""", chunk)]
     marks = _marks_by_bet(store, ids)
 
     per_class: dict[tuple, dict] = {}
@@ -97,7 +88,7 @@ def pnl_series(cfg, store, days: int, now=None) -> dict:
         key = (bet["kind"], bet["lane"], bet["variant"] or "")
         cell = per_class.setdefault(key, {})
         cell[day] = cell.get(day, Decimal(0)) + pnl
-        if not _headline_class(bet):
+        if not bet["headline_class"]:
             continue
         confirmed, pnl_conf = metrics.bet_confirmed(store, bet)
         mk = metrics.pnl_markout(cfg, bet, marks.get(bet["id"], []))

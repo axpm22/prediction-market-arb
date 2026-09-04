@@ -15,17 +15,20 @@ from rich.table import Table
 from arb import metrics, report_whale
 from arb.capacity import capacity_frame
 from arb.venues.fees import fee_is_stale
+from arb.whale_kill import HASHES_LOG
 
 console = Console()
+# THE headline population, once (rule 12): dashboard_data selects this same
+# expression in SQLite rather than re-deriving it in Python.
+HEADLINE_WHERE = ("fb.trusted = 1 AND fb.category = 'sports' AND fb.lane = 'clean' AND "
+                  "(fb.event_start_utc IS NULL OR fb.created_at < fb.event_start_utc)")
 
 
 def headline(cfg, store) -> tuple[Decimal, int]:
     """THE number: settled P&L, trusted+sports+pregame+clean, optimistic basis,
     GROSS OF CARRY (§10.6). Matches scripts/headline.sql by construction."""
     rows = store.query(
-        """SELECT fb.* FROM flat_bets fb
-           WHERE fb.trusted = 1 AND fb.category = 'sports' AND fb.lane = 'clean'
-             AND (fb.event_start_utc IS NULL OR fb.created_at < fb.event_start_utc)
+        f"""SELECT fb.* FROM flat_bets fb WHERE {HEADLINE_WHERE}
              AND EXISTS (SELECT 1 FROM bet_events be
                          WHERE be.bet_id = fb.id AND be.kind = 'settled')""")
     total, n = Decimal(0), 0
@@ -46,16 +49,13 @@ def _cadence(cfg, store, day: str) -> dict:
         "AND started_at < ? ORDER BY started_at", (start, end))
     times = [datetime.fromisoformat(r["started_at"]) for r in rows]
     gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:])]
-    if not gaps:
-        return {"n_polls": len(times), "mean": None, "p95": None}
-    return {"n_polls": len(times), "mean": statistics.mean(gaps),
-            "p95": sorted(gaps)[int(0.95 * (len(gaps) - 1))]}
+    return {"n_polls": len(times), "mean": statistics.mean(gaps) if gaps else None,
+            "p95": sorted(gaps)[int(0.95 * (len(gaps) - 1))] if gaps else None}
 
 
 def _live_section(cfg, store, day: str) -> dict:
     """LIVE lane (PROMPT_LIVE_LEADLAG A5): always visible, never blended.
     Populations per venue-pair, never pooled — like their pregame counterparts."""
-    import statistics as st
     start, end = metrics.day_bounds(cfg, day)
     pairs = {}
     for b in store.query(
@@ -81,7 +81,7 @@ def _live_section(cfg, store, day: str) -> dict:
                  - datetime.fromisoformat(b["created_at"])).total_seconds())
     for p in pairs.values():
         p["confirm_rate"] = p["confirmed"] / p["flags"] if p["flags"] else None
-        p["median_lifetime_secs"] = st.median(p["lifetimes"]) if p["lifetimes"] else None
+        p["median_lifetime_secs"] = statistics.median(p["lifetimes"]) if p["lifetimes"] else None
         del p["lifetimes"]
     cad_rows = store.query(
         "SELECT started_at FROM polls WHERE kind='live' AND started_at >= ? "
@@ -184,15 +184,10 @@ def _capacity_md(cap: dict) -> list[str]:
     return md
 
 
-def _wf(cfg, store, given: dict | None) -> dict:
-    """`given` (one score per `--daily` call) or a fresh whale_frame."""
-    return given if given is not None else report_whale.whale_frame(cfg, store)
-
-
-def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily",
+def write_daily(cfg, store, day: str, outdir: str | Path | None = None,
                 whale_frame: dict | None = None) -> dict:
     frame = daily_frame(cfg, store, day)
-    outdir = Path(outdir)
+    outdir = Path(outdir if outdir is not None else cfg["report_dir"])
     outdir.mkdir(parents=True, exist_ok=True)
     csv_path = outdir / f"{day}.csv"
     cols = ["id", "created_at", "kind", "lane", "trusted", "category", "sport",
@@ -225,14 +220,11 @@ def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily",
         md.append(f"| {kind} | {lane} | {variant} | {a['bets']} | ${a['staked']} | "
                   f"${a['settled_pnl']} | {a['pending']} | {a['missed']} |")
     md.append("")
-    frame["whale"] = _wf(cfg, store, whale_frame)
+    # §12 kill rule 2 counts consecutive PRODUCED daily reports; the record of
+    # which days those are is the HASHES chain below, read back (never written).
+    frame["whale"] = whale_frame if whale_frame is not None else \
+        report_whale.whale_frame(cfg, store, hashes_log_path=outdir / HASHES_LOG)
     md.extend(report_whale.whale_md(frame["whale"]))
-    # §12 kill rule 2 counts consecutive PRODUCED daily reports, so producing
-    # one is itself the datum: append this day's verdict (append-only; the
-    # streak is derived from these rows, and kill_status already counts today's
-    # live verdict, so the section above is not one day behind).
-    from arb.whale_metrics import record_fast_kill
-    record_fast_kill(cfg, store, day)
     md.append("")
     md.extend(_capacity_md(frame["capacity"]))
     md.append("")
@@ -262,7 +254,7 @@ def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily",
     # append-only hash chain: cheap tamper-evidence for the paper track record
     # (writeup verifiability; recomputing a day must reproduce its hash)
     import hashlib
-    with (outdir / "HASHES.log").open("a") as f:
+    with (outdir / HASHES_LOG).open("a") as f:
         f.write(f"{day} md:{hashlib.sha256((outdir / f'{day}.md').read_bytes()).hexdigest()} "
                 f"csv:{hashlib.sha256(csv_path.read_bytes()).hexdigest()}\n")
     return frame
@@ -281,7 +273,8 @@ def print_daily(cfg, store, day: str, whale_frame: dict | None = None) -> None:
         t.add_row(kind, lane, variant, str(a["bets"]), f"${a['staked']}",
                   f"${a['settled_pnl']}", str(a["pending"]), str(a["missed"]))
     console.print(t)
-    console.print("[dim]" + report_whale.whale_line(_wf(cfg, store, whale_frame)) + "[/]")
+    wf = whale_frame if whale_frame is not None else report_whale.whale_frame(cfg, store)
+    console.print("[dim]" + report_whale.whale_line(wf) + "[/]")
     c = frame["cadence"]
     console.print(f"[dim]polls={c['n_polls']} cadence mean={c['mean'] and round(c['mean'])}s "
                   f"p95={c['p95'] and round(c['p95'])}s; quote age="
