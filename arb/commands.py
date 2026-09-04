@@ -554,7 +554,7 @@ def cmd_status(cfg, store, args):
     from datetime import datetime, timezone
     from pathlib import Path
 
-    from arb.heartbeat import LOCK_DIR
+    from arb.heartbeat import LOCK_DIR, lane_status_lines
     now = datetime.now(timezone.utc)
 
     # supervisor semantics (§13.3): fresh beat OR live child pid -> ALIVE;
@@ -574,8 +574,10 @@ def cmd_status(cfg, store, args):
                 for b in beats)
     state = "ALIVE" if fresh or lock_alive else ("STALE" if beats else "DEAD")
     console.print(f"supervisor: [bold]{state}[/] (lock={'live' if lock_alive else 'none'})")
-    for b in beats:
-        console.print(f"  {b['process']}: last beat {b['beat_at']} sha={b['head_sha']}")
+    # whale lanes first (2026-09-04 operator: PM whales only, for now); a
+    # disabled lane is labeled rather than silently omitted
+    for name, status in lane_status_lines(cfg, beats):
+        console.print(f"  {name}: {status}")
 
     newest = store.query("SELECT MAX(fetched_at) t FROM quotes")[0]["t"]
     if newest:

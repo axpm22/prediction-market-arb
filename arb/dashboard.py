@@ -5,6 +5,7 @@ log (forensics greps must stay clean)."""
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -13,6 +14,49 @@ from arb.logutil import get_logger
 
 log = get_logger("arb.dashboard", "logs/scan.log")
 PAGE = Path(__file__).parent / "dashboard.html"
+
+# dashboard.mode (2026-09-04 operator: PM whales only, for now — SCHEMA/
+# _check_invariants in arb/config.py restrict the value to these two keys).
+_TITLES = {"whale": "Whale lane — instrument panel",
+          "full": "ArbitrageModel — instrument panel"}
+# blocks moved to the top, in order, when mode is whale — everything else
+# (including the arb-only pieces the page's own templated MODE hides) keeps
+# its original relative position.
+_WHALE_FRONT = ("whale1", "whale2", "positions", "lamps", "errsec")
+
+
+def _extract_marked(html: str, name: str) -> tuple[str, str]:
+    """Pull one `<!--WM:name-->...<!--/WM-->` block out of dashboard.html —
+    returns (inner_html, html_with_the_marked_region_removed). Raises if the
+    marker is missing rather than silently dropping a section (rule 3 style)."""
+    m = re.search(rf"<!--WM:{name}-->(.*?)<!--/WM-->", html, re.DOTALL)
+    if not m:
+        raise ValueError(f"dashboard.html: missing marker WM:{name}")
+    return m.group(1).strip(), html[:m.start()] + html[m.end():]
+
+
+def _whale_first(html: str) -> str:
+    """Cut-and-splice the five marked blocks to right after `<header>`. A
+    second HTML file would double-maintain the whole page; `dashboard.mode:
+    full` never calls this function, so today's layout can never regress."""
+    blocks = []
+    for name in _WHALE_FRONT:
+        block, html = _extract_marked(html, name)
+        blocks.append(block)
+    return html.replace("</header>", "</header>\n" + "\n".join(blocks), 1)
+
+
+def render_page(cfg) -> bytes:
+    """The `/` page: REFRESH_SECS/MODE/TITLE templated in, then — mode
+    whale only — the front-of-page reorder."""
+    mode = str(cfg["dashboard"]["mode"])
+    html = (PAGE.read_text()
+           .replace("{{REFRESH_SECS}}", str(int(cfg["dashboard"]["refresh_secs"])))
+           .replace("{{DASHBOARD_MODE}}", mode)
+           .replace("{{DASHBOARD_TITLE}}", _TITLES[mode]))
+    if mode == "whale":
+        html = _whale_first(html)
+    return html.encode()
 
 
 def _tail_errors(limit: int = 30) -> list[dict]:
@@ -256,11 +300,7 @@ def make_handler(cfg, db_path):
                         st.close()
                     ctype = "application/json"
                 elif self.path == "/":
-                    # {{REFRESH_SECS}} is the page's bootstrap refresh interval,
-                    # before /api/state has a chance to name its own
-                    body = PAGE.read_bytes().replace(
-                        b"{{REFRESH_SECS}}",
-                        str(int(cfg["dashboard"]["refresh_secs"])).encode())
+                    body = render_page(cfg)
                     ctype = "text/html; charset=utf-8"
                 else:
                     self.send_error(404)

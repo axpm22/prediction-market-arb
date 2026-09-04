@@ -166,26 +166,9 @@ def daily_frame(cfg, store, day: str, now: datetime | None = None) -> dict:
     }
 
 
-def write_daily(cfg, store, day: str, outdir: str | Path | None = None,
-                whale_frame: dict | None = None) -> dict:
-    # a day's report is a pure function of the stored data and `day` (rule 9):
-    # `now` here is the report day's END, never the wall clock, so a re-run of
-    # a past day reproduces the same hash (§H14 flake fix).
-    now = datetime.fromisoformat(metrics.day_bounds(cfg, day)[1])
-    frame = daily_frame(cfg, store, day, now=now)
-    outdir = Path(outdir if outdir is not None else cfg["report_dir"])
-    outdir.mkdir(parents=True, exist_ok=True)
-    csv_path = outdir / f"{day}.csv"
-    cols = ["id", "created_at", "kind", "lane", "trusted", "category", "sport",
-            "venue_pair", "event_key", "stake_usd", "edge_points", "status",
-            "pnl", "confirmed", "pnl_if_confirmed", "pnl_markout", "excluded", "notes"]
-    with csv_path.open("w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
-        w.writeheader()
-        for b in frame["per_bet"]:
-            w.writerow(b)
-    md = [f"# Daily report {day}", "",
-          f"**Headline (cumulative, trusted+sports+pregame+clean, optimistic, "
+def _arb_head_md(cfg, frame: dict) -> list[str]:
+    """Headline + cadence/data-age/stale-fee facts + the day's class table."""
+    md = [f"**Headline (cumulative, trusted+sports+pregame+clean, optimistic, "
           f"GROSS OF CARRY): ${frame['headline_pnl']} over {frame['headline_n']} "
           f"settled bets**", ""]
     c = frame["cadence"]
@@ -205,15 +188,12 @@ def write_daily(cfg, store, day: str, outdir: str | Path | None = None,
     for (kind, lane, variant), a in sorted(frame["by_class"].items()):
         md.append(f"| {kind} | {lane} | {variant} | {a['bets']} | ${a['staked']} | "
                   f"${a['settled_pnl']} | {a['pending']} | {a['missed']} |")
-    md.append("")
-    # §12 kill rule 2 counts consecutive PRODUCED daily reports; the record of
-    # which days those are is the HASHES chain below, read back (never written).
-    frame["whale"] = whale_frame if whale_frame is not None else \
-        report_whale.whale_frame(cfg, store, now=now, hashes_log_path=outdir / HASHES_LOG,
-                                 producing_day=day)
-    md.extend(report_whale.whale_md(frame["whale"]))
-    md.append("")
-    md.extend(capacity_md(frame["capacity"]))
+    return md
+
+
+def _arb_rest_md(cfg, frame: dict) -> list[str]:
+    """Capacity projection + LIVE lane + left-on-the-table."""
+    md = list(capacity_md(frame["capacity"]))
     md.append("")
     live = frame["live_lane"]
     md.append("## LIVE lane (in-play, review-lane forever — never headline)")
@@ -237,6 +217,43 @@ def write_daily(cfg, store, day: str, outdir: str | Path | None = None,
     md.append("|---|---|---|")
     for r in frame["left_on_table"]:
         md.append(f"| {r['reason']} | {r['n']} | {round(r['edge'] or 0, 4)} |")
+    return md
+
+
+def write_daily(cfg, store, day: str, outdir: str | Path | None = None,
+                whale_frame: dict | None = None) -> dict:
+    # a day's report is a pure function of the stored data and `day` (rule 9):
+    # `now` here is the report day's END, never the wall clock, so a re-run of
+    # a past day reproduces the same hash (§H14 flake fix).
+    now = datetime.fromisoformat(metrics.day_bounds(cfg, day)[1])
+    frame = daily_frame(cfg, store, day, now=now)
+    outdir = Path(outdir if outdir is not None else cfg["report_dir"])
+    outdir.mkdir(parents=True, exist_ok=True)
+    csv_path = outdir / f"{day}.csv"
+    cols = ["id", "created_at", "kind", "lane", "trusted", "category", "sport",
+            "venue_pair", "event_key", "stake_usd", "edge_points", "status",
+            "pnl", "confirmed", "pnl_if_confirmed", "pnl_markout", "excluded", "notes"]
+    with csv_path.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
+        w.writeheader()
+        for b in frame["per_bet"]:
+            w.writerow(b)
+    # §12 kill rule 2 counts consecutive PRODUCED daily reports; the record of
+    # which days those are is the HASHES chain below, read back (never written).
+    frame["whale"] = whale_frame if whale_frame is not None else \
+        report_whale.whale_frame(cfg, store, now=now, hashes_log_path=outdir / HASHES_LOG,
+                                 producing_day=day)
+    whale_section = report_whale.whale_md(frame["whale"])
+    arb_head, arb_rest = _arb_head_md(cfg, frame), _arb_rest_md(cfg, frame)
+    # dashboard.mode (2026-09-04 operator: PM whales only, for now) — reorder
+    # only, nothing below is ever dropped. Mode is config, not time, so the
+    # hash chain stays a pure function of the stored data and `day` (rule 9).
+    if str(cfg["dashboard"]["mode"]) == "whale":
+        md = [f"# Daily report {day}", ""] + whale_section + [
+            "", "## Legacy arb instrument (paused)", ""] + arb_head + [""] + arb_rest
+    else:
+        md = [f"# Daily report {day}", ""] + arb_head + [""] + whale_section + [
+            ""] + arb_rest
     (outdir / f"{day}.md").write_text("\n".join(md) + "\n")
     # append-only hash chain: cheap tamper-evidence for the paper track record
     # (writeup verifiability; recomputing a day must reproduce its hash)

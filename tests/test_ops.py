@@ -527,6 +527,55 @@ def test_stale_lanes_counts_a_heartbeat_as_liveness(cfg, tmp_path):
     assert "live" not in dict(stale_lanes(cfg, store, NOW))
 
 
+def test_lane_status_lines_leads_with_whale_and_labels_off_lanes(cfg):
+    """`arb status`/heartbeat summaries (2026-09-04 operator: PM whales only,
+    for now): whale lanes sort first, and a lane the supervisor has switched
+    off reads as 'off (whale-only mode)' instead of silently vanishing."""
+    from arb.heartbeat import lane_status_lines
+    cfg = copy.deepcopy(cfg)
+    cfg["supervisor"]["processes"] = {
+        "watch": True, "live": False, "negrisk": False,
+        "whale": True, "whale-backfill": True}
+
+    lines = lane_status_lines(cfg, beats=[])
+
+    names = [n for n, _ in lines]
+    assert names.index("whale") < names.index("watch")
+    assert names.index("whale-backfill") < names.index("watch")
+    status = dict(lines)
+    assert status["live"] == "off (whale-only mode)"
+    assert status["negrisk"] == "off (whale-only mode)"
+    assert status["watch"] == "no beat yet"
+
+
+def test_lane_status_lines_shows_the_last_beat_when_present(cfg):
+    from arb.heartbeat import lane_status_lines
+    cfg = copy.deepcopy(cfg)
+    cfg["supervisor"]["processes"] = {"whale": True}
+    beats = [{"process": "whale", "beat_at": "2026-09-04T00:00:00+00:00",
+             "head_sha": "abc123"}]
+
+    (name, status), = lane_status_lines(cfg, beats)
+
+    assert name == "whale"
+    assert status == "last beat 2026-09-04T00:00:00+00:00 sha=abc123"
+
+
+def test_cmd_status_leads_with_whale_lanes(cfg, tmp_path, capsys):
+    """Integration: the shipped config is already whale-only (watch stays on
+    for the whale lane's universe) — `arb status` must say so, whale-first."""
+    import argparse
+
+    from arb import commands
+    store = Store(tmp_path / "t.sqlite")
+
+    assert commands.cmd_status(cfg, store, argparse.Namespace()) == 0
+
+    out = capsys.readouterr().out
+    assert out.index("whale:") < out.index("watch:")
+    assert "off (whale-only mode)" in out
+
+
 def test_cadence_windows_default_to_a_no_op(cfg):
     """Ships as a mechanism. The numbers are a pre-registered policy decision."""
     from arb.heartbeat import lane_interval

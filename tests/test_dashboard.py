@@ -519,6 +519,78 @@ def test_a_broken_whale_section_says_so_in_the_kill_block_too():
     assert "section('kill', w)" in draw[:draw.index("$('whale').innerHTML")]
 
 
+# -------------------------------------------------- dashboard.mode: whale
+
+def test_whale_mode_leads_with_whale_sections_then_positions_then_strip(tmp_path):
+    """Operator instruction 2026-09-04: PM whales only, for now. The two whale
+    sections come first, then Open positions, then the supervisor/errors
+    strip; the arb-only sections stay out of that front block."""
+    cfg = _cfg()
+    cfg["dashboard"]["mode"] = "whale"
+    Store(tmp_path / "t.sqlite")
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(cfg, tmp_path / "t.sqlite"))
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        html = urllib.request.urlopen(f"http://127.0.0.1:{httpd.server_port}/").read().decode()
+        assert "<title>Whale lane — instrument panel</title>" in html
+        i_whale1 = html.index("L14 whale-consensus lane")
+        i_whale2 = html.index("Traders — where each wallet is good")
+        i_positions = html.index("Open positions — marked")
+        i_lamps = html.index('id="lamps"')
+        i_errsec = html.index('id="errsec"')
+        assert i_whale1 < i_whale2 < i_positions < i_lamps < i_errsec
+        assert 'const MODE = "whale";' in html
+    finally:
+        httpd.shutdown()
+
+
+def test_full_mode_keeps_todays_layout(tmp_path):
+    cfg = _cfg()
+    cfg["dashboard"]["mode"] = "full"
+    Store(tmp_path / "t.sqlite")
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(cfg, tmp_path / "t.sqlite"))
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        html = urllib.request.urlopen(f"http://127.0.0.1:{httpd.server_port}/").read().decode()
+        assert "<title>ArbitrageModel — instrument panel</title>" in html
+        assert html.index('id="lamps"') < html.index("Open positions — marked")
+        assert html.index("Open positions — marked") < html.index("L14 whale-consensus lane")
+        assert 'const MODE = "full";' in html
+    finally:
+        httpd.shutdown()
+
+
+def test_whale_panel_table_walks_roots_before_variant_or_reason():
+    """ee8b37f (2026-09-04, non-sports roots): `/api/whale`'s roi/bets/exits
+    are now {root: {variant_or_reason: cell}} — sports (primary_root) first,
+    never pooled across roots. drawWhale must walk root then variant/reason;
+    indexing straight off a variant/reason key (the pre-ee8b37f shape) reads
+    every cell as undefined."""
+    html = (ROOT / "arb" / "dashboard.html").read_text()
+    script = html.split("<script>")[1]
+    draw = script[script.index("function drawWhale("):script.index("function drawTraders(")]
+    assert "f.primary_root" in draw
+    assert "f.roi[f.primary_variant]" not in draw
+    assert "f.roi[v]" not in draw and "f.bets[v]" not in draw
+
+
+def test_whale_mode_js_hides_the_arb_only_pieces_and_filters_positions():
+    """The pieces the server didn't move (tiles/gates/pnl/bench) are hidden by
+    the page's own JS, guarded on the templated MODE constant — checked at the
+    source level, same as this file's other script-logic tests."""
+    html = (ROOT / "arb" / "dashboard.html").read_text()
+    script = html.split("<script>")[1]
+    assert "MODE === 'whale'" in script
+    assert "$('tiles').hidden = true" in script
+    assert "$('gates').hidden = true" in script
+    assert "$('pnl').closest('section').hidden = true" in script
+    assert "$('bench').closest('section').hidden = true" in script
+    draw = script[script.index("function drawPositions("):]
+    assert "b.kind === 'WHALE'" in draw[:draw.index("function ", 10)]
+
+
 def test_the_page_draws_its_own_charts_and_loads_nothing_remote():
     html = (ROOT / "arb" / "dashboard.html").read_text()
     assert "<svg" in html and "polyline" in html

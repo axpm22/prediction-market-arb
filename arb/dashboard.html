@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ArbitrageModel — instrument panel</title>
+<title>{{DASHBOARD_TITLE}}</title>
 <style>
   :root{
     --ink:#0b0e14; --panel:#11151d; --edge:#232a36; --edge2:#2e3745;
@@ -96,7 +96,7 @@
     <div class="meta" id="updated">connecting…</div>
   </header>
 
-  <div class="lamps" id="lamps" aria-label="instrument status lamps"></div>
+  <!--WM:lamps--><div class="lamps" id="lamps" aria-label="instrument status lamps"></div><!--/WM-->
 
   <div class="headline">
     <div class="num" id="headline">—</div>
@@ -108,12 +108,12 @@
 
   <div class="tiles" id="tiles"></div>
 
-  <section id="errsec" hidden>
+  <!--WM:errsec--><section id="errsec" hidden>
     <h2>Errors &amp; warnings — recent</h2>
     <div class="hint">Everything at WARNING or above from the live logs, newest first.
       The ANJ block on Polymarket shows here as one fast-fail line per host per poll.</div>
     <div id="errors"></div>
-  </section>
+  </section><!--/WM-->
 
   <section>
     <h2>Cumulative settled P&amp;L <span id="pnl-window"></span></h2>
@@ -127,14 +127,14 @@
     <div id="bases"></div>
   </section>
 
-  <section>
+  <!--WM:positions--><section>
     <h2>Open positions — marked</h2>
     <div class="hint">Every bet with no terminal event, marked at the latest persisted
       bid minus the taker fee that selling into it would cost. “no quote” is a
       position we cannot mark, not a position worth zero. WHALE rows carry the whales
       that formed the signal and the exit rule’s live verdict.</div>
     <div id="positions"></div>
-  </section>
+  </section><!--/WM-->
 
   <section>
     <h2>Lane verdicts — latest bench</h2>
@@ -144,14 +144,14 @@
     <div id="bench"></div>
   </section>
 
-  <section>
+  <!--WM:whale1--><section>
     <h2>L14 whale-consensus lane</h2>
     <div class="hint">REVIEW lane, never headline. Bounds are one-sided (§12):
       lb80 is the 20th percentile of the event-clustered bootstrap, ub90 the 90th.</div>
     <div id="whale"></div>
-  </section>
+  </section><!--/WM-->
 
-  <section>
+  <!--WM:whale2--><section>
     <h2>Traders — where each wallet is good</h2>
     <div class="hint">Read-time diagnostics over the tape's resolved history, never a
       lane input. <b>excess%</b> is the win rate above the break-even the price itself
@@ -160,7 +160,7 @@
       its own standard error. Hygiene-excluded wallets are ranked and flagged, never
       hidden. Click a column to sort, a row to see that wallet's best markets.</div>
     <div id="traders"></div>
-  </section>
+  </section><!--/WM-->
 
   <section>
     <h2>Kill rules — L14 (§12)</h2>
@@ -244,6 +244,7 @@
   </footer>
 </div>
 <script>
+const MODE = "{{DASHBOARD_MODE}}";      // dashboard.mode: 'whale' hides the arb-only pieces
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const mb = b => b == null ? '—' : (b / 1e6).toFixed(1);   // tape size, display only
@@ -353,7 +354,7 @@ async function refresh(){
       lamp('ERRORS', errCls, recentErrs.length?`${recentErrs.length} in 30m`:'quiet') +
       lamp('BACKUP', bkCls, bkTxt) +
       lamp('FEE FACTS', feeCls, feeTxt) +
-      lamp('ODDS CREDITS', crCls, crTxt);
+      (MODE === 'whale' ? '' : lamp('ODDS CREDITS', crCls, crTxt));
     $('errsec').hidden = !(s.errors||[]).length;
     $('errors').innerHTML = table(
       [{t:'when',r:1},{t:'level'},{t:'source'},{t:'message'},{t:'log'}],
@@ -454,10 +455,14 @@ function drawPnl(p){
 
 function drawPositions(p){
   if(!section('positions', p)) return;
+  // whale mode: this is the promoted, top-of-page positions table — WHALE
+  // rows only. /api/positions itself stays every-kind (other callers, §9).
+  const rows = MODE === 'whale'
+    ? (p.positions||[]).filter(b => b.kind === 'WHALE') : (p.positions||[]);
   $('positions').innerHTML = table(
     [{t:'kind'},{t:'variant'},{t:'event'},{t:'outcome'},{t:'stake',r:1},{t:'entry',r:1},
      {t:'bid',r:1},{t:'unrealized',r:1},{t:'age',r:1},{t:'starts'},{t:'whales / exit'}],
-    (p.positions||[]).map(b=>[{t:b.kind},{t:b.variant||'—'},{t:evName(b.event_key),c:'ell'},
+    rows.map(b=>[{t:b.kind},{t:b.variant||'—'},{t:evName(b.event_key),c:'ell'},
       {t:b.outcome||'—',c:'ell'},{t:'$'+b.stake_usd,r:1},{t:b.entry_cost,r:1},
       {t:b.bid==null?'no quote':b.bid,r:1,c:b.bid==null?'lane-review':''},
       {t:money(b.unrealized_pnl),r:1,
@@ -486,6 +491,16 @@ function drawBench(b){
     'no bench run recorded yet — run `arb bench`');
 }
 
+// roi/bets/markouts/exits are keyed by root before variant/reason (2026-09-04
+// non-sports-roots fix, PREREGISTRATION §7 item 5: a root's rows are never
+// pooled with another's) — primary_root (sports) first, then every other
+// root sorted, mirroring arb.whale_metrics.roots_first.
+function rootsFirst(obj, primary){
+  const keys = Object.keys(obj||{});
+  return (keys.includes(primary) ? [primary] : [])
+    .concat(keys.filter(k => k !== primary).sort());
+}
+
 function drawWhale(w){
   // the kill block lives in its own section, so it must say the same thing when
   // /api/whale is the thing that broke — an empty #kill reads as "no rules"
@@ -495,7 +510,13 @@ function drawWhale(w){
   if(!f){ $('whale').innerHTML = '<div class="empty">whale lane not configured</div>';
     $('kill').innerHTML = ''; return; }
   const c = f.collector, q = f.qualifying, sg = f.signals;
-  const roi = f.roi[f.primary_variant];
+  const roi = (f.roi[f.primary_root] || {})[f.primary_variant];
+  const roots = rootsFirst(f.roi, f.primary_root);
+  const roiRows = roots.flatMap(root => Object.keys(f.roi[root]).sort().map(v => ({
+    root, v, cell: f.roi[root][v], bets: (f.bets[root]||{})[v] || 0,
+    primary: root === f.primary_root && v === f.primary_variant})));
+  const exitRows = roots.flatMap(root => Object.entries(f.exits[root]||{})
+    .map(([reason, cell]) => ({root, reason, cell})));
   $('whale').innerHTML =
     `<div class="hint">${f.tape_ok?'':'<b>tape unavailable</b> — '}` +
     `wallets ${f.wallets.tracked} tracked / ${f.wallets.backfilled} backfilled / ` +
@@ -506,27 +527,27 @@ function drawWhale(w){
     `${mb(c.tape_bytes)} MB, ~${mb(c.bytes_per_day)} MB/day, ${c.prints_24h} prints/day, ` +
     `${c.holdings_24h} holdings rows/day · calibration ` +
     `${f.calibration.signal_days}/${f.calibration.calibration_days} signal days</div>` +
-    table([{t:'variant'},{t:'bets',r:1},{t:'settled',r:1},{t:'events',r:1},
+    table([{t:'root'},{t:'variant'},{t:'bets',r:1},{t:'settled',r:1},{t:'events',r:1},
            {t:'ROI/$',r:1},{t:'lb80',r:1},{t:'ub90',r:1},{t:'win rate',r:1}],
-      Object.keys(f.roi).sort().map(v=>[{t:v+(v===f.primary_variant?' (primary)':'')},
-        {t:f.bets[v]||0,r:1},{t:f.roi[v].n,r:1},{t:f.roi[v].n_events,r:1},
-        {t:f.roi[v].mean,r:1},{t:f.roi[v].lb80,r:1},{t:f.roi[v].ub90,r:1},
-        {t:f.roi[v].win_rate,r:1}]),
+      roiRows.map(x=>[{t:x.root},{t:x.v+(x.primary?' (primary)':'')},
+        {t:x.bets,r:1},{t:x.cell.n,r:1},{t:x.cell.n_events,r:1},
+        {t:x.cell.mean,r:1},{t:x.cell.lb80,r:1},{t:x.cell.ub90,r:1},
+        {t:x.cell.win_rate,r:1}]),
       'no settled whale bet yet — the lane collects before it can be scored') +
     table([{t:'whale'},{t:'bucket'},{t:'lb80',r:1},{t:'n',r:1},{t:'evidence'}],
       (q.top||[]).map(r=>[{t:r.wallet,c:'ell'},{t:r.bucket},{t:r.lb,r:1},
         {t:r.n_bucket,r:1},{t:r.native?'native':'transfer'}]),
       'no qualifying whale on the current tape') +
-    table([{t:'exit reason'},{t:'exits',r:1},{t:'exit P&L',r:1},{t:'hold P&L',r:1}],
-      Object.entries(f.exits||{}).map(([k,v])=>[{t:k},{t:v.n,r:1},
-        {t:'$'+v.exit_pnl,r:1},{t:'$'+v.hold_pnl,r:1}]), 'no exit yet');
+    table([{t:'root'},{t:'exit reason'},{t:'exits',r:1},{t:'exit P&L',r:1},{t:'hold P&L',r:1}],
+      exitRows.map(x=>[{t:x.root},{t:x.reason},{t:x.cell.n,r:1},
+        {t:'$'+x.cell.exit_pnl,r:1},{t:'$'+x.cell.hold_pnl,r:1}]), 'no exit yet');
   $('kill').innerHTML = table([{t:'rule'},{t:'state'},{t:'numbers'}],
     (f.kill.rules||[]).map(r=>[{t:`${r.rule} ${r.name}`},
       {t:r.state,c:killCls(r.state)},{t:r.says}]));
   if(roi) $('whale').insertAdjacentHTML('afterbegin',
-    `<div class="hint">primary ${esc(f.primary_variant)}: ROI/$ <b>${esc(roi.mean)}</b> ` +
-    `[lb80 ${esc(roi.lb80)}, ub90 ${esc(roi.ub90)}] over ${roi.n} settled bets ` +
-    `in ${roi.n_events} events</div>`);
+    `<div class="hint">primary ${esc(f.primary_root)}/${esc(f.primary_variant)}: ` +
+    `ROI/$ <b>${esc(roi.mean)}</b> [lb80 ${esc(roi.lb80)}, ub90 ${esc(roi.ub90)}] ` +
+    `over ${roi.n} settled bets in ${roi.n_events} events</div>`);
 }
 
 // Traders (/api/whale/traders). Sorting and the expand-a-wallet click are local
@@ -594,6 +615,17 @@ function renderTraders(){
   $('traders').innerHTML = `<table><tr>${head}</tr>${body}</table>`;
 }
 
+// whale mode (dashboard.mode, 2026-09-04 operator: PM whales only, for now):
+// hide the arb-only pieces the server didn't already move up top. Native
+// `hidden` — nothing here stops these sections computing, they just don't show.
+function applyMode(){
+  if(MODE !== 'whale') return;
+  $('tiles').hidden = true;
+  $('gates').hidden = true;
+  $('pnl').closest('section').hidden = true;
+  $('bench').closest('section').hidden = true;
+}
+applyMode();
 refresh();
 </script>
 </body>

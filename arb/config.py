@@ -133,7 +133,7 @@ SCHEMA = {
     "canary": {"enabled": BOOL, "day_of_month": NUM, "time": STR},
     "dashboard": {"host": STR, "port": NUM, "pnl_days": NUM,
                   "bench_stale_days": NUM, "refresh_secs": NUM, "cache_secs": NUM,
-                  "cache_max_entries": NUM},
+                  "cache_max_entries": NUM, "mode": STR},
     "notify": {"enabled": BOOL, "webhook_url": STR, "min_interval_secs": NUM,
                "timeout_secs": NUM, "events": LIST},
     "zombie_spread_min": NUM, "max_lead_hours": NUM,
@@ -312,7 +312,11 @@ def _check_invariants(cfg):
             ("whale.retention.scope", whale["retention"]["scope"], ("global", "universe")),
             ("whale.retention.raw_json", whale["retention"]["raw_json"],
              ("universe", "all", "none")),
-            ("whale.exit.holdings_keep", whale["exit"]["holdings_keep"], ("markets", "all"))):
+            ("whale.exit.holdings_keep", whale["exit"]["holdings_keep"], ("markets", "all")),
+            # 2026-09-04: the whale-first face of the instrument (dashboard.py,
+            # report.py, cmd_status all read this one flag) — a typo would
+            # silently keep the arb-first layout, so it fails at boot too.
+            ("dashboard.mode", cfg["dashboard"]["mode"], ("whale", "full"))):
         if value not in allowed:
             raise ConfigError(f"{key} ({value!r}) must be one of {list(allowed)} — the "
                               "collector implements no other mode, and a typo here would "

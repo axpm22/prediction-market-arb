@@ -218,6 +218,34 @@ def test_write_daily_hash_ignores_collector_churn_and_future_tape_rows(
     assert len(lines) == 2 and lines[0] == lines[1]
 
 
+# --------------------------------------------------- dashboard.mode (whale)
+
+def test_write_daily_leads_with_whale_in_whale_mode(cfg, fixture_db, tmp_path):
+    """Operator instruction 2026-09-04: dashboard.mode=whale (the shipped
+    default) makes the daily md lead with L14; the arb headline/class table/
+    capacity/LIVE/left-on-table content is demoted under one heading — never
+    removed, only reordered (§ task)."""
+    cfg["dashboard"]["mode"] = "whale"
+    write_daily(cfg, fixture_db, "2026-07-08", outdir=tmp_path)
+    md = (tmp_path / "2026-07-08.md").read_text()
+    assert md.index("# Daily report") < md.index("## L14 whale-consensus lane")
+    assert md.index("## L14 whale-consensus lane") < \
+        md.index("## Legacy arb instrument (paused)")
+    assert md.index("## Legacy arb instrument (paused)") < md.index("**Headline")
+    # nothing was deleted, only moved
+    for marker in ("never headline", "PROJECTION", "## Left on the table",
+                  "## LIVE lane"):
+        assert marker in md
+
+
+def test_write_daily_full_mode_keeps_todays_arb_first_layout(cfg, fixture_db, tmp_path):
+    cfg["dashboard"]["mode"] = "full"
+    write_daily(cfg, fixture_db, "2026-07-08", outdir=tmp_path)
+    md = (tmp_path / "2026-07-08.md").read_text()
+    assert md.index("**Headline") < md.index("## L14 whale-consensus lane")
+    assert "Legacy arb instrument" not in md
+
+
 def test_write_daily_appends_hash_chain(cfg, fixture_db, tmp_path):
     # verifiability: every write appends (never rewrites) the day's report
     # hashes; an idempotent recompute reproduces the same hash

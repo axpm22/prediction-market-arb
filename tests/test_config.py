@@ -352,6 +352,22 @@ def test_shipped_dashboard_cache_max_entries():
     assert cfg["dashboard"]["cache_max_entries"] == 256
 
 
+def test_shipped_dashboard_mode_is_whale():
+    """Operator instruction 2026-09-04: the whale lane is the face of the
+    instrument for now — dashboard.py/report.py/cmd_status all key off this
+    one flag. 'full' restores today's arb-first layout."""
+    cfg = load(SHIPPED)
+    assert cfg["dashboard"]["mode"] == "whale"
+
+
+def test_dashboard_mode_rejects_an_unimplemented_value(tmp_path):
+    text = SHIPPED.read_text().replace("mode: whale", "mode: bogus")
+    bad = tmp_path / "config.yaml"
+    bad.write_text(text)
+    with pytest.raises(ConfigError, match="dashboard.mode"):
+        load(bad)
+
+
 def test_shipped_supervisor_lanes_are_whale_only():
     """Operator decision 2026-09-04: run only the Polymarket whale lane. watch
     stays on because the whale lane's universe comes from watch's Polymarket

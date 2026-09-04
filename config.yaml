@@ -415,7 +415,8 @@ db_backup: { time: "04:10", dest: "backups/", keep_last: 2 }    # sqlite3 .backu
 canary: { enabled: false, day_of_month: 1, time: "05:30" }  # monthly synthetic — off in whale-only mode (2026-09-04)
                                                  #   end-to-end fixture, tagged lane
 dashboard: { host: 127.0.0.1, port: 8722, pnl_days: 30, bench_stale_days: 7,
-             refresh_secs: 60, cache_secs: 60, cache_max_entries: 256 }
+             refresh_secs: 60, cache_secs: 60, cache_max_entries: 256,
+             mode: whale }
                                                  # read-only local panel (§14.3); GETs only,
                                                  #   never bound beyond localhost
                                                  # pnl_days: window of the cumulative settled
@@ -435,6 +436,12 @@ dashboard: { host: 127.0.0.1, port: 8722, pnl_days: 30, bench_stale_days: 7,
                                                  #   this bounds memory for wallet-scoped
                                                  #   lookups instead of one permanent row per
                                                  #   wallet ever queried (review of 9e5951a)
+                                                 # mode: whale leads the dashboard/daily report/
+                                                 #   cmd_status with the L14 whale lane and hides
+                                                 #   the arb-only pieces (2026-09-04 operator:
+                                                 #   PM whales only, for now); full restores
+                                                 #   today's arb-first layout — arb code paths
+                                                 #   are unchanged either way
 notify:                             # outbound webhook to the operator's OWN endpoint; never market data
   enabled: false                    # flip true after pasting the URL; nothing posts while false
   webhook_url: ""                   # JSON POST target; one JSON object per event (Slack/Discord adapters are the endpoint's concern)
