@@ -34,8 +34,9 @@ from arb.logutil import get_logger
 from arb.replay import open_ro
 from arb.venues.base import get_json
 from arb.venues.polymarket import fetch_books
-from arb.whale_hygiene import hygiene_flags
 from arb.whale_merge import qualifying
+from arb.whale_state import score_state
+from arb.whale_tape import _set_meta
 
 log = get_logger("arb.whale", "logs/whale.log")
 
@@ -61,22 +62,17 @@ def _d(v) -> Decimal | None:
 
 # ------------------------------------------------------------------ cycle IO
 
-def _scorer(cfg, con, positions, resolutions, now):
-    """(score_lookup, base rate per root). The base rate is persisted with its
-    `as_of` so a score is reproducible (§6)."""
-    outcomes = whale_score.resolved_outcomes(positions, resolutions, now)
-    agg = whale_score.aggregate(outcomes)
-    rates = {}
-    for root in {o.root for o in outcomes} | {"sports"}:
-        value, n = whale_score.base_rate(outcomes, root, now, cfg)
-        rates[root] = value
+def _scorer(con, state, now):
+    """(score_lookup, base rate per root) from the shared scoring assembly. The
+    base rate is persisted with its `as_of` so a score is reproducible (§6) —
+    the one write in the chain, which is why the report calls `score_state`
+    directly and never this."""
+    for root, value in state.rates.items():
         con.execute("INSERT OR REPLACE INTO base_rates (root, as_of, value, n) "
-                    "VALUES (?,?,?,?)", (root, now.isoformat(), str(value), n))
+                    "VALUES (?,?,?,?)",
+                    (root, now.isoformat(), str(value), state.rate_n[root]))
     con.commit()
-
-    def lookup(wallet, sport, market_type):
-        return whale_score.score_for(agg, wallet, sport, market_type, cfg, rates)
-    return lookup, rates
+    return state.lookup, state.rates
 
 
 def _calibration_blocked(con, cfg) -> set[str]:
@@ -131,20 +127,13 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
         + [c["condition_id"] for c in ctxs.values() if c], now, get=get)
 
     # 6: score. Hygiene is applied by the LANE, before scoring and signalling
-    # (Task 5 decision), so an excluded wallet never becomes a vote.
-    # ponytail: positions are rebuilt from the whole tape every cycle — fine
-    # while the tape is our own collection; cache the aggregation per wallet if
-    # backfill ever makes this outrun the 120 s runtime cap.
-    prints = [dict(r) for r in con.execute("SELECT * FROM prints")]
-    tape_markets = {r["condition_id"]: dict(r)
-                    for r in con.execute("SELECT * FROM markets")}
-    resolutions = {r["condition_id"]: dict(r)
-                   for r in con.execute("SELECT * FROM resolutions")}
-    positions = whale_score.positions_from_prints(prints, tape_markets, cfg)
-    hyg = hygiene_flags(prints, positions, cfg)
-    open_pos = [p for p in positions if not hyg.excludes(p)]
-    res["hygiene_excluded"] = len(positions) - len(open_pos)
-    lookup, rates = _scorer(cfg, con, open_pos, resolutions, now)
+    # (Task 5 decision), so an excluded wallet never becomes a vote. The
+    # assembly itself is shared with the report (arb/whale_state.py).
+    state = score_state(cfg, con, now)
+    prints, tape_markets = state.prints, state.markets
+    open_pos = state.open_positions
+    res["hygiene_excluded"] = state.hygiene_excluded
+    lookup, rates = _scorer(con, state, now)
     tokens, slugs = _from_prints(prints)
 
     # 8-9 share one fetch: the same books price a new signal and an exit, and
@@ -212,6 +201,10 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     from arb.markout import persist_marks
     persist_marks(cfg, store)
     beat(store, "whale", head_sha())
+    # collector health for the daily report (§12): `polls` has no column for a
+    # cycle's status/rows/bad_rows and rule 9 forbids inventing one, so the
+    # counters live on the tape the report already opens read-only.
+    _set_meta(con, "last_cycle", json.dumps({**res, "at": now.isoformat()}))
     log.info("whale cycle: %s", res)
     return res
 

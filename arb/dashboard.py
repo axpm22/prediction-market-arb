@@ -166,8 +166,9 @@ def state(cfg, store) -> dict:
         "headline_n": frame["headline_n"],
         "cadence": frame["cadence"],
         "planned_interval": float(cfg["watch_interval_secs"]),
-        "by_class": [{"kind": k, "lane": lane, **{kk: str(vv) for kk, vv in a.items()}}
-                     for (k, lane), a in sorted(frame["by_class"].items())],
+        "by_class": [{"kind": k, "lane": lane, "variant": variant,
+                      **{kk: str(vv) for kk, vv in a.items()}}
+                     for (k, lane, variant), a in sorted(frame["by_class"].items())],
         "left_on_table": frame["left_on_table"],
         "capacity": {**frame["capacity"],
                      "projected_pnl": str(frame["capacity"]["projected_pnl"]),

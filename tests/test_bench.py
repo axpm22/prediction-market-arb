@@ -328,3 +328,114 @@ def test_non_money_lanes_opt_out_of_the_economic_floor():
     assert verdict_for(CFG, d("0.005"), d("0.0043"), d("0.0057"), 100) == "NULL"
     assert verdict_for(CFG, d("0.005"), d("0.0043"), d("0.0057"), 100,
                        null_band=d(0)) == "SIGNAL"
+
+
+# --- L14 whale-consensus lane (design 2026-09-03 §12) -----------------------
+
+def _whale_ledger(tmp_path, rows, variant="V2/flat"):
+    """A tmp ledger holding `rows` = [(signal_id, event_key, pnl)] booked under
+    `variant`, each with its terminal settled event. Returned read-only, the
+    way `arb bench` opens the ledger (rule 9 cannot be approached)."""
+    import json as _json
+    from datetime import datetime, timedelta, timezone
+
+    from arb.replay import open_ro
+    from arb.store import Store
+    now = datetime(2026, 9, 3, 12, tzinfo=timezone.utc)
+    store = Store(tmp_path / "bench.sqlite")
+    for i, (signal_id, event_key, pnl) in enumerate(rows):
+        fp = f"fp-{variant}-{signal_id}-{event_key}-{i}"
+        bet_id = store.insert("flat_bets", {
+            "created_at": now.isoformat(), "poll_id": 1, "poll_kind": "whale",
+            "fingerprint": fp, "position_key": fp, "kind": "WHALE",
+            "category": "sports", "sport": "baseball_mlb",
+            "venue_pair": "polymarket:self", "event_key": event_key,
+            "event_start_utc": (now + timedelta(hours=3)).isoformat(),
+            "start_grade": "nominal",
+            "legs_json": _json.dumps([{"venue": "polymarket", "market_type": "WINNER",
+                                       "outcome": "Rays", "side": "YES",
+                                       "cost": "0.50", "fee_cost": "0.01",
+                                       "mid0": "0.50",
+                                       "venue_market_id": "0xcond:0xyes"}]),
+            "stake_usd": "1", "edge_points": "0.05", "trusted": 0, "lane": "review",
+            "quality_flag": "none", "leg_skew_secs": 0.0, "status": "OPEN",
+            "variant": variant, "signal_id": signal_id})
+        store.insert("bet_events", {
+            "bet_id": bet_id, "created_at": now.isoformat(), "kind": "settled",
+            "payload_json": _json.dumps({"result": "EXITED", "source": "exit:flip",
+                                         "pnl": str(pnl)})})
+    store.close()
+    return open_ro(tmp_path / "bench.sqlite")
+
+
+def test_l14_is_registered_with_a_credit_line():
+    """`bench.run` skips no lane, but a lane without a credit line scores as if
+    it were free — L14 is keyless by construction and says so."""
+    from arb.bench_lanes import LANES
+    assert "L14" in LANES
+    assert int(CFG["bench"]["credits_per_month"]["L14"]) == 0
+
+
+def test_l14_primary_is_v2_flat_roi_clustered_on_event_key(tmp_path):
+    """§12: mean settled ROI per $, V2/flat only, clustered by event_key, at
+    the ONE-SIDED 10th/90th percentiles."""
+    from arb.bench_whale import l14_whale
+    from arb.regrade import _bootstrap_mean_ci
+    rows = [(i + 1, f"pm:e{i}", "0.20" if i % 2 else "-0.10") for i in range(12)]
+    con = _whale_ledger(tmp_path, rows)
+
+    r = l14_whale(CFG, con, None)
+
+    by_event = {ek: [float(p)] for _, ek, p in rows}
+    seed = int(CFG["regrade"]["bootstrap_seed"])
+    n_boot = int(CFG["regrade"]["bootstrap_n"])
+    mean, lo, hi = _bootstrap_mean_ci(by_event, seed, n_boot, percentiles=(0.10, 0.90))
+    two_sided = _bootstrap_mean_ci(by_event, seed, n_boot)
+    assert r.n == 12 and r.unit == "signal"
+    assert abs(float(r.estimate) - mean) < 1e-6
+    assert (abs(float(r.lo) - lo) < 1e-6) and (abs(float(r.hi) - hi) < 1e-6)
+    assert float(two_sided[1]) < float(r.lo) and float(r.hi) < float(two_sided[2])
+    assert any("ONE-SIDED" in d for d in r.detail)   # the table header says 95% CI
+
+
+def test_l14_counts_only_v2_flat_and_only_distinct_signal_ids(tmp_path):
+    from arb.bench_whale import l14_whale
+    con = _whale_ledger(tmp_path, [(1, "pm:a", "0.10"), (1, "pm:a", "0.10"),
+                                   (2, "pm:b", "0.10")])
+    con.close()
+    con = _whale_ledger(tmp_path, [(3, "pm:c", "0.99")], variant="V2/conf")
+    r = l14_whale(CFG, con, None)
+    assert r.n == 2                              # two signals, V2/flat only
+    assert abs(float(r.estimate) - 0.10) < 1e-9
+
+
+def test_l14_is_underpowered_below_the_pre_registered_decision_n(tmp_path):
+    """Six all-positive signals exclude zero. The pre-registration says the
+    lane cannot be called before kill.decision_n, so the verdict does not."""
+    from arb.bench_whale import l14_whale
+    con = _whale_ledger(tmp_path, [(i + 1, f"pm:e{i}", "0.20") for i in range(6)])
+    r = l14_whale(CFG, con, None)
+    assert r.n < int(CFG["whale"]["kill"]["decision_n"])
+    assert r.verdict == "UNDERPOWERED"
+    assert "decision_n" in r.note
+
+
+def test_l14_reports_null_and_killed_when_the_upper_bound_is_below_zero(tmp_path):
+    """Kill rule 1: at n >= decision_n with the upper 90% bound below zero the
+    lane is killed — reported as NULL with the kill named, never as a SIGNAL
+    that happens to be adverse."""
+    import copy
+    from arb.bench_whale import l14_whale
+    cfg = copy.deepcopy(CFG)
+    cfg["whale"]["kill"]["decision_n"] = 5
+    con = _whale_ledger(tmp_path, [(i + 1, f"pm:e{i}", "-0.30") for i in range(8)])
+    r = l14_whale(cfg, con, None)
+    assert float(r.hi) < 0
+    assert r.verdict == "NULL"
+    assert "kill" in r.note.lower()
+
+
+def test_l14_blocks_on_an_empty_ledger(tmp_path):
+    from arb.bench_whale import l14_whale
+    r = l14_whale(CFG, _whale_ledger(tmp_path, []), None)
+    assert r.verdict == "BLOCKED" and r.n == 0 and r.note

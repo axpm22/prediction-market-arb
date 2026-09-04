@@ -12,7 +12,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-from arb import metrics
+from arb import metrics, report_whale
 from arb.capacity import capacity_frame
 from arb.venues.fees import fee_is_stale
 
@@ -118,7 +118,7 @@ def daily_frame(cfg, store, day: str) -> dict:
                         "excluded": ",".join(excl)})
     by_class: dict[tuple, dict] = {}
     for b in per_bet:
-        key = (b["kind"], b["lane"])
+        key = (b["kind"], b["lane"], b["variant"] or "")
         agg = by_class.setdefault(key, {"bets": 0, "staked": Decimal(0),
                                         "settled_pnl": Decimal(0), "pending": 0,
                                         "missed": 0})
@@ -212,11 +212,15 @@ def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily") -> d
     if frame["stale_fees"]:
         md.append(f"- **stale fee badge**: {', '.join(frame['stale_fees'])}")
     md.append("")
-    md.append("| class | lane | bets | staked | settled P&L | pending | missed-confirm |")
-    md.append("|---|---|---|---|---|---|---|")
-    for (kind, lane), a in sorted(frame["by_class"].items()):
-        md.append(f"| {kind} | {lane} | {a['bets']} | ${a['staked']} | "
+    md.append("| class | lane | variant | bets | staked | settled P&L | pending "
+              "| missed-confirm |")
+    md.append("|---|---|---|---|---|---|---|---|")
+    for (kind, lane, variant), a in sorted(frame["by_class"].items()):
+        md.append(f"| {kind} | {lane} | {variant} | {a['bets']} | ${a['staked']} | "
                   f"${a['settled_pnl']} | {a['pending']} | {a['missed']} |")
+    md.append("")
+    frame["whale"] = report_whale.whale_frame(cfg, store)
+    md.extend(report_whale.whale_md(frame["whale"]))
     md.append("")
     md.extend(_capacity_md(frame["capacity"]))
     md.append("")
@@ -256,14 +260,17 @@ def print_daily(cfg, store, day: str) -> None:
     frame = daily_frame(cfg, store, day)
     t = Table(title=f"Daily report {day} — headline ${frame['headline_pnl']} "
                     f"({frame['headline_n']} settled clean bets, gross of carry)")
-    for col in ("class", "lane", "bets", "staked", "settled P&L", "pending", "missed"):
+    for col in ("class", "lane", "variant", "bets", "staked", "settled P&L",
+                "pending", "missed"):
         t.add_column(col)
     if not frame["by_class"]:
-        t.add_row("—", "—", "0", "$0", "$0", "0", "0")
-    for (kind, lane), a in sorted(frame["by_class"].items()):
-        t.add_row(kind, lane, str(a["bets"]), f"${a['staked']}",
+        t.add_row("—", "—", "", "0", "$0", "$0", "0", "0")
+    for (kind, lane, variant), a in sorted(frame["by_class"].items()):
+        t.add_row(kind, lane, variant, str(a["bets"]), f"${a['staked']}",
                   f"${a['settled_pnl']}", str(a["pending"]), str(a["missed"]))
     console.print(t)
+    console.print("[dim]" + report_whale.whale_line(
+        report_whale.whale_frame(cfg, store)) + "[/]")
     c = frame["cadence"]
     console.print(f"[dim]polls={c['n_polls']} cadence mean={c['mean'] and round(c['mean'])}s "
                   f"p95={c['p95'] and round(c['p95'])}s; quote age="

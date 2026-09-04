@@ -457,6 +457,7 @@ bench:                              # STRATEGIES.md lane bench: measure every su
     L9: 8
     L10: 0
     L11: 0
+    L14: 0                          # L14 is keyless: Polymarket public GETs only
 
 maker:                              # maker-side measurement lane (2026-07-30). Taking always
                                     #   pays the spread, which is 13x the edge on the one

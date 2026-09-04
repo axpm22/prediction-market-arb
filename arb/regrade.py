@@ -170,10 +170,17 @@ def _score_bucket(cfg, rows: list[dict], quote_series: dict, finals: dict, alias
     return as_stored, closing, ev_wins, excl
 
 
-def _bootstrap_mean_ci(by_event: dict, seed: int, n: int) -> tuple[float, float, float]:
+def _bootstrap_mean_ci(by_event: dict, seed: int, n: int,
+                       percentiles: tuple[float, float] = (0.025, 0.975)
+                       ) -> tuple[float, float, float]:
     """Cluster bootstrap by event_key -> (mean, ci_low, ci_high). Resample event
     keys with replacement; a drawn event contributes ALL its values (rows travel
-    together) — this doubles as the win-rate bootstrap (mean of 0/1 = win rate)."""
+    together) — this doubles as the win-rate bootstrap (mean of 0/1 = win rate).
+
+    `percentiles` is the pair to read off the resampled means. The default is
+    the two-sided 95% every regrade caller has always used; L14 passes the
+    one-sided pairs its pre-registration names (design §12: "upper 90% bound"
+    is the 90th percentile, "lower 80% bound" the 20th)."""
     all_vals = [v for vs in by_event.values() for v in vs]
     mean = statistics.mean(all_vals) if all_vals else 0.0
     events = list(by_event)
@@ -188,8 +195,8 @@ def _bootstrap_mean_ci(by_event: dict, seed: int, n: int) -> tuple[float, float,
         if sample:
             means.append(statistics.mean(sample))
     means.sort()
-    lo = means[int(0.025 * len(means))]
-    hi = means[int(0.975 * len(means))]
+    lo = means[int(percentiles[0] * len(means))]
+    hi = means[int(percentiles[1] * len(means))]
     return mean, lo, hi
 
 

@@ -541,3 +541,16 @@ def test_stale_lanes_recognises_a_silent_whale_lane(cfg, tmp_path):
                            "kind": "whale", "n_quotes": 0, "n_opps": 0})
     stale = dict(stale_lanes(cfg, store, NOW))
     assert "whale" in stale and stale["whale"] > 3 * 3600 - 60
+
+
+def test_the_cycle_records_its_result_in_the_tape_meta(cfg, tmp_path):
+    """Task 9: the daily report reads collector health from the tape, so the
+    cycle's own counters (status, rows, bad_rows) have to survive it. `polls`
+    carries no column for them and rule 9 forbids inventing one on the ledger."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+
+    last = json.loads(whale_tape._meta(con, "last_cycle"))
+    assert last["status"] == "ok" and last["prints"] == 3
+    assert last["bad_rows"] == 0 and last["booked"] == 2
+    assert last["at"] == NOW.isoformat()
