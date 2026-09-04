@@ -57,10 +57,11 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
     try:
         fire = cfg["whale"]["fire"]
         day_ago, week_ago = now - timedelta(days=1), now - timedelta(days=7)
-        signals = signals_by_id(con)
         booked = {r["signal_id"] for r in store.query(
             "SELECT DISTINCT signal_id FROM flat_bets WHERE kind='WHALE' "
             "AND signal_id IS NOT NULL")}
+        # only the booked ones: every lookup below is by a bet's own signal_id
+        signals = signals_by_id(con, booked)
         rows = roi_rows(store)
         qualifying = _qualifying(cfg, con, now)
         native_of = {sid: is_native(sig) for sid, sig in signals.items()}

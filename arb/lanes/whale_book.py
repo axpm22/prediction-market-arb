@@ -148,6 +148,24 @@ def candidate(cfg, market, sig, sizing, signal_id, event_key, token, label,
                  f"ratio={sig.ratio}; S={sig.S}"}
 
 
+def note_no_bid(store, bet, decision, bid, depth, venue_ok, now) -> None:
+    """§9: no bid, or depth under `min_executable_usd` — no exit, an
+    annotation, re-evaluated next cycle. Written ONCE per (bet, state): an
+    outage lasts hours, and the re-evaluation is the cycle's own counter, not
+    a new row every 60 s. `venue_ok` tells a THIN BOOK (the venue answered,
+    nobody is bidding) from an OUTAGE (no book at all): the same annotation,
+    opposite causes."""
+    detail = (f"exit:{decision.reason} priced at bid={bid} depth={depth} < "
+              f"min_executable_usd; venue_ok={venue_ok}; re-evaluated next cycle")
+    last = store.query("SELECT kind, detail FROM annotations WHERE target_kind='bet'"
+                       " AND target_id=? ORDER BY id DESC LIMIT 1", (str(bet["id"]),))
+    if last and (last[0]["kind"], last[0]["detail"]) == ("exit-no-bid", detail):
+        return
+    store.insert("annotations", {
+        "created_at": now.isoformat(), "target_kind": "bet",
+        "target_id": str(bet["id"]), "kind": "exit-no-bid", "detail": detail})
+
+
 def exit_payload(cfg, bet, decision, bid, contracts) -> dict:
     """§9's terminal `settled` payload. `result='EXITED'` and a `source` with
     the `exit:` prefix, which metrics.bet_pnl_optimistic reads for its pnl and

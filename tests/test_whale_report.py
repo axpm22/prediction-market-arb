@@ -714,3 +714,101 @@ def test_the_whale_section_prints_the_kill_block(cfg, tmp_path):
     assert "| kill rule (§12) | state | numbers |" in md
     for name in ("1 decision", "2 fast kill", "3 null", "4 starvation"):
         assert f"| {name} | not yet |" in md
+
+
+# ---------------------------------------- `whale-score --calibrate` (I4)
+
+def _calibration_tape(con, n_whales, lb="0.05", notional="500"):
+    """`n_whales` distinct wallets, each qualifying in its own evaluated
+    signal — the rows §7.2's calibration reads."""
+    for i in range(n_whales):
+        _signal_row(con, i + 1, [{"wallet": f"0xw{i}", "side": 0, "lb": lb,
+                                  "open_notional": notional, "native": True,
+                                  "n_bucket": 4, "sybil_dropped": False}])
+
+
+def test_whale_score_calibrate_prints_the_yaml_to_paste(cfg, tmp_path, capsys):
+    """I4: §7.2 says V2/V3 stay null until a calibration run sets them, and
+    nothing could run it. The command prints; the amendment stays a human
+    commit (rule 4 — it never edits config.yaml itself)."""
+    from arb.commands import cmd_whale_score
+    cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
+    cfg["whale"]["min_score_lb"] = Decimal("0.0")     # the shipped bar: excess = lb
+    con = _tape(tmp_path)
+    _calibration_tape(con, int(cfg["whale"]["fire"]["calibration_min_whales"]))
+
+    cmd_whale_score(cfg, Store(tmp_path / "arb.sqlite"),
+                    type("A", (), {"calibrate": True})())
+
+    out = capsys.readouterr().out
+    assert "V2: 0.150000" in out and "V3: " in out
+    assert "min_points:" in out                     # the YAML lines to paste
+
+    # and the CLI knows the subcommand + flag (--help exits before any DB open)
+    from arb import cli
+    with pytest.raises(SystemExit):
+        cli.main(["whale-score", "--help"])
+    assert "--calibrate" in capsys.readouterr().out
+
+
+def test_whale_score_calibrate_says_how_far_short_the_window_is(cfg, tmp_path, capsys):
+    from arb.commands import cmd_whale_score
+    cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
+    con = _tape(tmp_path)
+    _calibration_tape(con, 3)
+
+    cmd_whale_score(cfg, Store(tmp_path / "arb.sqlite"),
+                    type("A", (), {"calibrate": True})())
+
+    out = capsys.readouterr().out
+    assert "None" in out and "3" in out and "10" in out
+
+
+# ------------------------------------------- per-cycle whole-tape work (I5)
+
+def test_score_state_reads_only_the_print_columns_it_uses(cfg, tmp_path):
+    """I5(a): `SELECT *` pulled `raw_json` — the whole venue payload of every
+    print ever collected — into memory on every 60 s cycle."""
+    from arb.whale_state import score_state
+    con = _tape(tmp_path)
+    con.execute(
+        "INSERT INTO prints (observed_at, ts, tx_hash, proxy_wallet, condition_id,"
+        " asset, outcome_index, side, price, size, notional_usd, event_slug, source,"
+        " raw_json) VALUES (?,?,?,?,?,?,0,'BUY',?,?,?,?,'tape',?)",
+        (NOW.isoformat(), int(NOW.timestamp()), "0xt", "0xw", CID, "tok",
+         "0.500000", "1000.000000", "500.000000", "e", "x" * 10000))
+    con.commit()
+
+    state = score_state(cfg, con, NOW)
+
+    assert "raw_json" not in state.prints[0]
+    assert {"ts", "proxy_wallet", "condition_id", "outcome_index", "side", "price",
+            "size", "notional_usd", "source", "asset",
+            "event_slug"} <= set(state.prints[0])
+
+
+def test_signals_by_id_loads_only_the_ids_it_was_asked_for(cfg, tmp_path):
+    """I5(b): every `signals` row ever written was json-parsed for the report
+    and the bench, which only ever look up the ids the ledger booked."""
+    from arb.whale_metrics import signals_by_id
+    con = _tape(tmp_path)
+    _signal_row(con, 1, [_whale("0xa")])
+    _signal_row(con, 2, [_whale("0xb")])
+
+    assert set(signals_by_id(con, [1])) == {1}
+    assert set(signals_by_id(con, [])) == set()
+
+
+def test_the_report_parses_no_signal_the_ledger_never_booked(cfg, tmp_path):
+    """Discriminating on the parse itself: an unbooked row the report has no
+    use for is never read, so even a corrupt one cannot break the daily."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)                         # books two bets on one signal
+    con.execute("INSERT INTO signals (id, evaluated_at, condition_id, side, variant,"
+                " fired, whale_ids_json) VALUES (99, ?, ?, '0', 'V2', 1, '{not json')",
+                (NOW.isoformat(), CID))
+    con.commit()
+
+    frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+
+    assert frame["native"]["signals"] == {"native": 1, "transfer": 0}

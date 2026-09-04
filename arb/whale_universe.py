@@ -11,6 +11,10 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from arb.logutil import get_logger
+
+log = get_logger("arb.whale", "logs/whale.log")
+
 # `slug` is kept so a market Gamma answered for but whose league code is not
 # in whale.slug_sport_prefixes can be re-mapped LOCALLY when that map grows —
 # without it, an unmappable market would be stuck at sport=NULL forever.
@@ -19,8 +23,9 @@ MARKET_COLS = ("condition_id, sport, market_type, line, start_utc, event_key,"
 # The ledger's PM sports quotes for ONE poll: served by idx_quotes_poll. A
 # fetched_at range instead would scan the 37 GB table.
 UNIVERSE_SQL = (
-    "SELECT venue_market_id, sport, market_type, line, outcome, start_utc, event_key "
-    "FROM quotes WHERE poll_id = (SELECT MAX(id) FROM polls WHERE kind='watch') "
+    "SELECT venue_market_id, sport, market_type, line, outcome, side, start_utc, "
+    "event_key FROM quotes "
+    "WHERE poll_id = (SELECT MAX(id) FROM polls WHERE kind='watch') "
     "AND venue='polymarket' AND category='sports'")
 
 
@@ -46,10 +51,27 @@ def _iso(value) -> str | None:
         return None
 
 
-def universe(store_ro, cfg, now) -> list[Market]:
+def _labels(tokens: dict) -> dict | None:
+    """Token -> the label its leg carries (§8: a WHALE leg BUYS one token, so
+    `outcome` is that token's OWN label). A Yes/No proposition — every soccer
+    3-way — writes the same question text on BOTH tokens and tells them apart
+    by `side` (arb/venues/polymarket.py), so when the texts collide the side
+    names the leg: literally "Yes" and "No", which is also what Gamma's own
+    `outcomes` carry for such a market, so settlement's label comparison still
+    lines up. Still not distinct: None, and the caller skips the market rather
+    than booking two tokens under one fingerprint/position_key/quotes key."""
+    labels = {t: o for t, (o, _) in tokens.items()}
+    if len(set(labels.values())) < len(labels):
+        labels = {t: ("No" if s == "NO" else "Yes") for t, (_, s) in tokens.items()}
+    return labels if len(set(labels.values())) == len(labels) else None
+
+
+def universe(store_ro, cfg, now, res=None) -> list[Market]:
     """Polymarket sports markets from the LATEST watch poll whose start lies in
-    [now - lookback_hours, now + lookahead_hours] (spec §5 step 1)."""
+    [now - lookback_hours, now + lookahead_hours] (spec §5 step 1). `res` is an
+    optional diagnostics dict, as in whale_score.positions_from_prints."""
     w = cfg["whale"]
+    res = {} if res is None else res
     lo = now - timedelta(hours=float(w["lookback_hours"]))
     hi = now + timedelta(hours=float(w["lookahead_hours"]))
     by_cond: dict[str, dict] = {}
@@ -62,10 +84,21 @@ def universe(store_ro, cfg, now) -> list[Market]:
         m = by_cond.setdefault(cond, {"sport": r["sport"], "market_type": r["market_type"],
                                       "line": r["line"], "start_utc": start,
                                       "event_key": r["event_key"], "tokens": {}})
-        m["tokens"][token] = r["outcome"]
-    return [Market(condition_id=c, sport=m["sport"], market_type=m["market_type"],
-                   line=m["line"], start_utc=m["start_utc"], event_key=m["event_key"],
-                   tokens=tuple(sorted(m["tokens"].items()))) for c, m in by_cond.items()]
+        m["tokens"][token] = (r["outcome"], r["side"])
+    out = []
+    for cond, m in by_cond.items():
+        labels = _labels(m["tokens"])
+        if labels is None:
+            res["label_collision"] = res.get("label_collision", 0) + 1
+            log.warning("whale universe: market %s has %d tokens it cannot tell "
+                        "apart (%s) — skipped", cond, len(m["tokens"]),
+                        sorted({o for o, _ in m["tokens"].values()}))
+            continue
+        out.append(Market(condition_id=cond, sport=m["sport"],
+                          market_type=m["market_type"], line=m["line"],
+                          start_utc=m["start_utc"], event_key=m["event_key"],
+                          tokens=tuple(sorted(labels.items()))))
+    return out
 
 
 def persist_markets(con, markets, now):

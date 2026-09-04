@@ -132,14 +132,27 @@ def markout_stats(store) -> dict:
     return out
 
 
-def signals_by_id(con) -> dict:
-    """Tape `signals` by id, with the fired side's whale list parsed once."""
+def signals_by_id(con, ids) -> dict:
+    """Tape `signals` by id, with the fired side's whale list parsed once.
+
+    `ids` is the ids the caller will actually look up — the report and the
+    bench only ever ask about signals the ledger booked, and json-parsing every
+    row the collector has ever written to answer that is the whole tape's work
+    for a handful of rows. `None` means all of them (the calibration run)."""
     if con is None:
         return {}
+    if ids is None:
+        rows = con.execute("SELECT * FROM signals")
+    else:
+        ids = [i for i in ids if i is not None]
+        if not ids:
+            return {}
+        rows = con.execute(f"SELECT * FROM signals WHERE id IN "
+                           f"({','.join('?' * len(ids))})", list(ids))
     return {r["id"]: {"side": r["side"], "variant": r["variant"],
                       "fired": r["fired"], "condition_id": r["condition_id"],
                       "whales": json.loads(r["whale_ids_json"] or "[]")}
-            for r in con.execute("SELECT * FROM signals")}
+            for r in rows}
 
 
 def is_native(sig: dict) -> bool | None:

@@ -935,6 +935,34 @@ def cmd_whale(cfg, store, args):
     return 0
 
 
+def cmd_whale_score(cfg, store, args):
+    """`--calibrate`: design §7.2's one-shot run at the end of the calibration
+    window. Reads the tape's `signals` rows, prints the proposed thresholds and
+    the YAML to paste — and never writes config.yaml itself: the amendment is a
+    human commit (rule 4)."""
+    from arb.whale_metrics import signals_by_id
+    from arb.whale_signal import calibrate_min_points
+    from arb.whale_tape import open_tape
+    fire = cfg["whale"]["fire"]
+    con = open_tape(cfg["whale"]["tape_db"])
+    rows = list(signals_by_id(con, None).values())
+    out = calibrate_min_points(rows, cfg)
+    wallets = len({x["wallet"] for r in rows for x in r["whales"]})
+    if out is None:
+        print(f"calibration: None — {wallets} distinct whale(s) over {len(rows)} "
+              f"evaluated signal(s), need {fire['calibration_min_whales']} "
+              f"(whale.fire.calibration_min_whales). Extend the window by 7 days.")
+        return 0
+    print(f"calibration over {len(rows)} signal(s), {out['n_whales']} whale(s): "
+          f"q10 excess {out['q10']}, median open notional {out['median_open_notional']}")
+    print(f"  V2 = 3 x q10 = {out['V2']}")
+    print(f"  V3 = V2 x log10(1 + notional/unit_usd) = {out['V3']}")
+    print("paste into config.yaml under whale.fire (a dated amendment, by hand):")
+    print(f"    min_points: {{ V1: {fire['min_points']['V1']}, V2: {out['V2']}, "
+          f"V3: {out['V3']} }}")
+    return 0
+
+
 def cmd_whale_backfill(cfg, store, args):
     """Daily leaderboard snapshot plus the per-wallet trade-history backfill."""
     from datetime import datetime, timezone

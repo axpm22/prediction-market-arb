@@ -17,6 +17,12 @@ from typing import Callable
 from arb import whale_score
 from arb.whale_hygiene import hygiene_flags
 
+# Exactly what positions_from_prints, hygiene_flags and the lane's _from_prints
+# read. `SELECT *` also pulled `raw_json` — the venue's whole payload for every
+# print ever collected — into memory on every 60 s cycle.
+PRINT_COLS = ("ts, proxy_wallet, condition_id, outcome_index, side, price, size,"
+              " notional_usd, source, asset, event_slug")
+
 
 @dataclass(frozen=True)
 class WhaleState:
@@ -39,7 +45,7 @@ def score_state(cfg, con, now) -> WhaleState:
     # every 60 s. If a backfilled tape ever makes this outrun the report, cache
     # the aggregation per wallet — not a second, divergent assembly.
     """
-    prints = [dict(r) for r in con.execute("SELECT * FROM prints")]
+    prints = [dict(r) for r in con.execute(f"SELECT {PRINT_COLS} FROM prints")]
     markets = {r["condition_id"]: dict(r) for r in con.execute("SELECT * FROM markets")}
     resolutions = {r["condition_id"]: dict(r)
                    for r in con.execute("SELECT * FROM resolutions")}

@@ -114,6 +114,12 @@ def positions_from_prints(prints, markets, cfg, res=None) -> list[Position]:
     res = {} if res is None else res
     groups = defaultdict(list)
     for p in sorted(prints, key=lambda r: int(r["ts"])):
+        if p["outcome_index"] is None:
+            # a venue row with no `outcomeIndex` names no side, so no resolution
+            # can ever match it — `winner_outcome_index == None` is false for
+            # every winner, which would have scored it as a LOSS.
+            res["no_outcome_index"] = res.get("no_outcome_index", 0) + 1
+            continue
         groups[(p["proxy_wallet"], p["condition_id"], p["outcome_index"])].append(p)
 
     out = []

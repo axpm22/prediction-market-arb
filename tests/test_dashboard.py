@@ -261,11 +261,16 @@ def test_positions_report_no_quote_rather_than_a_wrong_mark(tmp_path):
 
 
 def test_positions_exclude_settled_void_and_lifetime_closed(tmp_path):
+    """`lifetime_closed` is terminal only for a LOCKED kind (here ARB): those
+    are settled off the flag itself, so losing the flag ends the position. A
+    resolution-settled kind is settled off an oracle and is still held — see
+    the next test (§9, final review I3)."""
     cfg = _cfg()
     now = datetime.now(timezone.utc)
     store = Store(tmp_path / "p.sqlite")
-    for kind in ("settled", "void", "lifetime_closed"):
-        bet_id = _legacy(store, fp=f"fp-{kind}", created=now)
+    for kind, bet_kind in (("settled", "EV"), ("void", "EV"),
+                           ("lifetime_closed", "ARB")):
+        bet_id = _legacy(store, kind=bet_kind, fp=f"fp-{kind}", created=now)
         store.insert("bet_events", {"bet_id": bet_id, "created_at": now.isoformat(),
                                     "kind": kind, "payload_json": "{}"})
     _legacy(store, fp="fp-open", created=now)
@@ -273,6 +278,27 @@ def test_positions_exclude_settled_void_and_lifetime_closed(tmp_path):
     rows = dashboard_data.positions(cfg, store, now=now)
 
     assert [r["fingerprint"] for r in rows] == ["fp-open"]
+
+
+def test_a_lifetime_closed_resolution_settled_bet_is_still_an_open_position(
+        whale_cfg, tmp_path):
+    """I3: §9 pins ONE definition of open — no `settled`/`void` event — and the
+    lane keeps exiting a `lifetime_closed` WHALE bet. The panel called it gone,
+    so the panel and the lane disagreed about what we hold."""
+    from arb import dashboard
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(whale_cfg, store, con)
+    arb_id = _legacy(store, kind="ARB", fp="fp-arb", created=NOW)
+    for bet_id in [b["id"] for b in store.query("SELECT id FROM flat_bets")]:
+        store.insert("bet_events", {"bet_id": bet_id, "created_at": NOW.isoformat(),
+                                    "kind": "lifetime_closed", "payload_json": "{}"})
+
+    rows = dashboard_data.positions(whale_cfg, store, now=NOW, con=con)
+
+    assert {r["kind"] for r in rows} == {"WHALE"}          # the ARB row is gone
+    assert arb_id not in {r["id"] for r in rows}
+    assert {b["kind"] for b in dashboard.state(whale_cfg, store)["open_bets"]} \
+        == {"WHALE"}
 
 
 # ---------------------------------------------------------------- /api/lanes

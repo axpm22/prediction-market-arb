@@ -670,3 +670,52 @@ def test_the_lane_books_at_the_shipped_min_score_lb(tmp_path):
 
     assert res["fired"] == 1 and res["booked"] == 2
     assert [b["variant"] for b in _bets(store)] == ["V1/flat", "V1/conf"]
+
+
+def test_the_cycle_records_its_own_wall_duration(cfg, tmp_path):
+    """I5(c): the supervisor kills a `whale` child at 120 s (config
+    `max_child_runtime_secs`) and nothing measured how close a cycle ran to
+    it. `last_cycle` carries the wall time the report and the panel show."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+
+    last = json.loads(whale_tape._meta(con, "last_cycle"))
+    assert 0 <= last["duration_secs"] < float(
+        cfg["supervisor"]["max_child_runtime_secs"]["whale"])
+
+
+def test_an_outage_annotates_exit_no_bid_once_per_bet_not_once_per_cycle(cfg, tmp_path):
+    """Minor (final review): during a Polymarket outage every cycle appended an
+    identical `exit-no-bid` annotation per bet — 60 a minute a bet, forever."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+    _flip(con)
+    dead = _fetch(**{YES_TOK: _book(bid=None), NO_TOK: _book(bid=None)})
+    for i in (1, 2, 3):
+        res = _run(cfg, store, con, now=NOW + timedelta(seconds=60 * i), fetch=dead)
+
+    assert res["exit_no_bid"] == 2                 # still counted every cycle
+    assert len(store.query("SELECT 1 FROM annotations WHERE kind='exit-no-bid'")) == 2
+
+
+def test_a_market_whose_tokens_collide_is_counted_in_the_cycle(cfg, tmp_path):
+    """I2's diagnostics reach `meta.last_cycle`, so a venue shape the universe
+    refuses is visible in the report instead of being a silently short list."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    store.query("SELECT 1")
+    for token in LABELS:                    # both tokens under one label + side
+        store.insert("quotes", {
+            "poll_id": store.query("SELECT MAX(id) id FROM polls")[0]["id"],
+            "fetched_at": NOW.isoformat(), "event_key": "k", "category": "sports",
+            "sport": "baseball_mlb", "venue": "polymarket", "book": "polymarket",
+            "market_type": "WINNER", "line": None, "outcome": "Same", "side": "YES",
+            "raw_price": Decimal("0.5"), "cost": Decimal("0.5"),
+            "fee_cost": Decimal("0"), "depth_usd": Decimal("500"),
+            "ladder_json": None, "live": False, "bid": Decimal("0.49"),
+            "volume_24h": Decimal("1000"), "start_utc": START.isoformat(),
+            "start_grade": "nominal", "venue_market_id": f"0xdup:{token}"})
+
+    res = _run(cfg, store, con)
+
+    assert res["label_collision"] == 1 and res["markets"] == 1     # ours, not 0xdup
+    assert json.loads(whale_tape._meta(con, "last_cycle"))["label_collision"] == 1

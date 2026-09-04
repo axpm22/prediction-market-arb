@@ -438,3 +438,17 @@ def test_frozen_clock_equals_a_physically_truncated_tape(tmp_path, cfg):
         assert (s.n_bucket, s.n_sport, s.n_root, s.native) == \
                (t.n_bucket, t.n_sport, t.n_root, t.native)
         assert all(isinstance(v, Decimal) for v in (s.mu, s.sd, s.lb, s.lb_report))
+
+
+def test_a_print_with_no_outcome_index_is_skipped_not_scored_as_a_loss(cfg):
+    """Minor (final review 2026-09-04): `outcomeIndex` is absent on some venue
+    rows, and (wallet, cid, None) grouped into its own position that no
+    resolution can ever match — `winner_outcome_index == None` is false for
+    every winner, so it would have scored as a LOSS."""
+    res = {}
+    prints = [_print(), dict(_print(ts=T + 1), outcome_index=None)]
+
+    pos = whale_score.positions_from_prints(prints, {"0xc": _market()}, cfg, res)
+
+    assert [p.outcome_index for p in pos] == [0]
+    assert res["no_outcome_index"] == 1

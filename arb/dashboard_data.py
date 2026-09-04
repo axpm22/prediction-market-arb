@@ -15,14 +15,21 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from arb import metrics, report
-from arb.models import q6
+from arb.models import RESOLUTION_SETTLED_KINDS, q6
 from arb.venues.fees import leg_fee_cost
 
 # §9, ONE definition (arb/dashboard.py's open-positions tile selects its own
-# columns with the same clause): open means no TERMINAL event. `lifetime_closed`
-# counts — a position we stopped tracking is not a position we still hold.
-OPEN_WHERE = """NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id = fb.id
-                       AND be.kind IN ('settled','void','lifetime_closed'))"""
+# columns with the same clause): open means no TERMINAL event.
+# `lifetime_closed` is terminal only for a LOCKED kind, whose P&L is settled
+# off the flag itself — losing the flag ends that position. For a
+# resolution-settled kind it means the flag left the feed, never that the
+# position closed: the L14 lane keeps exiting such a bet (§9, pinned
+# 2026-09-04) and it is still settled off its oracle, so it is still open here.
+_RESOLUTION_SETTLED = ",".join(f"'{k}'" for k in RESOLUTION_SETTLED_KINDS)
+OPEN_WHERE = f"""NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id = fb.id
+                       AND (be.kind IN ('settled','void')
+                            OR (be.kind = 'lifetime_closed'
+                                AND fb.kind NOT IN ({_RESOLUTION_SETTLED}))))"""
 OPEN_SQL = f"""
     SELECT fb.* FROM flat_bets fb WHERE {OPEN_WHERE}
      ORDER BY fb.event_start_utc IS NULL, fb.event_start_utc, fb.created_at"""

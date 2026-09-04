@@ -29,7 +29,7 @@ from arb import whale_tape, whale_universe
 from arb.lanes.whale_book import (_bet_ctx, _event_key, _from_prints,
                                   _persist_signal, _tape_market, _touch,
                                   _zombied, best_bid, candidate, exit_payload,
-                                  quote_rows)
+                                  note_no_bid, quote_rows)
 from arb.logutil import get_logger
 from arb.replay import open_ro
 from arb.venues.base import get_json
@@ -107,13 +107,14 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     res = {"status": "disabled", "markets": 0, "prints": 0, "bad_rows": 0,
            "wallets": 0, "hygiene_excluded": 0, "signals_evaluated": 0, "fired": 0,
            "suppressed": {}, "booked": 0, "exited": 0, "exit_no_bid": 0,
-           "quotes_rows": 0, "market_errors": 0}
+           "quotes_rows": 0, "market_errors": 0, "label_collision": 0}
     if not w["enabled"]:
         return res
+    t0 = time.monotonic()
     ro = open_ro(store.path)
 
     # 1-3: universe, prints, discovery.
-    markets = whale_universe.universe(ro, cfg, now)
+    markets = whale_universe.universe(ro, cfg, now, res=res)
     poll = whale_tape.poll_prints(cfg, con, markets, now, get=get)
     res.update(status=poll["status"], markets=len(markets), prints=poll["rows"],
                bad_rows=poll["bad_rows"],
@@ -214,6 +215,9 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     # counters live on the tape the report already opens read-only. Written
     # right after the cycle's own work — before persist_marks/beat — so a
     # markout failure below cannot leave this meta value stale.
+    # duration_secs against supervisor.max_child_runtime_secs.whale (120): a
+    # cycle drifting towards its own kill is visible before it is fatal.
+    res["duration_secs"] = round(time.monotonic() - t0, 3)
     _set_meta(con, "last_cycle", json.dumps({**res, "at": now.isoformat()}))
     log.info("whale cycle: %s", res)
 
@@ -273,14 +277,7 @@ def _exit(cfg, store, bet, ctx, open_pos, lookup, books, venue_ok, now, res) -> 
         return
     bid, depth = best_bid(books.get(ctx["token"]))
     if bid is None or depth < Decimal(str(cfg["min_executable_usd"])):
-        store.insert("annotations", {
-            "created_at": now.isoformat(), "target_kind": "bet",
-            "target_id": str(bet["id"]), "kind": "exit-no-bid",
-            # venue_ok tells a THIN BOOK (venue answered, nobody bidding) from
-            # an OUTAGE (no book at all): the same annotation, opposite causes.
-            "detail": f"exit:{decision.reason} priced at bid={bid} "
-                      f"depth={depth} < min_executable_usd; venue_ok={venue_ok}; "
-                      f"re-evaluated next cycle"})
+        note_no_bid(store, bet, decision, bid, depth, venue_ok, now)
         res["exit_no_bid"] += 1
         return
     # contracts on the same basis metrics.bet_pnl_optimistic counts them for a

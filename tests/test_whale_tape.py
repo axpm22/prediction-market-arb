@@ -73,8 +73,8 @@ def _ledger(rows):
             "line, outcome, side, start_utc, venue_market_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (r.get("poll_id", 2), r.get("event_key", "ek"), r.get("category", "sports"),
              r.get("sport", "baseball_mlb"), r.get("venue", "polymarket"),
-             r.get("market_type", "WINNER"), r.get("line"), r["outcome"], "YES",
-             r["start_utc"], r["venue_market_id"]))
+             r.get("market_type", "WINNER"), r.get("line"), r["outcome"],
+             r.get("side", "YES"), r["start_utc"], r["venue_market_id"]))
     con.commit()
     return con
 
@@ -703,3 +703,46 @@ def test_whale_backfill_command_runs_the_sweep(tmp_path, monkeypatch):
     cmd_whale_backfill(cfg, Store(tmp_path / "arb.sqlite"), None)
 
     assert len(calls) == 1
+
+
+# --- the leg convention on a 3-way proposition (final review I2) -------------
+
+def _prop_ledger(prop="Arsenal", sides=("YES", "NO")):
+    """arb/venues/polymarket.py's own shape for `Will X win?`: BOTH tokens carry
+    the PROPOSITION as their label and are told apart by `side` only."""
+    return _ledger([_q("0x3way", "tokY", prop, IN_WINDOW, side=sides[0],
+                       sport="soccer_epl"),
+                    _q("0x3way", "tokN", prop, IN_WINDOW, side=sides[1],
+                       sport="soccer_epl")])
+
+
+def test_a_three_way_proposition_gets_one_label_per_token():
+    """I2: `universe` mapped token -> outcome ignoring `side`, so a soccer
+    3-way collapsed to ONE label — and with it one fingerprint, one
+    position_key and one quotes key tuple for two different tokens."""
+    from arb.lanes.whale_book import quote_rows
+    from arb.models import position_key
+
+    (m,) = whale_universe.universe(_prop_ledger(), _cfg(), NOW)
+
+    assert dict(m.tokens) == {"tokY": "Yes", "tokN": "No"}
+    keys = {position_key("WHALE", m.sport, "pm:e", m.market_type, m.line,
+                         outcome=label, side="YES") for _, label in m.tokens}
+    assert len(keys) == 2
+    book = {"asks": [{"price": "0.51", "size": "1000"}],
+            "bids": [{"price": "0.49", "size": "1000"}]}
+    rows = quote_rows(_cfg(), m, {"tokY": book, "tokN": book}, "pm:e", NOW)
+    assert {(r["outcome"], r["side"], r["venue_market_id"]) for r in rows} == {
+        ("Yes", "YES", "0x3way:tokY"), ("No", "YES", "0x3way:tokN")}
+
+
+def test_a_market_whose_tokens_cannot_be_told_apart_is_skipped_and_counted():
+    """Rule 3's habit: an ambiguity we cannot resolve is dropped and reported,
+    never guessed into a colliding key."""
+    res = {}
+
+    markets = whale_universe.universe(_prop_ledger(sides=("YES", "YES")),
+                                      _cfg(), NOW, res=res)
+
+    assert markets == []
+    assert res["label_collision"] == 1

@@ -109,8 +109,8 @@ def _native_detail(cfg, rows) -> str:
     if con is None:
         return "native/transfer ROI: whale tape unavailable"
     try:
-        native_of = {sid: is_native(sig)
-                     for sid, sig in signals_by_id(con).items()}
+        native_of = {sid: is_native(sig) for sid, sig in
+                     signals_by_id(con, {x["signal_id"] for x in rows}).items()}
     finally:
         con.close()
     split: dict[str, list] = {"native": [], "transfer": []}

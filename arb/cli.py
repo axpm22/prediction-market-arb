@@ -104,6 +104,11 @@ def main(argv=None):
                                                  "trade-history backfill for the L14 whale "
                                                  "lane (its own process: ~11 min a cycle)")
     p_wb.add_argument("--once", action="store_true")
+    p_wsc = sub.add_parser("whale-score", help="L14 scoring utilities over the whale tape "
+                                               "(read-only, keyless, 0 credits)")
+    p_wsc.add_argument("--calibrate", action="store_true",
+                       help="propose whale.fire.min_points.V2/V3 from the tape's signals "
+                            "(design §7.2); prints the YAML, never edits config.yaml")
     p_bench = sub.add_parser("bench", help="score and rank every STRATEGIES.md lane on "
                                            "the data we hold (read-only)")
     p_bench.add_argument("--pull", action="store_true",
