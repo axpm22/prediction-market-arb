@@ -170,22 +170,15 @@ def _score_bucket(cfg, rows: list[dict], quote_series: dict, finals: dict, alias
     return as_stored, closing, ev_wins, excl
 
 
-def _bootstrap_mean_ci(by_event: dict, seed: int, n: int,
-                       percentiles: tuple[float, float] = (0.025, 0.975)
-                       ) -> tuple[float, float, float]:
-    """Cluster bootstrap by event_key -> (mean, ci_low, ci_high). Resample event
-    keys with replacement; a drawn event contributes ALL its values (rows travel
-    together) — this doubles as the win-rate bootstrap (mean of 0/1 = win rate).
-
-    `percentiles` is the pair to read off the resampled means. The default is
-    the two-sided 95% every regrade caller has always used; L14 passes the
-    one-sided pairs its pre-registration names (design §12: "upper 90% bound"
-    is the 90th percentile, "lower 80% bound" the 20th)."""
-    all_vals = [v for vs in by_event.values() for v in vs]
-    mean = statistics.mean(all_vals) if all_vals else 0.0
+def _bootstrap_means(by_event: dict, seed: int, n: int) -> list[float]:
+    """Cluster bootstrap draws of the mean, sorted ascending. Resample event
+    keys with replacement; a drawn event contributes ALL its values (rows
+    travel together). The one resample loop — `_bootstrap_mean_ci` below and
+    `arb.whale_metrics.cluster_ci` both read percentiles off this same sorted
+    list instead of each running their own copy of the loop."""
     events = list(by_event)
     if not events:
-        return mean, mean, mean
+        return []
     rng = random.Random(seed)
     means = []
     for _ in range(n):
@@ -195,6 +188,24 @@ def _bootstrap_mean_ci(by_event: dict, seed: int, n: int,
         if sample:
             means.append(statistics.mean(sample))
     means.sort()
+    return means
+
+
+def _bootstrap_mean_ci(by_event: dict, seed: int, n: int,
+                       percentiles: tuple[float, float] = (0.025, 0.975)
+                       ) -> tuple[float, float, float]:
+    """Cluster bootstrap by event_key -> (mean, ci_low, ci_high) — this doubles
+    as the win-rate bootstrap (mean of 0/1 = win rate).
+
+    `percentiles` is the pair to read off the resampled means. The default is
+    the two-sided 95% every regrade caller has always used; L14 passes the
+    one-sided pairs its pre-registration names (design §12: "upper 90% bound"
+    is the 90th percentile, "lower 80% bound" the 20th)."""
+    all_vals = [v for vs in by_event.values() for v in vs]
+    mean = statistics.mean(all_vals) if all_vals else 0.0
+    means = _bootstrap_means(by_event, seed, n)
+    if not means:
+        return mean, mean, mean
     lo = means[int(percentiles[0] * len(means))]
     hi = means[int(percentiles[1] * len(means))]
     return mean, lo, hi

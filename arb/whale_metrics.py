@@ -13,11 +13,10 @@ the cluster bootstrap of the mean, "lower 80% bound" its 20th. Clusters are
 from __future__ import annotations
 
 import json
-import random
 import statistics
 from decimal import Decimal
 
-from arb import metrics
+from arb import metrics, regrade
 from arb.markout import HORIZONS
 from arb.models import q6
 
@@ -35,36 +34,18 @@ def _d(v) -> Decimal:
     return Decimal(str(v or 0))
 
 
-def _sorted_means(by_event: dict, seed: int, n: int) -> list[float]:
-    """The exact resample loop `arb.regrade._bootstrap_mean_ci` runs
-    internally, exposed so `cluster_ci` can read every percentile it needs off
-    ONE draw instead of re-running the resample per pair — same `by_event` and
-    `seed` reproduce the same sequence of draws, so this is not a second
-    algorithm, just the one loop shared instead of repeated. `_bootstrap_mean_ci`
-    keeps its own public signature; every other caller still goes through it."""
-    events = list(by_event)
-    if not events:
-        return []
-    rng = random.Random(seed)
-    means = []
-    for _ in range(n):
-        sample = []
-        for ek in (rng.choice(events) for _ in events):
-            sample.extend(by_event[ek])
-        if sample:
-            means.append(statistics.mean(sample))
-    means.sort()
-    return means
-
-
 def cluster_ci(cfg, by_event: dict) -> dict:
     """Mean plus the one-sided bounds §12 reads: `lb80` (20th percentile) is the
     success test, `ub90` (90th) the kill test. Bootstrap internals are floats
-    (rule 5's stated exception) and are re-quantized here."""
+    (rule 5's stated exception) and are re-quantized here. The resample itself
+    is `arb.regrade._bootstrap_means` — the one cluster-bootstrap loop, shared
+    rather than copied, so `cluster_ci` reads every percentile it needs off
+    the same sorted draw `_bootstrap_mean_ci` would produce for this
+    `by_event`/`seed`/`n_boot`."""
     seed, n_boot = int(cfg["regrade"]["bootstrap_seed"]), int(cfg["regrade"]["bootstrap_n"])
     all_vals = [v for vs in by_event.values() for v in vs]
     mean = statistics.mean(all_vals) if all_vals else 0.0
-    means = _sorted_means(by_event, seed, n_boot)
+    means = regrade._bootstrap_means(by_event, seed, n_boot)
 
     def pct(p):
         return means[int(p * len(means))] if means else mean
