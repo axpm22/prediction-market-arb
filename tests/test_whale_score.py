@@ -8,8 +8,11 @@ import copy
 import inspect
 import json
 import math
+import random
 import shutil
 import sqlite3
+import time
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -402,6 +405,147 @@ def test_each_root_carries_its_own_base_rate_and_starts_at_the_default(cfg):
     default = q6(Decimal(str(cfg["whale"]["score"]["base_rate_default"])))
     assert whale_score.base_rate(outcomes, "politics", AS_OF, cfg) == (default, 2)
     assert whale_score.base_rate(outcomes, "sports", AS_OF, cfg) == (default, 3)
+
+
+# ------------------------------------------------------------- hygiene perf
+#
+# Regrade 2026-09-04 (review of 7c913bf, Important #2): whale_hygiene._pairs
+# is O(n^2) per (wallet, market)/(wallet, token) group and is the dominant
+# cost of whale_state.score_state, which the 60s whale cycle rebuilds every
+# minute under a 120s child cap. The tape is growing ~47k rows/day plus
+# wallet-history backfill, so a wallet's own group size keeps climbing.
+#
+# `_REFERENCE_hygiene_flags` below is whale_hygiene.hygiene_flags/_pairs
+# EXACTLY as they stood before the sliding-window fix (frozen here, not
+# imported, so refactoring the real module can never silently rot the
+# ground truth this compares against). The property test proves the fast
+# path returns bit-identical flags; the timing test is the regression guard.
+
+BUY = "BUY"
+
+
+def _REFERENCE_pairs(rows, gap):
+    """The old O(n^2) `_pairs`, byte-for-byte in behavior: every pair of rows
+    within `gap` seconds of each other."""
+    for i, a in enumerate(rows):
+        for b in rows[i + 1:]:
+            if abs(int(b["ts"]) - int(a["ts"])) <= gap:
+                yield a, b
+
+
+def _REFERENCE_hygiene_flags(prints, positions, cfg):
+    """The old O(n^2) `hygiene_flags`, byte-for-byte in behavior."""
+    h = cfg["whale"]["hygiene"]
+    by_wallet = defaultdict(list)
+    for p in prints:
+        by_wallet[p["proxy_wallet"]].append(p)
+
+    wallets = {}
+    for wallet, rows in by_wallet.items():
+        flags = set()
+        by_market = defaultdict(list)
+        for p in rows:
+            by_market[p["condition_id"]].append(p)
+
+        two_sided = sum(
+            any(a["outcome_index"] != b["outcome_index"]
+                for a, b in _REFERENCE_pairs([p for p in mrows if p["side"] == BUY],
+                                             int(h["mm_window_secs"])))
+            for mrows in by_market.values())
+        mean_usd = sum(Decimal(str(p["notional_usd"])) for p in rows) / len(rows)
+        if (Decimal(two_sided) / len(by_market) >= Decimal(h["mm_market_share"])
+                and mean_usd < Decimal(str(h["mm_max_avg_usd"]))):
+            flags.add("mm")
+
+        by_token = defaultdict(list)
+        for p in rows:
+            by_token[(p["condition_id"], p["outcome_index"])].append(p)
+        if any(a["side"] != b["side"] and Decimal(str(a["price"])) == Decimal(str(b["price"]))
+               for trows in by_token.values()
+               for a, b in _REFERENCE_pairs(trows, int(h["wash_gap_secs"]))):
+            flags.add("wash")
+        wallets[wallet] = flags
+
+    exposure = defaultdict(lambda: defaultdict(Decimal))
+    for pos in positions:
+        exposure[(pos.wallet, pos.condition_id)][pos.outcome_index] += pos.size - pos.sold_size
+    markets = {}
+    for key, sides in exposure.items():
+        live = [v for v in sides.values() if v > 0]
+        if len(live) > 1 and min(live) > Decimal(h["both_sides_tolerance"]) * max(live):
+            markets[key] = {"both_sides"}
+    return whale_hygiene.Hygiene(wallets=wallets, markets=markets)
+
+
+def _random_prints(rng, n, n_wallets=4, n_markets=3, ts_span=40):
+    """Random-ish, seeded prints clustered enough (small ts_span, few
+    wallets/markets/prices) that `gap`-window collisions — the case that
+    actually exercises the pair scan — are common, not rare."""
+    wallets = [f"0xw{i}" for i in range(n_wallets)]
+    cids = [f"0xc{i}" for i in range(n_markets)]
+    prices = ["0.10", "0.35", "0.50", "0.65", "0.90"]
+    out = []
+    for _ in range(n):
+        out.append(_print(wallet=rng.choice(wallets), cid=rng.choice(cids),
+                          idx=rng.choice((0, 1)), side=rng.choice(("BUY", "SELL")),
+                          ts=T + rng.randint(0, ts_span),
+                          price=rng.choice(prices),
+                          size=rng.choice(("50", "300", "2000"))))
+    return out
+
+
+def test_hygiene_flags_matches_the_reference_on_random_print_sets(cfg):
+    rng = random.Random(20260904)
+    markets = {f"0xc{i}": _market() for i in range(3)}
+    for trial in range(200):
+        n = rng.randint(1, 120)
+        prints = _random_prints(rng, n)
+        pos = whale_score.positions_from_prints(prints, markets, cfg)
+        got = whale_hygiene.hygiene_flags(prints, pos, cfg)
+        want = _REFERENCE_hygiene_flags(prints, pos, cfg)
+        assert got == want, f"trial {trial}, n={n}: {got} != {want}"
+
+
+def _concentrated_prints(n, n_wallets=200, n_whales=5, n_markets=20):
+    """Adversarial-but-realistic shape (regrade 2026-09-04 bench, see
+    bench_hygiene.py in the report): a fixed handful of whale wallets,
+    weight 8x the rest, each with 2 home markets, mostly one side/outcome —
+    a real accumulating whale, and also the worst case for the old
+    `any()`-short-circuited pair scan, since a match is rare so the scan
+    mostly runs to the end instead of exiting early. Measured (pre-fix,
+    this shape): 200k rows ~10.7s in whale_hygiene.hygiene_flags alone."""
+    rng = random.Random(1)
+    wallets = [f"0xw{i}" for i in range(n_wallets)]
+    whales = set(wallets[:n_whales])
+    weights = [8.0 if w in whales else 1.0 for w in wallets]
+    cids = [f"0xc{i}" for i in range(n_markets)]
+    home = {w: rng.sample(cids, k=2) for w in wallets}
+    prices = ["0.10", "0.35", "0.50", "0.65", "0.90"]
+    out = []
+    for _ in range(n):
+        w = rng.choices(wallets, weights=weights, k=1)[0]
+        cid = rng.choice(home[w])
+        if w in whales:
+            idx, side = 0, "BUY"
+        else:
+            idx, side = rng.choice((0, 1)), rng.choice(("BUY", "SELL"))
+        out.append(_print(wallet=w, cid=cid, idx=idx, side=side,
+                          ts=T + rng.randint(0, 200_000),
+                          price=rng.choice(prices), size="500"))
+    return out
+
+
+def test_hygiene_flags_completes_in_bounded_time_on_a_concentrated_tape(cfg):
+    # Regression guard: at 200k concentrated rows the OLD O(n^2) _pairs scan
+    # took >10s (measured, see .superpowers/sdd/retention-report.md); 3s is
+    # generous headroom over the fixed sliding-window scan's actual time.
+    prints = _concentrated_prints(200_000)
+    markets = {f"0xc{i}": _market() for i in range(20)}
+    pos = whale_score.positions_from_prints(prints, markets, cfg)
+    t0 = time.perf_counter()
+    whale_hygiene.hygiene_flags(prints, pos, cfg)
+    dt = time.perf_counter() - t0
+    assert dt < 3.0, f"hygiene_flags took {dt:.3f}s on 200k concentrated rows"
 
 
 # ---------------------------------------------------------------- structure

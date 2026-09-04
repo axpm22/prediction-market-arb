@@ -8,6 +8,20 @@ is not here: it is a print filter and lives in positions_from_prints.
 Flags are computed from raw PRINTS, not positions, on purpose: a quote-stuffing
 maker's prints are all below min_print_usd, so by the time they were positions
 the evidence would be gone.
+
+Perf (regrade 2026-09-04, review of 7c913bf Important #2): the mm/wash scans
+used to be a naive O(n^2) `_pairs` generator per (wallet, market)/(wallet,
+token) group — the dominant cost of whale_state.score_state, which the 60s
+whale cycle rebuilds every minute. Replaced with a sort + sliding-window scan
+(`_two_sided_within_window`, `_wash_pair_within_window`): O(n log n) per
+group, same flags bit-for-bit (tests/test_whale_score.py property-tests this
+against the old O(n^2) implementation, kept there as a frozen reference).
+Measured on a synthetic concentrated tape (bench_hygiene.py, see the
+retention report), whale_state.score_state before -> after:
+  50k rows:  0.83s   -> 0.41s
+  200k rows: 10.69s  -> 1.93s
+  500k rows: 66.93s  -> 4.90s
+  1M rows:   385.53s -> 9.04s
 """
 from __future__ import annotations
 
@@ -30,19 +44,62 @@ class Hygiene:
                     or self.markets.get((pos.wallet, pos.condition_id)))
 
 
-def _pairs(rows, gap):
-    """Every pair of rows within `gap` seconds. O(n^2) per market/wallet.
-    # ponytail: a wallet's prints in one market are tens, not thousands; if a
-    # backfilled whale ever makes this hurt, sort by ts and use a sliding window.
+def _two_sided_within_window(rows, gap) -> bool:
+    """True iff two rows with different `outcome_index` land within `gap`
+    seconds of EACH OTHER — i.e. some pair, not just neighbors.
+
+    O(n log n): sort by ts, then slide a two-pointer window [lo, hi]. Since
+    rows are sorted, `ts[hi] - ts[lo] <= gap` makes EVERY pair inside the
+    window mutually within `gap` (ts[hi] - ts[k] <= ts[hi] - ts[lo] for any
+    lo <= k <= hi) — the same pairs the old nested-loop `_pairs` produced,
+    just found without re-scanning the window on every row. A running count
+    of outcome_index values currently in the window answers "two different
+    values present" in O(1) instead of an O(window) rescan.
     """
-    for i, a in enumerate(rows):
-        for b in rows[i + 1:]:
-            if abs(int(b["ts"]) - int(a["ts"])) <= gap:
-                yield a, b
+    rows = sorted(rows, key=lambda r: int(r["ts"]))
+    counts: dict = defaultdict(int)
+    lo = 0
+    for row in rows:
+        ts_hi = int(row["ts"])
+        while ts_hi - int(rows[lo]["ts"]) > gap:
+            idx = rows[lo]["outcome_index"]
+            counts[idx] -= 1
+            if counts[idx] == 0:
+                del counts[idx]
+            lo += 1
+        if any(idx != row["outcome_index"] for idx in counts):
+            return True
+        counts[row["outcome_index"]] += 1
+    return False
+
+
+def _wash_pair_within_window(rows, gap) -> bool:
+    """True iff a BUY and a SELL at the SAME price land within `gap` seconds
+    of each other. Same two-pointer window as `_two_sided_within_window`;
+    the running state is price -> {side: count} in the window, so a match is
+    an O(1) lookup instead of a rescan.
+    """
+    rows = sorted(rows, key=lambda r: int(r["ts"]))
+    window: dict = defaultdict(lambda: defaultdict(int))
+    lo = 0
+    for row in rows:
+        ts_hi = int(row["ts"])
+        while ts_hi - int(rows[lo]["ts"]) > gap:
+            lo_row = rows[lo]
+            lo_price = Decimal(str(lo_row["price"]))
+            window[lo_price][lo_row["side"]] -= 1
+            lo += 1
+        price = Decimal(str(row["price"]))
+        sides = window.get(price)
+        if sides and any(cnt > 0 for side, cnt in sides.items() if side != row["side"]):
+            return True
+        window[price][row["side"]] += 1
+    return False
 
 
 def hygiene_flags(prints, positions, cfg) -> Hygiene:
     h = cfg["whale"]["hygiene"]
+    mm_window, wash_gap = int(h["mm_window_secs"]), int(h["wash_gap_secs"])
     by_wallet = defaultdict(list)
     for p in prints:
         by_wallet[p["proxy_wallet"]].append(p)
@@ -57,9 +114,7 @@ def hygiene_flags(prints, positions, cfg) -> Hygiene:
         # mm: both outcomes bought inside mm_window_secs on a large enough
         # share of the wallet's markets, with tiny prints throughout.
         two_sided = sum(
-            any(a["outcome_index"] != b["outcome_index"]
-                for a, b in _pairs([p for p in mrows if p["side"] == BUY],
-                                   int(h["mm_window_secs"])))
+            _two_sided_within_window([p for p in mrows if p["side"] == BUY], mm_window)
             for mrows in by_market.values())
         mean_usd = sum(Decimal(str(p["notional_usd"])) for p in rows) / len(rows)
         if (Decimal(two_sided) / len(by_market) >= Decimal(h["mm_market_share"])
@@ -82,9 +137,7 @@ def hygiene_flags(prints, positions, cfg) -> Hygiene:
         by_token = defaultdict(list)
         for p in rows:
             by_token[(p["condition_id"], p["outcome_index"])].append(p)
-        if any(a["side"] != b["side"] and Decimal(str(a["price"])) == Decimal(str(b["price"]))
-               for trows in by_token.values()
-               for a, b in _pairs(trows, int(h["wash_gap_secs"]))):
+        if any(_wash_pair_within_window(trows, wash_gap) for trows in by_token.values()):
             flags.add("wash")
         wallets[wallet] = flags
 
