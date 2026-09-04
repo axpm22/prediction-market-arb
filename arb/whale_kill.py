@@ -136,7 +136,12 @@ def kill_status(cfg, store, con=None, now=None, hashes_log_path=None,
             "SELECT COUNT(DISTINCT signal_id) c FROM flat_bets WHERE kind='WHALE' "
             "AND signal_id IS NOT NULL AND created_at >= ?",
             ((now - timedelta(days=7)).isoformat(),))[0]["c"]
-    oldest = con.execute("SELECT MIN(observed_at) t FROM prints").fetchone()["t"] \
+    # bounded by `now`: an unbounded MIN would let a print the collector
+    # recorded AFTER this report day (routine — the collector never stops for
+    # a past day) count toward "days of collection", breaking the same purity
+    # rule 9 needs from every other line in this table.
+    oldest = con.execute("SELECT MIN(observed_at) t FROM prints WHERE observed_at <= ?",
+                         (now.isoformat(),)).fetchone()["t"] \
         if con is not None else None
     collecting = (now - datetime.fromisoformat(oldest)) if oldest else timedelta(0)
     starving_armed = collecting >= timedelta(weeks=4)

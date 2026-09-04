@@ -2,7 +2,8 @@
 import re
 from pathlib import Path
 
-ARB = Path(__file__).resolve().parent.parent / "arb"
+ROOT = Path(__file__).resolve().parent.parent
+ARB = ROOT / "arb"
 
 FORBIDDEN = [
     re.compile(r"UPDATE\s+flat_bets", re.I),
@@ -47,6 +48,20 @@ def test_regrade_never_touches_the_odds_api():
     text = (ARB / "regrade.py").read_text()
     assert "oddsapi" not in text
     assert "INSERT" not in text.upper()
+
+
+def test_no_test_config_points_at_the_production_tapes():
+    # regrade 2026-08-29: tests/conftest.py's autouse `_no_production_tape`
+    # fixture must keep every test's whale/maker/kalshi-history tape path off
+    # the live files under data/ (rewritten every cycle by the running
+    # collectors) — this is the trip-wire that fails loudly if it ever stops
+    # applying, e.g. a future conftest edit that narrows or drops the fixture.
+    from arb.config import load
+    cfg = load(ROOT / "config.yaml")
+    for section, key in (("whale", "tape_db"), ("maker", "tape_db"),
+                         ("bench", "tape_db")):
+        path = str(cfg[section][key])
+        assert not path.startswith("data/"), f"{section}.{key} = {path}"
 
 
 def test_no_hardcoded_schedule_times_or_windows():

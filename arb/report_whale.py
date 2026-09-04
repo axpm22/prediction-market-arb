@@ -159,9 +159,18 @@ def _signal_counts(store, con, day_ago, week_ago) -> dict:
 
 
 def _collector(con, now) -> dict:
-    """Is the tape being written at all? Status, rows and bad_rows are the
-    lane's own last cycle (tape `meta`); the gap is §5 step 2's recorded
-    paging gap; prints/min is measured over the last hour."""
+    """Is the tape being written at all? Status, rows, bad_rows, `at` and
+    backoff_until are the lane's OWN last cycle (tape `meta`) — kept in this
+    frame for the live dashboard (arb/dashboard_whale.py reads the same
+    frame), but `whale_md` must never print them: the collector rewrites
+    them on its own ~60s cadence regardless of which day is being reported,
+    so they are not a function of the report day and would defeat the hash
+    chain (rule 9). The gap is §5 step 2's recorded paging gap, kept only
+    when it happened at or before `now` — a day's report must not show a gap
+    from AFTER that day. prints/min is measured over the hour before `now`,
+    by `observed_at` (when the collector recorded the row — bounded above by
+    `now` too) rather than `ts` (the trade's own venue timestamp, which the
+    query used to leave with no upper bound at all)."""
     out = {"status": None, "rows": None, "bad_rows": None, "at": None,
            "last_seen_age_secs": None, "last_gap": None, "backoff_until": None,
            "prints_per_min": Decimal(0)}
@@ -174,10 +183,12 @@ def _collector(con, now) -> dict:
                backoff_until=meta.get("backoff_until"))
     if meta.get("last_seen_ts"):
         out["last_seen_age_secs"] = int(now.timestamp()) - int(meta["last_seen_ts"])
-    if meta.get("last_gap"):
-        out["last_gap"] = json.loads(meta["last_gap"])
-    n = con.execute("SELECT COUNT(*) c FROM prints WHERE ts >= ?",
-                    (int((now - timedelta(hours=1)).timestamp()),)).fetchone()["c"]
+    gap = json.loads(meta["last_gap"]) if meta.get("last_gap") else None
+    if gap and gap.get("at") and datetime.fromisoformat(gap["at"]) <= now:
+        out["last_gap"] = gap
+    cutoff = (now - timedelta(hours=1)).isoformat()
+    n = con.execute("SELECT COUNT(*) c FROM prints WHERE observed_at >= ? "
+                    "AND observed_at <= ?", (cutoff, now.isoformat())).fetchone()["c"]
     out["prints_per_min"] = q6(Decimal(n) / 60)
     return out
 
@@ -217,13 +228,15 @@ def whale_md(frame: dict) -> list[str]:
           "- base rate: " + (", ".join(
               f"{r['root']} {r['value']} (n={r['n']})" for r in frame["base_rates"])
               or "—"),
-          f"- collector: last cycle {_n(c['status'])} rows={_n(c['rows'])} "
-          f"bad_rows={_n(c['bad_rows'])} at {_n(c['at'])}; newest print "
-          f"{_n(c['last_seen_age_secs'])}s ago; {c['prints_per_min']} prints/min (1h)"
+          # last cycle status/rows/bad_rows/at and backoff_until are LIVE
+          # collector facts, not a function of the report day — the
+          # dashboard shows them (frame["collector"] still carries them);
+          # this hashed line only prints what a re-run of a past day must
+          # always reproduce (rule 9).
+          f"- collector: newest print {_n(c['last_seen_age_secs'])}s ago; "
+          f"{c['prints_per_min']} prints/min (1h)"
           + (f"; **gap** {c['last_gap'].get('secs')}s at {c['last_gap'].get('at')}"
-             if c["last_gap"] else "; no recorded gap")
-          + (f"; **backing off until {c['backoff_until']}**"
-             if c["backoff_until"] else ""),
+             if c["last_gap"] else "; no recorded gap"),
           "",
           "| kill rule (§12) | state | numbers |", "|---|---|---|"]
     for r in frame["kill"]["rules"]:

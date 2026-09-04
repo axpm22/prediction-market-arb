@@ -177,6 +177,47 @@ def test_write_daily_deterministic_across_wall_clock(cfg, fixture_db, tmp_path,
     assert len(lines) == 2 and lines[0] == lines[1]
 
 
+def test_write_daily_hash_ignores_collector_churn_and_future_tape_rows(
+        cfg, fixture_db, tmp_path):
+    # regrade 2026-08-29: the whale collector rewrites meta.last_cycle on its
+    # own ~60s cadence and can append tape rows after this report day has
+    # already closed (a real collector never stops for a past day's report).
+    # Neither may change a past day's hash — the md must stay a pure function
+    # of the report day and the tape rows up to its end (rule 9). Regression
+    # for the flake in test_write_daily_appends_hash_chain: that test alone
+    # cannot catch this because conftest's tape redirection makes both of its
+    # calls read the same untouched (empty) tape either way.
+    import json
+
+    from arb import metrics
+    from arb.whale_tape import _set_meta, open_tape
+
+    day_end = datetime.fromisoformat(metrics.day_bounds(cfg, "2026-07-08")[1])
+    future = day_end + timedelta(hours=1)
+    con = open_tape(cfg["whale"]["tape_db"])
+    con.close()
+
+    write_daily(cfg, fixture_db, "2026-07-08", outdir=tmp_path)
+    lines = (tmp_path / "HASHES.log").read_text().strip().splitlines()
+    assert len(lines) == 1
+
+    con = open_tape(cfg["whale"]["tape_db"])
+    _set_meta(con, "last_cycle", json.dumps(
+        {"status": "error", "prints": 999, "bad_rows": 999, "at": future.isoformat()}))
+    con.execute(
+        "INSERT INTO prints (observed_at, ts, proxy_wallet, condition_id, "
+        "asset, outcome_index, side, price, size, notional_usd) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (future.isoformat(), int(future.timestamp()), "wX", "0xcond",
+         "0xyes", 0, "BUY", "0.50", "1000", "500"))
+    con.commit()
+    con.close()
+
+    write_daily(cfg, fixture_db, "2026-07-08", outdir=tmp_path)
+    lines = (tmp_path / "HASHES.log").read_text().strip().splitlines()
+    assert len(lines) == 2 and lines[0] == lines[1]
+
+
 def test_write_daily_appends_hash_chain(cfg, fixture_db, tmp_path):
     # verifiability: every write appends (never rewrites) the day's report
     # hashes; an idempotent recompute reproduces the same hash
