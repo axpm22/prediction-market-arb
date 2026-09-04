@@ -54,7 +54,7 @@ def test_missing_key_is_startup_error(tmp_path):
 
 def test_watch_venues_bad_name_is_startup_error(tmp_path):
     text = SHIPPED.read_text().replace(
-        "watch_venues: [polymarket, sx]", "watch_venues: [polymarket, sx, robinhood]")
+        "watch_venues: [polymarket]", "watch_venues: [polymarket, sx, robinhood]")
     bad = tmp_path / "config.yaml"
     bad.write_text(text)
     with pytest.raises(ConfigError, match="watch_venues"):
@@ -63,7 +63,7 @@ def test_watch_venues_bad_name_is_startup_error(tmp_path):
 
 def test_watch_venues_empty_list_is_startup_error(tmp_path):
     # review of 7528050: the non-empty invariant had no test of its own
-    text = SHIPPED.read_text().replace("watch_venues: [polymarket, sx]", "watch_venues: []")
+    text = SHIPPED.read_text().replace("watch_venues: [polymarket]", "watch_venues: []")
     bad = tmp_path / "config.yaml"
     bad.write_text(text)
     with pytest.raises(ConfigError, match="watch_venues"):
@@ -75,7 +75,7 @@ def test_shipped_watch_venues_excludes_kalshi():
     # whale lane; nothing reads kalshi's ~1.3M rows/day. Add it back by
     # editing config.yaml.
     cfg = load(SHIPPED)
-    assert cfg["watch_venues"] == ["polymarket", "sx"]
+    assert cfg["watch_venues"] == ["polymarket"]   # sx dropped 2026-09-04 evening (only PM whales)
 
 
 def test_a1_coupling_invariant_enforced(tmp_path):

@@ -92,7 +92,9 @@ watch_interval_secs: 300            # 60 -> 300, operator decision 2026-09-04: w
                                     #   falls back across 5 polls, and data_stale_alarm_secs
                                     #   (900) is 3x this. `arb report --daily` will show fewer
                                     #   quotes from now on — 5x fewer, same shape, not a bug.
-watch_venues: [polymarket, sx]      # kalshi dropped 2026-09-04 (operator decision): watch
+watch_venues: [polymarket]          # sx dropped too, 2026-09-04 evening ("only PM whales"; its
+                                    #   /orders endpoint has 400ed since July anyway); kalshi
+                                    #   dropped 2026-09-04 (operator decision): watch
                                     #   polled it every cycle for ~1.3M of the ~4.1M daily quote
                                     #   rows and nothing downstream reads a kalshi quote in
                                     #   whale-only mode (the whale lane is PM-only). A venue not
@@ -119,7 +121,10 @@ regrade:                             # §18.3 arb regrade: read-only paired-Brie
   bootstrap_n: 2000                  # cluster-bootstrap resamples (event_key clusters)
   bootstrap_seed: 20260714           # pinned before any data was scored (pre-registered honesty)
   min_events: 50                     # below this per (method,basis) cell -> INSUFFICIENT, no claim
-scan_times: ["06:15", "10:30", "13:30", "18:30"]
+scan_times: []                      # arb scans PAUSED 2026-09-04 ("only PM whales for now");
+                                    #   they were still spending Odds API credits (494 -> 491 that
+                                    #   day). Restore the four NY slots ["06:15", "10:30", "13:30",
+                                    #   "18:30"] to resume the arb instrument.
                                     # v3.4: retimed so the 3h freshness windows cover modal
                                     #   MLB starts (13:05-13:40, 18:40-19:10 ET); the old
                                     #   10:00/15:00/19:00 grid left 13:00-15:00 and
@@ -406,7 +411,7 @@ db_backup: { time: "04:10", dest: "backups/", keep_last: 2 }    # sqlite3 .backu
                                     # prune to keep_last newest after each backup (H8); report prints age
                                     # dest MUST be a different disk or synced folder (§13.3);
                                     #   a same-volume dest is a startup WARNING (v3.4)
-canary: { enabled: true, day_of_month: 1, time: "05:30" }   # monthly synthetic
+canary: { enabled: false, day_of_month: 1, time: "05:30" }  # monthly synthetic — off in whale-only mode (2026-09-04)
                                                  #   end-to-end fixture, tagged lane
 dashboard: { host: 127.0.0.1, port: 8722, pnl_days: 30, bench_stale_days: 7,
              refresh_secs: 60, cache_secs: 60, cache_max_entries: 256 }

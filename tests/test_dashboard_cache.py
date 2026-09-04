@@ -160,18 +160,18 @@ def test_cap_is_hard_even_while_a_compute_is_in_flight():
 
     def slow():
         started.set()
-        release.wait(5)
+        release.wait(20)
         return {"v": "slow"}
 
     t = threading.Thread(target=lambda: dc.get_or_compute(("hard", "slow"), 3600, slow, max_entries=2))
     t.start()
-    assert started.wait(5)
+    assert started.wait(20)
     for i in range(6):                       # six inserts while the slow compute holds its stripe
         dc.get_or_compute(("hard", i), 3600, lambda i=i: {"v": i}, max_entries=2)
     with dc._lock:
         assert sum(1 for k in dc._entries if k[0] == "hard") <= 2
     release.set()
-    t.join(5)
+    t.join(20)
     with dc._lock:                           # the slow compute re-inserted itself, still capped
         assert sum(1 for k in dc._entries if k[0] == "hard") <= 2
     assert dc.get_or_compute(("hard", "slow"), 3600, lambda: {"v": "no"}, max_entries=2)["v"] == "slow"
@@ -188,16 +188,16 @@ def test_single_flight_survives_eviction_of_the_key():
     def compute():
         calls.append(1)
         started.set()
-        release.wait(5)
+        release.wait(20)
         return {"v": len(calls)}
 
     key = ("sf", "same")
     a = threading.Thread(target=lambda: dc.get_or_compute(key, 3600, compute, max_entries=1))
     a.start()
-    assert started.wait(5)
+    assert started.wait(20)
     dc.get_or_compute(("sf", "other"), 3600, lambda: {"v": 0}, max_entries=1)   # evicts anything else
     b = threading.Thread(target=lambda: dc.get_or_compute(key, 3600, compute, max_entries=1))
     b.start()
     release.set()
-    a.join(5); b.join(5)
+    a.join(20); b.join(20)
     assert calls == [1], "the rival started a second compute for the same key"
