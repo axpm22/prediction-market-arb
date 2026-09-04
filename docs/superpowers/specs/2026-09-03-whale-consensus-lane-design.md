@@ -118,9 +118,12 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    they stop on a short page or on age, and never page past
    `whale.max_offset` (10,000: the feed returns 400 beyond it, observed
    2026-09-04); when the cap is hit with rows still newer than the bound,
-   the collector records a `gap` (`meta.last_gap`, seconds and cycle) and
-   advances the watermark to the oldest row it did fetch, so a long outage
-   costs a recorded gap, never a wedged collector. `start` is never relied
+   the collector records a `gap` (`meta.last_gap` = `[last_seen, oldest
+   fetched]`, seconds and cycle) once, and advances the watermark to the
+   NEWEST row fetched as on every other cycle (re-amended 2026-09-04, Task 8
+   review: advancing only to the oldest row left the watermark pinned behind
+   a fast feed and wrote a false 60 s gap every cycle), so a long outage
+   costs one recorded gap, never a wedged collector. `start` is never relied
    on. The
    `batched` fallback polls the universe in groups of `whale.markets_per_call`
    using `market=<a>,<b>,<c>` (comma CSV, verified for `/trades` in Task 1
@@ -416,7 +419,10 @@ Exit when any of:
 
 Exit price = best bid − taker fee, priced from a fresh `fetch_books`. No bid,
 or depth at the bid below `min_executable_usd`: no exit, annotation
-`exit-no-bid`, re-evaluated next cycle. The lane inserts the exit's
+`exit-no-bid`, re-evaluated next cycle. An open WHALE bet for exit
+purposes is one with no `settled`/`void` event; the tracker's
+`lifetime_closed` means the flag left the feed, not that the position
+closed, and never stops exit evaluation (pinned 2026-09-04). The lane inserts the exit's
 `settled` event directly through `store.insert`, never through
 `settle_bet`: that function's future-start guard rejects any settlement
 before the event starts, which is exactly when exits happen (Task 4
