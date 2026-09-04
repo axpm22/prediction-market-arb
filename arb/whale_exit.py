@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from arb.models import q6
-from arb.whale_merge import d, merge_windows, qualifying, ts
-from arb.whale_signal import NO, YES, point_of, tally, wmean
+from arb.whale_merge import d, merge_windows, ts
+from arb.whale_signal import holders_share, point_of, wmean
 
 
 @dataclass(frozen=True)
@@ -52,11 +52,10 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
     # had sold anything. Ageing out is not a change of mind. `total == 0` —
     # nobody holds this market at all — is still no reading, and falls through
     # to `left`/`confidence`, which measure the signal's own whales directly.
-    holding = qualifying(cid, open_positions_now, score_lookup, now, cfg,
-                         fresh_only=False)
-    by_side, _ = tally(variant, holding, cfg, ranked)
-    total, ours = by_side[YES] + by_side[NO], by_side[side]
-    ratio = q6(ours / total) if total > 0 else None
+    # ONE helper with §7's entry gate 1b (L14 amendment 2026-09-04): entry and
+    # exit read the same holders tally, so the two can never drift apart again.
+    ratio, ours, total = holders_share(variant, cid, open_positions_now,
+                                       score_lookup, side, now, cfg, ranked)
     if ratio is not None and ratio < d(ex["flip_ratio"]):
         return ExitDecision("flip", {"ratio": ratio, "points_side": ours,
                                      "points_total": total})

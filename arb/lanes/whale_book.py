@@ -35,7 +35,7 @@ VENUE, CATEGORY = "polymarket", "sports"
 # collector's own row modules are).
 SIGNAL_COLS = ("evaluated_at, condition_id, side, variant, points_yes, points_no,"
                " ratio, whale_ids_json, vwap, touch_ask, touch_bid, depth_usd,"
-               " fired, suppressed_reason, flagged_edge")
+               " fired, suppressed_reason, flagged_edge, holders_ratio")
 
 
 def _touch(books, tokens, cid) -> dict:
@@ -274,11 +274,12 @@ def _persist_signal(con, sig, cid, now) -> int:
     'left on the table' (§7). `bet_ids_json` stays NULL — the bets carry
     `signal_id`, and that join is the source of truth in both directions."""
     cur = con.execute(
-        f"INSERT INTO signals ({SIGNAL_COLS}) VALUES ({','.join('?' * 15)})",
+        f"INSERT INTO signals ({SIGNAL_COLS}) VALUES ({','.join('?' * 16)})",
         (now.isoformat(), cid, str(sig.side), sig.variant, str(sig.points_yes),
          str(sig.points_no), str(sig.ratio), json.dumps(sig.whales, default=str),
          str(sig.vwap), _s(sig.touch_ask), _s(sig.touch_bid), str(sig.depth_usd),
-         int(sig.fired), sig.suppressed_reason, str(sig.flagged_edge)))
+         int(sig.fired), sig.suppressed_reason, str(sig.flagged_edge),
+         _s(sig.holders_ratio)))
     con.commit()
     return cur.lastrowid
 

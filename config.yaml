@@ -711,7 +711,18 @@ whale:                                # L14 whale-consensus lane (design doc 202
   hygiene: { mm_window_secs: 600, mm_market_share: 0.30, mm_max_avg_usd: 50,
              both_sides_tolerance: 0.10, wash_gap_secs: 2 }
                                       # market-maker / wash-trade exclusion filters
-  fire: { ratio: 0.80, min_points: { V1: 3, V2: null, V3: null, V4: 3 },
+  fire: { ratio: 0.80,
+          holders_ratio: 0.6667,      # entry also needs this share of the whales still HOLDING
+                                      #   (fresh_only=False), under the bet's own variant. Sits
+                                      #   between exit.flip_ratio (0.50) and fire.ratio (0.80)
+                                      #   on purpose: a fired signal is never already
+                                      #   flip-eligible, and the band is the hysteresis.
+                                      #   Measured 2026-09-04 over the 56 fires to date:
+                                      #   holders-share < 0.50 in 20 (36%), < 0.6667 in 27
+                                      #   (48%), < 0.80 in 34 (61%); at 0.6667 the lane's ~21
+                                      #   fires/24h become ~11/day, ~77/week, against the
+                                      #   starvation alarm of 10/week.
+          min_points: { V1: 3, V2: null, V3: null, V4: 3 },
           calibration_days: 3, calibration_min_whales: 10,
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
                                       # entry-fire trigger: ratio + variant thresholds; V2/V3

@@ -320,6 +320,26 @@ re-review). Three pre-registered variants:
 **Fire** when all hold for a side s:
 
 1. `points_s / (points_s + points_other) ≥ whale.fire.ratio` (0.80).
+1b. **Holders agreement (amended 2026-09-04).** The same tally recomputed
+   over the whales still *holding* this market — `qualifying(...,
+   fresh_only=False)`, i.e. every qualifying wallet's merged net pregame
+   position whatever the age of the print that opened it — must give side s a
+   share of at least `whale.fire.holders_ratio` (0.6667). Condition 1 asks
+   whether the whales just moved; 1b asks whether the whales who are actually
+   in this market agree. A market with no holders reading at all (nobody
+   qualifying holds it) has nothing to disagree with and passes 1b.
+   Suppression reason: `holders`, evaluated immediately after the count tests
+   (`ratio`, then `min-points`/`uncalibrated`) so a variant still inside its
+   calibration window keeps its own, more specific reason. The share is
+   computed for every evaluation and persisted on the `signals` row as
+   `holders_ratio`, whichever gate is reported. Registered because the exit's
+   `flip` rule was moved onto the holders basis on 2026-09-04 (`a966232`)
+   while entry stayed on the fresh basis: measured over the 56 fires to that
+   date, 20 (36%) were already below `exit.flip_ratio` 0.50 on the holders
+   basis at the moment of entry and would have been flipped out on the next
+   cycle, paying the taker spread twice for nothing. Entry gate and §9's
+   `flip` recount are ONE function (`whale_signal.holders_share`, imported by
+   `arb/whale_exit.py`), so the two bases can never drift apart again.
 2. `points_s ≥ whale.fire.min_points.<variant>`; V1 = 3 literally. V2 and V3
    are null for the first `whale.fire.calibration_days` (14) of `signals` (amended 2026-09-04: provisional calibration on the first day signals span ≥ 3 UTC days, re-run and replaced at ≥ 14 days — PREREGISTRATION.md row 2026-09-04 'provisional early calibration'; `calibration_days` is now 3)
    rows: they are evaluated and persisted but never fire. On day 14 the
@@ -742,7 +762,8 @@ whale:
     eb_min_wallets: 200
   hygiene: { mm_window_secs: 600, mm_market_share: 0.30, mm_max_avg_usd: 50,
              both_sides_tolerance: 0.10, wash_gap_secs: 2 }
-  fire: { ratio: 0.80, min_points: { V1: 3, V2: null, V3: null, V4: 3 },
+  fire: { ratio: 0.80, holders_ratio: 0.6667,   # 1b, amended 2026-09-04: entry also needs this share of the whales still HOLDING, between exit.flip_ratio (0.50) and fire.ratio (0.80) so a fired signal is never already flip-eligible; invariant exit.flip_ratio < fire.holders_ratio <= fire.ratio
+          min_points: { V1: 3, V2: null, V3: null, V4: 3 },
           calibration_days: 3, calibration_min_whales: 10,   # calibration_days 14 -> 3 amended 2026-09-04 (provisional calibration)
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
   size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10 }
@@ -763,7 +784,9 @@ wallet still full at the cap is marked `partial` in the tape (see §9).
 Loader: the strict schema gains an optional-number leaf type
 (`int | Decimal | None`) used only for `fire.min_points.V2` and `V3`, since
 the existing `NUM` leaf rejects `null`. Invariants: `fire.ratio > 0.5`;
-`exit.flip_ratio < fire.ratio`; `size.min_stake_usd ≤ size.max_stake_usd`;
+`exit.flip_ratio < fire.ratio`;
+`exit.flip_ratio < fire.holders_ratio ≤ fire.ratio` (added 2026-09-04 with
+gate 1b); `size.min_stake_usd ≤ size.max_stake_usd`;
 `poll_secs ≥ 30`; `fire.min_points.V2/V3` may be null only while `signals`
 has fewer than 14 days of rows (a startup warning, a hard error after).
 

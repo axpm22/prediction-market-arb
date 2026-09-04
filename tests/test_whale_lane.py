@@ -361,6 +361,23 @@ def test_hygiene_excludes_before_scoring_and_signalling(cfg, tmp_path):
     assert _bets(store) == []
 
 
+def test_a_fresh_signal_held_against_by_older_whales_books_nothing(cfg, tmp_path):
+    """§7 item 1b end to end (L14 amendment 2026-09-04): three fresh YES prints
+    at share 1.00, four whales still holding NO whose prints aged out of
+    signal_window_secs. The fresh tally sees 3-0; the holders tally sees 3-4
+    (0.4286 < fire.holders_ratio), so the signal is suppressed `holders`, the
+    share is persisted for the report, and nothing is booked."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    old = [_trade(f"n{i}", idx=1, age=7300 + 30 * i) for i in range(4)]
+    res = _run(cfg, store, con, rows=_three() + old)
+
+    row = con.execute("SELECT * FROM signals WHERE variant='V1'").fetchone()
+    assert (row["fired"], row["suppressed_reason"]) == (0, "holders")
+    assert Decimal(row["holders_ratio"]) == Decimal("0.428571")
+    assert res["suppressed"]["holders"] == 1
+    assert _bets(store) == [] and res["booked"] == 0
+
+
 def test_calibration_guard_logs_critical_and_books_nothing(cfg, tmp_path, caplog):
     """§7.2: min_points.V2/V3 may be null only inside the calibration window.
     Past it, the lane logs CRITICAL and books nothing for that variant. 'Null

@@ -192,8 +192,9 @@ SCHEMA = {
                         "eb_min_wallets": NUM},
               "hygiene": {"mm_window_secs": NUM, "mm_market_share": NUM, "mm_max_avg_usd": NUM,
                           "both_sides_tolerance": NUM, "wash_gap_secs": NUM},
-              "fire": {"ratio": NUM, "min_points": {"V1": NUM, "V2": NUM_OPT,
-                                                    "V3": NUM_OPT, "V4": NUM},
+              "fire": {"ratio": NUM, "holders_ratio": NUM,
+                       "min_points": {"V1": NUM, "V2": NUM_OPT,
+                                      "V3": NUM_OPT, "V4": NUM},
                        "calibration_days": NUM, "calibration_min_whales": NUM,
                        "sybil_gap_secs": NUM, "max_drift_points": NUM,
                        "min_secs_to_start": NUM},
@@ -271,6 +272,14 @@ def _check_invariants(cfg):
             f"whale.exit.flip_ratio ({whale['exit']['flip_ratio']}) must be less than "
             f"whale.fire.ratio ({whale['fire']['ratio']}) — otherwise a just-fired position "
             "could be exited on the very next cycle (hysteresis)")
+    if not (Decimal(whale["exit"]["flip_ratio"]) < Decimal(whale["fire"]["holders_ratio"])
+            <= Decimal(whale["fire"]["ratio"])):
+        raise ConfigError(
+            f"whale.exit.flip_ratio ({whale['exit']['flip_ratio']}) < "
+            f"whale.fire.holders_ratio ({whale['fire']['holders_ratio']}) <= "
+            f"whale.fire.ratio ({whale['fire']['ratio']}) — the entry holders gate (§7 item "
+            "1b) must sit strictly above the flip ratio, or a signal fires straight into a "
+            "flip, and never above the fire ratio it qualifies")
     if not Decimal(whale["size"]["min_stake_usd"]) <= Decimal(whale["size"]["max_stake_usd"]):
         raise ConfigError(
             f"whale.size.min_stake_usd ({whale['size']['min_stake_usd']}) must be <= "

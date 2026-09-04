@@ -250,12 +250,16 @@ def test_suppressed_signals_are_reported_by_reason_and_variant(cfg, tmp_path):
     _signal_row(con, 1, [], variant="V2", fired=0, reason="uncalibrated")
     _signal_row(con, 2, [], variant="V3", fired=0, reason="uncalibrated")
     _signal_row(con, 3, [], variant="V1", fired=0, reason="min-points")
+    # the entry holders gate (§7 item 1b, 2026-09-04) reports like every other
+    # reason — the breakdown is keyed on whatever the lane wrote
+    _signal_row(con, 4, [], variant="V1", fired=0, reason="holders")
 
     sup = report_whale.whale_frame(cfg, store, now=NOW, con=con)["signals"]["suppressed"]
 
     assert sup[("uncalibrated", "V2")] == 1
     assert sup[("uncalibrated", "V3")] == 1
     assert sup[("min-points", "V1")] == 1
+    assert sup[("holders", "V1")] == 1
 
 
 def test_an_exited_bet_whose_market_resolved_gets_a_hold_counterfactual(cfg, tmp_path):

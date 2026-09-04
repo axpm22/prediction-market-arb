@@ -145,6 +145,9 @@ def test_whale_config_loads_with_spec_values():
     # L14 amendment 2026-09-04: V4 ranked is literal like V1 — the calibration
     # guard only ever applies to a NULL threshold, so V4 fires from day one.
     assert w["fire"]["min_points"]["V4"] == 3
+    # L14 amendment 2026-09-04 (§7 item 1b): entry needs the whales still
+    # HOLDING to agree too, between exit.flip_ratio (0.50) and fire.ratio (0.80)
+    assert w["fire"]["holders_ratio"] == Decimal("0.6667")
     assert w["leaderboard"]["time_periods"] == ["DAY", "WEEK", "MONTH", "ALL"]
     assert w["leaderboard"]["pages"] == 20        # offset cap 1000 / page size 50
     # esports prefixes stay unmapped until an `esports` hierarchy root exists:
@@ -182,6 +185,18 @@ def test_whale_exit_flip_ratio_invariant(tmp_path):
     bad.write_text(text)
     with pytest.raises(ConfigError, match="flip_ratio"):
         load(bad)
+
+
+def test_holders_ratio_must_sit_between_flip_ratio_and_fire_ratio(tmp_path):
+    """L14 amendment 2026-09-04 (§7 item 1b): the entry holders gate sits
+    strictly above exit.flip_ratio and at most at fire.ratio, so a signal can
+    never fire directly into a flip — the band is the hysteresis."""
+    for value in ("0.40", "0.90"):          # below flip_ratio, above fire.ratio
+        bad = tmp_path / f"config-{value}.yaml"
+        bad.write_text(SHIPPED.read_text().replace("holders_ratio: 0.6667,",
+                                                   f"holders_ratio: {value},"))
+        with pytest.raises(ConfigError, match="holders_ratio"):
+            load(bad)
 
 
 def test_whale_size_stake_invariant(tmp_path):

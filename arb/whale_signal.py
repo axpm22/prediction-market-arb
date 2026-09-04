@@ -52,6 +52,7 @@ class Signal:
     suppressed_reason: str | None
     flagged_edge: Decimal
     S: Decimal
+    holders_ratio: Decimal | None = None   # §7 item 1b; None = nobody holds
 
 
 # -------------------------------------------------------------------- points
@@ -142,6 +143,28 @@ def tally(variant, whales, cfg, ranked=frozenset()) -> tuple[dict, dict]:
              for s, ws in scored.items()}, scored)
 
 
+# ------------------------------------------------------- holders (§7 item 1b)
+
+def holders_share(variant, condition_id, open_positions, score_lookup, side,
+                  now, cfg, ranked=frozenset()) -> tuple:
+    """(`side`'s share, its points, both sides' points) over the whales still
+    HOLDING this market — `qualifying(..., fresh_only=False)`, every qualifying
+    wallet's merged net pregame position whatever the age of the print that
+    opened it — tallied under the caller's own variant.
+
+    ONE implementation, two callers (L14 amendment 2026-09-04): §7's entry gate
+    1b and §9's `flip` exit ask the same question of the same tally, so they
+    can never drift. A share of `None` — nobody qualifying holds this market —
+    means the same thing in both: no reading at all, never a zero share.
+    """
+    holding = qualifying(condition_id, open_positions, score_lookup, now, cfg,
+                         fresh_only=False)
+    by_side, _ = tally(variant, holding, cfg, ranked)
+    total = by_side[YES] + by_side[NO]
+    return ((q6(by_side[side] / total) if total > 0 else None),
+            by_side[side], total)
+
+
 # ------------------------------------------------------------------ evaluate
 
 def evaluate(market, open_positions, score_lookup, touch, now, cfg, m0,
@@ -153,10 +176,12 @@ def evaluate(market, open_positions, score_lookup, touch, now, cfg, m0,
     whales = qualifying(market["condition_id"], open_positions, score_lookup, now, cfg)
     if not whales:
         return []
-    return [_signal(v, market, whales, touch, now, cfg, m0, ranked) for v in VARIANTS]
+    return [_signal(v, market, whales, open_positions, score_lookup, touch,
+                    now, cfg, m0, ranked) for v in VARIANTS]
 
 
-def _signal(variant, market, whales, touch, now, cfg, m0, ranked) -> Signal:
+def _signal(variant, market, whales, open_positions, score_lookup, touch, now,
+            cfg, m0, ranked) -> Signal:
     w, f = cfg["whale"], cfg["whale"]["fire"]
     total, scored = tally(variant, whales, cfg, ranked)
     side = YES if total[YES] >= total[NO] else NO      # a tie fails `ratio` below
@@ -173,6 +198,12 @@ def _signal(variant, market, whales, touch, now, cfg, m0, ranked) -> Signal:
     threshold = f["min_points"][variant]
     age = ts(now) - max((x["last_ts"] for x in live), default=ts(now))
     to_start = (ts(market.get("start_utc")) or 0) - ts(now)
+    # §7 item 1b (L14 amendment 2026-09-04): condition 1 asks whether the
+    # whales just moved; this asks whether the whales actually IN this market
+    # agree. Always computed, so the share is on every row for the report even
+    # when an earlier gate is the one reported.
+    held, _, _ = holders_share(variant, market["condition_id"], open_positions,
+                               score_lookup, side, now, cfg, ranked)
 
     if ratio < d(f["ratio"]):
         reason = "ratio"
@@ -180,6 +211,8 @@ def _signal(variant, market, whales, touch, now, cfg, m0, ranked) -> Signal:
         reason = "min-points"
     elif threshold is None:                            # §7.2 calibration window
         reason = "uncalibrated"
+    elif held is not None and held < d(f["holders_ratio"]):
+        reason = "holders"
     elif age >= int(w["max_print_age_secs"]):          # §13: strictly younger
         reason = "late-print"
     elif ask is not None and ask > fresh_vwap + d(f["max_drift_points"]):
@@ -196,7 +229,8 @@ def _signal(variant, market, whales, touch, now, cfg, m0, ranked) -> Signal:
                   points_no=total[NO], ratio=ratio,
                   whales=scored[YES] + scored[NO], vwap=vwap, touch_ask=ask,
                   touch_bid=bid, depth_usd=depth, fired=reason is None,
-                  suppressed_reason=reason, flagged_edge=q6(S - d(m0)), S=S)
+                  suppressed_reason=reason, flagged_edge=q6(S - d(m0)), S=S,
+                  holders_ratio=held)
 
 
 # --------------------------------------------------------------- calibration

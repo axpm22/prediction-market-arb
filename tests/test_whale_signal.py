@@ -355,6 +355,78 @@ def test_clean_signal_fires(cfg):
     assert (s.fired, s.suppressed_reason, s.side) == (True, None, 0)
 
 
+# ------------------------------------------------- holders gate (§7 item 1b)
+
+def _holders(cfg, n, idx=1, lb="0.05"):
+    """`n` whales still HOLDING side `idx` whose prints aged out of
+    signal_window_secs: invisible to the fresh tally, standing opposition to
+    the holders one."""
+    old = N - int(cfg["whale"]["signal_window_secs"]) - 100
+    pos = [_pos(f"h{i}", idx=idx, last=old - 30 * i) for i in range(n)]
+    return pos, {f"h{i}": _score(lb) for i in range(n)}
+
+
+def test_a_signal_fresh_at_1_00_but_held_2_to_1_against_does_not_fire(cfg):
+    """§7 item 1b (L14 amendment 2026-09-04): condition 1 asks whether the
+    whales just moved, 1b whether the whales actually IN this market agree.
+    Fresh 3-0 our way, holders 3-4 against: 0.4286 < fire.holders_ratio."""
+    pos, scores = _three()
+    held, held_scores = _holders(cfg, 4)
+    s = _ev(cfg, pos + held, {**scores, **held_scores})["V1"]
+    assert (s.ratio, s.points_yes, s.points_no) == (Decimal("1.000000"),
+                                                    Decimal(3), Decimal(0))
+    assert (s.fired, s.suppressed_reason) == (False, "holders")
+    assert s.holders_ratio == q6(Decimal(3) / Decimal(7))
+
+
+def test_a_signal_held_three_to_one_clears_the_holders_gate(cfg):
+    """0.75 >= holders_ratio 0.6667 — the band above exit.flip_ratio."""
+    pos, scores = _three()
+    held, held_scores = _holders(cfg, 1)
+    s = _ev(cfg, pos + held, {**scores, **held_scores})["V1"]
+    assert (s.fired, s.suppressed_reason) == (True, None)
+    assert s.holders_ratio == Decimal("0.750000")
+
+
+def test_a_market_no_qualifying_whale_holds_still_fires(cfg, monkeypatch):
+    """`total == 0` is no reading at all, never a zero share: nothing standing
+    to disagree with. Forced here because `holders` is a superset of `fresh` by
+    construction — every fresh whale still holds — so `evaluate` alone cannot
+    produce the empty recount that a re-scored exit cycle can."""
+    assert whale_signal.holders_share("V1", CID, [], _lookup({}), 0, NOW, cfg) \
+        == (None, Decimal(0), Decimal(0))
+    pos, scores = _three()
+    monkeypatch.setattr(whale_signal, "holders_share",
+                        lambda *a, **k: (None, Decimal(0), Decimal(0)))
+    s = _ev(cfg, pos, scores)["V1"]
+    assert (s.fired, s.holders_ratio) == (True, None)
+
+
+def test_the_v4_holders_recount_counts_only_ranked_whales(cfg):
+    """The recount runs under the SIGNAL'S OWN variant, exactly as §9's flip
+    does: unranked standing opposition was never V4 consensus, so it blocks V1
+    and not V4 on the very same market."""
+    pos, scores = _three()
+    held, held_scores = _holders(cfg, 4)
+    both = {**scores, **held_scores}
+    sigs = _ev(cfg, pos + held, both, ranked=frozenset({"w0", "w1", "w2"}))
+    assert sigs["V1"].suppressed_reason == "holders"
+    assert (sigs["V4"].fired, sigs["V4"].holders_ratio) == (True, Decimal("1.000000"))
+
+
+def test_the_entry_gate_and_the_flip_exit_share_one_holders_helper(cfg):
+    """One helper, two callers (§7 1b entry, §9 flip exit) — they can never
+    drift because there is only one implementation."""
+    assert whale_exit.holders_share is whale_signal.holders_share
+    pos, scores = _three()
+    held, held_scores = _holders(cfg, 4)
+    both = {**scores, **held_scores}
+    entry = _ev(cfg, pos + held, both)["V1"].holders_ratio
+    ratio, ours, total = whale_signal.holders_share(
+        "V1", CID, pos + held, _lookup(both), 0, NOW, cfg)
+    assert (entry, ours, total) == (ratio, Decimal(3), Decimal(7))
+
+
 def test_null_min_points_evaluates_but_never_fires(cfg):
     pos, scores = _three()
     sigs = _ev(cfg, pos, scores)

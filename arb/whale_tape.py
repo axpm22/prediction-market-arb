@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY, evaluated_at TEXT, condition_id TEXT, side TEXT, variant TEXT,
     points_yes TEXT, points_no TEXT, ratio TEXT, whale_ids_json TEXT, vwap TEXT,
     touch_ask TEXT, touch_bid TEXT, depth_usd TEXT, fired INTEGER, suppressed_reason TEXT,
-    bet_ids_json TEXT, flagged_edge TEXT);
+    bet_ids_json TEXT, flagged_edge TEXT, holders_ratio TEXT);
 CREATE INDEX IF NOT EXISTS idx_signals_time ON signals(evaluated_at);
 -- holdings columns/INSERT: arb/whale_holdings.py COLS (kept in sync by hand,
 -- like `prints`). One row per open position in a wallet's `positions?user=`
@@ -133,8 +133,24 @@ def open_tape(path: str | Path) -> sqlite3.Connection:
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA busy_timeout=30000")
     con.executescript(SCHEMA)
+    _migrate(con)
     con.commit()
     return con
+
+
+# Every DDL above is CREATE TABLE IF NOT EXISTS, so a column added to an
+# existing tape needs an ALTER: (table, column, type), applied when
+# PRAGMA table_info says it is missing. The tape is not the ledger — rule 9
+# forbids UPDATE/DELETE on flat_bets/bet_events, not schema growth here.
+_MIGRATIONS = (("signals", "holders_ratio", "TEXT"),)    # §7 item 1b, 2026-09-04
+
+
+def _migrate(con) -> None:
+    for table, column, kind in _MIGRATIONS:
+        cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+            log.info("whale tape: added %s.%s", table, column)
 
 
 class _Bucket:
