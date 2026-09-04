@@ -1,9 +1,12 @@
 """L14 row shaping for the whale lane, in both directions: the tape rows it
-reads (markets, prints, signals, a booked bet's context) and the ledger rows it
-writes (`quotes`, candidates, the exit event). Split out of arb/lanes/whale.py
-on size alone (modules stay under ~300 lines) — same rules: money is Decimal
-(rule 5), every threshold comes from config (rule 4), no venue call and no
-clock (`now` is always an argument).
+reads (markets, prints, signals, a booked bet's context), the ledger rows it
+writes (`quotes`, candidates, the exit event), and the two shapers that turn a
+fetched book into what the pure signal module takes (`_touch`) and gives back
+(`_zombied`, §7.5 — the zombie test needs the ledger's volume, which a pure
+module has no way to read). Split out of arb/lanes/whale.py on size alone
+(modules stay under ~300 lines) — same rules: money is Decimal (rule 5), every
+threshold comes from config (rule 4), no venue call and no clock (`now` is
+always an argument).
 
 The leg convention is spec §8, pinned: a WHALE leg always BUYS one token, so
 `side = "YES"` and `outcome` is that token's own label — exactly how the watch
@@ -11,6 +14,7 @@ lane writes Polymarket sports quotes, which is what lets markouts join.
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from decimal import Decimal
@@ -20,8 +24,8 @@ from decimal import Decimal
 from arb.lanes.political import _best
 from arb.models import position_key, q6
 from arb.venues.fees import leg_fee_cost
-from arb.whale_signal import conf_stake
-from arb import whale_tape
+from arb.whale_signal import Signal, Touch, conf_stake
+from arb import whale_universe
 
 VENUE, CATEGORY = "polymarket", "sports"
 # tape `signals` DDL: arb/whale_tape.py SCHEMA (kept in sync by hand, as the
@@ -29,6 +33,32 @@ VENUE, CATEGORY = "polymarket", "sports"
 SIGNAL_COLS = ("evaluated_at, condition_id, side, variant, points_yes, points_no,"
                " ratio, whale_ids_json, vwap, touch_ask, touch_bid, depth_usd,"
                " fired, suppressed_reason, flagged_edge")
+
+
+def _touch(books, tokens, cid) -> dict:
+    """One `Touch` per side, keyed by outcome index. A side whose token or
+    book is missing is simply absent, which `evaluate` reads as one-sided."""
+    out = {}
+    for side in (0, 1):
+        best = _best(books.get(tokens.get((cid, side))))
+        if best is not None:
+            out[side] = Touch(ask=best[0], bid=best[1], depth_usd=best[2])
+    return out
+
+
+def _zombied(cfg, sig, volume) -> Signal:
+    """§7.5, lane-level: the pure signal module knows nothing about zombies.
+    Applied only to a signal that WOULD fire, so an earlier gate keeps its own
+    (more informative) reason — the same order the spec lists them in.
+    `volume_24h` is the ledger's latest watch quote for that token; unknown
+    (no watch row) reads as NOT a zombie, never as one."""
+    if not sig.fired or volume is None or volume != 0:
+        return sig
+    if sig.touch_ask is None or sig.touch_bid is None:
+        return sig
+    if sig.touch_ask - sig.touch_bid < Decimal(str(cfg["zombie_spread_min"])):
+        return sig
+    return dataclasses.replace(sig, fired=False, suppressed_reason="zombie")
 
 
 def best_bid(book: dict | None) -> tuple[Decimal | None, Decimal]:
@@ -135,10 +165,10 @@ def exit_payload(cfg, bet, decision, bid, contracts) -> dict:
 
 # ------------------------------------------------------------- tape rows
 
-def _tape_market(row) -> whale_tape.Market:
+def _tape_market(row) -> whale_universe.Market:
     """A market we hold a bet in but that has aged out of the universe still
     needs its tokens, so it can still be priced and exited."""
-    return whale_tape.Market(
+    return whale_universe.Market(
         condition_id=row["condition_id"], sport=row["sport"],
         market_type=row["market_type"], line=row["line"],
         start_utc=row["start_utc"], event_key=row["event_key"],

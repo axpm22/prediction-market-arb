@@ -19,37 +19,40 @@ calls / ~11 min per backfill cycle against a 60 s cadence here).
 """
 from __future__ import annotations
 
-import dataclasses
 import json
+import time
 from datetime import datetime
 from decimal import Decimal
 
 from arb import whale_backfill, whale_exit, whale_resolve, whale_score, whale_signal
-from arb import whale_tape
-from arb.lanes.political import _best
+from arb import whale_tape, whale_universe
 from arb.lanes.whale_book import (_bet_ctx, _event_key, _from_prints,
-                                  _persist_signal, _tape_market, best_bid,
-                                  candidate, exit_payload, quote_rows)
+                                  _persist_signal, _tape_market, _touch,
+                                  _zombied, best_bid, candidate, exit_payload,
+                                  quote_rows)
 from arb.logutil import get_logger
 from arb.replay import open_ro
 from arb.venues.base import get_json
 from arb.venues.polymarket import fetch_books
 from arb.whale_hygiene import hygiene_flags
 from arb.whale_merge import qualifying
-from arb.whale_signal import Touch
 
 log = get_logger("arb.whale", "logs/whale.log")
 
 # The ledger's PM volume for ONE poll: served by idx_quotes_poll, exactly like
-# whale_tape.UNIVERSE_SQL. A scan by venue_market_id would read 37 GB.
+# whale_universe.UNIVERSE_SQL. A scan by venue_market_id would read 37 GB.
 VOLUME_SQL = (
     "SELECT venue_market_id, volume_24h FROM quotes "
     "WHERE poll_id = (SELECT MAX(id) FROM polls WHERE kind='watch') "
     "AND venue='polymarket' AND category='sports'")
+# §9 (pinned 2026-09-04): open FOR EXIT PURPOSES means no terminal event.
+# `lifetime_closed` is deliberately NOT terminal here — the tracker writes it
+# after `dead_checks` cycles with no re-sighting, which for this lane only
+# means the prints aged past max_print_age_secs, not that the position closed.
 OPEN_BETS_SQL = """
     SELECT * FROM flat_bets fb WHERE fb.kind='WHALE' AND fb.poll_kind='whale'
       AND NOT EXISTS (SELECT 1 FROM bet_events be WHERE be.bet_id = fb.id
-                      AND be.kind IN ('settled', 'void', 'lifetime_closed'))"""
+                      AND be.kind IN ('settled', 'void'))"""
 
 
 def _d(v) -> Decimal | None:
@@ -78,8 +81,9 @@ def _scorer(cfg, con, positions, resolutions, now):
 
 def _calibration_blocked(con, cfg) -> set[str]:
     """§7.2: `min_points.V2/V3` may be null only while the tape's `signals`
-    span fewer than `fire.calibration_days` distinct UTC days — a day with no
-    rows is an outage day and simply never counts. Past that with a null we
+    span `fire.calibration_days` distinct UTC days or fewer — a day with no
+    rows is an outage day and simply never counts, and 'null for the first 14
+    days' reads literally: the guard fires on day 15. Past that with a null we
     log CRITICAL once per cycle and book nothing for that variant (`evaluate`
     already suppresses it as `uncalibrated`; this is the belt)."""
     fire = cfg["whale"]["fire"]
@@ -89,7 +93,7 @@ def _calibration_blocked(con, cfg) -> set[str]:
     days = con.execute(
         "SELECT COUNT(DISTINCT substr(evaluated_at, 1, 10)) d FROM signals"
     ).fetchone()["d"]
-    if days < int(fire["calibration_days"]):
+    if days <= int(fire["calibration_days"]):
         return set()
     for variant in sorted(nulls):
         log.critical("whale.fire.min_points.%s is still null after %d days of "
@@ -97,32 +101,6 @@ def _calibration_blocked(con, cfg) -> set[str]:
                      "until the dated amendment lands (design §7.2)",
                      variant, days, fire["calibration_days"], variant)
     return nulls
-
-
-def _touch(books, tokens, cid) -> dict:
-    """One `Touch` per side, keyed by outcome index. A side whose token or
-    book is missing is simply absent, which `evaluate` reads as one-sided."""
-    out = {}
-    for side in (0, 1):
-        best = _best(books.get(tokens.get((cid, side))))
-        if best is not None:
-            out[side] = Touch(ask=best[0], bid=best[1], depth_usd=best[2])
-    return out
-
-
-def _zombied(cfg, sig, volume) -> "whale_signal.Signal":
-    """§7.5, lane-level: the pure signal module knows nothing about zombies.
-    Applied only to a signal that WOULD fire, so an earlier gate keeps its own
-    (more informative) reason — the same order the spec lists them in.
-    `volume_24h` is the ledger's latest watch quote for that token; unknown
-    (no watch row) reads as NOT a zombie, never as one."""
-    if not sig.fired or volume is None or volume != 0:
-        return sig
-    if sig.touch_ask is None or sig.touch_bid is None:
-        return sig
-    if sig.touch_ask - sig.touch_bid < Decimal(str(cfg["zombie_spread_min"])):
-        return sig
-    return dataclasses.replace(sig, fired=False, suppressed_reason="zombie")
 
 
 # ---------------------------------------------------------------- the cycle
@@ -133,13 +111,13 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     res = {"status": "disabled", "markets": 0, "prints": 0, "bad_rows": 0,
            "wallets": 0, "hygiene_excluded": 0, "signals_evaluated": 0, "fired": 0,
            "suppressed": {}, "booked": 0, "exited": 0, "exit_no_bid": 0,
-           "quotes_rows": 0}
+           "quotes_rows": 0, "market_errors": 0}
     if not w["enabled"]:
         return res
     ro = open_ro(store.path)
 
     # 1-3: universe, prints, discovery.
-    markets = whale_tape.universe(ro, cfg, now)
+    markets = whale_universe.universe(ro, cfg, now)
     poll = whale_tape.poll_prints(cfg, con, markets, now, get=get)
     res.update(status=poll["status"], markets=len(markets), prints=poll["rows"],
                bad_rows=poll["bad_rows"],
@@ -180,7 +158,7 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
         cid = ctx["condition_id"] if ctx else None
         if cid and cid not in priced and cid in tape_markets:
             priced[cid] = _tape_market(tape_markets[cid])
-    books, venue_ok = _fetch_books(cfg, fetch, priced)
+    books, venue_ok, latency_ms = _fetch_books(cfg, fetch, priced)
     keys = {cid: _event_key(cid, slugs, tape_markets) for cid in priced}
     rows = [r for cid, m in priced.items()
             for r in quote_rows(cfg, m, books, keys[cid], now)]
@@ -191,35 +169,43 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     blocked = _calibration_blocked(con, cfg)
     cands = []
     for cid, m in live.items():
-        market = {"condition_id": cid, "start_utc": m.start_utc,
-                  "sport": m.sport, "market_type": m.market_type}
-        m0 = rates.get(whale_score.root_of(m.sport, m.market_type),
-                       w["score"]["base_rate_default"])
-        touch = _touch(books, tokens, cid)
-        for sig in whale_signal.evaluate(market, open_pos, lookup, touch, now, cfg, m0):
-            token = tokens.get((cid, sig.side))
-            sig = _zombied(cfg, sig, volumes.get(f"{cid}:{token}"))
-            signal_id = _persist_signal(con, sig, cid, now)
-            res["signals_evaluated"] += 1
-            if not sig.fired:
-                reason = sig.suppressed_reason
-                res["suppressed"][reason] = res["suppressed"].get(reason, 0) + 1
-                continue
-            res["fired"] += 1
-            if sig.variant in blocked:
-                continue
-            label = dict(m.tokens).get(token) or ""
-            start = datetime.fromisoformat(m.start_utc) if m.start_utc else None
-            cands += [candidate(cfg, m, sig, sizing, signal_id, keys[cid], token,
-                                label, start, now) for sizing in ("flat", "conf")]
+        # One market's evaluate + signals row + candidates, isolated: a market
+        # the venue or the tape has left malformed must not cost this cycle its
+        # quotes rows, its exits, its polls row or its heartbeat.
+        try:
+            market = {"condition_id": cid, "start_utc": m.start_utc,
+                      "sport": m.sport, "market_type": m.market_type}
+            m0 = rates.get(whale_score.root_of(m.sport, m.market_type),
+                           w["score"]["base_rate_default"])
+            touch = _touch(books, tokens, cid)
+            for sig in whale_signal.evaluate(market, open_pos, lookup, touch, now, cfg, m0):
+                token = tokens.get((cid, sig.side))
+                sig = _zombied(cfg, sig, volumes.get(f"{cid}:{token}"))
+                signal_id = _persist_signal(con, sig, cid, now)
+                res["signals_evaluated"] += 1
+                if not sig.fired:
+                    reason = sig.suppressed_reason
+                    res["suppressed"][reason] = res["suppressed"].get(reason, 0) + 1
+                    continue
+                if sig.variant in blocked:      # counted as fired only if bookable
+                    continue
+                res["fired"] += 1
+                label = dict(m.tokens).get(token) or ""
+                start = datetime.fromisoformat(m.start_utc) if m.start_utc else None
+                cands += [candidate(cfg, m, sig, sizing, signal_id, keys[cid], token,
+                                    label, start, now) for sizing in ("flat", "conf")]
+        except Exception as e:  # noqa: BLE001 — one market, not the whole cycle
+            res["market_errors"] += 1
+            log.warning("whale market %s skipped: %s", cid, e, exc_info=True)
 
-    poll_id = _persist(cfg, store, rows, cands, venue_ok, now)
+    poll_id = _persist(cfg, store, rows, cands, venue_ok, latency_ms, now)
     res["booked"] = store.query(
         "SELECT COUNT(*) c FROM flat_bets WHERE poll_id=?", (poll_id,))[0]["c"]
 
     # 9: exits, on the books this cycle already fetched.
     for bet in bets:
-        _exit(cfg, store, bet, ctxs[bet["id"]], open_pos, lookup, books, now, res)
+        _exit(cfg, store, bet, ctxs[bet["id"]], open_pos, lookup, books,
+              venue_ok, now, res)
 
     from arb.cli import head_sha
     from arb.heartbeat import beat
@@ -230,20 +216,23 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     return res
 
 
-def _fetch_books(cfg, fetch, priced) -> tuple[dict, bool]:
+def _fetch_books(cfg, fetch, priced) -> tuple[dict, bool, float | None]:
     """A venue hiccup is a poll with no books, never a dead lane: the tracker
-    reads the venue status and CARRIES open bets instead of closing them."""
+    reads the venue status and CARRIES open bets instead of closing them.
+    The third element is the MEASURED /books latency in ms — None when no
+    fetch happened at all, which is not the same fact as 0 ms."""
     tokens = [t for m in priced.values() for t, _ in m.tokens]
     if not tokens:
-        return {}, True
+        return {}, True, None
+    t0 = time.monotonic()
     try:
-        return fetch(cfg, tokens), True
+        return fetch(cfg, tokens), True, (time.monotonic() - t0) * 1000
     except Exception as e:  # noqa: BLE001 — venue outage, not a lane failure
         log.warning("whale books fetch failed for %d token(s): %s", len(tokens), e)
-        return {}, False
+        return {}, False, (time.monotonic() - t0) * 1000
 
 
-def _persist(cfg, store, rows, cands, venue_ok, now) -> int:
+def _persist(cfg, store, rows, cands, venue_ok, latency_ms, now) -> int:
     """arb.cycle.persist_poll's sequence, on dict quotes and dict candidates
     (that function needs Quote/Opportunity objects; the political lane's
     command mirrors it the same way)."""
@@ -252,15 +241,16 @@ def _persist(cfg, store, rows, cands, venue_ok, now) -> int:
                                      "n_quotes": len(rows), "n_opps": len(cands)})
     store.insert_many("poll_venues", [{"poll_id": poll_id, "venue": "polymarket",
                                        "ok": venue_ok, "n_quotes": len(rows),
-                                       "latency_ms": 0}])
+                                       "latency_ms": latency_ms}])
     store.insert_many("quotes", [{**r, "poll_id": poll_id} for r in rows])
     process_poll(cfg, store, poll_id, "whale", cands,
-                 {"polymarket": {"ok": venue_ok, "n": len(rows), "latency_ms": 0}},
+                 {"polymarket": {"ok": venue_ok, "n": len(rows),
+                                 "latency_ms": latency_ms}},
                  now=now)
     return poll_id
 
 
-def _exit(cfg, store, bet, ctx, open_pos, lookup, books, now, res) -> None:
+def _exit(cfg, store, bet, ctx, open_pos, lookup, books, venue_ok, now, res) -> None:
     """§9 for one open bet. `exit_reason` returns None post-start (a bet is
     held to resolution then), so there is nothing extra to re-check here."""
     if ctx is None:
@@ -273,8 +263,11 @@ def _exit(cfg, store, bet, ctx, open_pos, lookup, books, now, res) -> None:
         store.insert("annotations", {
             "created_at": now.isoformat(), "target_kind": "bet",
             "target_id": str(bet["id"]), "kind": "exit-no-bid",
+            # venue_ok tells a THIN BOOK (venue answered, nobody bidding) from
+            # an OUTAGE (no book at all): the same annotation, opposite causes.
             "detail": f"exit:{decision.reason} priced at bid={bid} "
-                      f"depth={depth} < min_executable_usd; re-evaluated next cycle"})
+                      f"depth={depth} < min_executable_usd; venue_ok={venue_ok}; "
+                      f"re-evaluated next cycle"})
         res["exit_no_bid"] += 1
         return
     # contracts on the same basis metrics.bet_pnl_optimistic counts them for a

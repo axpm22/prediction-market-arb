@@ -12,20 +12,24 @@ Rule 9: writes only to whale.tape_db, so flat_bets is structurally
         unreachable from this lane — the arb/pm_tape.py defence.
 
 I/O only. Positions, scores and signals are pure functions elsewhere.
-One print row (parse + persist) lives in arb/whale_rows.py, on size alone.
+One print row (parse + persist) lives in arb/whale_rows.py, and the market
+universe in arb/whale_universe.py — both on size alone.
 """
 from __future__ import annotations
 
 import json
 import sqlite3
 import time
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from arb.logutil import get_logger
 from arb.venues.base import get_json, VenueError
 from arb.whale_rows import _keep
+# The universe reader and the tape's `markets` table live in their own module
+# now (size only). `_iso` is re-exported: arb/whale_resolve.py imports the
+# collector's shared helpers from here, as it always has.
+from arb.whale_universe import _iso, persist_markets  # noqa: F401
 
 log = get_logger("arb.whale", "logs/whale.log")
 
@@ -74,19 +78,6 @@ CREATE TABLE IF NOT EXISTS base_rates (
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
-# `slug` is kept so a market Gamma answered for but whose league code is not
-# in whale.slug_sport_prefixes can be re-mapped LOCALLY when that map grows —
-# without it, an unmappable market would be stuck at sport=NULL forever.
-MARKET_COLS = ("condition_id, sport, market_type, line, start_utc, event_key,"
-               " tokens_json, slug, first_seen, last_seen")
-# The ledger's PM sports quotes for ONE poll: served by idx_quotes_poll. A
-# fetched_at range instead would scan the 37 GB table.
-UNIVERSE_SQL = (
-    "SELECT venue_market_id, sport, market_type, line, outcome, start_utc, event_key "
-    "FROM quotes WHERE poll_id = (SELECT MAX(id) FROM polls WHERE kind='watch') "
-    "AND venue='polymarket' AND category='sports'")
-
-
 def open_tape(path: str | Path) -> sqlite3.Connection:
     """WAL + busy_timeout: `whale` and `settle` both touch this file (Task 4)."""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -97,39 +88,6 @@ def open_tape(path: str | Path) -> sqlite3.Connection:
     con.executescript(SCHEMA)
     con.commit()
     return con
-
-
-@dataclass(frozen=True)
-class Market:
-    condition_id: str
-    sport: str | None
-    market_type: str | None
-    line: str | None
-    start_utc: str | None
-    event_key: str | None
-    tokens: tuple = ()          # ((token_id, outcome_label), ...)
-
-
-def universe(store_ro, cfg, now) -> list[Market]:
-    """Polymarket sports markets from the LATEST watch poll whose start lies in
-    [now - lookback_hours, now + lookahead_hours] (spec §5 step 1)."""
-    w = cfg["whale"]
-    lo = now - timedelta(hours=float(w["lookback_hours"]))
-    hi = now + timedelta(hours=float(w["lookahead_hours"]))
-    by_cond: dict[str, dict] = {}
-    for r in store_ro.execute(UNIVERSE_SQL):
-        vmid = r["venue_market_id"] or ""
-        start = _iso(r["start_utc"])
-        if ":" not in vmid or start is None or not (lo <= datetime.fromisoformat(start) <= hi):
-            continue
-        cond, token = vmid.split(":", 1)
-        m = by_cond.setdefault(cond, {"sport": r["sport"], "market_type": r["market_type"],
-                                      "line": r["line"], "start_utc": start,
-                                      "event_key": r["event_key"], "tokens": {}})
-        m["tokens"][token] = r["outcome"]
-    return [Market(condition_id=c, sport=m["sport"], market_type=m["market_type"],
-                   line=m["line"], start_utc=m["start_utc"], event_key=m["event_key"],
-                   tokens=tuple(sorted(m["tokens"].items()))) for c, m in by_cond.items()]
 
 
 class _Bucket:
@@ -212,17 +170,6 @@ def _set_backoff(con, cfg, now):
     log.warning("whale collector backing off until %s", until.isoformat())
 
 
-def _iso(value) -> str | None:
-    """Normalise a venue timestamp to the ledger's own ISO form. Gamma sends
-    '2026-08-09 09:00:00+00', which SQLite's strftime cannot parse."""
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(str(value)).isoformat()
-    except ValueError:
-        return None
-
-
 def _json_list(value) -> list:
     """Gamma JSON-encodes clobTokenIds/outcomes as STRINGS, not arrays."""
     if isinstance(value, list):
@@ -234,28 +181,13 @@ def _json_list(value) -> list:
     return parsed if isinstance(parsed, list) else []
 
 
-def persist_markets(con, markets, now):
-    con.executemany(
-        f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 10)}) "
-        "ON CONFLICT(condition_id) DO UPDATE SET last_seen=excluded.last_seen, "
-        "sport=COALESCE(excluded.sport, sport), "
-        "market_type=COALESCE(excluded.market_type, market_type), "
-        "start_utc=COALESCE(excluded.start_utc, start_utc), "
-        "tokens_json=excluded.tokens_json",
-        [(m.condition_id, m.sport, m.market_type, m.line, m.start_utc, m.event_key,
-          json.dumps([list(t) for t in m.tokens]), None, now.isoformat(), now.isoformat())
-         for m in markets])
-    con.commit()
-
-
 def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
     """One collector cycle (spec §5 step 2). Global mode: one marketless call,
     kept rows filtered client-side, paging by `offset` only while a page is
     full AND its oldest row is still newer than last_seen - overlap_secs."""
     w = cfg["whale"]
-    res = {"calls": 0, "rows": 0, "dupes": 0, "bad_rows": 0,
+    res = {"calls": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "gap_secs": 0,
            "status_counts": {}, "status": "ok"}
-    gap_to = None
     if _backoff_active(con, now):
         res["status"] = "backoff"
         return res
@@ -302,7 +234,6 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
                     # we will never fetch and move past it. Walking back into
                     # that 400 every cycle is how the collector wedged (Task 8).
                     if oldest > last_seen:   # else the overlap already covers it
-                        gap_to = oldest
                         res["gap_secs"] = oldest - last_seen
                         _set_meta(con, "last_gap", json.dumps(
                             {"from_ts": last_seen, "to_ts": oldest,
@@ -318,10 +249,11 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
         res["status"] = "error"
     # ONLY on a completed poll: on an abort the pages behind the failure were
     # never fetched, and advancing the watermark would strand that gap forever.
-    # A CAPPED poll is completed, but its watermark is the oldest row fetched,
-    # not the newest: the span below it is the recorded gap, and only moving
-    # past it stops the next cycle walking back into the same 400.
-    mark = gap_to if gap_to is not None else newest
-    if mark and res["status"] == "ok":
-        _set_meta(con, "last_seen_ts", mark)
+    # A CAPPED poll is completed, and its watermark is the newest row fetched
+    # like any other cycle (§5 step 2, re-amended 2026-09-04): the unreachable
+    # span below it is recorded ONCE as meta.last_gap. Stopping at the oldest
+    # row instead left the next floor two pages behind a `now` that had moved
+    # on, so the cap - and a fresh spurious gap - fired again every cycle.
+    if newest and res["status"] == "ok":
+        _set_meta(con, "last_seen_ts", newest)
     return res

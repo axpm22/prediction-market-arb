@@ -12,8 +12,9 @@ from decimal import Decimal
 from arb.venues.base import get_json
 from arb.whale_rows import _keep
 from arb.whale_tape import (DATA_API, GAMMA, GAMMA_IDS_PER_CALL, LEADERBOARD_PAGE,
-                            MARKET_COLS, SPORTS_MARKET_TYPE, _backoff_active, _bucket,
-                            _call, _iso, _json_list, _meta, _set_backoff, _set_meta, log)
+                            SPORTS_MARKET_TYPE, _backoff_active, _bucket, _call,
+                            _json_list, _meta, _set_backoff, _set_meta, log)
+from arb.whale_universe import MARKET_COLS, _iso
 from arb.models import q6
 
 

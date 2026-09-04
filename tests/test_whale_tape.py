@@ -3,6 +3,7 @@
 ledger is a three-row in-memory stand-in (the real one is 37 GB)."""
 import copy
 import json
+import logging
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -12,7 +13,7 @@ import pytest
 
 from arb.config import load
 from arb.venues.base import VenueError
-from arb import whale_backfill, whale_tape
+from arb import whale_backfill, whale_tape, whale_universe
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 NOW = datetime(2026, 9, 3, 17, 0, 0, tzinfo=timezone.utc)
@@ -111,7 +112,7 @@ def test_universe_keeps_only_polymarket_sports_markets_inside_the_window():
         _q("0xpolitics", "t5", "yes", IN_WINDOW, category="nonsports"),
         _q("0xstale", "t6", "old poll", IN_WINDOW, poll_id=1),
     ])
-    got = {m.condition_id for m in whale_tape.universe(led, _cfg(), NOW)}
+    got = {m.condition_id for m in whale_universe.universe(led, _cfg(), NOW)}
     assert got == {"0xin"}
 
 
@@ -120,7 +121,7 @@ def test_universe_carries_the_market_facts_and_every_token():
         _q("0xtot", "tA", "OVER", IN_WINDOW, market_type="TOTAL", line="7.5"),
         _q("0xtot", "tB", "UNDER", IN_WINDOW, market_type="TOTAL", line="7.5"),
     ])
-    (m,) = whale_tape.universe(led, _cfg(), NOW)
+    (m,) = whale_universe.universe(led, _cfg(), NOW)
     assert m.condition_id == "0xtot"
     assert m.sport == "baseball_mlb" and m.market_type == "TOTAL" and m.line == "7.5"
     assert m.start_utc == IN_WINDOW and m.event_key == "ek"
@@ -136,7 +137,7 @@ def _global_markets(n=2):
     for r in rows:
         counts[r["conditionId"]] = counts.get(r["conditionId"], 0) + 1
     top = sorted(counts, key=lambda c: -counts[c])[:n]
-    return [whale_tape.Market(condition_id=c, sport="baseball_mlb", market_type="WINNER",
+    return [whale_universe.Market(condition_id=c, sport="baseball_mlb", market_type="WINNER",
                               line=None, start_utc=IN_WINDOW, event_key="ek",
                               tokens=(("t1", "Yes"),)) for c in top]
 
@@ -259,10 +260,73 @@ def test_paging_stops_at_max_offset_and_records_a_gap(tmp_path):
     gap = json.loads(whale_tape._meta(con, "last_gap"))
     assert gap == {"from_ts": last_seen, "to_ts": oldest,
                    "secs": oldest - last_seen, "at": NOW.isoformat()}
-    # the watermark is the OLDEST row fetched, not the newest: everything above
-    # it is on the tape, everything below it is the recorded gap
-    assert whale_tape._meta(con, "last_seen_ts") == str(oldest)
+    # the watermark is the NEWEST row fetched, exactly as on every other cycle:
+    # everything above the gap is on the tape and the span below it is recorded
+    # once, so the next cycle starts from the present instead of re-walking it
+    newest = max(int(r["timestamp"]) for r in pages[0])
+    assert whale_tape._meta(con, "last_seen_ts") == str(newest)
     assert con.execute("SELECT COUNT(*) FROM prints").fetchone()[0] == 10
+
+
+class _Feed:
+    """A continuous global feed: one print every `spacing` seconds on a FIXED
+    grid, newest first, `size` rows per call from `offset`. The same wall-clock
+    row comes back on every cycle, so consecutive polls overlap the way the
+    venue's own feed does — which is what makes a repeated cap visible."""
+
+    def __init__(self, cond, spacing, size):
+        self.cond, self.spacing, self.size = cond, spacing, size
+        self.now = NOW
+        self.urls = []
+
+    def top(self):
+        return int(self.now.timestamp()) // self.spacing * self.spacing
+
+    def __call__(self, url, cfg, **kw):
+        self.urls.append(url)
+        base = _fixture("whale_trades_global")[0]
+        off = int(url.split("offset=")[1]) if "offset=" in url else 0
+        return [dict(base, conditionId=self.cond, timestamp=t, transactionHash=f"0x{t}")
+                for t in (self.top() - (off + i) * self.spacing
+                          for i in range(self.size))]
+
+
+def test_a_capped_cycle_records_one_gap_then_catches_up(tmp_path, caplog):
+    """Spec §5 step 2 (re-amended 2026-09-04): after a cap the watermark
+    advances to the NEWEST row fetched, like every other cycle, and the
+    unreachable span is recorded ONCE. Advancing to the oldest row instead left
+    the next floor two pages behind a `now` that kept moving, so the cap fired
+    again every cycle and rewrote `meta.last_gap` with a spurious ~60 s gap."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    mk = _global_markets(1)
+    feed = _Feed(mk[0].condition_id, spacing=30, size=5)
+    cfg = _cfg(page_size=5, max_offset=5, overlap_secs=120)
+    last_seen = int(NOW.timestamp()) - 100_000        # a long outage behind us
+    con.execute("INSERT INTO meta (key, value) VALUES ('last_seen_ts', ?)",
+                (str(last_seen),))
+    con.commit()
+
+    gaps, warned = [], []
+    with caplog.at_level(logging.WARNING, logger="arb.whale"):
+        for cycle in range(5):
+            feed.now = NOW + timedelta(seconds=60 * cycle)
+            caplog.clear()
+            res = whale_tape.poll_prints(cfg, con, mk, feed.now, get=feed)
+            gaps.append(res["gap_secs"])
+            warned.append([r.getMessage() for r in caplog.records])
+            assert res["status"] == "ok"
+            # the watermark is the newest row fetched, every cycle
+            assert whale_tape._meta(con, "last_seen_ts") == str(feed.top())
+
+    # exactly one gap: the first cycle's, spanning last_seen -> its oldest row
+    oldest = int(NOW.timestamp()) - 9 * 30        # 2 pages x 5 rows, 30 s apart
+    assert gaps[0] == oldest - last_seen > 0
+    assert gaps[1:] == [0, 0, 0, 0]
+    assert len(warned[0]) == 1 and "capped at offset" in warned[0][0]
+    assert warned[1:] == [[], [], [], []]
+    gap = json.loads(whale_tape._meta(con, "last_gap"))
+    assert gap["from_ts"] == last_seen and gap["secs"] == gaps[0]
+    assert gap["at"] == NOW.isoformat()           # cycle 1's clock, never rewritten
 
 
 def test_a_failed_call_records_a_backoff_and_the_next_poll_short_circuits(tmp_path):
@@ -339,7 +403,7 @@ def test_batched_mode_sends_comma_csv_markets_in_groups(tmp_path):
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     rows = _fixture("whale_trades_batch")
     ids = sorted({r["conditionId"] for r in rows})
-    mk = [whale_tape.Market(condition_id=c, sport="baseball_kbo", market_type="WINNER",
+    mk = [whale_universe.Market(condition_id=c, sport="baseball_kbo", market_type="WINNER",
                             line=None, start_utc=IN_WINDOW, event_key="ek",
                             tokens=(("t", "o"),)) for c in ids]
     get = FakeGet(rows, [])

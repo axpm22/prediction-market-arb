@@ -886,11 +886,11 @@ def cmd_whale_tape(cfg, store, args):
     poll the global print feed, then promote wallets over the discovery floor.
     Writes ONLY to whale.tape_db; the ledger is opened read-only (rule 9)."""
     from datetime import datetime, timezone
-    from arb import whale_backfill, whale_tape
+    from arb import whale_backfill, whale_tape, whale_universe
     from arb.replay import open_ro
     now = datetime.now(timezone.utc)
     con = whale_tape.open_tape(cfg["whale"]["tape_db"])
-    markets = whale_tape.universe(open_ro(store.path), cfg, now)
+    markets = whale_universe.universe(open_ro(store.path), cfg, now)
     print(f"universe: {len(markets)} polymarket sports markets in "
           f"[-{cfg['whale']['lookback_hours']}h, +{cfg['whale']['lookahead_hours']}h]")
     res = whale_tape.poll_prints(cfg, con, markets, now)

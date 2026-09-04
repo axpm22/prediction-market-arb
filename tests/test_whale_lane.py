@@ -33,6 +33,9 @@ YES_TOK, NO_TOK = "0xyes", "0xno"
 LABELS = {YES_TOK: "Rays", NO_TOK: "Yankees"}
 SLUG = "mlb-tb-nyy-2026-09-03"
 EVENT_KEY = f"pm:{SLUG}"
+CID2, YES2, NO2 = "0xcond2", "0xyes2", "0xno2"
+LABELS2 = {YES2: "Cubs", NO2: "Reds"}
+SLUG2 = "mlb-chc-cin-2026-09-03"
 
 
 @pytest.fixture(autouse=True)
@@ -60,12 +63,23 @@ def cfg():
 
 def _ledger(tmp_path, volume="1000") -> Store:
     """A three-row ledger: one watch poll with both Polymarket tokens, which is
-    all `whale_tape.universe` reads (the real one is 37 GB)."""
+    all `whale_universe.universe` reads (the real one is 37 GB)."""
     store = Store(tmp_path / "arb.sqlite")
     poll_id = store.insert("polls", {
         "started_at": (NOW - timedelta(minutes=5)).isoformat(), "kind": "watch",
         "n_quotes": 2, "n_opps": 0})
-    for token, label in LABELS.items():
+    _watch_quotes(store, poll_id, CID, LABELS, volume)
+    return store
+
+
+def _second_market(store, volume="1000"):
+    """A second market on the same watch poll: two markets, one cycle."""
+    poll_id = store.query("SELECT MAX(id) id FROM polls WHERE kind='watch'")[0]["id"]
+    _watch_quotes(store, poll_id, CID2, LABELS2, volume)
+
+
+def _watch_quotes(store, poll_id, cid, labels, volume):
+    for token, label in labels.items():
         store.insert("quotes", {
             "poll_id": poll_id, "fetched_at": (NOW - timedelta(minutes=5)).isoformat(),
             "event_key": "baseball_mlb|2026-09-03|nyy@tb", "category": "sports",
@@ -75,8 +89,7 @@ def _ledger(tmp_path, volume="1000") -> Store:
             "fee_cost": Decimal("0"), "depth_usd": Decimal("500"),
             "ladder_json": None, "live": False, "bid": Decimal("0.49"),
             "volume_24h": Decimal(volume), "start_utc": START.isoformat(),
-            "start_grade": "nominal", "venue_market_id": f"{CID}:{token}"})
-    return store
+            "start_grade": "nominal", "venue_market_id": f"{cid}:{token}"})
 
 
 def _tape(tmp_path):
@@ -90,6 +103,13 @@ def _trade(wallet, idx=0, price="0.50", size="1000", age=60, tx=None):
             "timestamp": int((NOW - timedelta(seconds=age)).timestamp()),
             "transactionHash": tx or f"0x{wallet}", "eventSlug": SLUG,
             "slug": f"{SLUG}-tb", "title": "Rays vs Yankees"}
+
+
+def _second_trades():
+    """Three whales on the second market's YES token."""
+    return [dict(_trade(f"c{i}", age=60 + 30 * i), conditionId=CID2, asset=YES2,
+                 eventSlug=SLUG2, slug=f"{SLUG2}-chc", transactionHash=f"0x2c{i}")
+            for i in range(3)]
 
 
 def _three(price="0.50"):
@@ -117,7 +137,7 @@ def _book(ask="0.51", bid="0.49", size="1000"):
 
 def _fetch(**per_token):
     """fetch_books stand-in. Default book on both tokens; override by token."""
-    books = {YES_TOK: _book(), NO_TOK: _book()}
+    books = {YES_TOK: _book(), NO_TOK: _book(), YES2: _book(), NO2: _book()}
     books.update(per_token)
 
     def fetch(cfg, token_ids, deadline=None):
@@ -162,6 +182,8 @@ def test_one_cycle_books_two_rows_per_fired_variant(cfg, tmp_path):
                and b["venue_pair"] == "polymarket:self"
                and b["event_key"] == EVENT_KEY for b in bets)
     assert res["booked"] == 2 and res["fired"] == 1
+    (venue,) = store.query("SELECT * FROM poll_venues")
+    assert venue["latency_ms"] is not None and venue["latency_ms"] >= 0
 
 
 def test_the_booked_leg_is_the_touch_the_fire_rule_saw(cfg, tmp_path):
@@ -261,9 +283,11 @@ def test_hygiene_excludes_before_scoring_and_signalling(cfg, tmp_path):
 
 def test_calibration_guard_logs_critical_and_books_nothing(cfg, tmp_path, caplog):
     """§7.2: min_points.V2/V3 may be null only inside the calibration window.
-    Past it, the lane logs CRITICAL and books nothing for that variant."""
+    Past it, the lane logs CRITICAL and books nothing for that variant. 'Null
+    for the first 14 days' reads literally: 14 distinct days of signals is
+    still inside the window, so the guard needs a 15th."""
     store, con = _ledger(tmp_path), _tape(tmp_path)
-    for day in range(int(cfg["whale"]["fire"]["calibration_days"])):
+    for day in range(int(cfg["whale"]["fire"]["calibration_days"]) + 1):
         con.execute("INSERT INTO signals (evaluated_at, condition_id, variant) "
                     "VALUES (?,?,?)",
                     (f"2026-08-{day + 1:02d}T00:00:00+00:00", CID, "V2"))
@@ -349,6 +373,30 @@ def test_every_variant_of_one_cycle_gets_its_own_position_key(cfg, tmp_path):
     assert all(b["position_key"].endswith("|" + b["variant"]) for b in bets)
 
 
+def test_one_bad_market_never_costs_the_cycle_its_poll_row(cfg, tmp_path, monkeypatch):
+    """Per-market isolation: evaluate/persist/book for ONE market is wrapped, so
+    a market the tape or the venue left malformed cannot cost the cycle its
+    quotes rows, its polls row, its heartbeat or the other market's bets."""
+    from arb import whale_signal
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _second_market(store)
+    real = whale_signal.evaluate
+
+    def boom(market, *a, **kw):
+        if market["condition_id"] == CID2:
+            raise ValueError("unparseable start_utc on the tape")
+        return real(market, *a, **kw)
+    monkeypatch.setattr(whale_signal, "evaluate", boom)
+    res = _run(cfg, store, con, rows=_three() + _second_trades())
+
+    assert res["market_errors"] == 1
+    assert res["booked"] == 2                      # the good market still books
+    assert {b["event_key"] for b in _bets(store)} == {EVENT_KEY}
+    assert res["quotes_rows"] == 4                 # both markets still priced
+    assert len(store.query("SELECT * FROM polls WHERE kind='whale'")) == 1
+    assert store.query("SELECT * FROM heartbeats WHERE process='whale'")
+
+
 # -------------------------------------------------------------------- exits
 
 def _flip(con):
@@ -379,6 +427,30 @@ def test_a_flipped_consensus_exits_the_bet_at_the_bid(cfg, tmp_path):
     assert Decimal(payload["detail"]["ratio"]) < Decimal("0.5")   # 3/7
 
 
+def test_a_lifetime_closed_bet_is_still_exited(cfg, tmp_path):
+    """§9 (pinned 2026-09-04): for exit purposes an open WHALE bet is one with
+    no `settled`/`void` event. `lifetime_closed` means the FLAG left the feed —
+    here, that the prints aged past `max_print_age_secs` so nothing re-fired —
+    not that the position closed. Excluding it stopped every exit after
+    `dead_checks` quiet cycles, which is most of a pregame window."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+    cycles = int(cfg["tracker"]["dead_checks"]) + 5
+    for i in range(1, cycles + 1):                     # no new prints: they hold
+        _run(cfg, store, con, now=NOW + timedelta(seconds=60 * i), rows=[])
+    assert len(_events(store, "lifetime_closed")) == 2       # both bets, once each
+    assert _events(store) == []                              # nothing settled yet
+
+    _flip(con)
+    res = _run(cfg, store, con, now=NOW + timedelta(seconds=60 * (cycles + 1)),
+               rows=[])
+
+    assert res["exited"] == 2
+    evs = _events(store)
+    assert len(evs) == 2
+    assert json.loads(evs[0]["payload_json"])["source"] == "exit:flip"
+
+
 def test_an_exit_with_no_bid_annotates_and_appends_no_event(cfg, tmp_path):
     store, con = _ledger(tmp_path), _tape(tmp_path)
     _run(cfg, store, con)
@@ -391,6 +463,25 @@ def test_an_exit_with_no_bid_annotates_and_appends_no_event(cfg, tmp_path):
     kinds = [r["kind"] for r in store.query(
         "SELECT kind FROM annotations WHERE target_kind='bet'")]
     assert kinds.count("exit-no-bid") == 2
+    assert all("venue_ok=True" in r["detail"] for r in store.query(
+        "SELECT detail FROM annotations WHERE kind='exit-no-bid'"))
+
+
+def test_a_venue_outage_is_annotated_as_an_outage_not_a_thin_book(cfg, tmp_path):
+    """Same annotation, opposite causes: `venue_ok` is what tells them apart
+    when the exit is re-read later (nobody bidding vs nobody answering)."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+    _flip(con)
+
+    def dead(cfg, token_ids, deadline=None):
+        raise RuntimeError("polymarket 503")
+    res = _run(cfg, store, con, now=NOW + timedelta(seconds=60), fetch=dead)
+
+    assert res["exited"] == 0 and res["exit_no_bid"] == 2
+    assert _events(store) == []
+    assert all("venue_ok=False" in r["detail"] for r in store.query(
+        "SELECT detail FROM annotations WHERE kind='exit-no-bid'"))
 
 
 def test_a_bid_thinner_than_the_depth_floor_is_no_bid(cfg, tmp_path):
