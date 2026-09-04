@@ -97,7 +97,7 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     res = {"status": "disabled", "markets": 0, "prints": 0, "bad_rows": 0,
            "wallets": 0, "hygiene_excluded": 0, "signals_evaluated": 0, "fired": 0,
            "suppressed": {}, "booked": 0, "exited": 0, "exit_no_bid": 0,
-           "quotes_rows": 0, "market_errors": 0, "label_collision": 0}
+           "quotes_rows": 0, "market_errors": 0, "label_collision": 0, "poll_id": None}
     if not w["enabled"]:
         return res
     t0 = time.monotonic()
@@ -161,8 +161,12 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     res["quotes_rows"] = len(rows)
 
     # 7-8: evaluate, persist every variant, book the fired ones twice.
-    vol_poll = whale_universe._poll_with_pm_rows(
-        ro, int(w["universe_poll_lookback"]), now, int(cfg["data_stale_alarm_secs"]))
+    # I2 (mapper fix pass 2, 2026-09-04): bind to the SAME poll universe()
+    # already picked (res["poll_id"]), never a fresh _poll_with_pm_rows call
+    # — poll_prints/read_resolutions/_fetch_books above spend real network
+    # time, in which the separate watch-lane process can commit a NEW poll;
+    # a re-query would silently switch VOLUME_SQL to it mid-cycle.
+    vol_poll = res["poll_id"]
     volumes = ({r["venue_market_id"]: _d(r["volume_24h"])
                for r in ro.execute(VOLUME_SQL, (vol_poll,))} if vol_poll is not None else {})
     blocked = _calibration_blocked(con, cfg)

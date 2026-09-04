@@ -1,0 +1,159 @@
+"""L14 whale-consensus lane: Gamma condition_id -> (sport, market_type,
+start_utc, tokens) mapping. Split out of arb/whale_backfill.py on size alone
+(mapper fix pass 2 2026-09-04) — same file, same rules: public GETs, Decimal
+at the store boundary, nothing here can reach data/arb.sqlite.
+"""
+from __future__ import annotations
+
+import json
+
+from arb.whale_tape import (GAMMA_IDS_PER_CALL, SPORTS_MARKET_TYPE, _call,
+                            _gamma_url, _json_list, _set_meta, log)
+from arb.whale_universe import MARKET_COLS, _iso
+
+# New condition_ids, FIFO by first print (any deterministic order is fine —
+# spec's own words): every distinct condition_id `prints` has ever seen that
+# `markets` has NO row for at all. Mirrors SWEEP_SQL's shape on purpose — same
+# bounded-FIFO-off-the-tape idiom, same reason (a cycle must never walk an
+# unbounded backlog).
+MAP_SQL = """
+    SELECT p.condition_id FROM prints p
+     LEFT JOIN markets m ON m.condition_id = p.condition_id
+     WHERE m.condition_id IS NULL AND p.condition_id <> ''
+     GROUP BY p.condition_id
+     ORDER BY MIN(p.ts), p.condition_id
+     LIMIT ?"""
+
+# Existing rows still missing a field, oldest first (mapper fix pass
+# 2026-09-04): the ORIGINAL sin here was `_map_markets`' INSERT OR IGNORE —
+# once a condition_id had ANY `markets` row, MAP_SQL's LEFT JOIN could never
+# select it again, so a row stored with sport set (e.g. by a one-off prefix
+# remap) and market_type still NULL was stuck that way forever, and could
+# never enter SWEEP_SQL (which requires both). `slug IS NOT NULL` is the
+# floor: with no slug Gamma never found the market at all, and there is
+# nothing left to retry. The `unmappable` join is `swept:`'s own idiom — a
+# row Gamma still couldn't map today is skipped until tomorrow instead of
+# spending the same call every cycle for nothing.
+REVISIT_SQL = """
+    SELECT m.condition_id FROM markets m
+     LEFT JOIN meta u ON u.key = 'unmappable:' || m.condition_id
+     WHERE m.slug IS NOT NULL
+       AND (m.sport IS NULL OR m.market_type IS NULL OR m.start_utc IS NULL)
+       AND (u.value IS NULL OR u.value <> ?)
+     ORDER BY m.first_seen, m.condition_id
+     LIMIT ?"""
+
+
+def _local_remap(con, ids, prefixes, now, res) -> list[str]:
+    """A revisit row's slug is already on hand, so a prefix hit costs no
+    Gamma call. Drop an id from the queue only when that leaves nothing
+    else missing; whatever still needs market_type/start_utc goes on."""
+    todo = []
+    for cond in ids:
+        row = con.execute("SELECT sport, market_type, start_utc, slug FROM markets "
+                          "WHERE condition_id=?", (cond,)).fetchone()
+        sport = row["sport"] or _sport_of(row["slug"] or "", prefixes)
+        if sport and row["market_type"] and row["start_utc"]:
+            con.execute("UPDATE markets SET sport=?, last_seen=? WHERE condition_id=?",
+                        (sport, now.isoformat(), cond))
+            res["mapped"] += 1
+        else:
+            todo.append(cond)
+    con.commit()
+    return todo
+
+
+def _gamma_fetch(cfg, bucket, get, ids, res, closed=False) -> dict:
+    """One Gamma condition_ids call -> {conditionId: raw row}."""
+    body = _call(bucket, get, _gamma_url(ids, closed=closed), cfg, res)
+    return {str(m.get("conditionId") or ""): m for m in body}
+
+
+def _map_markets(cfg, con, todo, now, bucket, get, res):
+    """Gamma mapping for a bounded, ordered slice of condition_ids (already
+    decided by `whale_backfill.map_markets`, or a test).
+
+    Two Gamma passes per chunk (F0, mapper fix pass 2 2026-09-04, live probe
+    dated in data/verified_facts.md): Gamma's default index omits an
+    old/resolved market, so an id absent from the first (default) pass gets a
+    SECOND request with `&closed=true` before it counts as not-on-Gamma —
+    reuses `whale_resolve`'s own closed=true idiom (`_gamma_url`) rather than
+    duplicating it. At most GAMMA_IDS_PER_CALL=2 ids a call (rule 3: a larger
+    batch was never probed); the retry's id list is already a subset of one
+    such chunk, so it never needs its own re-chunking.
+
+    Upserts with COALESCE, EXISTING non-NULL wins (C1, mapper fix pass 2):
+    the old `COALESCE(excluded.x, x)` let a revisit call's answer overwrite a
+    field an earlier, more authoritative source had already set — `sport` in
+    particular, which for a market also seen by the watch lane was set from
+    its own sport TAG (ground truth), not the slug-prefix heuristic
+    `_gamma_row` falls back to. Filling NULLs only never loses that. `slug`
+    gets the same treatment for the same reason. `tokens_json` keeps its own
+    pre-existing guard: a Gamma miss (`[]`) never blanks out tokens an
+    earlier call already found.
+
+    The `unmappable:` marker (C2, mapper fix pass 2) is decided from the row
+    AS STORED after the upsert, not from this call's own Gamma answer: with
+    C1's COALESCE now filling NULLs only, a revisit row can already be fully
+    mapped in every field but the ONE this call was fetching for, even when
+    THIS call's own answer was empty — checking the local answer alone used
+    to skip the marker on exactly that row (previously: `r[1] and r[2]`,
+    sport+market_type only, ignoring start_utc — the same miss REVISIT_SQL
+    itself checks for, so an id missing only start_utc got no marker and sat
+    at the head of the revisit queue every cycle forever)."""
+    prefixes = cfg["whale"]["slug_sport_prefixes"]
+    today = now.strftime("%Y-%m-%d")
+    for i in range(0, len(todo), GAMMA_IDS_PER_CALL):
+        chunk = todo[i:i + GAMMA_IDS_PER_CALL]
+        found = _gamma_fetch(cfg, bucket, get, chunk, res)
+        missing = [c for c in chunk if c not in found]
+        if missing:
+            found.update(_gamma_fetch(cfg, bucket, get, missing, res, closed=True))
+        rows = [_gamma_row(c, found.get(c), prefixes, now) for c in chunk]
+        con.executemany(
+            f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 10)}) "
+            "ON CONFLICT(condition_id) DO UPDATE SET last_seen=excluded.last_seen, "
+            "sport=COALESCE(sport, excluded.sport), "
+            "market_type=COALESCE(market_type, excluded.market_type), "
+            "start_utc=COALESCE(start_utc, excluded.start_utc), "
+            "slug=COALESCE(slug, excluded.slug), "
+            "tokens_json=COALESCE(NULLIF(excluded.tokens_json, '[]'), tokens_json)",
+            rows)
+        con.commit()
+        stored = {r["condition_id"]: r for r in con.execute(
+            f"SELECT condition_id, sport, market_type, start_utc FROM markets "
+            f"WHERE condition_id IN ({','.join('?' * len(chunk))})", chunk)}
+        for cond in chunk:
+            row = stored[cond]
+            if row["sport"] and row["market_type"] and row["start_utc"]:
+                res["mapped"] += 1
+            else:
+                res["unmappable"] += 1
+                log.info("whale market %s unmappable (sport=%s type=%s start=%s) "
+                         "— never scored", cond, row["sport"], row["market_type"],
+                         row["start_utc"])
+                _set_meta(con, f"unmappable:{cond}", today)
+
+
+def _gamma_row(cond, m, prefixes, now) -> tuple:
+    sport = mtype = start = None
+    tokens: list = []
+    if m:
+        mtype = SPORTS_MARKET_TYPE.get(str(m.get("sportsMarketType") or "").lower())
+        sport = _sport_of(str(m.get("slug") or ""), prefixes)
+        start = _iso(m.get("gameStartTime"))
+        tokens = [[t, o] for t, o in zip(_json_list(m.get("clobTokenIds")),
+                                         _json_list(m.get("outcomes")))]
+    return (cond, sport, mtype, None, start, None, json.dumps(tokens),
+            str(m.get("slug") or "") if m else None, now.isoformat(), now.isoformat())
+
+
+def _sport_of(slug: str, prefixes) -> str | None:
+    """Polymarket sports slugs lead with a league code: `kbo-lot-kt-2026-08-09`.
+    Longest configured prefix wins, so one `cric` key covers crict20max,
+    cricjcl, cricodc ... Unknown code -> None -> the market is never scored."""
+    head = slug.split("-")[0].lower()
+    for key in sorted(prefixes, key=len, reverse=True):
+        if head == key or head.startswith(key):
+            return prefixes[key]
+    return None

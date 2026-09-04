@@ -24,8 +24,9 @@ from datetime import datetime, timedelta, timezone
 
 from arb.settlement import open_resolution_bets, settle_bet
 from arb.venues.base import get_json
-from arb.whale_tape import (GAMMA, GAMMA_IDS_PER_CALL, _backoff_active, _bucket,
-                            _call, _iso, _json_list, _meta, _set_backoff, _set_meta, log)
+from arb.whale_tape import (GAMMA_IDS_PER_CALL, _backoff_active, _bucket, _call,
+                            _gamma_url, _iso, _json_list, _meta, _set_backoff,
+                            _set_meta, log)
 
 # The only two price strings a resolution ever names (verified 2026-09-03).
 WINNER_PRICE, LOSER_PRICE = "1", "0"
@@ -111,8 +112,7 @@ def read_resolutions(cfg, con, condition_ids, now, get=get_json) -> int:
         chunk = ids[i:i + GAMMA_IDS_PER_CALL]
         # repeated-param form + closed=true: the ONLY query verified to reach a
         # resolved market (2026-09-03); the comma CSV matches nothing.
-        url = (GAMMA + "/markets?"
-               + "&".join(f"condition_ids={c}" for c in chunk) + "&closed=true")
+        url = _gamma_url(chunk, closed=True)
         try:
             body = _call(bucket, get, url, cfg, {})
         except Exception as e:  # noqa: BLE001

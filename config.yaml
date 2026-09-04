@@ -329,14 +329,23 @@ supervisor:
                                     #   a live cycle past 120s is force-restarted;
                                     #   a whale cycle past 120s is 2 missed polls;
                                     #   whale-backfill measured 353 calls / 11 min.
-                                    #   Worst-case reconciliation (V4 review, 2026-09-04),
-                                    #   Gamma/API calls at max_calls_per_min=30: leaderboard
-                                    #   80 (whale.leaderboard.pages=20 x 4 time_periods) +
-                                    #   sweep 50 (whale.backfill.resolve_per_cycle=100 / 2
-                                    #   ids per Gamma call) + wallets 120
-                                    #   (wallets_per_cycle=3 x pages_per_wallet=40) + map 100
-                                    #   (backfill.map_per_cycle=200 / 2 ids per Gamma call)
-                                    #   = 350 calls ~= 11 min, under this 900s cap
+                                    #   Worst-case reconciliation (V4 review, 2026-09-04;
+                                    #   recomputed mapper fix pass 2, same day, after F0 added a
+                                    #   second Gamma pass to mapping), Gamma/API calls at
+                                    #   max_calls_per_min=30: leaderboard 80
+                                    #   (whale.leaderboard.pages=20 x 4 time_periods) + sweep 50
+                                    #   (whale.backfill.resolve_per_cycle=100 / 2 ids per Gamma
+                                    #   call) + wallets 120 (wallets_per_cycle=3 x
+                                    #   pages_per_wallet=40) + map 100 (backfill.map_per_cycle=100,
+                                    #   up to 2 Gamma passes each — default pass, then a
+                                    #   closed=true retry for whatever it missed — x ceil(100/2)
+                                    #   ids per Gamma call, worst case every id needs the retry)
+                                    #   = 350 calls ~= 11 min (~700s), under this 900s cap with
+                                    #   ~200s margin. map_per_cycle was 200 until this pass: at
+                                    #   200, worst-case mapping doubles to 200 calls (F0's second
+                                    #   pass), pushing the total to 450 calls ~= 900s — exactly
+                                    #   this cap, with NO margin — so map_per_cycle was lowered
+                                    #   200 -> 100 to restore it.
   schedule_catchup_grace_mins: 30   # on (re)start, only fire scheduled slots missed within
                                     #   this window; older slots are marked done, not burst-fired (H9)
   stagger_secs: 15                  # boot offset between lanes — lockstep fan-out
@@ -538,7 +547,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
   min_print_usd: 200                  # prints smaller than this are noise, not signal
   discovery_min_notional_usd: 1000    # minimum notional for a wallet to enter whale discovery
   backfill: { wallets_per_cycle: 3, pages_per_wallet: 40, page_size: 50,
-              cadence_secs: 600, resolve_per_cycle: 100, map_per_cycle: 200 }
+              cadence_secs: 600, resolve_per_cycle: 100, map_per_cycle: 100 }
                                       # per-cycle backfill budget for newly discovered wallets.
                                       #   cadence_secs is the `whale-backfill` process's own
                                       #   interval (spec §14): five wallets x 40 pages is ~7 min
@@ -556,10 +565,19 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   Gamma call — which is what blew the child's 900s cap;
                                       #   mapping now reads a bounded, oldest-print-first slice
                                       #   straight off `prints` instead (2026-09-04). Raised
-                                      #   40 -> 200 (V4 review, same day): 200 ids at
-                                      #   GAMMA_IDS_PER_CALL=2 is 100 Gamma calls ~= 3.3 min at
-                                      #   max_calls_per_min=30 — see the worst-case reconciliation
-                                      #   next to max_child_runtime_secs.whale-backfill below.
+                                      #   40 -> 200 (V4 review, same day), then LOWERED
+                                      #   200 -> 100 (mapper fix pass 2, 2026-09-04): F0 added a
+                                      #   second, closed=true Gamma pass for any id the default
+                                      #   index misses, so worst case mapping is now 2 passes x
+                                      #   ceil(map_per_cycle/GAMMA_IDS_PER_CALL) calls, not 1 —
+                                      #   at 200 that is 200 Gamma calls (was 100), pushing the
+                                      #   whole child to 450 calls ~= 900s, exactly
+                                      #   max_child_runtime_secs.whale-backfill with ZERO margin.
+                                      #   100 keeps worst-case mapping at <=100 calls (2 passes x
+                                      #   50), restoring the same 350-call / ~700s total and ~200s
+                                      #   margin the reviewed commit had — see the worst-case
+                                      #   reconciliation next to max_child_runtime_secs.whale-backfill
+                                      #   below.
   page_size: 10000                    # trades rows per call (10,000 verified 2026-09-03);
                                       #   paging stops on age, never on `start`
   max_offset: 10000                   # the feed 400s past this (observed 2026-09-04);

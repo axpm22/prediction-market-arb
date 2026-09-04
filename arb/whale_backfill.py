@@ -6,18 +6,20 @@ nothing here can reach data/arb.sqlite.
 """
 from __future__ import annotations
 
-import json
 from decimal import Decimal
 
 from arb.venues.base import get_json
+from arb.whale_map import MAP_SQL, REVISIT_SQL, _local_remap, _map_markets, _sport_of  # noqa: F401
 from arb.whale_rows import _keep
-from arb.whale_tape import (DATA_API, GAMMA, GAMMA_IDS_PER_CALL, LEADERBOARD_PAGE,
-                            SPORTS_MARKET_TYPE, _backoff_active, _bucket, _call,
-                            _json_list, _meta, _set_backoff, _set_meta, log)
-from arb.whale_universe import MARKET_COLS, _iso
+from arb.whale_tape import (DATA_API, LEADERBOARD_PAGE, _backoff_active, _bucket,
+                            _call, _meta, _set_backoff, _set_meta, log)
 from arb.models import q6
 # resolve_sweep/SWEEP_SQL live in arb/whale_sweep.py (size, V4 fix pass
-# 2026-09-04); callers import that module directly now.
+# 2026-09-04); Gamma mapping (_map_markets/_gamma_row/_local_remap/
+# MAP_SQL/REVISIT_SQL) lives in arb/whale_map.py (size, mapper fix pass 2
+# 2026-09-04) — imported here for `map_markets`'s own use, and `_sport_of`
+# re-exported for backward compat (tests, callers reach it as
+# `whale_backfill._sport_of`).
 
 
 def _add_wallets(con, pairs, now, source) -> int:
@@ -155,44 +157,30 @@ def backfill(cfg, con, now, get=get_json) -> dict:
     return res
 
 
-# New condition_ids, FIFO by first print (any deterministic order is fine —
-# spec's own words): every distinct condition_id `prints` has ever seen that
-# `markets` has NO row for at all. Mirrors SWEEP_SQL's shape on purpose — same
-# bounded-FIFO-off-the-tape idiom, same reason (a cycle must never walk an
-# unbounded backlog).
-MAP_SQL = """
-    SELECT p.condition_id FROM prints p
-     LEFT JOIN markets m ON m.condition_id = p.condition_id
-     WHERE m.condition_id IS NULL AND p.condition_id <> ''
-     GROUP BY p.condition_id
-     ORDER BY MIN(p.ts), p.condition_id
-     LIMIT ?"""
-
-# Existing rows still missing a field, oldest first (mapper fix pass
-# 2026-09-04): the ORIGINAL sin here was `_map_markets`' INSERT OR IGNORE —
-# once a condition_id had ANY `markets` row, MAP_SQL's LEFT JOIN could never
-# select it again, so a row stored with sport set (e.g. by a one-off prefix
-# remap) and market_type still NULL was stuck that way forever, and could
-# never enter SWEEP_SQL (which requires both). `slug IS NOT NULL` is the
-# floor: with no slug Gamma never found the market at all, and there is
-# nothing left to retry. The `unmappable` join is `swept:`'s own idiom — a
-# row Gamma still couldn't map today is skipped until tomorrow instead of
-# spending the same call every cycle for nothing.
-REVISIT_SQL = """
-    SELECT m.condition_id FROM markets m
-     LEFT JOIN meta u ON u.key = 'unmappable:' || m.condition_id
-     WHERE m.slug IS NOT NULL
-       AND (m.sport IS NULL OR m.market_type IS NULL OR m.start_utc IS NULL)
-       AND (u.value IS NULL OR u.value <> ?)
-     ORDER BY m.first_seen, m.condition_id
-     LIMIT ?"""
+def _queue(con, limit, today) -> tuple[list[str], list[str]]:
+    """I1 budget split (mapper fix pass 2, 2026-09-04): MAP_SQL used to take
+    the WHOLE `map_per_cycle` limit and REVISIT_SQL only whatever was left,
+    so a sustained inflow of new ids starved the revisit queue indefinitely —
+    the same unbounded-backlog class 2c74fff was fixing for revisit itself.
+    Each queue gets a floor of `limit // 2`; new ids are drawn first, then
+    revisit gets the rest, then whatever revisit still did not use (it ran
+    dry) flows back to new ids, which have already shown there is more
+    supply there. No new config key — derived from `map_per_cycle`."""
+    floor = limit // 2
+    new_ids = [r[0] for r in con.execute(MAP_SQL, (floor,))]
+    revisit_budget = limit - len(new_ids)
+    revisit = [r[0] for r in con.execute(REVISIT_SQL, (today, revisit_budget))]
+    short = revisit_budget - len(revisit)
+    if short > 0:
+        new_ids = [r[0] for r in con.execute(MAP_SQL, (len(new_ids) + short,))]
+    return new_ids, revisit
 
 
 def map_markets(cfg, con, now, get=get_json) -> dict:
     """Market mapping (spec §5 step 4 continued), its own step and its own
-    budget: `whale.backfill.map_per_cycle` a cycle, new condition_ids first
-    (MAP_SQL) and whatever budget is left to the oldest existing row still
-    missing a field (REVISIT_SQL). A revisit row already carries its OWN
+    budget: `whale.backfill.map_per_cycle` a cycle, split between new
+    condition_ids (MAP_SQL) and existing rows still missing a field
+    (REVISIT_SQL) by `_queue` (I1). A revisit row already carries its OWN
     slug, so `_local_remap` fills `sport` from it directly — no Gamma call —
     before whatever still needs market_type/start_utc goes to Gamma."""
     w = cfg["whale"]
@@ -202,9 +190,7 @@ def map_markets(cfg, con, now, get=get_json) -> dict:
         return res
     limit = int(w["backfill"]["map_per_cycle"])
     today = now.strftime("%Y-%m-%d")
-    new_ids = [r[0] for r in con.execute(MAP_SQL, (limit,))]
-    revisit = ([r[0] for r in con.execute(REVISIT_SQL, (today, limit - len(new_ids)))]
-              if len(new_ids) < limit else [])
+    new_ids, revisit = _queue(con, limit, today)
     todo = new_ids + _local_remap(con, revisit, w["slug_sport_prefixes"], now, res)
     if not todo:
         return res
@@ -216,84 +202,3 @@ def map_markets(cfg, con, now, get=get_json) -> dict:
         _set_backoff(con, cfg, now)
         res["status"] = "error"
     return res
-
-
-def _local_remap(con, ids, prefixes, now, res) -> list[str]:
-    """A revisit row's slug is already on hand, so a prefix hit costs no
-    Gamma call. Drop an id from the queue only when that leaves nothing
-    else missing; whatever still needs market_type/start_utc goes on."""
-    todo = []
-    for cond in ids:
-        row = con.execute("SELECT sport, market_type, start_utc, slug FROM markets "
-                          "WHERE condition_id=?", (cond,)).fetchone()
-        sport = row["sport"] or _sport_of(row["slug"] or "", prefixes)
-        if sport and row["market_type"] and row["start_utc"]:
-            con.execute("UPDATE markets SET sport=?, last_seen=? WHERE condition_id=?",
-                        (sport, now.isoformat(), cond))
-            res["mapped"] += 1
-        else:
-            todo.append(cond)
-    con.commit()
-    return todo
-
-
-def _map_markets(cfg, con, todo, now, bucket, get, res):
-    """Gamma's condition_ids takes the REPEATED-param form only (verified
-    2026-09-03; the comma CSV silently matches nothing), at most 2 ids a call
-    because a larger batch was never probed (rule 3). `todo` is already the
-    bounded, ordered slice `map_markets` (or a test) decided on.
-
-    Upserts with COALESCE (mapper fix pass 2026-09-04, mirrors
-    `whale_universe.persist_markets`' ON CONFLICT idiom) rather than INSERT
-    OR IGNORE: a revisit row already exists, so OR IGNORE was a silent no-op
-    that could never write the market_type/start_utc this call came back
-    for. `tokens_json` only overwrites on a non-empty answer, so a Gamma miss
-    on a revisit row cannot blank out tokens an earlier call already found."""
-    prefixes = cfg["whale"]["slug_sport_prefixes"]
-    today = now.strftime("%Y-%m-%d")
-    for i in range(0, len(todo), GAMMA_IDS_PER_CALL):
-        chunk = todo[i:i + GAMMA_IDS_PER_CALL]
-        url = GAMMA + "/markets?" + "&".join(f"condition_ids={c}" for c in chunk)
-        body = _call(bucket, get, url, cfg, res)
-        found = {str(m.get("conditionId") or ""): m for m in body}
-        rows = [_gamma_row(c, found.get(c), prefixes, now) for c in chunk]
-        con.executemany(
-            f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 10)}) "
-            "ON CONFLICT(condition_id) DO UPDATE SET last_seen=excluded.last_seen, "
-            "sport=COALESCE(excluded.sport, sport), "
-            "market_type=COALESCE(excluded.market_type, market_type), "
-            "start_utc=COALESCE(excluded.start_utc, start_utc), "
-            "slug=COALESCE(excluded.slug, slug), "
-            "tokens_json=COALESCE(NULLIF(excluded.tokens_json, '[]'), tokens_json)",
-            rows)
-        con.commit()
-        for r in rows:
-            res["mapped" if r[1] and r[2] else "unmappable"] += 1
-            if not (r[1] and r[2]):
-                log.info("whale market %s unmappable (sport=%s type=%s) — never scored",
-                         r[0], r[1], r[2])
-                _set_meta(con, f"unmappable:{r[0]}", today)
-
-
-def _gamma_row(cond, m, prefixes, now) -> tuple:
-    sport = mtype = start = None
-    tokens: list = []
-    if m:
-        mtype = SPORTS_MARKET_TYPE.get(str(m.get("sportsMarketType") or "").lower())
-        sport = _sport_of(str(m.get("slug") or ""), prefixes)
-        start = _iso(m.get("gameStartTime"))
-        tokens = [[t, o] for t, o in zip(_json_list(m.get("clobTokenIds")),
-                                         _json_list(m.get("outcomes")))]
-    return (cond, sport, mtype, None, start, None, json.dumps(tokens),
-            str(m.get("slug") or "") if m else None, now.isoformat(), now.isoformat())
-
-
-def _sport_of(slug: str, prefixes) -> str | None:
-    """Polymarket sports slugs lead with a league code: `kbo-lot-kt-2026-08-09`.
-    Longest configured prefix wins, so one `cric` key covers crict20max,
-    cricjcl, cricodc ... Unknown code -> None -> the market is never scored."""
-    head = slug.split("-")[0].lower()
-    for key in sorted(prefixes, key=len, reverse=True):
-        if head == key or head.startswith(key):
-            return prefixes[key]
-    return None

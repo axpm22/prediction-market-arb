@@ -100,11 +100,17 @@ def universe(store_ro, cfg, now, res=None) -> list[Market]:
     `whale.universe_poll_lookback`, and no older than `data_stale_alarm_secs`)
     that has any, whose start lies in [now - lookback_hours, now +
     lookahead_hours] (spec §5 step 1). `res` is an optional diagnostics dict,
-    as in whale_score.positions_from_prints."""
+    as in whale_score.positions_from_prints — this is also where the poll id
+    this call picked is handed back (`res["poll_id"]`, I2, mapper fix pass 2
+    2026-09-04): a caller that needs a SECOND read against this same universe
+    (e.g. `run_whale_cycle`'s VOLUME_SQL) must bind to THIS poll, not
+    re-derive its own after network time has passed and a separate watch-lane
+    process may have committed a newer one."""
     w = cfg["whale"]
     res = {} if res is None else res
     poll_id = _poll_with_pm_rows(store_ro, int(w["universe_poll_lookback"]), now,
                                  int(cfg["data_stale_alarm_secs"]))
+    res["poll_id"] = poll_id
     if poll_id is None:
         return []
     lo = now - timedelta(hours=float(w["lookback_hours"]))

@@ -288,12 +288,50 @@ def test_volumes_come_from_the_same_fallback_poll_the_universe_used(cfg, tmp_pat
     NOT a zombie) and the zombie guard failed open lane-wide. A newer,
     PM-empty poll must not stop the SAME fallback poll from pricing volumes."""
     store, con = _ledger(tmp_path, volume="0"), _tape(tmp_path)
+    fallback_poll = store.query("SELECT id FROM polls WHERE kind='watch'")[0]["id"]
     store.insert("polls", {"started_at": (NOW - timedelta(minutes=1)).isoformat(),
                            "kind": "watch", "n_quotes": 0, "n_opps": 0})
     res = _run(cfg, store, con, rows=_three(price="0.93"),
                fetch=_fetch(**{YES_TOK: _book(ask="0.95", bid="0.02"),
                                NO_TOK: _book(ask="0.95", bid="0.02")}))
 
+    # I2: universe() hands back the poll id it actually used
+    assert res["poll_id"] == fallback_poll
+    row = con.execute("SELECT * FROM signals WHERE variant='V1'").fetchone()
+    assert row["fired"] == 0 and row["suppressed_reason"] == "zombie"
+    assert res["booked"] == 0 and _bets(store) == []
+
+
+def test_volume_sql_binds_universes_poll_not_one_committed_mid_cycle(cfg, tmp_path,
+                                                                     monkeypatch):
+    """I2 (mapper fix pass 2, 2026-09-04): `run_whale_cycle` used to re-call
+    `_poll_with_pm_rows` for VOLUME_SQL AFTER poll_prints/read_resolutions/
+    _fetch_books had already spent real network time. If the separate
+    watch-lane process commits a NEW poll with Polymarket sports rows in that
+    window, the re-query silently switches to it, so volumes end up bound to
+    a poll the signals were never evaluated against. A poll landing mid-cycle
+    with a healthy volume must NOT rescue a signal the ORIGINAL poll's zero
+    volume would have zombied — proves VOLUME_SQL is bound to res['poll_id'],
+    not a fresh lookup."""
+    store, con = _ledger(tmp_path, volume="0"), _tape(tmp_path)
+    first_poll = store.query("SELECT id FROM polls WHERE kind='watch'")[0]["id"]
+    real_poll_prints = whale_tape.poll_prints
+
+    def sneaky(cfg, con, markets, now, get):
+        # simulates a separate watch-lane cycle committing a fresh poll with
+        # PM rows WHILE this cycle is mid-flight (after universe() already
+        # bound to first_poll, before VOLUME_SQL would have re-queried)
+        new_poll = store.insert("polls", {"started_at": now.isoformat(),
+                                          "kind": "watch", "n_quotes": 2, "n_opps": 0})
+        _watch_quotes(store, new_poll, CID, LABELS, "999999")
+        return real_poll_prints(cfg, con, markets, now, get=get)
+
+    monkeypatch.setattr(whale_tape, "poll_prints", sneaky)
+    res = _run(cfg, store, con, rows=_three(price="0.93"),
+               fetch=_fetch(**{YES_TOK: _book(ask="0.95", bid="0.02"),
+                               NO_TOK: _book(ask="0.95", bid="0.02")}))
+
+    assert res["poll_id"] == first_poll
     row = con.execute("SELECT * FROM signals WHERE variant='V1'").fetchone()
     assert row["fired"] == 0 and row["suppressed_reason"] == "zombie"
     assert res["booked"] == 0 and _bets(store) == []

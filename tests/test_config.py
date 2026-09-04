@@ -82,10 +82,15 @@ def test_whale_config_loads_with_spec_values():
                              # raised 40 -> 100 once the sweep always runs
                              # first (whale-backfill fix pass); map_per_cycle
                              # bounds the now-separate mapping step, raised
-                             # 40 -> 200 (V4 review, same day): worst case
-                             # leaderboard 80 + sweep 50 + wallets 120 +
-                             # map 100 Gamma calls ~= 11 min, under the 900s cap
-                             "resolve_per_cycle": 100, "map_per_cycle": 200}
+                             # 40 -> 200 (V4 review, same day), then LOWERED
+                             # 200 -> 100 (mapper fix pass 2, same day): F0's
+                             # closed=true retry can double mapping's Gamma
+                             # calls, so 200 pushed the child's worst case to
+                             # exactly its 900s cap with no margin; worst case
+                             # at 100: leaderboard 80 + sweep 50 + wallets 120
+                             # + map 100 Gamma calls ~= 11 min, under the 900s
+                             # cap with ~200s margin
+                             "resolve_per_cycle": 100, "map_per_cycle": 100}
     assert w["universe_poll_lookback"] == 5
     assert w["fire"]["min_points"]["V1"] == 3
     assert w["fire"]["min_points"]["V2"] is None

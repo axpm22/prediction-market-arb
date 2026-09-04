@@ -722,7 +722,12 @@ def test_backfill_writes_prints_only_and_map_markets_maps_them_through_gamma(tmp
     whale_backfill.map_markets(cfg, con, NOW, get=get)
 
     g = [u for u in get.urls if "gamma" in u]
-    assert len(g) == 1 and g[0].count("condition_ids=") == 2   # repeated param, not CSV
+    # F0 (mapper fix pass 2): "0xnowhere" isn't in the default pass's answer,
+    # so it gets a second, closed=true call before it counts as unmappable.
+    assert len(g) == 2
+    assert g[0].count("condition_ids=") == 2 and "closed=true" not in g[0]
+    assert g[1].count("condition_ids=") == 1 and "closed=true" in g[1]
+    assert "condition_ids=0xnowhere" in g[1]
     rows = {r["condition_id"]: r for r in con.execute("SELECT * FROM markets")}
     assert rows[known]["sport"] == "baseball_kbo"              # kbo- slug prefix
     assert rows[known]["market_type"] == "WINNER"              # sportsMarketType=moneyline
@@ -757,6 +762,139 @@ def test_map_markets_revisits_an_existing_row_missing_a_field(tmp_path):
     assert row["market_type"] == "WINNER"                      # filled from Gamma
     assert row["start_utc"] == "2026-08-09T09:00:00+00:00"     # filled from Gamma
     assert res["mapped"] == 1 and res["calls"] == 1
+
+
+def test_map_markets_reaches_an_old_market_via_a_closed_true_retry(tmp_path):
+    """F0 (mapper fix pass 2, 2026-09-04, live probe in data/verified_facts.md
+    row 71): Gamma's default index omits an old/resolved market — 0/2 without
+    `closed=true`, 2/2 with it. An id absent from the default pass must get a
+    SECOND request with `closed=true` before it counts as not-on-Gamma."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    gamma = _fixture("whale_gamma_condition_ids_repeated")[0]
+    cond = gamma["conditionId"]
+    _print(con, "0xw", cond, "BUY", "900", int(NOW.timestamp()) - 100)
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 40})
+
+    class ClosedOnly:
+        """Answers only a query carrying closed=true, empty otherwise —
+        exactly the live index gap F0 exists for."""
+
+        def __init__(self, row):
+            self.row, self.urls = row, []
+
+        def __call__(self, url, cfg, **kw):
+            self.urls.append(url)
+            return [self.row] if "closed=true" in url else []
+
+    get = ClosedOnly(gamma)
+    res = whale_backfill.map_markets(cfg, con, NOW, get=get)
+
+    row = con.execute("SELECT * FROM markets WHERE condition_id=?", (cond,)).fetchone()
+    assert row["sport"] == "baseball_kbo" and row["market_type"] == "WINNER"
+    assert res["mapped"] == 1 and res["unmappable"] == 0
+    assert len(get.urls) == 2 and "closed=true" not in get.urls[0]
+    assert "closed=true" in get.urls[1]
+    assert whale_tape._meta(con, f"unmappable:{cond}") is None
+
+
+def test_map_markets_never_overwrites_a_seeded_sport_with_a_slug_guess(tmp_path):
+    """C1 (mapper fix pass 2, 2026-09-04): the upsert used to let THIS call's
+    slug-heuristic sport (`sport=COALESCE(excluded.sport, sport)`, new wins)
+    overwrite an existing value even when that value came from the watch
+    lane's own sport TAG — ground truth, not a heuristic. A revisit row
+    seeded sport=baseball_mlb (as `persist_markets` would from a tag) must
+    keep it even though Gamma's slug for this exact market maps to a
+    different sport (baseball_kbo); market_type/start_utc, genuinely
+    missing, still fill from Gamma."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    gamma = _fixture("whale_gamma_condition_ids_repeated")[0]   # slug -> baseball_kbo
+    cond = gamma["conditionId"]
+    _map_row(con, cond, sport="baseball_mlb", market_type=None, start_utc=None,
+           slug=gamma["slug"])
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 40})
+
+    res = whale_backfill.map_markets(cfg, con, NOW, get=FakeGet([gamma]))
+
+    row = con.execute("SELECT * FROM markets WHERE condition_id=?", (cond,)).fetchone()
+    assert row["sport"] == "baseball_mlb"                       # seeded value survives
+    assert row["market_type"] == "WINNER"                       # genuinely missing, filled
+    assert row["start_utc"] == "2026-08-09T09:00:00+00:00"      # genuinely missing, filled
+    assert res["mapped"] == 1
+
+
+def test_map_markets_marks_unmappable_when_only_start_utc_is_missing(tmp_path):
+    """C2 (mapper fix pass 2, 2026-09-04): the marker used to key off
+    sport+market_type only, so a market Gamma answers for but never gives a
+    start (`gameStartTime` absent) got sport+market_type filled, NO marker,
+    and — because REVISIT_SQL's own predicate DOES include start_utc — sat
+    at the head of its FIFO burning one Gamma call every cycle forever. The
+    marker must key off the row AS STORED against REVISIT_SQL's own
+    predicate (sport, market_type OR start_utc still NULL)."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    gamma = dict(_fixture("whale_gamma_condition_ids_repeated")[0])
+    gamma["gameStartTime"] = None
+    cond = gamma["conditionId"]
+    _print(con, "0xw", cond, "BUY", "900", int(NOW.timestamp()) - 100)
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 40})
+
+    res1 = whale_backfill.map_markets(cfg, con, NOW, get=FakeGet([gamma]))
+
+    row = con.execute("SELECT * FROM markets WHERE condition_id=?", (cond,)).fetchone()
+    assert row["sport"] == "baseball_kbo" and row["market_type"] == "WINNER"
+    assert row["start_utc"] is None
+    assert res1["calls"] == 1 and res1["unmappable"] == 1 and res1["mapped"] == 0
+    assert whale_tape._meta(con, f"unmappable:{cond}") == NOW.strftime("%Y-%m-%d")
+
+    # second cycle, same day: the marker skips it entirely — 0 Gamma calls
+    get2 = FakeGet([])
+    res2 = whale_backfill.map_markets(cfg, con, NOW, get=get2)
+    assert res2["calls"] == 0 and get2.urls == []
+
+
+def test_map_markets_budget_reserves_a_floor_for_each_queue(tmp_path):
+    """I1 (mapper fix pass 2, 2026-09-04): MAP_SQL used to take the WHOLE
+    `map_per_cycle` budget and REVISIT_SQL only whatever was left, so a
+    sustained inflow of new ids could starve the revisit queue indefinitely
+    — the same unbounded-backlog class 2c74fff was fixing for revisit
+    itself. Each queue gets a floor of `limit // 2`, isolated here from any
+    Gamma call (`_queue` alone)."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    for i in range(100):
+        _print(con, "0xw", f"0xnew{i}", "BUY", "900", int(NOW.timestamp()) - i)
+    for i in range(100):
+        _map_row(con, f"0xold{i}", sport="baseball_mlb", market_type=None,
+               start_utc="2026-01-01T00:00:00+00:00", slug=f"mlb-x-y-{i}",
+               first_seen=(NOW - timedelta(days=100 - i)).isoformat())
+    con.commit()
+
+    new_ids, revisit = whale_backfill._queue(con, 40, NOW.strftime("%Y-%m-%d"))
+
+    assert (len(new_ids), len(revisit)) == (20, 20)
+
+
+def test_map_markets_budget_flows_a_short_revisit_queue_back_to_new(tmp_path):
+    """The other half of I1's split: when revisit cannot fill its own floor
+    (only 100 old rows exist but new supply is thin — 5 ids — the leftover
+    still has to go SOMEWHERE), the unused share flows back to new ids,
+    which have already proven there is more supply there."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    for i in range(5):
+        _print(con, "0xw", f"0xnew{i}", "BUY", "900", int(NOW.timestamp()) - i)
+    for i in range(100):
+        _map_row(con, f"0xold{i}", sport="baseball_mlb", market_type=None,
+               start_utc="2026-01-01T00:00:00+00:00", slug=f"mlb-x-y-{i}",
+               first_seen=(NOW - timedelta(days=100 - i)).isoformat())
+    con.commit()
+
+    new_ids, revisit = whale_backfill._queue(con, 40, NOW.strftime("%Y-%m-%d"))
+
+    assert (len(new_ids), len(revisit)) == (5, 35)
 
 
 def test_map_markets_prefix_only_remap_needs_no_gamma_call(tmp_path):
@@ -796,15 +934,19 @@ def test_map_markets_marks_an_unmappable_revisit_row_for_the_day(tmp_path):
     tomorrow = NOW + timedelta(days=1)
     res3 = whale_backfill.map_markets(cfg, con, tomorrow, get=get)  # new day: retried
 
-    assert res1["unmappable"] == 1 and res1["calls"] == 1
+    # F0: Gamma finding nothing on the default pass earns the id a SECOND,
+    # closed=true call before it counts as unmappable — 2 calls, not 1.
+    assert res1["unmappable"] == 1 and res1["calls"] == 2
     assert res2["unmappable"] == 0 and res2["calls"] == 0       # skipped, marker still today
-    assert res3["unmappable"] == 1 and res3["calls"] == 1       # marker expired, re-asked
+    assert res3["unmappable"] == 1 and res3["calls"] == 2       # marker expired, re-asked
 
 
 def test_map_markets_bounds_new_ids_and_revisit_rows_together(tmp_path):
-    """`map_per_cycle` bounds the UNION, not each source separately: new ids
-    fill the budget first, the remainder goes to the oldest revisit row —
-    whatever is left over waits for the next cycle."""
+    """`map_per_cycle` bounds the UNION, not each source separately: with only
+    one new id on hand (below its I1 floor of `limit // 2 == 1`), the unused
+    new-queue budget flows to revisit — whatever is left over waits for the
+    next cycle. See test_map_markets_budget_reserves_a_floor_for_each_queue
+    (I1) for the split itself, isolated from any Gamma call."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     _print(con, "0xw", "0xnew", "BUY", "900", int(NOW.timestamp()) - 100)
     _map_row(con, "0xold1", sport="baseball_mlb", market_type=None,
@@ -821,7 +963,8 @@ def test_map_markets_bounds_new_ids_and_revisit_rows_together(tmp_path):
     res = whale_backfill.map_markets(cfg, con, NOW, get=get)
 
     assert set(_asked(get)) == {"0xnew", "0xold1"}     # 0xold2 waits for the next cycle
-    assert len(get.urls) == 1
+    # F0: Gamma finding nothing means a closed=true retry for the same 2 ids
+    assert len(get.urls) == 2
 
 
 def test_the_2026_09_04_census_prefixes_resolve_to_the_right_sport():
@@ -861,8 +1004,9 @@ def test_map_markets_is_bounded_and_fifo_by_first_print(tmp_path):
 
     res = whale_backfill.map_markets(cfg, con, NOW, get=get)
 
-    assert _asked(get) == ["0xm1", "0xm2"]           # oldest two (age 300, 200); 0xm0 waits
-    assert len(get.urls) == 1
+    # F0: Gamma finding nothing means a closed=true retry for the same chunk
+    assert _asked(get) == ["0xm1", "0xm2", "0xm1", "0xm2"]
+    assert len(get.urls) == 2
     assert res["unmappable"] == 2 and res["mapped"] == 0
 
 

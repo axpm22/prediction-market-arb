@@ -43,6 +43,19 @@ LEADERBOARD_PAGE = 50
 GAMMA_IDS_PER_CALL = 2
 SPORTS_MARKET_TYPE = {"moneyline": "WINNER", "totals": "TOTAL"}
 
+
+def _gamma_url(ids, closed=False) -> str:
+    """Gamma's condition_ids takes the REPEATED-param form only (verified
+    2026-09-03; the comma CSV silently matches nothing) — one builder shared
+    by every Gamma condition_ids caller (whale_resolve's resolution reader,
+    whale_map's market mapper) so the query string is written once.
+    `closed=true` is the only query verified to reach a resolved/archived
+    market; the default index omits it (F0, mapper fix pass 2 2026-09-04 —
+    live probe in data/verified_facts.md: 0/2 without it, 2/2 with it)."""
+    url = GAMMA + "/markets?" + "&".join(f"condition_ids={c}" for c in ids)
+    return f"{url}&closed=true" if closed else url
+
+
 SCHEMA = """
 -- prints columns/INSERT: arb/whale_rows.py PRINT_COLS (kept in sync by hand).
 CREATE TABLE IF NOT EXISTS prints (
