@@ -734,7 +734,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       # paper stake sizing for whale-lane fills
   exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01,
           holdings_poll_secs: 300, holdings_calls_per_cycle: 10,
-          holdings_page_size: 100, holdings_max_age_polls: 3 }
+          holdings_page_size: 500, holdings_max_age_polls: 3 }
                                       # signal-driven exit: consensus flip / sell-off thresholds —
                                       #   invariant: exit.flip_ratio < fire.ratio.
                                       #   The four holdings_* keys are the L14 amendment of
@@ -753,6 +753,8 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   and still be read: past that the wallet falls back to
                                       #   the prints rather than exiting on a stale holding.
                                       #   holdings_page_size is the endpoint's `limit`; paging
+                                      #   (100 -> 500 on 2026-09-04: limit=500 verified live in one call;
+                                      #   three signal whales held >100 positions and page 1 missed them)
                                       #   beyond one page was NOT probed (rule 3), so a wallet
                                       #   returning a full page is logged WARNING once and what
                                       #   came back is used.

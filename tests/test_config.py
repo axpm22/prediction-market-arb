@@ -112,7 +112,7 @@ def test_whale_config_loads_with_spec_values():
     # data-api `positions?user=` for the wallets behind an open bet.
     assert w["exit"] == {"flip_ratio": Decimal("0.50"), "sold_fraction": Decimal("0.50"),
                          "min_score_lb": Decimal("-0.01"), "holdings_poll_secs": 300,
-                         "holdings_calls_per_cycle": 10, "holdings_page_size": 100,
+                         "holdings_calls_per_cycle": 10, "holdings_page_size": 500,
                          "holdings_max_age_polls": 3}
     assert w["backfill"] == {"wallets_per_cycle": 3, "pages_per_wallet": 40,
                              "page_size": 50, "cadence_secs": 600,
