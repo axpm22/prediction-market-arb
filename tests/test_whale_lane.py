@@ -528,7 +528,10 @@ def test_heartbeat_knows_both_whale_processes(cfg):
         == float(cfg["whale"]["backfill"]["cadence_secs"])
     assert POLL_KIND["whale"] == "whale"
     assert "whale-backfill" not in POLL_KIND      # it writes no polls (like verify)
-    assert cfg["supervisor"]["processes"]["whale"] is True
+    # wired but OFF by default: enabling is Task 11's deliberate commit after
+    # the operator's terms-of-use decision (spec §3, plan Task 11)
+    assert cfg["supervisor"]["processes"]["whale"] is False
+    assert cfg["supervisor"]["processes"]["whale-backfill"] is False
     assert cfg["supervisor"]["commands"]["whale"] == "whale --once"
     assert cfg["supervisor"]["commands"]["whale-backfill"] == "whale-backfill --once"
     assert cfg["supervisor"]["max_child_runtime_secs"]["whale"] == 120
@@ -536,6 +539,9 @@ def test_heartbeat_knows_both_whale_processes(cfg):
 
 def test_stale_lanes_recognises_a_silent_whale_lane(cfg, tmp_path):
     from arb.heartbeat import stale_lanes
+    import copy
+    cfg = copy.deepcopy(cfg)
+    cfg["supervisor"]["processes"]["whale"] = True  # the check only covers enabled lanes
     store = Store(tmp_path / "t.sqlite")
     store.insert("polls", {"started_at": (NOW - timedelta(hours=3)).isoformat(),
                            "kind": "whale", "n_quotes": 0, "n_opps": 0})
