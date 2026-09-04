@@ -36,6 +36,25 @@ def test_page_and_state(server):
     assert state["trusted_pairs"] == []
 
 
+def test_the_bootstrap_refresh_uses_the_configured_interval(tmp_path):
+    """scheduleRefresh(timerSecs || 60) used to hard-code the bootstrap tick
+    (the one that fires before /api/state has answered even once) regardless
+    of dashboard.refresh_secs; the server now substitutes the config value in."""
+    cfg = load(ROOT / "config.yaml")
+    cfg["dashboard"]["refresh_secs"] = 45
+    Store(tmp_path / "t.sqlite")
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(cfg, tmp_path / "t.sqlite"))
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        html = urllib.request.urlopen(
+            f"http://127.0.0.1:{httpd.server_port}/").read().decode()
+        assert "{{REFRESH_SECS}}" not in html
+        assert "timerSecs || 45" in html
+    finally:
+        httpd.shutdown()
+
+
 def test_unknown_path_404(server):
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(f"{server}/etc/passwd")

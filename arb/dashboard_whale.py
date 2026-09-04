@@ -20,9 +20,13 @@ from arb.whale_state import score_state
 
 def whale_panel(cfg, store, now=None, con=None) -> dict:
     """`/api/whale`: the daily section's frame (which already carries the §12
-    kill-rule block) as of now."""
+    kill-rule block) as of now. `producing_day` is today (cfg timezone): the
+    dashboard IS today's live view, the same "day being produced" cmd_report
+    counts toward its own streak, so the two surfaces agree (§12 fix report 2)."""
+    from zoneinfo import ZoneInfo
     now = now or datetime.now(timezone.utc)
-    return report_whale.whale_frame(cfg, store, now=now, con=con)
+    today = now.astimezone(ZoneInfo(str(cfg["timezone"]))).date().isoformat()
+    return report_whale.whale_frame(cfg, store, now=now, con=con, producing_day=today)
 
 
 def whale_positions(cfg, store, bets, now, con=None) -> dict[int, dict]:

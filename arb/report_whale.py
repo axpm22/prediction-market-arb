@@ -43,13 +43,15 @@ def open_tape_ro(cfg) -> sqlite3.Connection | None:
 
 
 def whale_frame(cfg, store, now: datetime | None = None, con=None,
-                hashes_log_path=None) -> dict:
+                hashes_log_path=None, producing_day: str | None = None) -> dict:
     """Everything §12 asks the daily report to print about L14. `con` is a tape
     handle for tests and callers that already hold one; otherwise the tape is
     opened read-only here and closed before returning — on the error path too.
     `hashes_log_path` is the report chain rule 2's streak is derived from
     (default: the configured `report_dir`; `write_daily` passes its own outdir,
-    so a report written elsewhere counts the days written there)."""
+    so a report written elsewhere counts the days written there). `producing_day`
+    is the day this call is FOR — not yet in the chain — so rule 2 counts it too
+    (see `whale_kill.fast_kill_streak`)."""
     now = now or datetime.now(timezone.utc)
     opened = con is None and (con := open_tape_ro(cfg)) is not None
     try:
@@ -105,7 +107,7 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
                      "min_signals_per_week_alarm":
                          int(cfg["whale"]["kill"]["min_signals_per_week_alarm"]),
                      **kill_status(cfg, store, con, now, hashes_log_path,
-                                   counts["fired_7d"])},
+                                   counts["fired_7d"], producing_day)},
         }
     finally:
         if opened:

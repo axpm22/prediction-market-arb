@@ -306,7 +306,7 @@ function scheduleRefresh(secs){
 }
 
 async function refresh(){
-  scheduleRefresh(timerSecs || 60);        // bootstrap default; /api/state adjusts
+  scheduleRefresh(timerSecs || {{REFRESH_SECS}});  // bootstrap default; /api/state adjusts
   // each section paints as its own endpoint answers: /api/state runs the whole
   // daily frame and takes tens of seconds on the real ledger, and the P&L curves
   // must not wait on it

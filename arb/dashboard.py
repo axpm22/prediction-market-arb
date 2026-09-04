@@ -234,7 +234,11 @@ def make_handler(cfg, db_path):
                         st.close()
                     ctype = "application/json"
                 elif self.path == "/":
-                    body = PAGE.read_bytes()
+                    # {{REFRESH_SECS}} is the page's bootstrap refresh interval,
+                    # before /api/state has a chance to name its own
+                    body = PAGE.read_bytes().replace(
+                        b"{{REFRESH_SECS}}",
+                        str(int(cfg["dashboard"]["refresh_secs"])).encode())
                     ctype = "text/html; charset=utf-8"
                 else:
                     self.send_error(404)

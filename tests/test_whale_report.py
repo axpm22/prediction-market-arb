@@ -532,11 +532,12 @@ def _hashes(tmp_path, *days):
     return path
 
 
-def _rules(cfg, store, con=None, hashes=None):
+def _rules(cfg, store, con=None, hashes=None, producing_day=None):
     from arb.whale_kill import kill_status
     # no chain = no report was ever produced here; the rule-2 tests bring theirs
     return {r["rule"]: r for r in kill_status(
-        cfg, store, con, NOW, hashes or "/nonexistent/HASHES.log")["rules"]}
+        cfg, store, con, NOW, hashes or "/nonexistent/HASHES.log",
+        producing_day=producing_day)["rules"]}
 
 
 def test_every_kill_rule_starts_at_not_yet_on_an_empty_ledger(cfg, tmp_path):
@@ -594,6 +595,31 @@ def test_rule_2_needs_two_consecutive_produced_reports(cfg, tmp_path):
     assert one["held_today"] is True
     assert one["streak"] == 1 and one["state"] == "armed"
     assert two["streak"] == 2 and two["state"] == "FIRED"
+
+
+def test_the_day_being_produced_counts_toward_its_own_streak(cfg, tmp_path):
+    """cmd_report scores whale_frame BEFORE write_daily appends the day's own
+    HASHES.log line, so without `producing_day` the printed report undercounts
+    its own streak by one: held on D-1 and D, but only D-1 is in the chain
+    yet, the D report must still see streak 2 — matching what the dashboard
+    (which passes `now`'s day) already shows live. Re-running D once its own
+    line exists changes nothing (rule 9: recomputed from the raw log)."""
+    cfg["whale"]["kill"]["fast_kill_min_marked"] = 1
+    store = Store(tmp_path / "t.sqlite")
+    yesterday = NOW - timedelta(days=1)
+    _mark(store, _whale_row(store, "V2/flat", 1, "pm:1", created=yesterday),
+          marked_at=yesterday)
+    log = _hashes(tmp_path, "2026-09-02")          # D-1 produced; D not written yet
+
+    producing = _rules(cfg, store, hashes=log, producing_day=DAY)[2]
+    not_producing = _rules(cfg, store, hashes=log)[2]
+
+    assert producing["streak"] == 2 and producing["state"] == "FIRED"
+    assert not_producing["streak"] == 1 and not_producing["state"] == "armed"
+
+    log_after = _hashes(tmp_path, "2026-09-02", DAY)   # D's own line lands
+    rerun = _rules(cfg, store, hashes=log_after, producing_day=DAY)[2]
+    assert rerun["streak"] == 2
 
 
 def test_rule_2_stays_not_yet_below_the_marked_bet_floor(cfg, tmp_path):

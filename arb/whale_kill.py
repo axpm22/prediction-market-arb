@@ -75,15 +75,26 @@ def produced_days(path) -> list[str]:
     return sorted((d for d in days if _DAY.fullmatch(d)), reverse=True)
 
 
-def fast_kill_streak(cfg, store, hashes_log_path, now) -> dict:
+def fast_kill_streak(cfg, store, hashes_log_path, now,
+                     producing_day: str | None = None) -> dict:
     """Consecutive produced daily reports, newest first, on which rule 2's
     condition held — each evaluated AS OF that day's end (§12). A day with no
     line in the chain is neither counted nor a break: an outage PAUSES the
-    streak. Nothing is stored, so a re-run cannot inflate it."""
+    streak. Nothing is stored, so a re-run cannot inflate it.
+
+    `producing_day` is the day the CALLER is producing right now: its
+    HASHES.log line does not exist yet (it is appended after the report is
+    built), so without this it would silently miss its own day and the
+    printed streak would lag the dashboard's live view by one. Unioned into
+    the chain's days — re-running the same day once its line exists changes
+    nothing."""
     min_marked = int(cfg["whale"]["kill"]["fast_kill_min_marked"])
     today = now.astimezone(ZoneInfo(str(cfg["timezone"]))).date().isoformat()
+    days = set(produced_days(hashes_log_path))
+    if producing_day is not None:
+        days.add(producing_day)
     streak, newest = 0, None
-    for day in produced_days(hashes_log_path):
+    for day in sorted(days, reverse=True):
         if day > today:
             continue                    # a future-dated line is not evidence yet
         newest = newest or day
@@ -94,7 +105,7 @@ def fast_kill_streak(cfg, store, hashes_log_path, now) -> dict:
 
 
 def kill_status(cfg, store, con=None, now=None, hashes_log_path=None,
-                fired_7d=None) -> dict:
+                fired_7d=None, producing_day: str | None = None) -> dict:
     """§12's four kill rules, each `armed` / `not yet` / `FIRED` with the
     numbers behind it. Pure read; the daily whale section and the dashboard
     print the same block from this one computation. `fired_7d` is the caller's
@@ -116,7 +127,8 @@ def kill_status(cfg, store, con=None, now=None, hashes_log_path=None,
     held = _held(fk, min_marked)
     fks = fast_kill_streak(
         cfg, store,
-        hashes_log_path or Path(str(cfg["report_dir"])) / HASHES_LOG, now)
+        hashes_log_path or Path(str(cfg["report_dir"])) / HASHES_LOG, now,
+        producing_day=producing_day)
     streak = fks["streak"]
 
     if fired_7d is None:

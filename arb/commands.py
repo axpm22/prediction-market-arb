@@ -137,11 +137,13 @@ def cmd_negrisk_scan(cfg, store, args):
 
 def cmd_report(cfg, store, args):
     from datetime import datetime as _dt
+    from pathlib import Path
     from zoneinfo import ZoneInfo
 
     from arb.metrics import day_bounds
     from arb.report import print_daily, write_daily
     from arb.report_whale import whale_frame
+    from arb.whale_kill import HASHES_LOG
     # default day = today in the config timezone (§H5), not machine-local
     day = args.daily or _dt.now(ZoneInfo(str(cfg["timezone"]))).date().isoformat()
     start, end = day_bounds(cfg, day)
@@ -149,9 +151,17 @@ def cmd_report(cfg, store, args):
         "SELECT COUNT(*) c, COALESCE(SUM(n_quotes),0) q FROM polls "
         "WHERE started_at >= ? AND started_at < ?", (start, end))[0]
     console.print(f"[dim]{day}: polls={polls['c']} quotes={polls['q']}[/]")
-    # scored once, passed to both — the tape used to be read twice per call
-    whale = whale_frame(cfg, store)
-    write_daily(cfg, store, day, whale_frame=whale)
+    # scored once, passed to both — the tape used to be read twice per call.
+    # outdir built once (one source of truth) and fed to both calls: write_daily's
+    # own outdir-derived hashes_log_path fallback never fires once a frame is
+    # passed in, so THIS is the path that actually decides which chain rule 2
+    # reads. producing_day=day counts the day being produced (§12 fix report 2):
+    # otherwise the printed streak lags the dashboard's live view by one, because
+    # this call happens before write_daily appends today's HASHES.log line.
+    outdir = Path(str(cfg["report_dir"]))
+    whale = whale_frame(cfg, store, hashes_log_path=outdir / HASHES_LOG,
+                        producing_day=day)
+    write_daily(cfg, store, day, outdir=outdir, whale_frame=whale)
     print_daily(cfg, store, day, whale_frame=whale)
     return 0
 

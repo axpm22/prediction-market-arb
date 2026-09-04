@@ -223,7 +223,8 @@ def write_daily(cfg, store, day: str, outdir: str | Path | None = None,
     # §12 kill rule 2 counts consecutive PRODUCED daily reports; the record of
     # which days those are is the HASHES chain below, read back (never written).
     frame["whale"] = whale_frame if whale_frame is not None else \
-        report_whale.whale_frame(cfg, store, hashes_log_path=outdir / HASHES_LOG)
+        report_whale.whale_frame(cfg, store, hashes_log_path=outdir / HASHES_LOG,
+                                 producing_day=day)
     md.extend(report_whale.whale_md(frame["whale"]))
     md.append("")
     md.extend(_capacity_md(frame["capacity"]))
