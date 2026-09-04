@@ -233,12 +233,12 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
         log.critical("another supervisor is running; refusing to double-run")
         return 1
 
-    def _notify(event: str, payload: dict | None = None) -> None:
+    def _notify(event: str, payload: dict | None = None, key=None) -> None:
         if event not in cfg["notify"]["events"]:
             return
         try:
             from arb.notify import post
-            post(cfg, event, payload or {})
+            post(cfg, event, payload or {}, key=key)
         except Exception as e:  # noqa: BLE001 — a notifier failure must never crash the supervisor
             log.warning("notify %s failed: %s", event, e)
 
@@ -331,7 +331,7 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                         log.critical("lane %s silent for %.0fs (%.2f h) — no "
                                      "poll rows and no heartbeat", lane, age,
                                      age / 3600)
-                        _notify("lane_silent", {"lane": lane, "age_secs": age})
+                        _notify("lane_silent", {"lane": lane, "age_secs": age}, key=lane)
                 except Exception as e:  # noqa: BLE001 — an alarm must never kill the loop
                     log.warning("stale-lane check failed: %s", e)
 

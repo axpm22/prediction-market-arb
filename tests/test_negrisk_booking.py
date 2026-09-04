@@ -208,6 +208,90 @@ def test_negrisk_scan_survives_polymarket_venue_error(tmp_path, monkeypatch):
     assert [r["reason"] for r in lot] == ["venue-error:polymarket"]
 
 
+def test_negrisk_scan_survives_events_fetch_venue_error(tmp_path, monkeypatch):
+    # C1: polymarket.fetch_negrisk_events (the Gamma events list call) can
+    # raise VenueError too, same as fetch_books — it was left unwrapped, so a
+    # Gamma outage crashed the whole cycle before the polls row was ever
+    # written (negrisk's only liveness signal, see the venue_error test above).
+    from types import SimpleNamespace
+
+    from arb.commands import cmd_negrisk_scan
+    from arb.venues.base import VenueError
+    import arb.nonsports.kalshi_events as ke
+    import arb.venues.polymarket as pm
+
+    def boom(cfg, tags):
+        raise VenueError("Gamma outage: 503")
+
+    monkeypatch.setattr(pm, "fetch_negrisk_events", boom)
+    monkeypatch.setattr(ke, "scan_kalshi_events", lambda cfg, now: ([], [], 0))
+    store = Store(tmp_path / "ev.sqlite")
+    rc = cmd_negrisk_scan(CFG, store, SimpleNamespace(once=True))
+    assert rc == 0
+    assert [r["kind"] for r in store.query("SELECT kind FROM polls")] == ["negrisk"]
+    pv = {r["venue"]: r["ok"] for r in store.query("SELECT venue, ok FROM poll_venues")}
+    assert pv["polymarket"] == 0
+
+
+def test_negrisk_scan_pm_quote_count_excludes_kalshi_quotes(tmp_path, monkeypatch):
+    # I4: poll_venues' polymarket row used len(all_quotes) AFTER it had already
+    # been extended with the Kalshi quotes — double-counting Kalshi into PM's
+    # own n_quotes.
+    from types import SimpleNamespace
+
+    from arb.commands import cmd_negrisk_scan
+    from arb.negrisk import quote_rows
+    import arb.nonsports.kalshi_events as ke
+    import arb.venues.polymarket as pm
+    ev = {"id": "E11", "negRisk": True, "_tag": "politics", "title": "t",
+          "markets": [{"clobTokenIds": json.dumps(["y1", "n1"]),
+                       "groupItemTitle": "o0", "volume24hr": 1}]}
+    books = {"y1": {"asks": [{"price": "0.40", "size": "10"}],
+                    "bids": [{"price": "0.39", "size": "10"}]},
+             "n1": {"asks": [{"price": "0.65", "size": "10"}],
+                    "bids": [{"price": "0.64", "size": "10"}]}}
+    # 3 real kalshi quote rows (same quote_rows() shape production uses), so
+    # they merge cleanly into the same insert_many batch as the PM rows
+    k_quotes = quote_rows(CFG, "kalshi", "politics", "nonsports:kalshi:K1",
+                          [out(f"k{i}", "0.50", "0.49") for i in range(3)], NOW)
+    monkeypatch.setattr(pm, "fetch_negrisk_events", lambda cfg, tags: [ev])
+    monkeypatch.setattr(pm, "fetch_books", lambda cfg, tokens: books)
+    monkeypatch.setattr(ke, "scan_kalshi_events", lambda cfg, now: (k_quotes, [], 1))
+    store = Store(tmp_path / "cnt.sqlite")
+    cmd_negrisk_scan(CFG, store, SimpleNamespace(once=True))
+    pv = {r["venue"]: r["n_quotes"] for r in
+          store.query("SELECT venue, n_quotes FROM poll_venues")}
+    assert pv["polymarket"] == 2   # the E11 basket's YES+NO quotes, PM-only
+    assert pv["kalshi"] == 3       # 3 outcomes, YES-only (no no_ask given)
+
+
+def test_kalshi_legged_bet_not_flagged_venue_fetch_gap_when_kalshi_healthy(tmp_path):
+    # M1: pins the fix in 32f6c08 — venue_status used to never carry a
+    # "kalshi" key at all (even with kalshi_events enabled), so ANY missed
+    # Kalshi-legged bet was misclassified venue-fetch-gap regardless of
+    # Kalshi's actual health.
+    store = Store(tmp_path / "kg.sqlite")
+    b = _no_basket()
+    legs = json.loads(b["legs_json"])
+    for leg in legs:
+        leg["venue"] = "kalshi"
+    b = dict(b, legs_json=json.dumps(legs))
+    cand = candidate_from_basket(b)
+    healthy = {"polymarket": {"ok": True, "n": 0, "latency_ms": 0},
+              "kalshi": {"ok": True, "n": 0, "latency_ms": 0}}
+    poll1 = store.insert("polls", {"started_at": NOW.isoformat(), "kind": "negrisk",
+                                   "n_quotes": 0, "n_opps": 1})
+    process_poll(CFG, store, poll1, "negrisk", [cand], healthy, now=NOW)
+    # second poll: the bet isn't sighted (opps=[]) but Kalshi is healthy
+    poll2 = store.insert("polls", {"started_at": NOW.isoformat(), "kind": "negrisk",
+                                   "n_quotes": 0, "n_opps": 0})
+    process_poll(CFG, store, poll2, "negrisk", [], healthy, now=NOW)
+    gaps = store.query(
+        "SELECT 1 FROM annotations WHERE kind='venue-fetch-gap' AND target_id=?",
+        (str(poll2),))
+    assert not gaps
+
+
 def test_migration_6_indexes_exist(tmp_path):
     store = Store(tmp_path / "i.sqlite")
     idx = {r[1] for r in store.conn.execute(

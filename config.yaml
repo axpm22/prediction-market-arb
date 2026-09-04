@@ -377,6 +377,7 @@ notify:                             # outbound webhook to the operator's OWN end
   enabled: false                    # flip true after pasting the URL; nothing posts while false
   webhook_url: ""                   # JSON POST target; one JSON object per event (Slack/Discord adapters are the endpoint's concern)
   min_interval_secs: 300            # per-event throttle
+  timeout_secs: 10                  # outbound POST timeout; precedent execution.venue_fetch_timeout_secs
   events: [daily_report, kill_rule_fired, lane_silent, supervisor_started, supervisor_stopped]
 max_lead_hours: 12                  # a covering pair flagged further than this before the
                                     #   event starts is REVIEW-only. Measured 2026-07-28:

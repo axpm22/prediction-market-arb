@@ -133,7 +133,7 @@ SCHEMA = {
     "dashboard": {"host": STR, "port": NUM, "pnl_days": NUM,
                   "bench_stale_days": NUM, "refresh_secs": NUM},
     "notify": {"enabled": BOOL, "webhook_url": STR, "min_interval_secs": NUM,
-               "events": LIST},
+               "timeout_secs": NUM, "events": LIST},
     "zombie_spread_min": NUM, "max_lead_hours": NUM,
     "risk_free_rate": {"value": NUM, "source_url": STR, "confirmed_on": DATE},
     "deployment": {"annualized_hurdle": NUM, "xspread_autobook": BOOL,

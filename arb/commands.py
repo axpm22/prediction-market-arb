@@ -44,11 +44,18 @@ def cmd_negrisk_scan(cfg, store, args):
         console.print("[yellow]negrisk disabled[/]")
         return 0
     tags = list(cfg["nonsports"]["polymarket_tags"])
-    events = polymarket.fetch_negrisk_events(cfg, tags)[:int(cfg["negrisk"]["scan_limit"])]
+    pm_ok, pm_error = True, None
+    try:
+        events = polymarket.fetch_negrisk_events(cfg, tags)[
+            :int(cfg["negrisk"]["scan_limit"])]
+    except VenueError as ex:
+        # C1: same shape as the books-fetch outage below — a Gamma outage must
+        # not crash the cycle before the polls row (this lane's only
+        # liveness signal) is written
+        pm_ok, pm_error, events = False, str(ex), []
     console.print(f"[dim]negrisk: {len(events)} flagged events across tags {tags}[/]")
     now = datetime.now(timezone.utc)
     all_opps, all_quotes, skipped = [], [], []
-    pm_ok, pm_error = True, None
     for e in events:
         markets = [m for m in e.get("markets", []) if m.get("clobTokenIds")]
         if not markets or len(markets) > int(cfg["negrisk"]["max_outcomes"]):
@@ -109,7 +116,7 @@ def cmd_negrisk_scan(cfg, store, args):
             b["resolution_date"] = e.get("endDate")  # D2 horizon gate input
         all_opps.extend(opps)
     if not pm_ok:
-        log.warning("negrisk: polymarket books fetch failed, baskets skipped "
+        log.warning("negrisk: polymarket fetch failed, baskets skipped "
                     "this cycle: %s", pm_error)
 
     kalshi_ok = True
@@ -137,7 +144,12 @@ def cmd_negrisk_scan(cfg, store, args):
         {"poll_id": poll_id, "fingerprint": "", "kind": "NEGRISK",
          "event_key": ek, "venue_pair": "polymarket:self", "legs_json": "[]",
          "reason": reason, "edge_points": None} for ek, reason in skipped])
-    venue_status = {"polymarket": {"ok": pm_ok, "n": len(all_quotes), "latency_ms": 0}}
+    # I4: computed before any Kalshi extend so PM's own count never
+    # double-counts Kalshi quotes
+    pm_n_quotes = len(all_quotes)
+    if cfg["negrisk"]["kalshi_events"]:
+        pm_n_quotes -= len(k_quotes)
+    venue_status = {"polymarket": {"ok": pm_ok, "n": pm_n_quotes, "latency_ms": 0}}
     if cfg["negrisk"]["kalshi_events"]:
         venue_status["kalshi"] = {"ok": kalshi_ok, "n": len(k_quotes), "latency_ms": 0}
     # the poll/poll_venues rows are this lane's only sign of life (negrisk
@@ -219,7 +231,7 @@ def _notify_daily(cfg, frame, whale) -> None:
         if whale is not None and "kill_rule_fired" in events:
             for rule in whale["kill"]["rules"]:
                 if rule["state"] == "FIRED":
-                    post(cfg, "kill_rule_fired", rule)
+                    post(cfg, "kill_rule_fired", rule, key=rule["rule"])
     except Exception as e:  # noqa: BLE001 — a notifier failure must never break `report`
         console.print(f"[yellow]notify failed: {e}[/]")
 
