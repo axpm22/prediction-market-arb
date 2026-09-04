@@ -20,8 +20,8 @@ from arb.regrade import _bootstrap_mean_ci
 from arb.report import daily_frame, print_daily, write_daily
 from arb.store import Store
 
-from tests.test_whale_lane import (CID, NOW, _flip, _ledger, _run, _tape,
-                                   cfg)  # noqa: F401
+from tests.test_whale_lane import (CID, NOW, _flip, _holding, _ledger, _run,
+                                   _tape, cfg)  # noqa: F401
 
 DAY = "2026-09-03"                      # NOW is 13:00 ET on this day
 
@@ -249,6 +249,24 @@ def test_an_exited_bet_whose_market_resolved_gets_a_hold_counterfactual(cfg, tmp
     # contracts pay $1 (contracts = stake / (0.51 + 0.007497))
     assert abs(exits["flip"]["exit_pnl"] - Decimal("-0.091500")) < Decimal("0.001")
     assert abs(exits["flip"]["hold_pnl"] - Decimal("1.261581")) < Decimal("0.001")
+
+
+def test_left_exits_are_broken_down_by_the_reading_that_fired_them(cfg, tmp_path):
+    """Item D of the L14 amendment (2026-09-04): `left` has two readings now —
+    the print tape and the venue's own `positions?user=` — and the
+    pre-registered exit-vs-hold table has to say which one fired, or the two
+    can never be compared against the hold counterfactual separately."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+    holdings = {f"w{i}": [_holding(f"w{i}", 400)] for i in range(3)}
+    _run(cfg, store, con, now=NOW + timedelta(seconds=60), rows=[],
+         positions=holdings)
+
+    exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
+                                     con=con)["exits"]
+
+    assert set(exits) == {"left (positions)"}
+    assert exits["left (positions)"]["n"] == 2
 
 
 def test_an_exited_bet_whose_market_later_voided_gets_a_zero_hold(cfg, tmp_path):

@@ -426,7 +426,39 @@ Exit when any of:
 |---|---|---|
 | `flip` | Recomputed ratio for our side under the bet's own variant < `whale.exit.flip_ratio` | 0.50 |
 | `left` | Whales that formed the signal have net SOLD ≥ `whale.exit.sold_fraction` of the size they held at booking | 0.50 |
+| `left` (via positions) | The same test against what data-api `positions?user=` says those whales HOLD now | 0.50 |
 | `confidence` | Points-weighted mean `score_lb` of the remaining whales on our side < `whale.exit.min_score_lb` (scores move as their other positions resolve); a whale whose points went negative since booking weighs zero, never negative (pinned 2026-09-03) | −0.01 |
+
+**Amended 2026-09-04 (PREREGISTRATION row of that date), three sentences.**
+(1) The `flip` recount runs over the whales still HOLDING — every wallet's
+merged net position on this market across all open windows, scored and
+pointed under the bet's own variant — not over the whales whose prints are
+still inside `signal_window_secs`: on day one 12 of 14 flips fired with
+`points_side` 0 and `points_total` 1–2 after 55–153 minutes because our own
+whales' prints had aged out while one opposing fresh print remained, and
+ageing out is not a change of mind (`arb/whale_merge.qualifying(...,
+fresh_only=False)`).
+(2) The print collector runs `takerOnly=false`, so both legs of every fill are
+recorded and a whale exiting through a RESTING sell order appears as its own
+SELL leg under its own wallet — invisible under `takerOnly=true` (live probe,
+`data/verified_facts.md` 2026-09-04); the cost is ~2.8× the rows, and a maker
+quoting both sides of a token now correctly trips the §13 wash filter.
+(3) A SECOND `left` test reads each signal whale's CURRENT holding of the
+bet's token from data-api `positions?user=<wallet>` — polled every
+`whale.exit.holdings_poll_secs` per wallet, at most
+`whale.exit.holdings_calls_per_cycle` wallets a cycle, stalest first, every
+snapshot persisted to the tape's `holdings` table (rule 7) — and exits `left`
+with `via: "positions"` when those holdings fall to ≤ `(1 − sold_fraction)` of
+the size held at booking; the prints-based test keeps `via: "prints"` and
+whichever fires first wins. A snapshot older than `holdings_poll_secs ×
+holdings_max_age_polls` is no reading and that wallet falls back to its
+prints-based size — exiting on a stale holding is the same mistake as (1). An
+entirely EMPTY positions body is likewise read as no reading rather than a
+verified zero: rule 3 never probed what an empty body means, and reading it as
+"sold everything" would exit every bet behind that whale on one bad response,
+while a whale that truly sold everything now prints its SELL leg under (2).
+The report and `/api/whale` break `left` down by `via`, each with its own
+exit-vs-hold counterfactual.
 
 Exit price = best bid − taker fee, priced from a fresh `fetch_books`. No bid,
 or depth at the bid below `min_executable_usd`: no exit, annotation
@@ -650,7 +682,7 @@ whale:
   universe_poll_lookback: 5         # watch polls searched backwards for one with Polymarket rows (2026-09-04); older than data_stale_alarm_secs -> no universe
   page_size: 10000                  # trades rows per call (10,000 verified 2026-09-03); paging stops on age, never on `start`
   max_offset: 10000                 # the feed 400s past this (observed 2026-09-04); beyond it we record a gap and move on
-  taker_only: true                  # Task 1 probe 3: one row per fill; `false` returns every leg (2.2x rows)
+  taker_only: false                 # Task 1 probe 3: `true` is one row per fill; `false` returns every leg — flipped true -> false 2026-09-04 (L14 amendment, item 2 of §9's amendment above): maker legs carry the maker's own proxyWallet and side (live probe, data/verified_facts.md), so `true` hides every whale that exits through a resting order; ~2.8x rows, so a 10,000-row page spans ~2.4 min at today's flow — still over the 60 s cycle, and offset paging to max_offset 10,000 is unchanged and verified
   leaderboard: { enabled: true, category: SPORTS, time_periods: [DAY, WEEK, MONTH, ALL], order_by: PNL, pages: 20 }   # amended 2026-09-04: all windows, full depth (80 calls/day)
   resolve_after_hours: 4
   resolve_giveup_days: 14
@@ -672,7 +704,9 @@ whale:
           calibration_days: 3, calibration_min_whales: 10,   # calibration_days 14 -> 3 amended 2026-09-04 (provisional calibration)
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
   size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10 }
-  exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01 }
+  exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01,
+          holdings_poll_secs: 300, holdings_calls_per_cycle: 10,          # L14 amendment 2026-09-04, item 3 of §9's amendment: the authoritative holdings check. Per-wallet cadence and the per-cycle GET budget (10 of whale.max_calls_per_min 30, on the same shared bucket) — a roster of <=50 wallets is fully refreshed inside one cadence, a bigger one rotates stalest-first rather than starving
+          holdings_page_size: 100, holdings_max_age_polls: 3 }            # `limit` on positions?user= (paging past one page NOT probed: a full page logs WARNING once and what came back is used), and how many cadences old a snapshot may be (300 x 3 = 900 s) before that wallet falls back to its prints-based size
   primary_variant: V2
   kill: { decision_n: 100, null_n: 1200, fast_kill_min_marked: 50,
           min_signals_per_week_alarm: 10 }

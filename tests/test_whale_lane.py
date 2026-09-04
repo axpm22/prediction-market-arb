@@ -124,16 +124,22 @@ def _three(price="0.50"):
 
 
 class Get:
-    """Stands in for arb.venues.base.get_json. `/trades` gets the print page;
-    anything else (Gamma resolutions) gets an empty body."""
+    """Stands in for arb.venues.base.get_json. `/trades` gets the print page,
+    `/positions` the holdings page for the wallet in the URL; anything else
+    (Gamma resolutions) gets an empty body."""
 
-    def __init__(self, rows=()):
+    def __init__(self, rows=(), positions=None):
         self.rows = list(rows)
+        self.positions = positions or {}
         self.urls = []
 
     def __call__(self, url, cfg, **kw):
         self.urls.append(url)
-        return list(self.rows) if "/trades" in url else []
+        if "/trades" in url:
+            return list(self.rows)
+        if "/positions" in url:
+            return list(self.positions.get(url.split("user=")[1].split("&")[0], []))
+        return []
 
 
 def _book(ask="0.51", bid="0.49", size="1000"):
@@ -161,10 +167,10 @@ def _ranked(con, wallets, at=NOW, period="DAY"):
     con.commit()
 
 
-def _run(cfg, store, con, now=NOW, rows=None, fetch=None):
+def _run(cfg, store, con, now=NOW, rows=None, fetch=None, positions=None):
     from arb.lanes.whale import run_whale_cycle
-    return run_whale_cycle(cfg, store, con, now, get=Get(rows if rows is not None
-                                                         else _three()),
+    return run_whale_cycle(cfg, store, con, now,
+                           get=Get(rows if rows is not None else _three(), positions),
                            fetch=fetch or _fetch())
 
 
@@ -612,6 +618,46 @@ def test_a_lifetime_closed_bet_is_still_exited(cfg, tmp_path):
     evs = _events(store)
     assert len(evs) == 2
     assert json.loads(evs[0]["payload_json"])["source"] == "exit:flip"
+
+
+def _holding(wallet, size, asset=YES_TOK):
+    """One data-api `positions?user=` row (fields per data/verified_facts.md,
+    2026-09-04)."""
+    return {"proxyWallet": wallet, "conditionId": CID, "asset": asset,
+            "outcomeIndex": 0, "size": size, "avgPrice": 0.50,
+            "totalBought": 1000, "redeemable": False, "curPrice": 0.51,
+            "outcome": "Rays", "slug": f"{SLUG}-tb", "eventSlug": SLUG}
+
+
+def test_the_whales_holdings_falling_exits_the_bet_via_positions(cfg, tmp_path):
+    """Item C of the L14 amendment (2026-09-04), end to end: no new print of
+    any kind — under the tape alone the three signal whales still hold every
+    contract they bought — but data-api says they hold 400 of 1,000 each. A
+    whale that leaves through a resting order is what this rule is for."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+    holdings = {f"w{i}": [_holding(f"w{i}", 400)] for i in range(3)}
+    res = _run(cfg, store, con, now=NOW + timedelta(seconds=60), rows=[],
+               positions=holdings)
+
+    assert res["exited"] == 2
+    assert res["holdings"]["wallets"] == 3 and res["holdings"]["rows"] == 3
+    payload = json.loads(_events(store)[0]["payload_json"])
+    assert payload["source"] == "exit:left"
+    assert payload["detail"]["via"] == "positions"
+    assert payload["detail"]["open_now"] == "1200.000000"
+    # rule 7: the snapshot that justified the exit is on the tape
+    assert con.execute("SELECT COUNT(*) FROM holdings").fetchone()[0] == 3
+
+
+def test_holdings_are_polled_only_for_the_wallets_behind_an_open_bet(cfg, tmp_path):
+    """The budget is 10 wallets a cycle: it is spent on the whales whose
+    verdict can still move a position we hold, not on the whole roster."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    first = _run(cfg, store, con)                    # nothing open yet
+    assert first["holdings"] == {"wallets": 0, "rows": 0, "calls": 0, "errors": 0}
+    second = _run(cfg, store, con, now=NOW + timedelta(seconds=60), rows=[])
+    assert second["holdings"]["calls"] == 3          # w0, w1, w2 — our side only
 
 
 def test_an_exit_with_no_bid_annotates_and_appends_no_event(cfg, tmp_path):

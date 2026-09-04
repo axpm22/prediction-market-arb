@@ -67,6 +67,10 @@ def hygiene_flags(prints, positions, cfg) -> Hygiene:
             flags.add("mm")
 
         # wash: a BUY and a SELL of the same token, same price, seconds apart.
+        # Under `taker_only: false` (2026-09-04) a wallet's maker legs are in
+        # the feed too, so a maker quoting both sides of a token within
+        # wash_gap_secs now trips this — correctly: that is a market maker, and
+        # §13 wants it out of the signal either way.
         by_token = defaultdict(list)
         for p in rows:
             by_token[(p["condition_id"], p["outcome_index"])].append(p)

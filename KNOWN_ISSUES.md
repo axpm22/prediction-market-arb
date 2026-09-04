@@ -273,6 +273,31 @@ The operator must decide before `supervisor.processes.whale` runs live under
 the supervisor. No decision is recorded here — do not infer one from the
 config default.
 
+### 33. L14 day-one exit churn — the flip recount, closed 2026-09-04
+The L14 lane's first supervised day fired 21 V1/V4 signals and 16 early
+exits. **12 of the 14 `flip` exits were spurious**: they carry
+`points_side` 0 and `points_total` 1–2 and fired 55–153 minutes after
+booking. The cause was the recount reading the FRESH-PRINT tally
+(`qualifying` over `signal_window_secs` 7,200 s) — the whales that formed
+the signal still held every contract they had bought, but their prints had
+aged out of that window while one opposing fresh print remained, so the
+recomputed ratio was 0/1 and the position was closed at the bid for nothing.
+Ageing out is not a change of mind, and no `left` exit fired on any of them
+because nobody had sold.
+
+A second, quieter half of the same defect: the collector ran
+`takerOnly=true`, one row per fill, and a live probe that day showed maker
+legs carry the MAKER's own `proxyWallet` and `side` — so a whale exiting
+through a resting sell order produced no row the lane could see at all.
+
+Fixed 2026-09-04 (PREREGISTRATION row of that date): the `flip` recount runs
+over the whales still HOLDING under the bet's own variant; the collector
+records both legs of every fill; and a second `left` test reads each signal
+whale's current holding from data-api `positions?user=`. The 16 exits already
+booked stand as recorded — `flat_bets`/`bet_events` are append-only (rule 9)
+— and their hold-to-resolution counterfactual is reported as before, so the
+cost of the churn is measured rather than erased.
+
 ---
 
 ## The two numbers that matter most

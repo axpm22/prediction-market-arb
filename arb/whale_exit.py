@@ -21,7 +21,7 @@ class ExitDecision:
 
 
 def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
-                ranked=frozenset()) -> ExitDecision | None:
+                ranked=frozenset(), holdings=None) -> ExitDecision | None:
     """`bet_ctx` is what the lane stored at booking: variant, side,
     condition_id, start_utc and the contributing `whales` (wallet, lb,
     open_size — a `Signal.whales` list is exactly this shape).
@@ -29,19 +29,32 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
     `ranked` is the cycle's leaderboard set, handed in by the lane. Every
     recomputation below runs under the BET'S OWN variant, so a V4 bet is
     re-read over ranked whales only — unranked opposition was never V4
-    consensus and must not flip a V4 position (§7 amendment 2026-09-04)."""
+    consensus and must not flip a V4 position (§7 amendment 2026-09-04).
+
+    `holdings` is `{wallet: contracts held now}` from the venue's own
+    `positions?user=` (arb/whale_holdings.for_bet), for the second `left`
+    test. A wallet absent from it has no fresh reading and keeps its
+    prints-based size; None or empty disables that test entirely. This module
+    stays pure — the tape read and the staleness bound live in the caller."""
     ex, variant = cfg["whale"]["exit"], bet_ctx["variant"]
     side, cid = int(bet_ctx["side"]), bet_ctx["condition_id"]
     start = ts(bet_ctx.get("start_utc"))
     if start is None or ts(now) >= start:
         return None
 
-    # flip: the consensus itself moved, recomputed under this bet's variant.
-    # `total == 0` is every contributing print having simply aged out of
-    # signal_window_secs — no reading at all, not a reading that flipped, so it
-    # falls through to `left`/`confidence`, which measure the whales directly.
-    by_side, _ = tally(variant, qualifying(cid, open_positions_now,
-                                           score_lookup, now, cfg), cfg, ranked)
+    # flip: the consensus itself moved, recomputed under this bet's variant
+    # over the whales still HOLDING — every wallet's merged net position on
+    # this market, whatever the age of the print that opened it (L14 amendment
+    # 2026-09-04, `fresh_only=False`). Recounting the FRESH prints instead made
+    # 12 of day one's 14 flips fire at points_side 0 / points_total 1-2 after
+    # 55-153 minutes: our own whales' prints had aged out of
+    # signal_window_secs while one opposing fresh print remained, and nobody
+    # had sold anything. Ageing out is not a change of mind. `total == 0` —
+    # nobody holds this market at all — is still no reading, and falls through
+    # to `left`/`confidence`, which measure the signal's own whales directly.
+    holding = qualifying(cid, open_positions_now, score_lookup, now, cfg,
+                         fresh_only=False)
+    by_side, _ = tally(variant, holding, cfg, ranked)
     total, ours = by_side[YES] + by_side[NO], by_side[side]
     ratio = q6(ours / total) if total > 0 else None
     if ratio is not None and ratio < d(ex["flip_ratio"]):
@@ -67,9 +80,25 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
             notional_now[wallet] = m["notional"]
     held_then = sum(booked.values(), Decimal(0))
     held_now = sum(open_now.values(), Decimal(0))
-    if held_now <= (1 - d(ex["sold_fraction"])) * held_then:
+    sold_out = (1 - d(ex["sold_fraction"])) * held_then
+    if held_now <= sold_out:
         return ExitDecision("left", {"open_now": q6(held_now),
-                                     "open_at_booking": q6(held_then)})
+                                     "open_at_booking": q6(held_then),
+                                     "via": "prints"})
+
+    # left, second reading (L14 amendment 2026-09-04, item C): the same test
+    # against what the VENUE says each whale holds. The prints can only see a
+    # whale leave through a trade we collected; `positions?user=` is the
+    # wallet's current book. A wallet with no fresh snapshot keeps its
+    # prints-based size, so a stale reading never exits a position — it just
+    # leaves this test as weak as the prints-only one it extends.
+    if holdings:
+        held_venue = sum((d(holdings.get(w, open_now.get(w, Decimal(0))))
+                          for w in booked), Decimal(0))
+        if held_venue <= sold_out:
+            return ExitDecision("left", {"open_now": q6(held_venue),
+                                         "open_at_booking": q6(held_then),
+                                         "via": "positions"})
 
     # confidence: the whales are still here, their scores are not. Their print
     # may have aged out of the signal window by now, so this reads the holders

@@ -13,7 +13,8 @@ import pytest
 
 from arb.config import load
 from arb.venues.base import VenueError
-from arb import whale_backfill, whale_map, whale_resolve, whale_sweep, whale_tape, whale_universe
+from arb import (whale_backfill, whale_holdings, whale_map, whale_resolve, whale_score,
+                 whale_sweep, whale_tape, whale_universe)
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 NOW = datetime(2026, 9, 3, 17, 0, 0, tzinfo=timezone.utc)
@@ -266,6 +267,49 @@ def test_taker_only_comes_from_config(tmp_path):
     get = FakeGet([])
     whale_tape.poll_prints(_cfg(taker_only=False), con, _global_markets(1), NOW, get=get)
     assert "takerOnly=false" in get.urls[0]
+    get = FakeGet([])
+    whale_tape.poll_prints(_cfg(taker_only=True), con, _global_markets(1), NOW, get=get)
+    assert "takerOnly=true" in get.urls[0]
+
+
+MAKER_CID = "0xmakerlegcond"
+
+
+def _maker_market():
+    return [whale_universe.Market(
+        condition_id=MAKER_CID, sport="baseball_mlb", market_type="WINNER",
+        line=None, start_utc=IN_WINDOW, event_key="ek",
+        tokens=(("tokyes", "Rays"), ("tokno", "Yankees")))]
+
+
+def test_a_maker_leg_page_keeps_every_leg_and_a_maker_sell_reduces_the_position(tmp_path):
+    """L14 amendment 2026-09-04, item B. `takerOnly=false` is the shipped
+    value now: the live probe in data/verified_facts.md showed maker legs
+    carry the MAKER's own `proxyWallet` and `side`, so a whale exiting
+    through a resting order is invisible under `takerOnly=true` and only ever
+    appears as its own SELL leg here. Three legs of one fill, three wallets,
+    one transactionHash: the prints unique index is (tx_hash, proxy_wallet,
+    asset, side, price, size, ts), so all three survive it, and the
+    maker-SELL leg reduces that wallet's held size FIFO."""
+    cfg = _cfg()
+    assert cfg["whale"]["taker_only"] is False          # shipped 2026-09-04
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    get = FakeGet(_fixture("whale_trades_maker_legs"))
+    res = whale_tape.poll_prints(cfg, con, _maker_market(), NOW, get=get)
+    assert "takerOnly=false" in get.urls[0]
+    assert res["rows"] == 4 and res["bad_rows"] == 0
+    assert tuple(con.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT proxy_wallet) FROM prints WHERE tx_hash='0xfill1'"
+    ).fetchone()) == (3, 3)
+
+    prints = [dict(r) for r in con.execute("SELECT * FROM prints")]
+    markets = {MAKER_CID: {"sport": "baseball_mlb", "market_type": "WINNER",
+                           "start_utc": IN_WINDOW}}
+    pos = [p for p in whale_score.positions_from_prints(prints, markets, cfg)
+           if p.wallet == "0xmakerb"]
+    assert len(pos) == 1                                 # the SELL forms no position
+    assert (pos[0].size, pos[0].sold_size) == (Decimal("1000"), Decimal("400"))
+    assert pos[0].size - pos[0].sold_size == Decimal("600")
 
 
 def test_a_full_page_of_fresh_rows_pages_on_by_offset(tmp_path):
@@ -1395,3 +1439,129 @@ def test_a_market_whose_tokens_cannot_be_told_apart_is_skipped_and_counted():
 
     assert markets == []
     assert res["label_collision"] == 1
+
+
+# --- holdings: the authoritative "what do they still hold" check (§9, item C)
+
+def _position_row(wallet, size, asset="tokyes", cid=MAKER_CID, idx=0):
+    """One `positions?user=` row. Every field is from the live-probed row in
+    data/verified_facts.md (2026-09-04); the collector reads only conditionId,
+    asset, outcomeIndex, size, avgPrice, totalBought and redeemable."""
+    return {"proxyWallet": wallet, "conditionId": cid, "asset": asset,
+            "outcomeIndex": idx, "size": size, "avgPrice": 0.182,
+            "totalBought": 1000, "redeemable": False, "curPrice": 0.115,
+            "outcome": "Rays", "slug": "mlb-tb-nyy-2026-09-03-tb",
+            "eventSlug": "mlb-tb-nyy-2026-09-03", "title": "Rays vs Yankees",
+            "negativeRisk": False, "mergeable": False}
+
+
+def _ctx(wallets, side=0, token="tokyes"):
+    return {"variant": "V1", "side": side, "condition_id": MAKER_CID,
+            "token": token, "start_utc": IN_WINDOW,
+            "whales": [{"wallet": w, "side": side, "lb": "0.05",
+                        "open_size": "1000"} for w in wallets]}
+
+
+def test_holdings_poll_persists_every_snapshot_row(tmp_path):
+    """Rule 7: what we observed is stored whether or not it moves an exit."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    get = FakeGet([_position_row("0xw0", 400), _position_row("0xw0", 900, asset="tokno", idx=1)])
+    res = whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW, get=get)
+
+    assert res["wallets"] == 1 and res["rows"] == 2 and res["calls"] == 1
+    assert "positions?user=0xw0&limit=100" in get.urls[0]
+    rows = [dict(r) for r in con.execute("SELECT * FROM holdings ORDER BY asset")]
+    assert [r["asset"] for r in rows] == ["tokno", "tokyes"]
+    assert rows[1]["observed_at"] == NOW.isoformat()
+    assert (rows[1]["proxy_wallet"], rows[1]["condition_id"]) == ("0xw0", MAKER_CID)
+    assert (rows[1]["size"], rows[1]["avg_price"]) == ("400.000000", "0.182000")
+    assert (rows[1]["outcome_index"], rows[1]["redeemable"]) == (0, 0)
+    assert json.loads(rows[1]["raw_json"])["curPrice"] == 0.115
+
+
+def test_holdings_poll_caps_the_calls_per_cycle_and_round_robins_by_staleness(tmp_path):
+    """<=holdings_calls_per_cycle wallets a 60 s cycle, stalest first, so a
+    roster bigger than the cap is still refreshed rather than starved."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    wallets = [f"0xw{i:02d}" for i in range(25)]
+    cap = int(_cfg()["whale"]["exit"]["holdings_calls_per_cycle"])
+    assert cap == 10
+
+    first = whale_holdings.poll_holdings(_cfg(), con, wallets, NOW, get=FakeGet([]))
+    second = whale_holdings.poll_holdings(_cfg(), con, wallets,
+                                          NOW + timedelta(seconds=60), get=FakeGet([]))
+
+    assert (first["calls"], second["calls"]) == (cap, cap)
+    polled = {r[0] for r in con.execute(
+        "SELECT substr(key, 13) FROM meta WHERE key LIKE 'holdings_at:%'")}
+    assert polled == set(wallets[:20])            # 10 + the next 10, none repeated
+
+
+def test_holdings_a_wallet_polled_within_the_cadence_is_not_polled_again(tmp_path):
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW, get=FakeGet([]))
+    cadence = int(_cfg()["whale"]["exit"]["holdings_poll_secs"])
+    soon = whale_holdings.poll_holdings(_cfg(), con, ["0xw0"],
+                                        NOW + timedelta(seconds=cadence - 1), get=FakeGet([]))
+    due = whale_holdings.poll_holdings(_cfg(), con, ["0xw0"],
+                                       NOW + timedelta(seconds=cadence), get=FakeGet([]))
+    assert (soon["calls"], due["calls"]) == (0, 1)
+
+
+def test_holdings_for_bet_reads_the_freshest_snapshot_and_zeroes_a_missing_token(tmp_path):
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    get = FakeGet([_position_row("0xw0", 400)], [_position_row("0xw1", 900, asset="tokno", idx=1)])
+    whale_holdings.poll_holdings(_cfg(), con, ["0xw0", "0xw1"], NOW, get=get)
+
+    held = whale_holdings.for_bet(_cfg(), con, _ctx(["0xw0", "0xw1"]), NOW)
+
+    # w0 holds 400 of the bet's token; w1 was polled and no longer holds it at
+    # all — a fresh reading of zero, not an absent one.
+    assert held == {"0xw0": Decimal("400.000000"), "0xw1": Decimal(0)}
+
+
+def test_holdings_older_than_the_max_age_are_ignored_not_believed(tmp_path):
+    """A snapshot older than holdings_poll_secs x holdings_max_age_polls is no
+    reading at all: that wallet falls back to the prints (absent from the
+    mapping), because exiting on a stale holding is exactly the failure item A
+    just fixed on the other rule."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cfg = _cfg()
+    ex = cfg["whale"]["exit"]
+    max_age = int(ex["holdings_poll_secs"]) * int(ex["holdings_max_age_polls"])
+    whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW,
+                                 get=FakeGet([_position_row("0xw0", 400)]))
+    ctx = _ctx(["0xw0"])
+
+    assert whale_holdings.for_bet(cfg, con, ctx, NOW + timedelta(seconds=max_age)) \
+        == {"0xw0": Decimal("400.000000")}
+    assert whale_holdings.for_bet(cfg, con, ctx,
+                                  NOW + timedelta(seconds=max_age + 1)) == {}
+
+
+def test_holdings_a_failed_wallet_costs_only_that_wallet(tmp_path):
+    """One venue error is not an outage: the other wallets are still read and
+    the print collector's own backoff is untouched (it is a different feed)."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    get = FakeGet(VenueError("polymarket 503"), [_position_row("0xw1", 400)])
+    res = whale_holdings.poll_holdings(_cfg(), con, ["0xw0", "0xw1"], NOW, get=get)
+
+    assert (res["errors"], res["wallets"], res["rows"]) == (1, 1, 1)
+    assert whale_tape._meta(con, "backoff_until") is None
+    assert whale_tape._meta(con, "holdings_at:0xw0") is None   # retried next cycle
+
+
+def test_holdings_an_empty_page_is_no_reading_not_a_verified_zero(tmp_path):
+    """Rule 3: the live probe verified what `positions?user=` returns for a
+    wallet WITH open positions, never what an empty body means. Reading it as
+    "sold everything" would exit every bet behind that whale on one bad
+    response; a whale that really did sell everything prints its SELL leg
+    under `taker_only: false` anyway. So the wallet is absent from the
+    mapping — the prints stand — while the poll still counts as done, so the
+    round-robin moves on rather than retrying it forever."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    res = whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW, get=FakeGet([]))
+
+    assert (res["wallets"], res["rows"], res["errors"]) == (1, 0, 0)
+    assert whale_tape._meta(con, "holdings_at:0xw0") == NOW.isoformat()
+    assert whale_holdings.for_bet(_cfg(), con, _ctx(["0xw0"]), NOW) == {}

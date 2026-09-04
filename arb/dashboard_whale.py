@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from arb import report_whale, whale_exit
+from arb import report_whale, whale_exit, whale_holdings
 from arb.lanes.whale_book import _bet_ctx
 from arb.whale_state import score_state
 
@@ -52,8 +52,13 @@ def whale_positions(cfg, store, bets, now, con=None) -> dict[int, dict]:
             ctx = _bet_ctx(con, bet)
             if ctx is None:
                 continue              # booked without a signal row: nothing to say
-            decision = whale_exit.exit_reason(ctx, state.open_positions,
-                                              state.lookup, now, cfg)
+            decision = whale_exit.exit_reason(
+                ctx, state.open_positions, state.lookup, now, cfg,
+                # the same second `left` reading the lane runs (§9 item C,
+                # 2026-09-04) — read-only, off the snapshots the lane polled,
+                # so the panel cannot say "held" about a bet the next cycle
+                # exits on the venue's own holdings
+                holdings=whale_holdings.for_bet(cfg, con, ctx, now))
             out[bet["id"]] = {
                 "signal_id": bet["signal_id"], "variant": ctx["variant"],
                 "side": ctx["side"], "condition_id": ctx["condition_id"],

@@ -475,6 +475,34 @@ def test_exit_left_when_the_signal_whales_sold_half(cfg):
     pos, scores = _held(sold="600")                   # 800 open of 2,000 booked
     d = whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg)
     assert (d.reason, d.detail["open_now"]) == ("left", Decimal("800.000000"))
+    assert d.detail["via"] == "prints"                # the tape, not the venue
+
+
+def test_exit_left_via_positions_when_the_holdings_fell_and_no_sell_printed(cfg):
+    """Item C of the L14 amendment (2026-09-04): the second `left` test reads
+    what data-api `positions?user=` says each signal whale HOLDS now. The
+    prints here are unanimous that nothing was sold — every whale still shows
+    its full booked window — and the venue says they hold 40% of it. The
+    holdings win: a wallet that leaves quietly is exactly what the prints
+    cannot see."""
+    pos, scores = _held()                             # 2 x 1,000, nothing sold
+    assert whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg) is None
+    d = whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg,
+                               holdings={"w0": Decimal("400"), "w1": Decimal("400")})
+    assert (d.reason, d.detail["via"]) == ("left", "positions")
+    assert (d.detail["open_now"], d.detail["open_at_booking"]) \
+        == (Decimal("800.000000"), Decimal("2000.000000"))
+
+
+def test_exit_positions_rule_falls_back_to_prints_for_a_wallet_with_no_snapshot(cfg):
+    """A wallet the holdings poll has not reached (or whose snapshot is older
+    than the max age) is simply ABSENT from the mapping, and its prints-based
+    open size stands. Here w0 has sold down to 100 by the venue's reckoning
+    and w1 has no reading at all: 1,100 of 2,000 is not half gone, so nothing
+    exits on a mixture of one fresh fact and one stale one."""
+    pos, scores = _held()
+    assert whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg,
+                                  holdings={"w0": Decimal("100")}) is None
 
 
 def test_exit_confidence_names_the_whale_and_its_levels(cfg):
@@ -496,6 +524,46 @@ def test_exit_does_not_flip_when_every_print_aged_out(cfg):
     scores = {"w0": _score("0.05"), "w1": _score("0.05")}
     assert whale_signal.qualifying(CID, pos, _lookup(scores), NOW, cfg) == []
     assert whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg) is None
+
+
+def test_exit_does_not_flip_when_our_prints_aged_out_but_the_whales_still_hold(cfg):
+    """The live case (L14 amendment 2026-09-04): 12 of the day's 14 `flip`
+    exits fired with points_side 0 and points_total 1-2 after 55-153 minutes,
+    because the recount ran over the FRESH-PRINT tally — our four whales'
+    prints had simply aged out of signal_window_secs while one opposing fresh
+    print remained. Nobody sold: every one of them still holds exactly what it
+    held at booking. Ageing out is not a change of mind, so the flip recount
+    must read the whales still HOLDING (4 of 5), not the prints still fresh."""
+    old = N - int(cfg["whale"]["signal_window_secs"]) - 100
+    pos = [_pos(f"w{i}", last=old - 30 * i) for i in range(4)]
+    pos.append(_pos("n0", idx=1, last=T0))          # the one fresh opposing print
+    scores = {f"w{i}": _score("0.05") for i in range(4)}
+    scores["n0"] = _score("0.05")
+    ctx = _ctx(whales=[{"wallet": f"w{i}", "lb": Decimal("0.05"), "side": 0,
+                        "open_size": Decimal("1000")} for i in range(4)])
+    # exactly the reading that fired the bad exits: 0 points ours, 1 total
+    fresh, _ = whale_signal.tally(
+        "V1", whale_signal.qualifying(CID, pos, _lookup(scores), NOW, cfg), cfg)
+    assert (fresh[0], fresh[1]) == (Decimal("0.000000"), Decimal("1.000000"))
+    assert whale_exit.exit_reason(ctx, pos, _lookup(scores), NOW, cfg) is None
+
+
+def test_exit_still_fires_when_ours_sold_out_and_new_whales_bought_the_other_side(cfg):
+    """The mirror of the case above: a REAL change of mind still exits. Two of
+    the four booked whales sold to zero and two new whales bought the other
+    side, so the holders are 2 v 2 (ratio 0.50, not below flip_ratio) and the
+    half that left trips `left` — whichever rule the order yields, the
+    position exits."""
+    pos = [_pos("w0", last=T0), _pos("w1", last=T0 - 30),
+           _pos("w2", sold="1000", last=T0 - 60), _pos("w3", sold="1000", last=T0 - 90),
+           _pos("n0", idx=1, last=T0), _pos("n1", idx=1, last=T0 - 30)]
+    scores = {w: _score("0.05") for w in ("w0", "w1", "w2", "w3", "n0", "n1")}
+    ctx = _ctx(whales=[{"wallet": f"w{i}", "lb": Decimal("0.05"), "side": 0,
+                        "open_size": Decimal("1000")} for i in range(4)])
+    d = whale_exit.exit_reason(ctx, pos, _lookup(scores), NOW, cfg)
+    assert d.reason == "left"
+    assert (d.detail["open_now"], d.detail["open_at_booking"]) \
+        == (Decimal("2000.000000"), Decimal("4000.000000"))
 
 
 def test_exit_left_uses_the_merged_held_size(cfg):

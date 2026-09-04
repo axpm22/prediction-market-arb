@@ -24,8 +24,8 @@ import time
 from datetime import datetime
 from decimal import Decimal
 
-from arb import whale_backfill, whale_exit, whale_resolve, whale_score, whale_signal
-from arb import whale_tape, whale_universe
+from arb import whale_backfill, whale_exit, whale_holdings, whale_resolve
+from arb import whale_score, whale_signal, whale_tape, whale_universe
 from arb.lanes.whale_book import (_bet_ctx, _event_key, _fetch_books,
                                   _from_prints, _persist_signal, _tape_market,
                                   _touch, _zombied, best_bid, candidate,
@@ -97,7 +97,8 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     res = {"status": "disabled", "markets": 0, "prints": 0, "bad_rows": 0,
            "wallets": 0, "hygiene_excluded": 0, "signals_evaluated": 0, "fired": 0,
            "suppressed": {}, "booked": 0, "exited": 0, "exit_no_bid": 0,
-           "quotes_rows": 0, "market_errors": 0, "label_collision": 0, "poll_id": None}
+           "quotes_rows": 0, "market_errors": 0, "label_collision": 0, "poll_id": None,
+           "holdings": {}}
     if not w["enabled"]:
         return res
     t0 = time.monotonic()
@@ -127,6 +128,14 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     whale_resolve.read_resolutions(
         cfg, con, [m.condition_id for m in markets]
         + [c["condition_id"] for c in ctxs.values() if c], now, get=get)
+
+    # 5b (L14 amendment 2026-09-04, §9 item C): what the signal whales behind
+    # an open bet still HOLD, straight from data-api. Bounded to
+    # exit.holdings_calls_per_cycle wallets a cycle and paced by the same
+    # bucket as every other call here; it must run BEFORE the exits below, so
+    # this cycle's exits read this cycle's snapshot.
+    res["holdings"] = whale_holdings.poll_holdings(
+        cfg, con, whale_holdings.wallets_of(ctxs.values()), now, get=get)
 
     # 6: score. Hygiene is applied by the LANE, before scoring and signalling
     # (Task 5 decision), so an excluded wallet never becomes a vote. The
@@ -221,7 +230,7 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
 
     # 9: exits, on the books this cycle already fetched.
     for bet in bets:
-        _exit(cfg, store, bet, ctxs[bet["id"]], open_pos, lookup, books,
+        _exit(cfg, store, con, bet, ctxs[bet["id"]], open_pos, lookup, books,
               venue_ok, now, res, ranked)
 
     # collector health for the daily report (§12): `polls` has no column for a
@@ -265,13 +274,15 @@ def _persist(cfg, store, rows, cands, on_table, venue_ok, latency_ms, now) -> in
     return poll_id
 
 
-def _exit(cfg, store, bet, ctx, open_pos, lookup, books, venue_ok, now, res,
+def _exit(cfg, store, con, bet, ctx, open_pos, lookup, books, venue_ok, now, res,
           ranked) -> None:
     """§9 for one open bet. `exit_reason` returns None post-start (a bet is
     held to resolution then), so there is nothing extra to re-check here."""
     if ctx is None:
         return
-    decision = whale_exit.exit_reason(ctx, open_pos, lookup, now, cfg, ranked)
+    decision = whale_exit.exit_reason(
+        ctx, open_pos, lookup, now, cfg, ranked,
+        holdings=whale_holdings.for_bet(cfg, con, ctx, now))
     if decision is None:
         return
     bid, depth = best_bid(books.get(ctx["token"]))

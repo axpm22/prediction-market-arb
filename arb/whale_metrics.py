@@ -183,7 +183,13 @@ def exit_stats(store, con, signals: dict) -> dict:
         source = str(payload.get("source") or "")
         if not source.startswith("exit:"):
             continue
-        cell = out.setdefault(source.split(":", 1)[1], {
+        # `left` has two readings since the L14 amendment of 2026-09-04 — the
+        # print tape and the venue's own positions?user= — and they are
+        # separate rows here: each carries its own exit-vs-hold comparison, so
+        # a rule that turns out to be worse than holding is visible on its own.
+        via = (payload.get("detail") or {}).get("via")
+        reason = source.split(":", 1)[1]
+        cell = out.setdefault(f"{reason} ({via})" if via else reason, {
             "n": 0, "exit_pnl": Decimal(0), "hold_pnl": Decimal(0), "n_hold": 0})
         cell["n"] += 1
         cell["exit_pnl"] = q6(cell["exit_pnl"] + _d(payload.get("pnl")))

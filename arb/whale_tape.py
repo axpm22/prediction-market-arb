@@ -76,6 +76,14 @@ CREATE TABLE IF NOT EXISTS prints (
     proxy_wallet TEXT, pseudonym TEXT, condition_id TEXT, asset TEXT, outcome TEXT,
     outcome_index INTEGER, side TEXT, price TEXT, size TEXT, notional_usd TEXT,
     event_slug TEXT, slug TEXT, title TEXT, source TEXT, raw_json TEXT);
+-- Every leg of a fill is its own row under `taker_only: false` (2026-09-04):
+-- a maker leg carries the MAKER's wallet and side, so one transactionHash's
+-- legs differ in proxy_wallet (144/144 fills in the live probe) and all
+-- survive this key. Two maker legs of the SAME wallet/side/price/size/ts in
+-- one tx DO collide and only one is stored — accepted: a leg index in the key
+-- would break the overlap window's dedup (the only defence against
+-- double-counting a re-fetched page), and under-counting a whale's size is
+-- the conservative direction for both `left` tests.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prints_key
     ON prints(tx_hash, proxy_wallet, asset, side, price, size, ts);
 CREATE INDEX IF NOT EXISTS idx_prints_market ON prints(condition_id, ts);
@@ -101,6 +109,17 @@ CREATE TABLE IF NOT EXISTS signals (
     touch_ask TEXT, touch_bid TEXT, depth_usd TEXT, fired INTEGER, suppressed_reason TEXT,
     bet_ids_json TEXT, flagged_edge TEXT);
 CREATE INDEX IF NOT EXISTS idx_signals_time ON signals(evaluated_at);
+-- holdings columns/INSERT: arb/whale_holdings.py COLS (kept in sync by hand,
+-- like `prints`). One row per open position in a wallet's `positions?user=`
+-- snapshot (§9 item C, 2026-09-04); the poll ATTEMPT is meta
+-- `holdings_at:<wallet>`, so a wallet holding nothing is still known to have
+-- been read.
+CREATE TABLE IF NOT EXISTS holdings (
+    id INTEGER PRIMARY KEY, observed_at TEXT, proxy_wallet TEXT, condition_id TEXT,
+    asset TEXT, outcome_index INTEGER, size TEXT, avg_price TEXT,
+    total_bought TEXT, redeemable INTEGER, raw_json TEXT);
+CREATE INDEX IF NOT EXISTS idx_holdings_wallet
+    ON holdings(proxy_wallet, observed_at);
 CREATE TABLE IF NOT EXISTS base_rates (
     root TEXT, as_of TEXT, value TEXT, n INTEGER, PRIMARY KEY (root, as_of));
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);

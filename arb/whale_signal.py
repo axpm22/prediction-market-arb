@@ -105,7 +105,11 @@ def sybil(whales, gap) -> None:
     neighbour but not of the far end, is therefore ONE whale, and the answer
     depends only on the timestamps — the earlier greedy pass against a kept set
     left 1 or 2 survivors for the same three prints depending on which held the
-    top `lb`. Highest `lb` in a cluster survives (ties to the lowest wallet);
+    top `lb`. Under `taker_only: false` (2026-09-04) two makers filling the
+    same side of one taker's order share a timestamp and therefore collapse to
+    one whale here: one fill is one piece of information, so counting it once
+    is the conservative reading, and it is stated rather than silent.
+    Highest `lb` in a cluster survives (ties to the lowest wallet);
     the rest stay in the row, flagged, so the heuristic is auditable rather
     than silent. Idempotent: every row's flag is (re)set from its cluster.
     """

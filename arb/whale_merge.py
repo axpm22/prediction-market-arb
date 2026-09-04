@@ -61,7 +61,8 @@ def merge_windows(condition_id, positions, min_usd, now, cfg) -> dict[tuple, dic
     return merged
 
 
-def qualifying(condition_id, open_positions, score_lookup, now, cfg) -> list[dict]:
+def qualifying(condition_id, open_positions, score_lookup, now, cfg,
+               fresh_only=True) -> list[dict]:
     """Spec §7's qualifying whales, ONE ROW PER WALLET PER SIDE (pinned
     2026-09-03): a wallet's several BUY windows on the same (market, side) are
     one contributor — summed open size, notional-weighted average price, newest
@@ -73,6 +74,13 @@ def qualifying(condition_id, open_positions, score_lookup, now, cfg) -> list[dic
     (spec §7, pinned 2026-09-03). The merged wallet then needs a score
     clearing `min_score_lb`; sport and market type come from its newest
     window, which is what settlement and scoring already agreed on.
+
+    `fresh_only=False` drops that one age gate and returns every wallet still
+    HOLDING on this market — same rows, same scoring bar, same merge. It is
+    what §9's `flip` recount reads (L14 amendment 2026-09-04): firing is a
+    statement about what whales just did, so it needs a fresh print; exiting
+    is a statement about what they still believe, and a print ageing out is
+    not a change of mind. Nothing else may pass it.
     """
     w = cfg["whale"]
     window, min_lb = int(w["signal_window_secs"]), d(w["min_score_lb"])
@@ -80,7 +88,7 @@ def qualifying(condition_id, open_positions, score_lookup, now, cfg) -> list[dic
     out = []
     for m in merge_windows(condition_id, open_positions, min_usd, now, cfg).values():
         p = m["newest"]
-        if now_ts - p.last_ts > window:
+        if fresh_only and now_ts - p.last_ts > window:
             continue
         score = score_lookup(p.wallet, p.sport, p.market_type)
         if score is None or score.lb < min_lb:
