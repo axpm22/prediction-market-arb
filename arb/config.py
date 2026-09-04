@@ -60,7 +60,8 @@ SCHEMA = {
     "unreliable_start_venues": MAP(LIST), "activity_lookahead_hours": NUM,
     "consensus_sports": LIST, "odds_api_sport_aliases": MAP(STR),
     "odds_api_markets": MAP(STR), "scan_breaks": BOOL, "break_windows": MAP(LIST),
-    "watch_interval_secs": NUM, "consensus_enabled": BOOL, "ev_enabled": BOOL,
+    "watch_interval_secs": NUM, "watch_venues": LIST,
+    "consensus_enabled": BOOL, "ev_enabled": BOOL,
     "consensus_max_age_hours": NUM, "consensus_pregame_max_age_hours": NUM,
     "ev": {"e_min": NUM, "clv_window_mins": NUM, "kelly_fraction": NUM,
            "edge_suspect_above": NUM, "max_edge": NUM, "require_exact_match": LIST,
@@ -232,6 +233,17 @@ def _validate(data, spec, path=""):
 
 
 def _check_invariants(cfg):
+    from arb.watch import VENUES as WATCH_VENUES  # local import: config.py loads first at boot
+    watch_venues = cfg["watch_venues"]
+    if not watch_venues:
+        raise ConfigError("watch_venues must be non-empty — the watch lane needs at least "
+                          "one venue to name the universe downstream lanes read")
+    bad = [v for v in watch_venues if v not in WATCH_VENUES]
+    if bad:
+        raise ConfigError(
+            f"watch_venues: unknown venue(s) {bad} — must be a subset of "
+            f"arb.watch.VENUES ({sorted(WATCH_VENUES)})")
+
     proof = cfg["negrisk"]["exhaustive_proof"]
     slack = Decimal(1) - Decimal(proof["mids_sum_min"])
     p_tail_bound = slack / Decimal(proof["mids_sum_min"])

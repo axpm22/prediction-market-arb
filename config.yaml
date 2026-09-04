@@ -84,7 +84,23 @@ scan_breaks: true
 break_windows: { basketball_nba: [48, 15], soccer: [45, 15] }  # [offset-mins-after-start, duration-mins]
                                     # NBA 48 is a placeholder — real halftime starts ~60-70
                                     #   wall-clock mins after tip; calibrate from stored quotes
-watch_interval_secs: 60
+watch_interval_secs: 300            # 60 -> 300, operator decision 2026-09-04: whale-only mode
+                                    #   (supervisor.processes) means watch exists only to name
+                                    #   the Polymarket universe for the whale lane, which polls
+                                    #   its own tape at whale.poll_secs. The whale universe
+                                    #   tolerates a slower watch: whale.universe_poll_lookback
+                                    #   falls back across 5 polls, and data_stale_alarm_secs
+                                    #   (900) is 3x this. `arb report --daily` will show fewer
+                                    #   quotes from now on — 5x fewer, same shape, not a bug.
+watch_venues: [polymarket, sx]      # kalshi dropped 2026-09-04 (operator decision): watch
+                                    #   polled it every cycle for ~1.3M of the ~4.1M daily quote
+                                    #   rows and nothing downstream reads a kalshi quote in
+                                    #   whale-only mode (the whale lane is PM-only). A venue not
+                                    #   listed here is neither fetched nor threaded by
+                                    #   arb.watch.fetch_all_venues — it reports the same
+                                    #   {ok: False, n: 0, ...} shape a real outage takes, so
+                                    #   every §10.2 consumer treats it right without a new state.
+                                    #   Adding kalshi back is a one-line config edit.
 consensus_enabled: true
 ev_enabled: false                   # FROZEN by Phase A verdict; see PREREGISTRATION
 consensus_max_age_hours: 8

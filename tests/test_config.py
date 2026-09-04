@@ -1,4 +1,5 @@
 """Config loader: typed, strict both ways, Decimal numbers, loader-enforced invariants."""
+import re
 from decimal import Decimal
 from pathlib import Path
 
@@ -41,11 +42,31 @@ def test_unknown_nested_key_is_startup_error(tmp_path):
 
 
 def test_missing_key_is_startup_error(tmp_path):
-    text = SHIPPED.read_text().replace("watch_interval_secs: 60\n", "")
+    # ^-anchored regex hits only the unindented top-level line (and its trailing
+    # comment) — nonsports.watch_interval_secs is indented, shares the same
+    # value (300) since 2026-09-04, and must not be touched
+    text = re.sub(r"(?m)^watch_interval_secs: 300.*\n", "", SHIPPED.read_text())
     bad = tmp_path / "config.yaml"
     bad.write_text(text)
     with pytest.raises(ConfigError, match="watch_interval_secs"):
         load(bad)
+
+
+def test_watch_venues_bad_name_is_startup_error(tmp_path):
+    text = SHIPPED.read_text().replace(
+        "watch_venues: [polymarket, sx]", "watch_venues: [polymarket, sx, robinhood]")
+    bad = tmp_path / "config.yaml"
+    bad.write_text(text)
+    with pytest.raises(ConfigError, match="watch_venues"):
+        load(bad)
+
+
+def test_shipped_watch_venues_excludes_kalshi():
+    # operator decision 2026-09-04: watch only names the PM universe for the
+    # whale lane; nothing reads kalshi's ~1.3M rows/day. Add it back by
+    # editing config.yaml.
+    cfg = load(SHIPPED)
+    assert cfg["watch_venues"] == ["polymarket", "sx"]
 
 
 def test_a1_coupling_invariant_enforced(tmp_path):

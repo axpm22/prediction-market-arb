@@ -539,8 +539,8 @@ def test_cadence_window_overrides_inside_its_hours(cfg):
                                "cadence_windows": {"watch": [[19, 23, 20]]}}}
     assert lane_interval(c, "watch", datetime(2026, 7, 28, 19, 0)) == 20.0
     assert lane_interval(c, "watch", datetime(2026, 7, 28, 22, 59)) == 20.0
-    assert lane_interval(c, "watch", datetime(2026, 7, 28, 23, 0)) == 60.0
-    assert lane_interval(c, "watch", datetime(2026, 7, 28, 5, 0)) == 60.0
+    assert lane_interval(c, "watch", datetime(2026, 7, 28, 23, 0)) == float(c["watch_interval_secs"])
+    assert lane_interval(c, "watch", datetime(2026, 7, 28, 5, 0)) == float(c["watch_interval_secs"])
     # a lane with no window is untouched
     assert lane_interval(c, "mapped", datetime(2026, 7, 28, 20, 0)) == \
         float(c["nonsports"]["watch_interval_secs"])

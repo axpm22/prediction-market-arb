@@ -71,10 +71,45 @@ def test_partial_fetch_keeps_quotes_but_marks_venue_not_ok(monkeypatch):
         raise PartialFetch(["q1", "q2"])
 
     monkeypatch.setattr(watch, "VENUES", {"sx": truncated})
-    quotes, status = watch.fetch_all_venues({})
+    quotes, status = watch.fetch_all_venues({"watch_venues": ["sx"]})
     assert quotes["sx"] == ["q1", "q2"]                    # persisted (rule 7)
     assert status["sx"]["ok"] is False                     # not a full-coverage poll
     assert status["sx"]["partial"] is True                 # §10.2 lifetime-carry applies
+
+
+def test_watch_venues_config_skips_unlisted_venues_without_fetching(monkeypatch):
+    # operator decision 2026-09-04: kalshi dropped from the watch lane (nothing
+    # reads its quotes in whale-only mode) via config.yaml watch_venues, not a
+    # code change. A venue left out must not be threaded/called at all.
+    import arb.watch as watch
+
+    called = []
+
+    def fake_polymarket(cfg):
+        called.append("polymarket")
+        return ["pm1"]
+
+    def fake_sx(cfg):
+        called.append("sx")
+        return ["sx1"]
+
+    def fake_kalshi(cfg):  # pragma: no cover — must never be invoked
+        called.append("kalshi")
+        raise AssertionError("kalshi fetcher must not be called when not in watch_venues")
+
+    monkeypatch.setattr(watch, "VENUES", {
+        "kalshi": fake_kalshi, "polymarket": fake_polymarket, "sx": fake_sx})
+    quotes, status = watch.fetch_all_venues({"watch_venues": ["polymarket", "sx"]})
+
+    assert "kalshi" not in called
+    assert set(called) == {"polymarket", "sx"}              # the others still ran, concurrently
+    assert quotes["kalshi"] == []
+    assert status["kalshi"] == {"ok": False, "skipped": True, "n": 0,
+                                "latency_ms": 0.0, "error": "not in watch_venues"}
+    assert quotes["polymarket"] == ["pm1"]
+    assert status["polymarket"]["ok"] is True
+    assert quotes["sx"] == ["sx1"]
+    assert status["sx"]["ok"] is True
 
 
 def test_request_deadline_trims_timeout_and_skips_retries(monkeypatch):
