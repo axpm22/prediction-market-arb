@@ -506,6 +506,24 @@ def test_hygiene_flags_matches_the_reference_on_random_print_sets(cfg):
         assert got == want, f"trial {trial}, n={n}: {got} != {want}"
 
 
+def test_hygiene_flags_matches_the_reference_when_the_mm_window_evicts(cfg):
+    """Regrade (review of b1fc427): ts_span=40 above is far below
+    mm_window_secs=600, so `_two_sided_within_window`'s eviction branch
+    (`while ts_hi - ts[lo] > gap: lo += 1`) never runs in the trial above —
+    every row in a group always fits in one window. ts_span=5,000 forces rows
+    to fall in and out of the window, so eviction is actually exercised
+    against the frozen O(n^2) reference."""
+    rng = random.Random(20260904)
+    markets = {f"0xc{i}": _market() for i in range(3)}
+    for trial in range(200):
+        n = rng.randint(1, 120)
+        prints = _random_prints(rng, n, ts_span=5_000)
+        pos = whale_score.positions_from_prints(prints, markets, cfg)
+        got = whale_hygiene.hygiene_flags(prints, pos, cfg)
+        want = _REFERENCE_hygiene_flags(prints, pos, cfg)
+        assert got == want, f"trial {trial}, n={n}: {got} != {want}"
+
+
 def _concentrated_prints(n, n_wallets=200, n_whales=5, n_markets=20):
     """Adversarial-but-realistic shape (regrade 2026-09-04 bench, see
     bench_hygiene.py in the report): a fixed handful of whale wallets,
@@ -537,15 +555,17 @@ def _concentrated_prints(n, n_wallets=200, n_whales=5, n_markets=20):
 
 def test_hygiene_flags_completes_in_bounded_time_on_a_concentrated_tape(cfg):
     # Regression guard: at 200k concentrated rows the OLD O(n^2) _pairs scan
-    # took >10s (measured, see .superpowers/sdd/retention-report.md); 3s is
-    # generous headroom over the fixed sliding-window scan's actual time.
+    # took >10s (measured, see .superpowers/sdd/retention-report.md). 8.0s is
+    # regression headroom, not a target: measured 2.3s idle / 3.85s under CPU
+    # load (regrade of b1fc427), so 3.0s flaked on a loaded machine while
+    # still passing the whole fixed-scan-vs-O(n^2) comparison it exists for.
     prints = _concentrated_prints(200_000)
     markets = {f"0xc{i}": _market() for i in range(20)}
     pos = whale_score.positions_from_prints(prints, markets, cfg)
     t0 = time.perf_counter()
     whale_hygiene.hygiene_flags(prints, pos, cfg)
     dt = time.perf_counter() - t0
-    assert dt < 3.0, f"hygiene_flags took {dt:.3f}s on 200k concentrated rows"
+    assert dt < 8.0, f"hygiene_flags took {dt:.3f}s on 200k concentrated rows"
 
 
 # ---------------------------------------------------------------- structure

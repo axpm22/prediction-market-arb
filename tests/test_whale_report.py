@@ -1007,6 +1007,128 @@ def test_score_state_reads_only_the_print_columns_it_uses(cfg, tmp_path):
             "event_slug"} <= set(state.prints[0])
 
 
+def test_score_state_query_constants_select_no_raw_json_and_no_star():
+    """Retention regrade 2026-09-04 (score_state read trim, part 2): the
+    `markets`/`resolutions` reads were still `SELECT *`, pulling `raw_json` —
+    the resolution's whole venue payload — and columns state.markets/
+    state.resolutions never serve a reader (first_seen/last_seen/volume_24h).
+    Introspects the SQL constants directly, so a future `SELECT *` regression
+    fails here instead of only showing up as a slower cycle."""
+    from arb import whale_state
+    for name in ("PRINT_COLS", "MARKET_COLS", "RESOLUTION_COLS"):
+        cols = getattr(whale_state, name)
+        assert "raw_json" not in cols, name
+        assert "*" not in cols, name
+
+
+def test_score_state_reads_only_the_market_and_resolution_columns_it_uses(cfg, tmp_path):
+    """The other half of the trim: `state.markets[cid]` still carries every
+    field a reader off it needs — positions_from_prints (sport, market_type,
+    start_utc), the lane's `_tape_market`/`_event_key` for an aged-out held
+    market (line, event_key, tokens_json, slug) — but not the columns nothing
+    reads back through `state`. `state.resolutions[cid]` keeps what
+    resolved_outcomes/whale_rank read (resolved_at, winner_outcome_index,
+    status) and drops the venue's raw resolution payload."""
+    from arb.whale_state import score_state
+    con = _tape(tmp_path)
+    con.execute(
+        "INSERT INTO markets (condition_id, sport, market_type, line, start_utc,"
+        " event_key, tokens_json, slug, first_seen, last_seen, volume_24h)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (CID, "baseball_mlb", "WINNER", None, NOW.isoformat(), "pm:evt",
+         '[["0xyes","Yes"]]', "slug-x", NOW.isoformat(), NOW.isoformat(), "1000"))
+    con.execute(
+        "INSERT INTO resolutions (condition_id, resolved_at, winner_outcome_index,"
+        " status, source, raw_json, fetched_at) VALUES (?,?,0,'resolved','gamma',?,?)",
+        (CID, NOW.isoformat(), "x" * 10000, NOW.isoformat()))
+    con.commit()
+
+    state = score_state(cfg, con, NOW)
+
+    mk = state.markets[CID]
+    assert {"condition_id", "sport", "market_type", "line", "start_utc",
+            "event_key", "tokens_json", "slug"} <= set(mk)
+    assert not {"first_seen", "last_seen", "volume_24h"} & set(mk)
+
+    res = state.resolutions[CID]
+    assert {"condition_id", "resolved_at", "winner_outcome_index", "status"} <= set(res)
+    assert not {"source", "raw_json", "fetched_at"} & set(res)
+
+
+def test_score_state_matches_the_select_star_reference_on_a_mixed_tape(cfg, tmp_path):
+    """Equivalence: the column trim changes what state.markets/state.resolutions
+    dicts CARRY, never what score_state COMPUTES off them. `_reference` below
+    is score_state's body frozen at `SELECT * FROM markets`/`SELECT * FROM
+    resolutions` (pre-trim); the tape mixes a resolved clean position with a
+    wash-flagged (hygiene-excluded) one, so positions, open_positions,
+    hygiene_excluded, agg and a scored lookup all have something to disagree
+    on if the trim ever drops a column a reader actually needs."""
+    from arb import whale_score
+    from arb.whale_hygiene import hygiene_flags
+    from arb.whale_state import WhaleState, score_state
+
+    def _reference(cfg, con, now):
+        prints = [dict(r) for r in con.execute("SELECT * FROM prints")]
+        markets = {r["condition_id"]: dict(r) for r in con.execute("SELECT * FROM markets")}
+        resolutions = {r["condition_id"]: dict(r)
+                       for r in con.execute("SELECT * FROM resolutions")}
+        positions = whale_score.positions_from_prints(prints, markets, cfg)
+        hyg = hygiene_flags(prints, positions, cfg)
+        open_pos = [p for p in positions if not hyg.excludes(p)]
+        outcomes = whale_score.resolved_outcomes(open_pos, resolutions, now)
+        agg = whale_score.aggregate(outcomes)
+        rates, rate_n = {}, {}
+        for root in {o.root for o in outcomes} | {"sports"}:
+            rates[root], rate_n[root] = whale_score.base_rate(outcomes, root, now, cfg)
+
+        def lookup(wallet, sport, market_type):
+            return whale_score.score_for(agg, wallet, sport, market_type, cfg, rates)
+
+        return WhaleState(prints=prints, markets=markets, resolutions=resolutions,
+                          positions=positions, open_positions=open_pos,
+                          hygiene_excluded=len(positions) - len(open_pos),
+                          rates=rates, rate_n=rate_n, agg=agg, lookup=lookup)
+
+    con = _tape(tmp_path)
+    resolved_at = NOW - timedelta(hours=1)
+    start = NOW - timedelta(days=2)
+    for cid, wallet, wash in (("0xclean", "0xw1", False), ("0xwash", "0xw2", True)):
+        con.execute(
+            "INSERT INTO markets (condition_id, sport, market_type, start_utc,"
+            " tokens_json, first_seen, last_seen) VALUES (?,?,?,?,'[]',?,?)",
+            (cid, "baseball_mlb", "WINNER", start.isoformat(),
+             start.isoformat(), start.isoformat()))
+        con.execute(
+            "INSERT INTO resolutions (condition_id, resolved_at,"
+            " winner_outcome_index, status, source, raw_json, fetched_at)"
+            " VALUES (?,?,0,'resolved','gamma','{}',?)",
+            (cid, resolved_at.isoformat(), resolved_at.isoformat()))
+        ts = int((start - timedelta(hours=1)).timestamp())
+        rows = [("BUY", ts, "0.50", "1000")]
+        if wash:
+            rows.append(("SELL", ts + 1, "0.50", "1"))
+        for j, (side, at, px, size) in enumerate(rows):
+            con.execute(
+                "INSERT INTO prints (observed_at, ts, tx_hash, proxy_wallet,"
+                " condition_id, asset, outcome_index, side, price, size,"
+                " notional_usd, source, raw_json) VALUES (?,?,?,?,?,?,0,?,?,?,?,'tape','{}')",
+                (start.isoformat(), at, f"0x{wallet}{j}", wallet, cid, "tok",
+                 side, px, size, str(Decimal(px) * Decimal(size))))
+    con.commit()
+
+    got = score_state(cfg, con, NOW)
+    want = _reference(cfg, con, NOW)
+
+    assert got.positions == want.positions
+    assert got.open_positions == want.open_positions
+    assert got.hygiene_excluded == want.hygiene_excluded == 1   # only the wash wallet
+    assert got.agg == want.agg
+    assert got.rates == want.rates and got.rate_n == want.rate_n
+    for wallet in ("0xw1", "0xw2"):
+        assert (got.lookup(wallet, "baseball_mlb", "WINNER")
+                == want.lookup(wallet, "baseball_mlb", "WINNER"))
+
+
 def test_signals_by_id_loads_only_the_ids_it_was_asked_for(cfg, tmp_path):
     """I5(b): every `signals` row ever written was json-parsed for the report
     and the bench, which only ever look up the ids the ledger booked."""
