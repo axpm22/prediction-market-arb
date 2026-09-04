@@ -1565,3 +1565,71 @@ def test_holdings_an_empty_page_is_no_reading_not_a_verified_zero(tmp_path):
     assert (res["wallets"], res["rows"], res["errors"]) == (1, 0, 0)
     assert whale_tape._meta(con, "holdings_at:0xw0") == NOW.isoformat()
     assert whale_holdings.for_bet(_cfg(), con, _ctx(["0xw0"]), NOW) == {}
+
+
+# --- holdings paging fix (2026-09-04): a full page keeps going ---------------
+
+def test_holdings_poll_pages_past_one_page_until_a_short_page(tmp_path):
+    """Item 1 of the holdings-paging fix: a wallet whose page 1 comes back
+    full must not be read as "sold out" of a token that only shows up on
+    page 3 — the poll continues by `offset` (verified live 2026-09-04) until
+    a short page or holdings_max_pages, and every page lands under the SAME
+    observed_at so `for_bet` sees the real size wherever it lands."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    page1 = [_position_row("0xw0", 10, asset=f"filler{i}") for i in range(500)]
+    page2 = [_position_row("0xw0", 10, asset=f"filler{500 + i}") for i in range(500)]
+    page3 = ([_position_row("0xw0", 10, asset=f"filler{1000 + i}") for i in range(36)]
+             + [_position_row("0xw0", "777.5", asset="tokyes")])
+    get = FakeGet(page1, page2, page3)
+
+    res = whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW, get=get)
+
+    assert (res["wallets"], res["rows"], res["calls"], res["errors"]) == (1, 1037, 3, 0)
+    assert [u.split("offset=")[1] for u in get.urls] == ["0", "500", "1000"]
+    held = whale_holdings.for_bet(_cfg(), con, _ctx(["0xw0"]), NOW)
+    assert held == {"0xw0": Decimal("777.500000")}    # real size, not a hard zero
+
+
+def test_holdings_marks_a_still_full_snapshot_partial(tmp_path):
+    """Item 2: a wallet still full at holdings_max_pages is truncated, not
+    fully read. The snapshot is marked partial; a token PRESENT in it is
+    still a valid size, but a token ABSENT from it may simply be on the page
+    that was never fetched — no reading, not a verified zero."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cfg = _cfg()
+    cfg["whale"]["exit"] = {**cfg["whale"]["exit"],
+                            "holdings_page_size": 2, "holdings_max_pages": 2}
+    page1 = [_position_row("0xw0", "5", asset="tokyes"), _position_row("0xw0", 1, asset="b")]
+    page2 = [_position_row("0xw0", 1, asset="c"), _position_row("0xw0", 1, asset="d")]
+    get = FakeGet(page1, page2)
+
+    res = whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW, get=get)
+
+    assert (res["wallets"], res["rows"], res["calls"], res["errors"]) == (1, 4, 2, 0)
+    assert whale_holdings.for_bet(cfg, con, _ctx(["0xw0"], token="tokyes"), NOW) \
+        == {"0xw0": Decimal("5.000000")}                      # present: trusted
+    assert whale_holdings.for_bet(cfg, con, _ctx(["0xw0"], token="zzz_missing"), NOW) == {}
+
+
+def test_holdings_truncation_warns_once_per_wallet_per_day(tmp_path, caplog):
+    """Item 3: the truncation WARNING is keyed by (wallet, UTC day), not a
+    module-level set — a second poll of the same wallet the same day is
+    silent, and a poll on a new day warns again."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cfg = _cfg()
+    cfg["whale"]["exit"] = {**cfg["whale"]["exit"],
+                            "holdings_page_size": 1, "holdings_max_pages": 1}
+    cadence = int(cfg["whale"]["exit"]["holdings_poll_secs"])
+    full_page = lambda: [_position_row("0xw0", 1, asset="tokyes")]
+
+    with caplog.at_level(logging.WARNING, logger="arb.whale"):
+        whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW, get=FakeGet(full_page()))
+        caplog.clear()
+        whale_holdings.poll_holdings(cfg, con, ["0xw0"],
+                                     NOW + timedelta(seconds=cadence), get=FakeGet(full_page()))
+        assert caplog.records == []                    # same UTC day: already warned
+
+        caplog.clear()
+        whale_holdings.poll_holdings(cfg, con, ["0xw0"],
+                                     NOW + timedelta(days=1), get=FakeGet(full_page()))
+        assert len(caplog.records) == 1                 # a new day: warns again

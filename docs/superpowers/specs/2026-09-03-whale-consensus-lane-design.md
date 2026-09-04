@@ -460,6 +460,14 @@ while a whale that truly sold everything now prints its SELL leg under (2).
 The report and `/api/whale` break `left` down by `via`, each with its own
 exit-vs-hold counterfactual.
 
+**Amended 2026-09-04 (holdings-paging fix).** A full `positions?user=` page
+now pages by `offset` (verified live 2026-09-04) up to `holdings_max_pages`
+or a short page, whichever comes first, so a token that only shows up past
+page 1 is read at its real size rather than as a hard zero; a wallet still
+full at `holdings_max_pages` is marked `partial`, and a row-level absence in
+a partial snapshot is read as no reading (falls back to prints) rather than
+a verified zero — presence is still trusted wherever it lands.
+
 Exit price = best bid − taker fee, priced from a fresh `fetch_books`. No bid,
 or depth at the bid below `min_executable_usd`: no exit, annotation
 `exit-no-bid`, re-evaluated next cycle. A position that is still held (an
@@ -745,6 +753,12 @@ whale:
   kill: { decision_n: 100, null_n: 1200, fast_kill_min_marked: 50,
           min_signals_per_week_alarm: 10 }
 ```
+
+**Amended 2026-09-04 (holdings-paging fix):** a fifth `exit` key,
+`holdings_max_pages: 4`, bounds offset-paging past the first
+`positions?user=` page to 2,000 positions or a short page; each extra page
+spends one call of the same `holdings_calls_per_cycle` budget above, and a
+wallet still full at the cap is marked `partial` in the tape (see §9).
 
 Loader: the strict schema gains an optional-number leaf type
 (`int | Decimal | None`) used only for `fire.min_points.V2` and `V3`, since

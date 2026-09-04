@@ -9,12 +9,12 @@ from under us and see nothing move. This module is the second reading.
 
 Rule 1: public, unauthenticated GETs only, paced by the collector's own shared
         token bucket (one bucket per process, whale.max_calls_per_min).
-Rule 3: `positions?user=<wallet>&limit=N` and the seven fields read below are
-        the live-probed row dated 2026-09-04 in data/verified_facts.md. Paging
-        past one page was NOT probed, so it is not attempted: a wallet at the
-        page limit is logged once and what came back is used.
-Rule 4: the cadence, the per-cycle cap, the page size and the staleness bound
-        all come from `whale.exit`.
+Rule 3: `positions?user=<wallet>&limit=N&offset=M` and the seven fields read
+        below are the live-probed rows dated 2026-09-04 in
+        data/verified_facts.md — including the offset-paging row that lets a
+        full page keep going rather than being read as the whole wallet.
+Rule 4: the cadence, the per-cycle cap, the page size, the page cap and the
+        staleness bound all come from `whale.exit`.
 Rule 5: size, avg_price and total_bought are 6-place Decimal strings.
 Rule 7: every snapshot is persisted, whether or not it moves an exit.
 Rule 9: writes go to the whale tape only — flat_bets is unreachable from here.
@@ -40,7 +40,16 @@ COLS = ("observed_at, proxy_wallet, condition_id, asset, outcome_index, size,"
 # list and writes no `holdings` row, so the rows alone cannot say whether it
 # was read — and "read, holds nothing" is precisely the reading that exits.
 POLLED = "holdings_at:"
-_WARNED: set[str] = set()
+# Set to the snapshot's `observed_at` when that wallet was STILL full at
+# holdings_max_pages (truncated, not fully read); "" otherwise. Meta, not a
+# `holdings` column (2026-09-04 holdings-paging fix, smaller-change pick) —
+# no migration needed for an existing tape file, whose `holdings` table
+# CREATE TABLE IF NOT EXISTS would not gain a new column anyway.
+PARTIAL = "holdings_partial:"
+# Truncation WARNING, once per (wallet, UTC day) — meta, not a module-level
+# set, so it survives a process restart and still fires again on a new day
+# (2026-09-04 holdings-paging fix, item 3).
+TRUNC_WARNED = "holdings_trunc_warned:"
 
 
 def _row(r: dict, wallet: str, observed_at: str) -> tuple:
@@ -81,28 +90,53 @@ def due(cfg, con, wallets, now) -> list[str]:
     return sorted(overdue, key=lambda w: (seen[w], w))[:cap]
 
 
+def _warn_truncated_once(con, wallet, observed_at, n) -> None:
+    key = TRUNC_WARNED + wallet + ":" + observed_at[:10]     # UTC day
+    if _meta(con, key):
+        return
+    _set_meta(con, key, "1")
+    log.warning("whale holdings: %s still full after holdings_max_pages "
+                "(%d positions read) — snapshot marked partial, a row-level "
+                "absence in it is no reading, not a verified zero",
+                wallet, n)
+
+
 def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
     """One cycle's holdings refresh. A wallet the venue refuses costs only
     itself: no watermark, no backoff (that guard belongs to the print feed,
     which is a different endpoint), and no `holdings_at` stamp, so it is
-    retried next cycle rather than silently believed to hold what it did."""
-    page = int(cfg["whale"]["exit"]["holdings_page_size"])
+    retried next cycle rather than silently believed to hold what it did.
+
+    A full page pages by `offset` (verified live 2026-09-04) until a short
+    page or `holdings_max_pages`, each extra page spending one call of this
+    cycle's own `holdings_calls_per_cycle` budget — so once that budget is
+    spent, no further wallet in `due()`'s list is started this cycle (it
+    simply rotates to the front next time, same as an unpolled wallet)."""
+    ex = cfg["whale"]["exit"]
+    page, max_pages = int(ex["holdings_page_size"]), int(ex["holdings_max_pages"])
+    cap = int(ex["holdings_calls_per_cycle"])
     res = {"wallets": 0, "rows": 0, "calls": 0, "errors": 0}
     bucket, observed_at = _bucket(cfg), now.isoformat()
     for wallet in due(cfg, con, wallets, now):
+        if res["calls"] >= cap:
+            break
+        body, partial, offset = [], False, 0
         try:
-            body = _call(bucket, get, f"{DATA_API}/positions?user={wallet}"
-                         f"&limit={page}", cfg, res)
+            for _ in range(max_pages):
+                chunk = _call(bucket, get, f"{DATA_API}/positions?user={wallet}"
+                              f"&limit={page}&offset={offset}", cfg, res)
+                body += chunk
+                if len(chunk) < page:
+                    break
+                offset += page
+            else:
+                partial = True                  # still full after holdings_max_pages
         except Exception as e:  # noqa: BLE001 — one wallet, not the cycle
             res["errors"] += 1
             log.warning("whale holdings poll failed for %s: %s", wallet, e)
             continue
-        if len(body) >= page and wallet not in _WARNED:
-            _WARNED.add(wallet)
-            log.warning("whale holdings: %s returned a full page of %d positions "
-                        "— paging past one page is unverified (rule 3), so this "
-                        "snapshot is what came back, not the whole wallet",
-                        wallet, len(body))
+        if partial:
+            _warn_truncated_once(con, wallet, observed_at, len(body))
         rows = []
         for r in body:
             try:
@@ -112,7 +146,8 @@ def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
                 log.warning("whale skipped an unreadable holdings row: %s", e)
         con.executemany(f"INSERT INTO holdings ({COLS}) VALUES ({','.join('?' * 10)})",
                         rows)
-        _set_meta(con, POLLED + wallet, observed_at)        # commits both
+        _set_meta(con, POLLED + wallet, observed_at)
+        _set_meta(con, PARTIAL + wallet, observed_at if partial else "")  # commits both
         res["wallets"] += 1
         res["rows"] += len(rows)
     return res
@@ -139,6 +174,12 @@ def for_bet(cfg, con, ctx, now) -> dict[str, Decimal]:
     response. A whale that truly sold everything now prints its SELL leg
     anyway (`taker_only: false`, item B), so the prints-based test above still
     catches it — the lost case is small, the false-exit case is not.
+
+    A wallet still full at `holdings_max_pages` (PARTIAL, 2026-09-04 holdings-
+    paging fix) is the same shape of risk one page further out: a token
+    missing from it may simply be sitting on the page that was never
+    fetched, so it too is no reading. Presence is unaffected either way — a
+    token this snapshot DID capture is trusted at its real size regardless.
     """
     ex = cfg["whale"]["exit"]
     max_age = int(ex["holdings_poll_secs"]) * int(ex["holdings_max_age_polls"])
@@ -152,6 +193,11 @@ def for_bet(cfg, con, ctx, now) -> dict[str, Decimal]:
         held = {r[0]: r[1] for r in con.execute(
             "SELECT asset, size FROM holdings WHERE proxy_wallet=? AND observed_at=?",
             (wallet, at))}
-        if held:
-            out[wallet] = Decimal(held.get(token, 0))
+        if not held:
+            continue                                        # empty page: no reading
+        if token in held:
+            out[wallet] = Decimal(held[token])
+        elif _meta(con, PARTIAL + wallet) != at:
+            out[wallet] = Decimal(0)                         # fresh full read: a real zero
+        # else: partial snapshot, token may be unread — no reading, fall back to prints
     return out

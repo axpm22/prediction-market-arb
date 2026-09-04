@@ -734,7 +734,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       # paper stake sizing for whale-lane fills
   exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01,
           holdings_poll_secs: 300, holdings_calls_per_cycle: 10,
-          holdings_page_size: 500, holdings_max_age_polls: 3 }
+          holdings_page_size: 500, holdings_max_age_polls: 3, holdings_max_pages: 4 }
                                       # signal-driven exit: consensus flip / sell-off thresholds —
                                       #   invariant: exit.flip_ratio < fire.ratio.
                                       #   The four holdings_* keys are the L14 amendment of
@@ -758,6 +758,17 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   beyond one page was NOT probed (rule 3), so a wallet
                                       #   returning a full page is logged WARNING once and what
                                       #   came back is used.
+                                      #   holdings_max_pages (2026-09-04 amendment, holdings-paging
+                                      #   fix): a full page now pages by `offset` (verified live
+                                      #   2026-09-04, data/verified_facts.md: limit=100&offset=100
+                                      #   returns the next distinct page, limit=500 returns 500 in
+                                      #   one call) up to 4 pages (2,000 positions) or a short page,
+                                      #   whichever comes first — each extra page spends one call of
+                                      #   the same holdings_calls_per_cycle budget above. A wallet
+                                      #   still full at holdings_max_pages is marked `partial`; a
+                                      #   token missing from a partial snapshot is no reading (falls
+                                      #   back to prints), never a verified zero — presence is still
+                                      #   trusted at its real size wherever it lands.
   rank: { min_n: 5, top: 15 }         # read-time trader ranking (`arb whale-rank`,
                                       #   /api/whale/traders, the daily "Top traders"
                                       #   table — design §12 "Trader profiles").

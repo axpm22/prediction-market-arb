@@ -71,6 +71,14 @@ def hygiene_flags(prints, positions, cfg) -> Hygiene:
         # the feed too, so a maker quoting both sides of a token within
         # wash_gap_secs now trips this — correctly: that is a market maker, and
         # §13 wants it out of the signal either way.
+        # Self-match note (2026-09-04, holdings-paging fix, review of a966232
+        # Important #2): whether Polymarket's CLOB matches an order against
+        # its own owner's resting order on the other side is NOT verified — no
+        # fact row in data/verified_facts.md. If it does, the two legs share
+        # one transactionHash/timestamp at one price with opposite sides,
+        # which is exactly the pattern this predicate already flags. No code
+        # change: that classification is correct either way, since a
+        # self-match nets the wallet's exposure to zero same as any other wash.
         by_token = defaultdict(list)
         for p in rows:
             by_token[(p["condition_id"], p["outcome_index"])].append(p)
