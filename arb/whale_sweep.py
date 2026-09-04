@@ -47,7 +47,8 @@ def resolve_sweep(cfg, con, now, get=get_json) -> int:
     whale traded that has aged out — every backfilled one — was never read at
     all and no wallet could ever score. This sweeps them, FIFO by start,
     `backfill.resolve_per_cycle` a cycle, through the SAME reader: the shared
-    token bucket, the shared backoff, two ids per Gamma call.
+    token bucket, the shared backoff, GAMMA_IDS_PER_CALL (20, verified live
+    2026-09-04) ids per Gamma call.
 
     Head-of-line blocking fix (2026-09-04): `read_resolutions` persists
     nothing for a market Gamma reports open or omits, so without a marker the

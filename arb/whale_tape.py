@@ -153,22 +153,35 @@ def _bucket(cfg) -> _Bucket:
 
 def _call(bucket, get, url, cfg, res) -> list:
     """One paced GET. get_json returns parsed JSON or raises VenueError whose
-    message carries the HTTP status, so the status IS the exception text."""
+    message carries the HTTP status, so the status IS the exception text.
+
+    A 200 whose body is not a list (an error object from a degraded Gamma,
+    e.g.) is itself a failure, not an empty result: it used to be silently
+    coerced to `[]` with status_counts still "ok", which reads to a caller
+    exactly like a genuine "found nothing" — in whale_map._map_markets that
+    made a degraded response on both Gamma passes write a PERMANENT
+    `absent:<cond>` marker, quarantining a real market forever with nothing
+    logged above INFO. Raising VenueError here — the one shared choke point
+    for the sweep, the resolutions reader, and the mapper — routes it
+    through the exact handling a bad HTTP status already gets (backoff set,
+    status="error", row untouched) instead of needing a second check in
+    every caller."""
     bucket.take()
     res["calls"] = res.get("calls", 0) + 1
     counts = res.setdefault("status_counts", {})
     t0 = time.monotonic()
     try:
         body = get(url, cfg)
+        if not isinstance(body, list):
+            raise VenueError(f"whale GET 200 non-list body ({type(body).__name__}): {url}")
     except Exception as e:
         counts["error"] = counts.get("error", 0) + 1
         log.warning("whale GET failed in %dms: %s (%s)",
                     int((time.monotonic() - t0) * 1000), url, e)
         raise
     counts["ok"] = counts.get("ok", 0) + 1
-    n = len(body) if isinstance(body, list) else 0
-    log.info("whale GET 200 %dms n=%d %s", int((time.monotonic() - t0) * 1000), n, url)
-    return body if isinstance(body, list) else []
+    log.info("whale GET 200 %dms n=%d %s", int((time.monotonic() - t0) * 1000), len(body), url)
+    return body
 
 
 def _meta(con, key):

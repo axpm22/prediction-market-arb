@@ -1,6 +1,7 @@
 """L14 resolution reader and Polymarket-native settlement (spec §5 step 5, §10).
 
-Rule 1: one public, unauthenticated Gamma GET per (at most) two markets.
+Rule 1: one public, unauthenticated Gamma GET per (at most)
+        GAMMA_IDS_PER_CALL (20, verified live 2026-09-04) markets.
 Rule 3: every field below was read off a LIVE resolved market on 2026-09-03
         (Task 4 step 0, fixture tests/fixtures/whale_gamma_resolved.json, rows
         in data/verified_facts.md). `outcomePrices` is a JSON-encoded STRING

@@ -860,6 +860,36 @@ def test_revisit_sql_drops_the_permanent_slug_floor_and_absent_never_reasked(tmp
     assert revisit_after == []
 
 
+def test_a_non_list_gamma_body_raises_instead_of_being_coerced_to_absent(tmp_path):
+    """CRITICAL fix (reviewer, 4b746cf): a 200 whose JSON body is not a list
+    (a degraded Gamma error object, e.g. `{"error": "degraded"}`) used to be
+    silently coerced to `[]` by `_call`, with status_counts still "ok". Both
+    Gamma passes (default, then closed=true) then read as "found nothing",
+    and `_map_markets` wrote a PERMANENT `absent:` marker — quarantining a
+    real market forever, with nothing logged above INFO. `_call` must raise
+    VenueError instead, so the SAME handling a bad HTTP status already gets
+    (`map_markets`: backoff set, status="error", nothing written) covers
+    this too — one guard at the shared choke point, not a second check in
+    the mapper."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cond = "0xdegraded"
+    _print(con, "0xw", cond, "BUY", "900", int(NOW.timestamp()) - 100)
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 40})
+    get = FakeGet({"error": "degraded", "markets": []})  # same dict both passes
+
+    res = whale_backfill.map_markets(cfg, con, NOW, get=get)
+
+    assert res["status"] == "error"
+    assert res["status_counts"].get("error", 0) >= 1
+    assert whale_tape._meta(con, f"absent:{cond}") is None
+    assert whale_tape._meta(con, f"unmappable:{cond}") is None
+    assert con.execute("SELECT * FROM markets WHERE condition_id=?",
+                       (cond,)).fetchone() is None
+    assert whale_tape._meta(con, "backoff_until") is not None
+
+
 def test_mapper_closed_pass_records_a_resolution_and_the_sweep_ignores_it(tmp_path):
     """Legacy re-map (2026-09-04): the closed=true retry (F0) already fetches
     the FULL resolved-market row for anything missing from Gamma's default
@@ -1103,7 +1133,7 @@ def test_map_markets_is_bounded_and_fifo_by_first_print(tmp_path):
     con.commit()
     cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40, "page_size": 50,
                          "map_per_cycle": 2})
-    get = FakeGet([])                                # one call covers both (GAMMA_IDS_PER_CALL=2)
+    get = FakeGet([])          # one call covers both (GAMMA_IDS_PER_CALL=20, verified live 2026-09-04)
 
     res = whale_backfill.map_markets(cfg, con, NOW, get=get)
 
