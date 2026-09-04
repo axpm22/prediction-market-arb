@@ -141,6 +141,7 @@ def cmd_report(cfg, store, args):
 
     from arb.metrics import day_bounds
     from arb.report import print_daily, write_daily
+    from arb.report_whale import whale_frame
     # default day = today in the config timezone (§H5), not machine-local
     day = args.daily or _dt.now(ZoneInfo(str(cfg["timezone"]))).date().isoformat()
     start, end = day_bounds(cfg, day)
@@ -148,8 +149,10 @@ def cmd_report(cfg, store, args):
         "SELECT COUNT(*) c, COALESCE(SUM(n_quotes),0) q FROM polls "
         "WHERE started_at >= ? AND started_at < ?", (start, end))[0]
     console.print(f"[dim]{day}: polls={polls['c']} quotes={polls['q']}[/]")
-    write_daily(cfg, store, day)
-    print_daily(cfg, store, day)
+    # scored once, passed to both — the tape used to be read twice per call
+    whale = whale_frame(cfg, store)
+    write_daily(cfg, store, day, whale_frame=whale)
+    print_daily(cfg, store, day, whale_frame=whale)
     return 0
 
 

@@ -554,3 +554,21 @@ def test_the_cycle_records_its_result_in_the_tape_meta(cfg, tmp_path):
     assert last["status"] == "ok" and last["prints"] == 3
     assert last["bad_rows"] == 0 and last["booked"] == 2
     assert last["at"] == NOW.isoformat()
+
+
+def test_last_cycle_meta_survives_a_markout_failure(cfg, tmp_path, monkeypatch):
+    """`last_cycle` is written right after the cycle's own work — before
+    persist_marks/beat — so a markout failure below cannot leave a stale
+    value for the report to read."""
+    from arb import markout
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+
+    def _boom(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(markout, "persist_marks", _boom)
+    with pytest.raises(RuntimeError):
+        _run(cfg, store, con)
+
+    last = json.loads(whale_tape._meta(con, "last_cycle"))
+    assert last["status"] == "ok" and last["booked"] == 2

@@ -78,9 +78,9 @@ def _signal_row(con, signal_id, whales, variant="V2", side=0, fired=1,
     con.commit()
 
 
-def _whale(wallet, native=True, side=0):
+def _whale(wallet, native=True, side=0, sybil_dropped=False):
     return {"wallet": wallet, "side": side, "lb": "0.05", "n_bucket": 4,
-            "native": native}
+            "native": native, "sybil_dropped": sybil_dropped}
 
 
 # ------------------------------------------------------- the by_class key
@@ -235,6 +235,26 @@ def test_an_exited_bet_whose_market_resolved_gets_a_hold_counterfactual(cfg, tmp
     assert abs(exits["flip"]["hold_pnl"] - Decimal("1.261581")) < Decimal("0.001")
 
 
+def test_an_exited_bet_whose_market_later_voided_gets_a_zero_hold(cfg, tmp_path):
+    """Ledger convention (arb/metrics.py: 'VOID leg contributes 0'): a void
+    resolution is a valid hold outcome, not a missing one — it belongs in the
+    exit-vs-hold comparison with hold P&L 0.000000, not dropped from n_hold."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+    _flip(con)
+    _run(cfg, store, con, now=NOW + timedelta(seconds=60))
+    con.execute("INSERT INTO resolutions (condition_id, resolved_at, "
+                "winner_outcome_index, status) VALUES (?,?,?,?)",
+                (CID, (NOW + timedelta(hours=6)).isoformat(), None, "void"))
+    con.commit()
+
+    exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
+                                     con=con)["exits"]
+
+    assert exits["flip"]["n_hold"] == 2
+    assert exits["flip"]["hold_pnl"] == Decimal("0.000000")
+
+
 def test_a_losing_hold_counterfactual_is_negative(cfg, tmp_path):
     """The other side of the same computation: the exit saved money."""
     store, con = _ledger(tmp_path), _tape(tmp_path)
@@ -348,6 +368,21 @@ def test_a_whale_on_the_other_side_never_makes_a_signal_transfer(cfg, tmp_path):
     """Only contributors on the FIRED side carry the native flag that counts."""
     store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
     _signal_row(con, 1, [_whale("w1"), _whale("w2", native=False, side=1)])
+    _whale_row(store, "V2/flat", 1, "pm:a", pnl=Decimal("0.30"))
+
+    split = report_whale.whale_frame(cfg, store, now=NOW, con=con)["native"]
+
+    assert split["signals"] == {"native": 1, "transfer": 0}
+
+
+def test_a_sybil_dropped_whale_never_flips_a_native_signal_to_transfer(cfg, tmp_path):
+    """A sybil-dropped whale contributes zero points (arb/whale_signal.py:
+    `points()` skips it) — it must not count toward `is_native` either. A
+    duplicate print collapsed by the sybil rule must never turn an otherwise
+    all-native fired side into 'transfer'."""
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    _signal_row(con, 1, [_whale("w1", native=True),
+                        _whale("w2", native=False, sybil_dropped=True)])
     _whale_row(store, "V2/flat", 1, "pm:a", pnl=Decimal("0.30"))
 
     split = report_whale.whale_frame(cfg, store, now=NOW, con=con)["native"]
@@ -471,7 +506,9 @@ def test_the_report_writes_nothing_to_the_tape(cfg, tmp_path):
     store, con = _ledger(tmp_path), _tape(tmp_path)
     _run(cfg, store, con)
     before = con.execute("SELECT COUNT(*) c FROM base_rates").fetchone()["c"]
+    changes_before = con.total_changes
 
     report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=1), con=con)
 
     assert con.execute("SELECT COUNT(*) c FROM base_rates").fetchone()["c"] == before
+    assert con.total_changes == changes_before

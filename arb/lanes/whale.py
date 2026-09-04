@@ -196,16 +196,19 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
         _exit(cfg, store, bet, ctxs[bet["id"]], open_pos, lookup, books,
               venue_ok, now, res)
 
+    # collector health for the daily report (§12): `polls` has no column for a
+    # cycle's status/rows/bad_rows and rule 9 forbids inventing one, so the
+    # counters live on the tape the report already opens read-only. Written
+    # right after the cycle's own work — before persist_marks/beat — so a
+    # markout failure below cannot leave this meta value stale.
+    _set_meta(con, "last_cycle", json.dumps({**res, "at": now.isoformat()}))
+    log.info("whale cycle: %s", res)
+
     from arb.cli import head_sha
     from arb.heartbeat import beat
     from arb.markout import persist_marks
     persist_marks(cfg, store)
     beat(store, "whale", head_sha())
-    # collector health for the daily report (§12): `polls` has no column for a
-    # cycle's status/rows/bad_rows and rule 9 forbids inventing one, so the
-    # counters live on the tape the report already opens read-only.
-    _set_meta(con, "last_cycle", json.dumps({**res, "at": now.isoformat()}))
-    log.info("whale cycle: %s", res)
     return res
 
 

@@ -13,14 +13,17 @@ the cluster bootstrap of the mean, "lower 80% bound" its 20th. Clusters are
 from __future__ import annotations
 
 import json
+import random
+import statistics
 from decimal import Decimal
 
 from arb import metrics
+from arb.markout import HORIZONS
 from arb.models import q6
-from arb.regrade import _bootstrap_mean_ci
 
-# The two PREGAME horizons §12 names, in arb/markout.py's own units.
-H_2M, H_10M = 120, 600
+# The two PREGAME horizons §12 names, straight off arb/markout.py's own tuple
+# (30, 120, 600, 1800) — no second copy of the numbers to drift out of sync.
+H_2M, H_10M = HORIZONS[1], HORIZONS[2]
 UB90, LB80 = (0.10, 0.90), (0.20, 0.80)     # one-sided percentile pairs (§12)
 SETTLED_SQL = """
     SELECT b.* FROM flat_bets b WHERE b.kind='WHALE' AND EXISTS
@@ -32,13 +35,41 @@ def _d(v) -> Decimal:
     return Decimal(str(v or 0))
 
 
+def _sorted_means(by_event: dict, seed: int, n: int) -> list[float]:
+    """The exact resample loop `arb.regrade._bootstrap_mean_ci` runs
+    internally, exposed so `cluster_ci` can read every percentile it needs off
+    ONE draw instead of re-running the resample per pair — same `by_event` and
+    `seed` reproduce the same sequence of draws, so this is not a second
+    algorithm, just the one loop shared instead of repeated. `_bootstrap_mean_ci`
+    keeps its own public signature; every other caller still goes through it."""
+    events = list(by_event)
+    if not events:
+        return []
+    rng = random.Random(seed)
+    means = []
+    for _ in range(n):
+        sample = []
+        for ek in (rng.choice(events) for _ in events):
+            sample.extend(by_event[ek])
+        if sample:
+            means.append(statistics.mean(sample))
+    means.sort()
+    return means
+
+
 def cluster_ci(cfg, by_event: dict) -> dict:
     """Mean plus the one-sided bounds §12 reads: `lb80` (20th percentile) is the
     success test, `ub90` (90th) the kill test. Bootstrap internals are floats
     (rule 5's stated exception) and are re-quantized here."""
     seed, n_boot = int(cfg["regrade"]["bootstrap_seed"]), int(cfg["regrade"]["bootstrap_n"])
-    mean, lo90, ub90 = _bootstrap_mean_ci(by_event, seed, n_boot, percentiles=UB90)
-    _, lb80, hi80 = _bootstrap_mean_ci(by_event, seed, n_boot, percentiles=LB80)
+    all_vals = [v for vs in by_event.values() for v in vs]
+    mean = statistics.mean(all_vals) if all_vals else 0.0
+    means = _sorted_means(by_event, seed, n_boot)
+
+    def pct(p):
+        return means[int(p * len(means))] if means else mean
+
+    lo90, ub90, lb80, hi80 = pct(UB90[0]), pct(UB90[1]), pct(LB80[0]), pct(LB80[1])
     return {"n": sum(len(v) for v in by_event.values()), "n_events": len(by_event),
             "mean": q6(Decimal(mean)), "lo90": q6(Decimal(lo90)),
             "ub90": q6(Decimal(ub90)), "lb80": q6(Decimal(lb80)),
@@ -109,8 +140,11 @@ def signals_by_id(con) -> dict:
 
 def is_native(sig: dict) -> bool | None:
     """§7: native iff EVERY contributing whale on the FIRED side qualified on
-    its own bucket. A whale on the other side never makes a signal transfer."""
-    on_side = [w for w in sig["whales"] if str(w.get("side")) == str(sig["side"])]
+    its own bucket. A whale on the other side never makes a signal transfer,
+    and neither does a sybil-dropped one — `points()` (arb/whale_signal.py)
+    already gives it zero weight, so it never contributed to the fire."""
+    on_side = [w for w in sig["whales"] if str(w.get("side")) == str(sig["side"])
+               and not w.get("sybil_dropped")]
     return all(bool(w.get("native")) for w in on_side) if on_side else None
 
 
@@ -134,12 +168,16 @@ def exit_stats(store, con, signals: dict) -> dict:
         cell["exit_pnl"] = q6(cell["exit_pnl"] + _d(payload.get("pnl")))
         sig = signals.get(bet["signal_id"])
         res = resolutions.get(sig["condition_id"]) if sig else None
-        if not sig or not res or res.get("status") != "resolved":
+        if not sig or not res or res.get("status") not in ("resolved", "void"):
             continue
-        stake = _d(bet["stake_usd"])
-        contracts = stake / metrics.bet_effective_cost(bet)
-        payout = Decimal(1) if res["winner_outcome_index"] == int(sig["side"]) \
-            else Decimal(0)
-        cell["hold_pnl"] = q6(cell["hold_pnl"] + payout * contracts - stake)
+        if res["status"] == "void":
+            hold = Decimal(0)          # ledger convention: VOID contributes 0
+        else:
+            stake = _d(bet["stake_usd"])
+            contracts = stake / metrics.bet_effective_cost(bet)
+            payout = Decimal(1) if res["winner_outcome_index"] == int(sig["side"]) \
+                else Decimal(0)
+            hold = payout * contracts - stake
+        cell["hold_pnl"] = q6(cell["hold_pnl"] + hold)
         cell["n_hold"] += 1
     return out

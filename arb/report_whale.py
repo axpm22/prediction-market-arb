@@ -20,6 +20,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from arb.models import q6
+from arb.replay import open_ro
 from arb.whale_metrics import (exit_stats, is_native, markout_stats, roi_cell,
                                roi_rows, signals_by_id)
 
@@ -32,8 +33,7 @@ def open_tape_ro(cfg) -> sqlite3.Connection | None:
     if not path.exists():
         return None
     try:
-        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=10)
-        con.row_factory = sqlite3.Row
+        con = open_ro(path)
         con.execute("SELECT 1 FROM meta LIMIT 1")
         return con
     except sqlite3.Error:
@@ -187,7 +187,7 @@ def whale_md(frame: dict) -> list[str]:
                                          "could not be opened read-only"),
           f"- wallets: {w['tracked']} tracked, {w['backfilled']} backfilled, "
           f"{w['hygiene_excluded']} positions hygiene-excluded",
-          f"- qualifying whales at lb80: {q['n']} "
+          f"- whales scored >= lb80 (ungated roster): {q['n']} "
           + (", ".join(f"{k} {v}" for k, v in sorted(q["by_root"].items())) or "—")
           + " | by sport: "
           + (", ".join(f"{k} {v}" for k, v in sorted(q["by_sport"].items())) or "—"),

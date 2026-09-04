@@ -184,7 +184,13 @@ def _capacity_md(cap: dict) -> list[str]:
     return md
 
 
-def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily") -> dict:
+def _wf(cfg, store, given: dict | None) -> dict:
+    """`given` (one score per `--daily` call) or a fresh whale_frame."""
+    return given if given is not None else report_whale.whale_frame(cfg, store)
+
+
+def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily",
+                whale_frame: dict | None = None) -> dict:
     frame = daily_frame(cfg, store, day)
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -219,7 +225,7 @@ def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily") -> d
         md.append(f"| {kind} | {lane} | {variant} | {a['bets']} | ${a['staked']} | "
                   f"${a['settled_pnl']} | {a['pending']} | {a['missed']} |")
     md.append("")
-    frame["whale"] = report_whale.whale_frame(cfg, store)
+    frame["whale"] = _wf(cfg, store, whale_frame)
     md.extend(report_whale.whale_md(frame["whale"]))
     md.append("")
     md.extend(_capacity_md(frame["capacity"]))
@@ -256,7 +262,7 @@ def write_daily(cfg, store, day: str, outdir: str | Path = "reports/daily") -> d
     return frame
 
 
-def print_daily(cfg, store, day: str) -> None:
+def print_daily(cfg, store, day: str, whale_frame: dict | None = None) -> None:
     frame = daily_frame(cfg, store, day)
     t = Table(title=f"Daily report {day} — headline ${frame['headline_pnl']} "
                     f"({frame['headline_n']} settled clean bets, gross of carry)")
@@ -269,8 +275,7 @@ def print_daily(cfg, store, day: str) -> None:
         t.add_row(kind, lane, variant, str(a["bets"]), f"${a['staked']}",
                   f"${a['settled_pnl']}", str(a["pending"]), str(a["missed"]))
     console.print(t)
-    console.print("[dim]" + report_whale.whale_line(
-        report_whale.whale_frame(cfg, store)) + "[/]")
+    console.print("[dim]" + report_whale.whale_line(_wf(cfg, store, whale_frame)) + "[/]")
     c = frame["cadence"]
     console.print(f"[dim]polls={c['n_polls']} cadence mean={c['mean'] and round(c['mean'])}s "
                   f"p95={c['p95'] and round(c['p95'])}s; quote age="
