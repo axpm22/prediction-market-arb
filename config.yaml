@@ -377,7 +377,7 @@ supervisor:
                                     #   -> total unchanged at leaderboard 80 + sweep 50 + wallets
                                     #   120 + map 100 = 350 calls, PLUS the non-sports universe's
                                     #   9 (whale.nonsports.tags 3 x pages 3, amendment 2026-09-04)
-                                    #   = 359 calls ~= 718s, same ~180s margin as before. This unlocks the 12,091 `markets` rows the
+                                    #   = 359 calls ~= 718s, ~180s margin (was ~200s before the non-sports builder). This unlocks the 12,091 `markets` rows the
                                     #   pre-4b3bcc9 mapper left slug/sport/start_utc NULL
                                     #   (REVISIT_SQL's permanent slug floor on them is gone,
                                     #   arb/whale_map.py) — at 1000/cycle the backlog drains in

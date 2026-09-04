@@ -120,7 +120,7 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     else:
         log.warning("whale cycle: empty market universe (no watch poll in the "
                     "lookback window had Polymarket sports rows, and no "
-                    "non-sports market inside nonsports_max_days) — skipping "
+                    "non-sports market inside whale.nonsports.max_days) — skipping "
                     "poll_prints, watermark untouched")
         res["status"] = "no-universe"
     res["wallets"] = whale_backfill.discover_wallets(cfg, con, now)
