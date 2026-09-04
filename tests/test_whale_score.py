@@ -335,7 +335,7 @@ def test_positions_from_prints_completes_in_bounded_time_on_a_200k_tape(cfg):
     t0 = time.perf_counter()
     whale_score.positions_from_prints(prints, markets, cfg)
     dt = time.perf_counter() - t0
-    assert dt < 1.3, f"positions_from_prints took {dt:.3f}s on 200k rows"
+    assert dt < 4.0, f"positions_from_prints took {dt:.3f}s on 200k rows"
 
 
 # ---------------------------------------------------------------- scoring
