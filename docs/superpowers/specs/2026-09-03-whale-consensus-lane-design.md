@@ -109,6 +109,47 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    connection (`replay.open_ro`) filtered by that poll's `poll_id` so the
    query is served by `idx_quotes_poll` and never scans the 37 GB table.
    Nothing is guessed.
+1b. **Non-sports universe (added 2026-09-04).** The `whale-backfill` process
+   (cadence `backfill.cadence_secs`, 600 s — deliberately no second cadence
+   key to drift out of step with it) walks `whale.nonsports.tags` with
+   `GET gamma-api/events?tag_slug=<tag>&closed=false&limit=100&offset=<page×100>`
+   for `whale.nonsports.pages` pages a tag, and keeps a NESTED market when:
+   its own `closed` is false; its `volume24hr` is present and ≥
+   `nonsports.min_volume_24h_usd` ($1,000; a null `volume24hr` is not an
+   unknown to be admitted — measured 2026-09-04, 231 of 485 open crypto
+   markets carry none); its lifetime is ≥ `nonsports.min_lifetime_hours` (6);
+   and its OWN `endDate` is inside `[now, now + nonsports_max_days]`.
+   Lifetime is that `endDate` minus the LATEST of the market's `startDate`,
+   its `createdAt` and the event's `startDate` — the shortest measurable span,
+   the reading that admits fewer markets; a market with no measurable start is
+   excluded rather than assumed long-lived. **The market's own `endDate`, never
+   the event's** (verified 2026-09-04: `macron-out-in-2025` reads event
+   2027-01-01 against market 2026-01-01). The root is decided by the EVENT's
+   own `tags` array — the first `nonsports.tags` key present wins — because
+   events are multi-tagged and overlapping, and the root must not depend on
+   which tag's page surfaced the market. Kept markets are upserted into the
+   tape's `markets` with `sport = <root>`, `market_type = LADDER` when the
+   event's `negRisk` is true else `BINARY`, `start_utc = <the market's
+   endDate>`, `tokens_json` from `clobTokenIds`/`outcomes` (exactly two
+   distinguishable outcomes or the market is skipped) and `volume_24h` from
+   `volume24hr`. The upsert pins `sport` and `start_utc` to whatever the row
+   already holds: Gamma can EDIT an endDate, and a moving `start_utc`
+   retroactively changes which of a whale's positions were pregame. Ordering
+   parameters are never relied on (`order`/`ascending` were sent in the
+   2026-09-04 census probe and their effect is unverified); all filtering is
+   client-side. The 60 s lane cycle reads this universe from the tape — it
+   makes no Gamma tag call of its own, and the watch lane is not involved at
+   any point.
+   **Correction to the proposal, measured (data/verified_facts.md
+   2026-09-04):** `min_lifetime_hours` is NOT what removes the 5- and
+   15-minute crypto up/down series — those events read a 23.94 h lifetime on
+   both date pairs, the cadence being in the slug and not in any date. What
+   excludes them is the `nonsports_max_days` horizon. The 6 h floor is kept as
+   registered, as a cheap bound that can only ever exclude.
+   **Surface, measured the same day:** the horizon, not the volume floor, is
+   what binds — 173 of 1,971 open politics markets resolve within 7 days and 5
+   of those clear $1,000; crypto contributes 0 of 1,219.
+
 2. **Collect.** `whale.collector_mode: global` (Task 1 fix pass: the global
    feed returns 10,000 rows per call against a platform rate of about
    1,400–2,000 rows/min): one `GET /trades?takerOnly=<whale.taker_only>&limit=<whale.page_size>`
@@ -240,10 +281,26 @@ scores a fixture twice, once against the full fixture and once against the
 fixture physically truncated to `resolved_at < T0`, and asserts identical
 `Decimal` output.
 
-**Hierarchy.** Two disjoint roots: `sports` and `nonsports`. Sports:
-bucket (sport × market_type) → sport → root. Nonsports is a flat root and
-is not scored in this version (recorded, not booked). No query joins across
-roots; a structural test asserts `hierarchy_root` is in every aggregation.
+**Hierarchy (amended 2026-09-04, non-sports roots).** Four disjoint roots:
+`sports`, `politics`, `geopolitics`, `crypto` — one per configured
+`whale.nonsports.tags` value, plus sports. A root name IS the Polymarket fee
+category (`arb/venues/fees.py::_PM_CATEGORY_RATE_KEY`), so one field prices
+the leg, segregates the report and isolates the score. Sports: bucket
+(sport × market_type) → sport → root. Each non-sports root: bucket
+(root × market_type, market_type ∈ {BINARY, LADDER}) → root → root; the middle
+level repeats the root deliberately (the natural mid level would be Gamma's
+`series` family, and no series has 20 resolved positions yet), which shrinks a
+non-sports score toward its root's base rate twice and is therefore
+conservative — the upgrade path is one config map from `series.slug` to a mid
+level, no schema change. **No transfer between roots** (operator decision
+2026-09-03 item 4, unchanged): no query joins across roots, and the structural
+test asserting `hierarchy_root` is in every aggregation is what proves it —
+`whale_score._agg_keys` carries `root` in position 1 of every key it builds. A
+root's `m0` falls back to `base_rate_default` (−0.02) until it has
+`base_rate_min_n` (500) resolved positions of its own, so a new root starts
+pessimistic and never borrows the sports base rate. Superseded: the previous
+wording ("two disjoint roots `sports` and `nonsports`; nonsports … not scored
+in this version").
 
 **Model.** Normal–normal empirical Bayes with observation variance
 `whale.score.obs_var` = 0.25 (`e` is bounded in `[−1, 1]` with sd ≈
@@ -415,7 +472,18 @@ re-review). Three pre-registered variants:
    carries both `avg_price` (all open windows) and `fresh_avg_price`.
 5. Pregame with at least `whale.fire.min_secs_to_start` (600) remaining;
    depth at the ask ≥ `min_executable_usd`; the book is two-sided and not a
-   zombie.
+   zombie. **Amended 2026-09-04 (non-sports roots):** for a non-sports root
+   the identical test runs against `start_utc = the market's Gamma endDate`,
+   i.e. at least 600 s before the market's own resolution deadline — with that
+   one assignment `positions_from_prints`' `pregame` test reads "printed before
+   resolution", the tracker's horizon check fires on the same field, and no
+   line of `whale_score`, `whale_merge`, `whale_exit` or `whale_resolve`
+   changes. **Adverse-selection reading, stated:** a sports pregame gate
+   excludes game state; a non-sports close gate excludes only the last-minute
+   settlement scramble, so the non-sports lane leans entirely on
+   `max_print_age_secs` (300) and `fire.max_drift_points` (0.03) — both tuned
+   on sports — and its result must be read that way. The +2m/+10m markout is
+   reported per root for exactly this reason, and kill rule 2 runs per root.
 
 Every evaluation is persisted to `signals` with `fired`, `suppressed_reason`,
 both point totals, the whale list, VWAP, touch, and depth. Suppressed
@@ -452,7 +520,12 @@ Per fired (market, side, variant), two `flat_bets` rows, distinct
 
 Each row has one leg: venue `polymarket`, the outcome token on side s,
 `cost` = best ask at booking, `fee_cost` via `leg_fee_cost(cfg, "polymarket",
-"sports", ask)`, `depth_usd`, `mid0`, `venue_market_id = condition_id:token`.
+market.root, ask)` (amended 2026-09-04: the leg's fee CATEGORY is the market's
+own root, so a politics leg pays 0.04 and a crypto leg 0.07 rather than the
+sports 0.03 — pricing a politics leg at the sports rate would understate the
+cost of the very thing under test; an exit reads the same category off the
+bet's own stored `category`), `depth_usd`, `mid0`,
+`venue_market_id = condition_id:token`.
 **Leg convention (pinned 2026-09-03, Task 4 review):** a WHALE leg always
 BUYS one token, so `side = "YES"` and `outcome` = that token's own label
 (`"Rays"`, `"Down"`, or literally `"No"` on a Yes/No market), exactly as the
@@ -460,7 +533,8 @@ watch lane's Polymarket sports `quotes` rows are written. `side = "NO"` is
 the ledger's complement-inversion flag and is never used for WHALE legs;
 settlement decides by token identity (`venue_market_id` vs the winning
 `clobTokenIds` entry), and the label is only used to name the losing side.
-`kind = WHALE`, `category = sports`, `event_key = pm:<event_slug>` always,
+`kind = WHALE`, `category` = the market's root (`sports`, `politics`,
+`geopolitics`, `crypto` — amended 2026-09-04), `event_key = pm:<event_slug>` always,
 never the cross-venue matched key; `position_key` is the generic
 `sport|event_key|outcome|market_type|line|YES` with a `|<variant>/<sizing>`
 suffix, because each variant × sizing is its own paper position by design
@@ -827,6 +901,12 @@ whale:
     scope: global                   # `universe` restores the pre-2026-09-04 behaviour
     global_min_print_usd: 1000      # a print outside EVERY universe is stored only at or above this; measured ~35% of the >=min_print_usd rows, ~47k rows/day, ~47 MB/day at 1.0 KB/compact row
     raw_json: universe              # `universe` = raw_json and title kept only for a universe market; `all` = everywhere (+864 B/row); `none` = never
+  nonsports:                        # non-sports ROOTS, added 2026-09-04 (proposal §1; PREREGISTRATION row of the same date)
+    enabled: true                   # false = the pre-2026-09-04 sports-only lane
+    tags: { politics: politics, geopolitics: geopolitics, crypto: crypto }   # Gamma tag_slug -> whale ROOT, in PRIORITY order (events are multi-tagged, so the first key present in the EVENT's own `tags` decides — deterministic whichever tag's page surfaced the market). Every value must be a Polymarket fee category and never `sports` (loader invariant). Deliberately absent per the operator's 2026-09-04 decision: weather, economy/business/science, esports — KNOWN_ISSUES.md "L14 deferred non-sports roots"
+    pages: 3                        # /events?tag_slug pages per tag per refresh, 100 events a page, paged by `offset` (verified live 2026-09-04). 3 tags x 3 = 9 paced calls, moving the whale-backfill child's worst case from ~350 to ~359 of its 900 s budget. The refresh CADENCE is backfill.cadence_secs (600) — no second key
+    min_volume_24h_usd: 1000        # nested-market Gamma `volume24hr` floor; a NULL volume24hr fails it (231 of 485 open crypto markets carry none, measured 2026-09-04)
+    min_lifetime_hours: 6           # market endDate minus the LATEST of its own startDate, its own createdAt and the event's startDate. NOT the noise rule the proposal claimed (btc-updown-5m reads 23.94 h) — the nonsports_max_days (7) horizon is what excludes the short series; kept as a cheap bound that can only ever exclude
   backfill: { wallets_per_cycle: 3, pages_per_wallet: 40, page_size: 50,   # 5 -> 3 amended 2026-09-04: the child twice exceeded its 900 s cap
               cadence_secs: 600, resolve_per_cycle: 100, map_per_cycle: 100 }   # own supervisor process; order: leaderboard -> resolution sweep -> wallet pages -> Gamma mapping; resolve 40->100 and map_per_cycle added 2026-09-04 after the child hit its 900 s cap on unbounded mapping; map_per_cycle 40->200 amended 2026-09-04 (V4 review): worst case leaderboard 80 + sweep 50 + wallets 120 + map 100 Gamma calls ~= 11 min, under the 900s cap; map_per_cycle 200->100 amended 2026-09-04 (mapper fix pass 2): the mapper's Gamma query gained a second, closed=true pass for any id the default index misses (F0), which can double mapping's Gamma calls — at 200 that pushed the worst case to 450 calls ~= 900s, exactly this cap with no margin; 100 restores the same 350-call / ~700s worst case (2 passes x ceil(100/2) calls) with ~200s margin — amended 2026-09-04 (legacy re-map): GAMMA_IDS_PER_CALL verified live at 20, not 2 (data/verified_facts.md); shipped resolve_per_cycle and map_per_cycle are both 1000, ten times this block's 100, exactly offsetting the ten-times-larger Gamma batch — worst case is unchanged: sweep ceil(1000/20)=50 + mapping 2 x ceil(1000/20)=100, so leaderboard 80 + sweep 50 + wallets 120 + map 100 = 350 calls, ~700s of the 900s cap, same margin as before
   universe_poll_lookback: 5         # watch polls searched backwards for one with Polymarket rows (2026-09-04); older than data_stale_alarm_secs -> no universe
@@ -870,6 +950,15 @@ whale:
 `positions?user=` page to 2,000 positions or a short page; each extra page
 spends one call of the same `holdings_calls_per_cycle` budget above, and a
 wallet still full at the cap is marked `partial` in the tape (see §9).
+
+**Amended 2026-09-04 (non-sports roots):** the booking horizon for a
+non-sports WHALE candidate needs no key of its own — it is the ledger's
+existing `nonsports_max_days` (7), applied by `arb/tracker.py` because the
+candidate's `category != "sports"`, and by the universe builder so the lane
+never prices a market it could not book. A new loader invariant: every
+`whale.nonsports.tags` value must be a Polymarket fee category other than
+`sports`; a root that is not one would be priced at the venue's default
+`fee_rate`, and `sports` as a value would defeat the no-transfer decision.
 
 Loader: the strict schema gains an optional-number leaf type
 (`int | Decimal | None`) used only for `fire.min_points.V2` and `V3`, since

@@ -148,6 +148,29 @@ L11 scrapped wallet-copy for three named reasons: Kalshi trades are anonymous; P
 
 **Pinning tests:** `tests/test_whale_score.py` fixes the shrinkage worked table (n=5/15/40/120/400 at lb80/lb90) and the point-in-time frozen-clock identity; `tests/test_whale_signal.py` fixes the gate order (sybil merge happens inside the tally before any gate; then ratio → min-points → uncalibrated → holders → late-print → stale → too-close → depth → one-sided), the one-wallet-one-whale merge, and the three exit reasons (flip / left / confidence); `tests/test_whale_lane.py` fixes the `exit:flip` end-to-end path, the `lifetime_closed`-never-stops-an-exit rule, and the position-key variant/sizing suffix.
 
+**Non-sports roots (amended 2026-09-04, PREREGISTRATION row of that date):** the
+lane is no longer sports-only. `politics`, `geopolitics` and `crypto` join
+`sports` as **disjoint roots with no skill transfer between them** and a
+per-root base rate that starts at the `-0.02` default until that root has 500
+resolved positions of its own. A root name IS the Polymarket fee category, so
+the same field prices the leg (politics 0.04, crypto 0.07, geopolitics 0.00
+against the sports 0.03), segregates the report and isolates the score. The
+universe comes from Gamma by tag inside `whale-backfill` (never the watch lane,
+never the 60 s cycle), filtered to open markets over $1,000 of 24h volume, at
+least 6 hours of lifetime and resolving within `nonsports_max_days` (7); the
+pregame gate becomes the market's own resolution deadline, so "600 s before
+kickoff" reads as "not inside the last ten minutes before resolution" with no
+change to a single line of scoring, exits or settlement. **Two things stated
+before the data.** Adverse selection should be WORSE here, not better: a
+politics market has no kickoff, so the whale's information may be hours old and
+already in the price, and only the print-age and drift gates — both tuned on
+sports — stand against it; the markout is therefore reported per root. And the
+surface is THIN: measured 2026-09-04, the 7-day horizon (not the volume floor)
+binds, leaving 5 politics markets over $1,000 resolving inside it and nothing at
+all in crypto. The primary metric stays the SPORTS-root V2/flat figure; each new
+root accumulates its own n against the same kill rules and is never pooled with
+sports.
+
 **Comparable to L8 and L13:** same taker basis (paper fills at the touch, fee-inclusive, rule 1) and the same `event_key` cluster convention for every CI — a follower taking at the post-print touch pays the same structural cost L8/L13 already measured (about 13x the edge on the one fully-measured cover; posting is adversely selected). L14's claim is only that whale consensus is worth more than that cost.
 
 **Status, plainly:** the instrument (watch lane, `data/arb.sqlite`) has been down since 2026-08-09 — no supervisor process running. One `arb whale --once` acceptance cycle ran live on 2026-09-04 (Task 8, head `76da135`; `polls` row id 94743, the lane's only `kind='whale'` row to date) against that stale universe; it booked nothing (0 WHALE `flat_bets`) — no wallet qualified, so no book was ever fetched. The lane has not yet run under the supervisor.

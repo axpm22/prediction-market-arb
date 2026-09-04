@@ -226,6 +226,34 @@ than structural.
 "lane watch phase separation 10.0s < stagger_secs 15.0 — cadence too fast for 6
 lanes on one IP". Advisory only. The attempt to enforce it is #19.
 
+### 26b. L14 deferred non-sports roots — weather, economy/business/science, esports
+*Registered 2026-09-04 with the non-sports roots amendment.* The whale lane now
+scores and books `politics`, `geopolitics` and `crypto` beside `sports`. Four
+candidate roots were deliberately left out, each for its own reason, and each is
+one `whale.nonsports.tags` line away from being added — but adding one is a
+dated PREREGISTRATION amendment, because a new root is a new population with its
+own n against the same kill rules.
+
+- **`weather`** — operator decision 2026-09-04. It is the second-largest surface
+  by market count (405 markets ≥ $1k/day, measured 2026-09-04) but the smallest
+  by dollars ($1.7M/day across the whole tag, against politics' $20.7M), so the
+  markets are individually tiny and a "whale" there is a few thousand dollars.
+  It is also the tag whose markets Gamma answers a `gameStartTime` for, which is
+  exactly the confusion the `markets.sport IS NOT NULL` discovery guard exists
+  to prevent.
+- **`economy` / `business`** — the economy surface is FOMC/CPI scheduled-release
+  markets: an "insider" there is a rumour, and the efficiency is high; business
+  has only 45 markets over the volume floor. Both are too thin or too efficient
+  to reach n in a reasonable time.
+- **`science`** — 9 markets over the floor. Not a population.
+- **esports** — no `esports` hierarchy root exists (controller decision
+  2026-09-04, see the `slug_sport_prefixes` note in config.yaml): the four
+  observed prefixes stay unmapped rather than pooling CS2 skill into the sports
+  root. This one needs a root, not a tag line.
+
+A fifth candidate, `tech-and-science`, is not a tag slug at all — the probe
+returned an empty list (data/verified_facts.md 2026-09-04).
+
 ### 27. Interpreter changed
 The framework Python the supervisor ran under since 17 July no longer has
 `dotenv`; it now runs under `.venv/bin/python`. Children inherit via
