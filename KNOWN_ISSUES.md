@@ -257,6 +257,22 @@ fractions, promote_requires) become `whale.exit` (signal-driven exits — flip
 ratio, sold fraction — design doc 2026-09-03 spec §9), a narrower mechanism
 scoped to the new lane rather than a general read-time engine nothing called.
 
+### 32. Polymarket data-API terms of use — OPEN operator decision (spec §3)
+The L14 whale-consensus lane's print collector, backfill, and resolution
+reader (`arb/whale_tape.py`, `arb/whale_backfill.py`, `arb/whale_resolve.py`)
+read `data-api.polymarket.com` and `gamma-api.polymarket.com` automatically,
+on a timer. Those reads are unauthenticated and reachable — confirmed live,
+`data/verified_facts.md` — but whether Polymarket's terms of service permit
+this kind of automated, scheduled polling is unverified: the ToS page could
+not be fetched during research (design doc §3, 2026-09-03). The collector
+rate-limits itself (`whale.max_calls_per_min`, default 30) and backs off
+(`whale.backoff_secs`, default 300) on any non-200 response, so it degrades
+rather than hammering the endpoint if access is ever restricted or contested,
+but that is a courtesy to the venue, not a resolution of the ToS question.
+The operator must decide before `supervisor.processes.whale` runs live under
+the supervisor. No decision is recorded here — do not infer one from the
+config default.
+
 ---
 
 ## The two numbers that matter most
