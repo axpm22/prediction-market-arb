@@ -134,3 +134,12 @@ def test_dead_config_blocks_removed():
     cfg = load(SHIPPED)
     assert "tape_check" not in cfg
     assert "exit" not in cfg
+
+
+def test_shipped_supervisor_lanes_are_whale_only():
+    """Operator decision 2026-09-04: run only the Polymarket whale lane. watch
+    stays on because the whale lane's universe comes from watch's Polymarket
+    quotes; live/negrisk/political/mapped/verify are off until re-enabled."""
+    cfg = load(SHIPPED)
+    on = {name for name, enabled in cfg["supervisor"]["processes"].items() if enabled}
+    assert on == {"watch", "whale", "whale-backfill"}

@@ -1,4 +1,5 @@
 """Phase 7 ops: markout hook, supervisor lock/stop-flag semantics, canary."""
+import copy
 import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -386,8 +387,14 @@ def test_verify_lane_is_supervised(cfg):
     cadence branch in heartbeat - but was never in supervisor.processes, so the
     branch was unreachable and the lane never ran: ONE annotation in the
     production DB, from 2026-07-08. It is the only sub-cadence arb-lifetime
-    measurement in the repo and costs zero Odds API credits."""
+    measurement in the repo and costs zero Odds API credits.
+
+    Self-contained: verify was flipped off 2026-09-04 (whale-lane-only
+    operator decision), so this test enables it on its own deepcopy rather
+    than depending on which lanes are currently shipped on."""
     from arb.heartbeat import lane_interval
+    cfg = copy.deepcopy(cfg)
+    cfg["supervisor"]["processes"]["verify"] = True
     procs = cfg["supervisor"]["processes"]
     assert procs.get("verify") is True
     assert cfg["supervisor"]["commands"]["verify"] == "verify --once"
@@ -430,8 +437,14 @@ def test_lane_offsets_never_collide_within_a_period(cfg):
 def test_watch_and_live_are_never_scheduled_simultaneously(cfg):
     """live.cadence_secs 20 divides watch_interval_secs 60 exactly, so a shared
     phase is permanent, not transient. Measured 2026-07-29: 355 of 1,078 watch
-    polls had a live poll start within 5s. Simulate an hour of grid slots."""
+    polls had a live poll start within 5s. Simulate an hour of grid slots.
+
+    Self-contained: live was flipped off 2026-09-04 (whale-lane-only operator
+    decision); enable it on a deepcopy so this test doesn't depend on which
+    lanes are currently shipped on."""
     from arb.heartbeat import lane_interval, lane_offsets, next_grid_run
+    cfg = copy.deepcopy(cfg)
+    cfg["supervisor"]["processes"]["live"] = True
     offs = lane_offsets(cfg)
 
     def slots(name, horizon=3600.0):
@@ -448,9 +461,15 @@ def test_watch_and_live_are_never_scheduled_simultaneously(cfg):
 def test_stale_lanes_flags_a_silent_lane(cfg, tmp_path):
     """negrisk and political were dark for 9.7 days and nothing said so: the
     supervisor beat covers the supervisor, not each lane. Reproduced 2026-07-29
-    — max inter-poll gap for both lanes is 232.2 h."""
+    — max inter-poll gap for both lanes is 232.2 h.
+
+    Self-contained: negrisk was flipped off 2026-09-04 (whale-lane-only
+    operator decision), and stale_lanes only reports enabled lanes — enable it
+    on a deepcopy so this test doesn't depend on which lanes ship on."""
     from arb.heartbeat import stale_lanes
     from arb.store import Store
+    cfg = copy.deepcopy(cfg)
+    cfg["supervisor"]["processes"]["negrisk"] = True
     store = Store(tmp_path / "t.sqlite")
     fresh = NOW - timedelta(seconds=30)
     store.insert("polls", {"started_at": fresh.isoformat(), "kind": "watch",
@@ -487,9 +506,15 @@ def test_stale_lanes_counts_a_heartbeat_as_liveness(cfg, tmp_path):
     """A lane that ran and correctly found nothing writes NO poll row — the live
     lane skips its poll on an empty shortlist. Polls measure work, heartbeats
     measure running; silence means neither. Without this, enabling the empty-
-    shortlist skip would make the alarm scream all night."""
+    shortlist skip would make the alarm scream all night.
+
+    Self-contained: live was flipped off 2026-09-04 (whale-lane-only operator
+    decision), and stale_lanes only reports enabled lanes — enable it on a
+    deepcopy so this test doesn't depend on which lanes ship on."""
     from arb.heartbeat import stale_lanes
     from arb.store import Store
+    cfg = copy.deepcopy(cfg)
+    cfg["supervisor"]["processes"]["live"] = True
     store = Store(tmp_path / "t.sqlite")
     store.insert("polls", {"started_at": (NOW - timedelta(hours=3)).isoformat(),
                            "kind": "live", "n_quotes": 1, "n_opps": 0})

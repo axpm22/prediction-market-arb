@@ -308,13 +308,12 @@ validation:
                # live poll: detect a modest 0.55 win rate, not only >= 0.65.
                # See PREREGISTRATION.md.
 supervisor:
-  processes: { watch: true, live: true,    # add lanes deliberately, one at a time
-               negrisk: true, political: true,    # non-sports pivot (plan Phase 2)
-               mapped: true,                      # adjudicated cross-venue pairs
-               verify: true,                      # 10s re-quote of fresh locked flags.
-                                                  #   Implemented since Phase 7 and never
-                                                  #   run: 1 annotation in 21 days. Keyless
-                                                  #   Kalshi/PM reads only (rule 2 safe).
+  processes: { watch: true,    # off 2026-09-04: whale lane's universe comes
+                                                  #   from watch lane's Polymarket quotes — kept on
+               live: false,    # off 2026-09-04: whale watching only
+               negrisk: false, political: false,    # off 2026-09-04: whale watching only
+               mapped: false,                      # off 2026-09-04: whale watching only
+               verify: false,                      # off 2026-09-04: whale watching only
                whale: true,                        # L14 whale-consensus lane (60s cycle) — enabled 2026-09-04 (Task 11)
                whale-backfill: true }              # its leaderboard + per-wallet history
                                                   #   process: ~11 min of paced calls per

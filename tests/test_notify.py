@@ -2,6 +2,7 @@
 (arb/commands.py, cmd_report) and the stale-lane alarm (arb/heartbeat.py,
 run_supervisor). No network: every test injects the poster or monkeypatches
 `arb.notify._default_poster`."""
+import copy
 import json
 import logging
 import socket
@@ -267,8 +268,13 @@ def test_stale_lane_alarm_posts_lane_silent_once(cfg, tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(notify, "_default_poster",
                         lambda url, body, timeout: calls.append(json.loads(body)))
+    cfg = copy.deepcopy(cfg)
     cfg["notify"]["enabled"] = True
     cfg["notify"]["webhook_url"] = "http://example.test/hook"
+    # negrisk was flipped off 2026-09-04 (whale-lane-only operator decision);
+    # stale_lanes only reports enabled lanes, so enable it here — self-contained,
+    # independent of which lanes currently ship on.
+    cfg["supervisor"]["processes"]["negrisk"] = True
     monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
     monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "absent-stop")
     monkeypatch.setattr(hb.subprocess, "Popen", lambda argv: FakeProc())
@@ -308,8 +314,14 @@ def test_stale_lane_alarm_posts_lane_silent_for_each_distinct_lane(cfg, tmp_path
     calls = []
     monkeypatch.setattr(notify, "_default_poster",
                         lambda url, body, timeout: calls.append(json.loads(body)))
+    cfg = copy.deepcopy(cfg)
     cfg["notify"]["enabled"] = True
     cfg["notify"]["webhook_url"] = "http://example.test/hook"
+    # negrisk and political were flipped off 2026-09-04 (whale-lane-only
+    # operator decision); stale_lanes only reports enabled lanes, so enable
+    # both here — self-contained, independent of which lanes currently ship on.
+    cfg["supervisor"]["processes"]["negrisk"] = True
+    cfg["supervisor"]["processes"]["political"] = True
     monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
     monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "absent-stop")
     monkeypatch.setattr(hb.subprocess, "Popen", lambda argv: FakeProc())
