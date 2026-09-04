@@ -56,8 +56,14 @@ class FakeGet:
 
 # --- ledger stand-in --------------------------------------------------------
 
-def _ledger(rows):
-    """polls/quotes with the ledger's own columns; rows are quote dicts."""
+def _ledger(rows, poll1_at=None, poll2_at=None):
+    """polls/quotes with the ledger's own columns; rows are quote dicts.
+    Both polls default to well inside `data_stale_alarm_secs` (900s) of NOW —
+    poll 1 further back only to keep the fallback-ordering tests meaningful,
+    never far enough to trip the staleness guard on its own; a test that
+    wants a genuinely stale poll passes an explicit poll1_at/poll2_at."""
+    poll1_at = poll1_at or (NOW - timedelta(minutes=10))
+    poll2_at = poll2_at or (NOW - timedelta(minutes=2))
     con = sqlite3.connect(":memory:")
     con.row_factory = sqlite3.Row
     con.execute("CREATE TABLE polls (id INTEGER PRIMARY KEY, started_at TEXT, kind TEXT)")
@@ -65,8 +71,10 @@ def _ledger(rows):
                 "fetched_at TEXT, event_key TEXT, category TEXT, sport TEXT, venue TEXT, "
                 "market_type TEXT, line TEXT, outcome TEXT, side TEXT, start_utc TEXT, "
                 "venue_market_id TEXT)")
-    con.execute("INSERT INTO polls (id, started_at, kind) VALUES (1, '2026-09-01T00:00:00+00:00', 'watch')")
-    con.execute("INSERT INTO polls (id, started_at, kind) VALUES (2, '2026-09-03T16:00:00+00:00', 'watch')")
+    con.execute("INSERT INTO polls (id, started_at, kind) VALUES (1, ?, 'watch')",
+                (poll1_at.isoformat(),))
+    con.execute("INSERT INTO polls (id, started_at, kind) VALUES (2, ?, 'watch')",
+                (poll2_at.isoformat(),))
     for r in rows:
         con.execute(
             "INSERT INTO quotes (poll_id, event_key, category, sport, venue, market_type, "
@@ -125,6 +133,36 @@ def test_universe_falls_back_to_the_previous_poll_when_the_latest_has_no_pm_rows
         _q("0xprev", "t1", "rays", IN_WINDOW, poll_id=1),
         _q("0xlatest_kalshi", "t2", "jays", IN_WINDOW, poll_id=2, venue="kalshi"),
     ])
+    got = {m.condition_id for m in whale_universe.universe(led, _cfg(), NOW)}
+    assert got == {"0xprev"}
+
+
+def test_universe_treats_a_stale_fallback_poll_as_no_universe(caplog):
+    """Lookback bounds the poll COUNT, not its age (2026-09-04): if the watch
+    lane stalls, a poll count alone can hand back a universe hours old with
+    no warning. The only PM-bearing candidate here is older than
+    `data_stale_alarm_secs` (900s, config.yaml), so it must be rejected —
+    same as no candidate having been found at all — with a WARNING naming
+    the age."""
+    led = _ledger([
+        _q("0xstale", "t1", "rays", IN_WINDOW, poll_id=1),
+        _q("0xlatest_kalshi", "t2", "jays", IN_WINDOW, poll_id=2, venue="kalshi"),
+    ], poll1_at=NOW - timedelta(hours=2))
+    with caplog.at_level(logging.WARNING, logger="arb.whale"):
+        got = whale_universe.universe(led, _cfg(), NOW)
+    assert got == []
+    assert any("data_stale_alarm_secs" in r.getMessage() and "7200" in r.getMessage()
+               for r in caplog.records)
+
+
+def test_universe_uses_a_fresh_fallback_poll_within_the_alarm(caplog):
+    """The mirror case: a fallback poll that IS within the alarm is used
+    normally — the age check does not fire on every fallback, only a stale
+    one."""
+    led = _ledger([
+        _q("0xprev", "t1", "rays", IN_WINDOW, poll_id=1),
+        _q("0xlatest_kalshi", "t2", "jays", IN_WINDOW, poll_id=2, venue="kalshi"),
+    ], poll1_at=NOW - timedelta(minutes=5))
     got = {m.condition_id for m in whale_universe.universe(led, _cfg(), NOW)}
     assert got == {"0xprev"}
 
@@ -603,6 +641,20 @@ def _wallet(con, w, first_seen):
                 "VALUES (?,?,?,'tape')", (w, "p", first_seen))
 
 
+def _map_row(con, cond, sport=None, market_type=None, start_utc=None, slug=None,
+            first_seen=None):
+    """A pre-existing `markets` row, as the mapper-fix REVISIT_SQL finds one:
+    written by an earlier cycle (a prefix remap, a partial Gamma answer),
+    possibly still missing a field. Distinct from `_market` above (which
+    always writes a fully-mapped row) — this one's whole point is to leave
+    fields NULL."""
+    at = first_seen or NOW.isoformat()
+    con.execute(
+        "INSERT INTO markets (condition_id, sport, market_type, line, start_utc,"
+        " event_key, tokens_json, slug, first_seen, last_seen) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (cond, sport, market_type, None, start_utc, None, "[]", slug, at, at))
+
+
 def test_backfill_pulls_activity_pages_until_a_short_page(tmp_path):
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")
@@ -669,6 +721,97 @@ def test_backfill_writes_prints_only_and_map_markets_maps_them_through_gamma(tmp
     assert rows[known]["slug"] == "kbo-lot-kt-2026-08-09"      # kept for a LOCAL re-map
     assert rows["0xnowhere"]["sport"] is None                  # unmappable => never scored
     assert other not in rows
+
+
+def test_map_markets_revisits_an_existing_row_missing_a_field(tmp_path):
+    """Mapper fix pass (2026-09-04): the ORIGINAL bug — `_map_markets` did
+    INSERT OR IGNORE, so a `markets` row already on hand (here: a prefix
+    remap that filled `sport` but not `market_type`/`start_utc`) could never
+    be revisited once written; MAP_SQL's LEFT JOIN excludes any condition_id
+    with ANY markets row, mapped or not. REVISIT_SQL must pick this row up
+    (no print required — it isn't in `prints` at all) and the upsert must
+    WRITE the Gamma answer, not silently no-op."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    gamma = _fixture("whale_gamma_condition_ids_repeated")[0]
+    cond = gamma["conditionId"]
+    _map_row(con, cond, sport="baseball_kbo", market_type=None, start_utc=None,
+           slug=gamma["slug"])
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 40})
+
+    res = whale_backfill.map_markets(cfg, con, NOW, get=FakeGet([gamma]))
+
+    row = con.execute("SELECT * FROM markets WHERE condition_id=?", (cond,)).fetchone()
+    assert row["sport"] == "baseball_kbo"                      # untouched, already right
+    assert row["market_type"] == "WINNER"                      # filled from Gamma
+    assert row["start_utc"] == "2026-08-09T09:00:00+00:00"     # filled from Gamma
+    assert res["mapped"] == 1 and res["calls"] == 1
+
+
+def test_map_markets_prefix_only_remap_needs_no_gamma_call(tmp_path):
+    """The other half of the fix: a revisit row that already carries its OWN
+    slug can fill `sport` LOCALLY when that is the only field missing —
+    `_local_remap` must never spend a Gamma call for it."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    _map_row(con, "0xprefixonly", sport=None, market_type="WINNER",
+           start_utc="2026-08-09T09:00:00+00:00", slug="kbo-lot-kt-2026-08-09")
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 40})
+    get = FakeGet()                                  # raises if ever called
+
+    res = whale_backfill.map_markets(cfg, con, NOW, get=get)
+
+    row = con.execute(
+        "SELECT sport FROM markets WHERE condition_id='0xprefixonly'").fetchone()
+    assert row["sport"] == "baseball_kbo"
+    assert res["mapped"] == 1 and res["calls"] == 0 and get.urls == []
+
+
+def test_map_markets_marks_an_unmappable_revisit_row_for_the_day(tmp_path):
+    """`unmappable:<cond>` mirrors `swept:`'s idiom: a row Gamma still can't
+    map is skipped for the REST of today's cycles (no wasted calls chasing a
+    market that will never resolve) and picked back up tomorrow."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    _map_row(con, "0xhopeless", sport=None, market_type=None, start_utc=None,
+           slug="will-something-happen-2026")             # a real slug, no prefix maps it
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 40})
+    get = FakeGet([])                                 # Gamma finds nothing either call
+
+    res1 = whale_backfill.map_markets(cfg, con, NOW, get=get)
+    res2 = whale_backfill.map_markets(cfg, con, NOW, get=get)   # same day: must not re-ask
+    tomorrow = NOW + timedelta(days=1)
+    res3 = whale_backfill.map_markets(cfg, con, tomorrow, get=get)  # new day: retried
+
+    assert res1["unmappable"] == 1 and res1["calls"] == 1
+    assert res2["unmappable"] == 0 and res2["calls"] == 0       # skipped, marker still today
+    assert res3["unmappable"] == 1 and res3["calls"] == 1       # marker expired, re-asked
+
+
+def test_map_markets_bounds_new_ids_and_revisit_rows_together(tmp_path):
+    """`map_per_cycle` bounds the UNION, not each source separately: new ids
+    fill the budget first, the remainder goes to the oldest revisit row —
+    whatever is left over waits for the next cycle."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    _print(con, "0xw", "0xnew", "BUY", "900", int(NOW.timestamp()) - 100)
+    _map_row(con, "0xold1", sport="baseball_mlb", market_type=None,
+           start_utc="2026-01-01T00:00:00+00:00", slug="mlb-x-y-2026-01-01",
+           first_seen="2026-08-01T00:00:00+00:00")
+    _map_row(con, "0xold2", sport="baseball_mlb", market_type=None,
+           start_utc="2026-01-01T00:00:00+00:00", slug="mlb-a-b-2026-01-01",
+           first_seen="2026-08-02T00:00:00+00:00")
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 2})
+    get = FakeGet([])                                 # one call covers both (2 ids/call)
+
+    res = whale_backfill.map_markets(cfg, con, NOW, get=get)
+
+    assert set(_asked(get)) == {"0xnew", "0xold1"}     # 0xold2 waits for the next cycle
+    assert len(get.urls) == 1
 
 
 def test_the_2026_09_04_census_prefixes_resolve_to_the_right_sport():

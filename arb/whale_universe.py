@@ -65,30 +65,46 @@ def _labels(tokens: dict) -> dict | None:
     return labels if len(set(labels.values())) == len(labels) else None
 
 
-def _poll_with_pm_rows(store_ro, lookback: int) -> int | None:
+def _poll_with_pm_rows(store_ro, lookback: int, now, stale_secs: int) -> int | None:
     """The most recent watch poll, within a bounded lookback, that actually
     has a Polymarket sports quotes row. Polymarket's CLOB has intermittent
     TLS failures on its own leg of a watch poll (observed 2026-09-04) while
     the poll itself still lands with rows from other venues/categories —
     strictly the latest poll would then hand the lane an empty universe for
-    that whole cycle instead of falling back one poll."""
+    that whole cycle instead of falling back one poll.
+
+    Time-bounded too (2026-09-04): a poll count alone can't tell a healthy
+    fallback from a stalled watch lane handing back a universe hours old with
+    no warning. The first candidate WITH rows is checked against
+    `data_stale_alarm_secs` (the existing collector-health threshold) and, if
+    older, treated as no candidate at all — every poll behind it is only
+    older still, so there is nothing left to try."""
     for row in store_ro.execute(
-            "SELECT id FROM polls WHERE kind='watch' ORDER BY id DESC LIMIT ?", (lookback,)):
+            "SELECT id, started_at FROM polls WHERE kind='watch' ORDER BY id DESC LIMIT ?",
+            (lookback,)):
         if store_ro.execute(
                 "SELECT 1 FROM quotes WHERE poll_id=? AND venue='polymarket' "
                 "AND category='sports' LIMIT 1", (row["id"],)).fetchone():
+            age = (now - datetime.fromisoformat(row["started_at"])).total_seconds()
+            if age > stale_secs:
+                log.warning("whale universe: newest poll with Polymarket sports rows "
+                            "(id=%s) is %.0fs old (> data_stale_alarm_secs=%s) — "
+                            "treating as no universe", row["id"], age, stale_secs)
+                return None
             return row["id"]
     return None
 
 
 def universe(store_ro, cfg, now, res=None) -> list[Market]:
     """Polymarket sports markets from the most recent watch poll (within
-    `whale.universe_poll_lookback`) that has any, whose start lies in
-    [now - lookback_hours, now + lookahead_hours] (spec §5 step 1). `res` is an
-    optional diagnostics dict, as in whale_score.positions_from_prints."""
+    `whale.universe_poll_lookback`, and no older than `data_stale_alarm_secs`)
+    that has any, whose start lies in [now - lookback_hours, now +
+    lookahead_hours] (spec §5 step 1). `res` is an optional diagnostics dict,
+    as in whale_score.positions_from_prints."""
     w = cfg["whale"]
     res = {} if res is None else res
-    poll_id = _poll_with_pm_rows(store_ro, int(w["universe_poll_lookback"]))
+    poll_id = _poll_with_pm_rows(store_ro, int(w["universe_poll_lookback"]), now,
+                                 int(cfg["data_stale_alarm_secs"]))
     if poll_id is None:
         return []
     lo = now - timedelta(hours=float(w["lookback_hours"]))

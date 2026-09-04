@@ -279,6 +279,25 @@ def test_a_zombie_book_suppresses_a_signal_that_would_otherwise_fire(cfg, tmp_pa
     assert res["booked"] == 0 and _bets(store) == []
 
 
+def test_volumes_come_from_the_same_fallback_poll_the_universe_used(cfg, tmp_path):
+    """VOLUME_SQL used to hard-code MAX(id) of watch polls (2026-09-04 fix):
+    when the newest watch poll's Polymarket leg is empty, `universe()` already
+    falls back one poll for its markets, but volumes stayed on the dead
+    newest poll — empty there, so `_zombied` read volume=None (unknown ->
+    NOT a zombie) and the zombie guard failed open lane-wide. A newer,
+    PM-empty poll must not stop the SAME fallback poll from pricing volumes."""
+    store, con = _ledger(tmp_path, volume="0"), _tape(tmp_path)
+    store.insert("polls", {"started_at": (NOW - timedelta(minutes=1)).isoformat(),
+                           "kind": "watch", "n_quotes": 0, "n_opps": 0})
+    res = _run(cfg, store, con, rows=_three(price="0.93"),
+               fetch=_fetch(**{YES_TOK: _book(ask="0.95", bid="0.02"),
+                               NO_TOK: _book(ask="0.95", bid="0.02")}))
+
+    row = con.execute("SELECT * FROM signals WHERE variant='V1'").fetchone()
+    assert row["fired"] == 0 and row["suppressed_reason"] == "zombie"
+    assert res["booked"] == 0 and _bets(store) == []
+
+
 def test_hygiene_excludes_before_scoring_and_signalling(cfg, tmp_path):
     """Task 5 decision: the lane drops excluded positions BEFORE scoring, so a
     washing wallet cannot make up the third vote V1 needs."""

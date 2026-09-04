@@ -7,7 +7,6 @@ nothing here can reach data/arb.sqlite.
 from __future__ import annotations
 
 import json
-from datetime import timedelta
 from decimal import Decimal
 
 from arb.venues.base import get_json
@@ -17,68 +16,10 @@ from arb.whale_tape import (DATA_API, GAMMA, GAMMA_IDS_PER_CALL, LEADERBOARD_PAG
                             _json_list, _meta, _set_backoff, _set_meta, log)
 from arb.whale_universe import MARKET_COLS, _iso
 from arb.models import q6
-
-
-# Markets a whale actually traded that still have no verdict, oldest start
-# first. Epoch comparison, never string compare: `start_utc` is whatever ISO
-# form the venue sent (`discover_wallets` reads it the same way). Sport/type
-# NULL means the market was never mapped and can never be scored (never worth
-# a sweep slot). The `swept` LEFT JOIN is the per-day skip marker below: a
-# market swept and left unresolved today is not asked again until tomorrow,
-# so the FIFO advances past it instead of re-asking the same oldest ids
-# forever.
-SWEEP_SQL = """
-    SELECT m.condition_id FROM markets m
-     LEFT JOIN meta sw ON sw.key = 'swept:' || m.condition_id
-     WHERE m.start_utc IS NOT NULL
-       AND m.sport IS NOT NULL AND m.market_type IS NOT NULL
-       AND CAST(strftime('%s', m.start_utc) AS INTEGER) <= ?
-       AND CAST(strftime('%s', m.start_utc) AS INTEGER) > ?
-       AND (sw.value IS NULL OR sw.value <> ?)
-       AND NOT EXISTS (SELECT 1 FROM resolutions r
-                       WHERE r.condition_id = m.condition_id)
-       AND EXISTS (SELECT 1 FROM prints p
-                   WHERE p.condition_id = m.condition_id AND p.side = 'BUY')
-     ORDER BY CAST(strftime('%s', m.start_utc) AS INTEGER), m.condition_id
-     LIMIT ?"""
-
-
-def resolve_sweep(cfg, con, now, get=get_json) -> int:
-    """Spec §5 step 5 (final review 2026-09-04): the 60 s cycle reads
-    resolutions only for its CURRENT universe (`start_utc` within
-    [-lookback_hours, +lookahead_hours]) and for its open bets, so a market a
-    whale traded that has aged out — every backfilled one — was never read at
-    all and no wallet could ever score. This sweeps them, FIFO by start,
-    `backfill.resolve_per_cycle` a cycle, through the SAME reader: the shared
-    token bucket, the shared backoff, two ids per Gamma call.
-
-    Head-of-line blocking fix (2026-09-04): `read_resolutions` persists
-    nothing for a market Gamma reports open or omits, so without a marker the
-    same oldest ids would be re-asked every cycle forever and nothing past
-    them would ever be swept. Every id still unresolved after the call gets a
-    `swept:<condition_id>` meta row dated today (mirroring `_due`'s
-    `giveup:` marker), and `SWEEP_SQL` skips markets swept today — one ask a
-    day per market, and the FIFO advances within the same cycle budget.
-
-    # ponytail: no watermark beyond that. `resolutions` is itself the "done"
-    # marker and a market past resolve_giveup_days drops out of the query, so
-    # the backlog drains without a second piece of state to get out of sync.
-    """
-    from arb import whale_resolve                # tape reader; no import cycle
-    w = cfg["whale"]
-    due = int((now - timedelta(hours=float(w["resolve_after_hours"]))).timestamp())
-    floor = int((now - timedelta(days=int(w["resolve_giveup_days"]))).timestamp())
-    today = now.strftime("%Y-%m-%d")
-    ids = [r[0] for r in con.execute(
-        SWEEP_SQL, (due, floor, today, int(w["backfill"]["resolve_per_cycle"])))]
-    if not ids:
-        return 0
-    log.info("whale resolution sweep: %d market(s) due", len(ids))
-    n = whale_resolve.read_resolutions(cfg, con, ids, now, get=get)
-    for cond in ids:
-        if whale_resolve.resolution_for(con, cond) is None:
-            _set_meta(con, f"swept:{cond}", today)
-    return n
+# Re-exported (size only, mapper fix pass 2026-09-04): moved to
+# whale_resolve.py, which already owns SWEEP_SQL's reader; kept importable as
+# `whale_backfill.resolve_sweep` for its existing callers/tests/monkeypatches.
+from arb.whale_resolve import resolve_sweep  # noqa: F401
 
 
 def _add_wallets(con, pairs, now, source) -> int:
@@ -216,11 +157,11 @@ def backfill(cfg, con, now, get=get_json) -> dict:
     return res
 
 
-# Pending mapping queue, FIFO by first print (any deterministic order is
-# fine — spec's own words): every distinct condition_id `prints` has ever
-# seen that `markets` does not yet have a row for. Mirrors SWEEP_SQL's shape
-# on purpose — same bounded-FIFO-off-the-tape idiom, same reason (a cycle
-# must never walk an unbounded backlog).
+# New condition_ids, FIFO by first print (any deterministic order is fine —
+# spec's own words): every distinct condition_id `prints` has ever seen that
+# `markets` has NO row for at all. Mirrors SWEEP_SQL's shape on purpose — same
+# bounded-FIFO-off-the-tape idiom, same reason (a cycle must never walk an
+# unbounded backlog).
 MAP_SQL = """
     SELECT p.condition_id FROM prints p
      LEFT JOIN markets m ON m.condition_id = p.condition_id
@@ -229,18 +170,44 @@ MAP_SQL = """
      ORDER BY MIN(p.ts), p.condition_id
      LIMIT ?"""
 
+# Existing rows still missing a field, oldest first (mapper fix pass
+# 2026-09-04): the ORIGINAL sin here was `_map_markets`' INSERT OR IGNORE —
+# once a condition_id had ANY `markets` row, MAP_SQL's LEFT JOIN could never
+# select it again, so a row stored with sport set (e.g. by a one-off prefix
+# remap) and market_type still NULL was stuck that way forever, and could
+# never enter SWEEP_SQL (which requires both). `slug IS NOT NULL` is the
+# floor: with no slug Gamma never found the market at all, and there is
+# nothing left to retry. The `unmappable` join is `swept:`'s own idiom — a
+# row Gamma still couldn't map today is skipped until tomorrow instead of
+# spending the same call every cycle for nothing.
+REVISIT_SQL = """
+    SELECT m.condition_id FROM markets m
+     LEFT JOIN meta u ON u.key = 'unmappable:' || m.condition_id
+     WHERE m.slug IS NOT NULL
+       AND (m.sport IS NULL OR m.market_type IS NULL OR m.start_utc IS NULL)
+       AND (u.value IS NULL OR u.value <> ?)
+     ORDER BY m.first_seen, m.condition_id
+     LIMIT ?"""
+
 
 def map_markets(cfg, con, now, get=get_json) -> dict:
     """Market mapping (spec §5 step 4 continued), its own step and its own
-    budget: `whale.backfill.map_per_cycle` condition_ids a cycle, oldest
-    print first, straight off the durable queue in `prints`. Whatever does
-    not fit this cycle simply waits for the next one."""
+    budget: `whale.backfill.map_per_cycle` a cycle, new condition_ids first
+    (MAP_SQL) and whatever budget is left to the oldest existing row still
+    missing a field (REVISIT_SQL). A revisit row already carries its OWN
+    slug, so `_local_remap` fills `sport` from it directly — no Gamma call —
+    before whatever still needs market_type/start_utc goes to Gamma."""
     w = cfg["whale"]
     res = {"calls": 0, "mapped": 0, "unmappable": 0, "status_counts": {}, "status": "ok"}
     if _backoff_active(con, now):
         res["status"] = "backoff"
         return res
-    todo = [r[0] for r in con.execute(MAP_SQL, (int(w["backfill"]["map_per_cycle"]),))]
+    limit = int(w["backfill"]["map_per_cycle"])
+    today = now.strftime("%Y-%m-%d")
+    new_ids = [r[0] for r in con.execute(MAP_SQL, (limit,))]
+    revisit = ([r[0] for r in con.execute(REVISIT_SQL, (today, limit - len(new_ids)))]
+              if len(new_ids) < limit else [])
+    todo = new_ids + _local_remap(con, revisit, w["slug_sport_prefixes"], now, res)
     if not todo:
         return res
     bucket = _bucket(cfg)
@@ -253,26 +220,61 @@ def map_markets(cfg, con, now, get=get_json) -> dict:
     return res
 
 
+def _local_remap(con, ids, prefixes, now, res) -> list[str]:
+    """A revisit row's slug is already on hand, so a prefix hit costs no
+    Gamma call. Drop an id from the queue only when that leaves nothing
+    else missing; whatever still needs market_type/start_utc goes on."""
+    todo = []
+    for cond in ids:
+        row = con.execute("SELECT sport, market_type, start_utc, slug FROM markets "
+                          "WHERE condition_id=?", (cond,)).fetchone()
+        sport = row["sport"] or _sport_of(row["slug"] or "", prefixes)
+        if sport and row["market_type"] and row["start_utc"]:
+            con.execute("UPDATE markets SET sport=?, last_seen=? WHERE condition_id=?",
+                        (sport, now.isoformat(), cond))
+            res["mapped"] += 1
+        else:
+            todo.append(cond)
+    con.commit()
+    return todo
+
+
 def _map_markets(cfg, con, todo, now, bucket, get, res):
     """Gamma's condition_ids takes the REPEATED-param form only (verified
     2026-09-03; the comma CSV silently matches nothing), at most 2 ids a call
     because a larger batch was never probed (rule 3). `todo` is already the
-    bounded, ordered slice `map_markets` (or a test) decided on."""
+    bounded, ordered slice `map_markets` (or a test) decided on.
+
+    Upserts with COALESCE (mapper fix pass 2026-09-04, mirrors
+    `whale_universe.persist_markets`' ON CONFLICT idiom) rather than INSERT
+    OR IGNORE: a revisit row already exists, so OR IGNORE was a silent no-op
+    that could never write the market_type/start_utc this call came back
+    for. `tokens_json` only overwrites on a non-empty answer, so a Gamma miss
+    on a revisit row cannot blank out tokens an earlier call already found."""
     prefixes = cfg["whale"]["slug_sport_prefixes"]
+    today = now.strftime("%Y-%m-%d")
     for i in range(0, len(todo), GAMMA_IDS_PER_CALL):
         chunk = todo[i:i + GAMMA_IDS_PER_CALL]
         url = GAMMA + "/markets?" + "&".join(f"condition_ids={c}" for c in chunk)
         body = _call(bucket, get, url, cfg, res)
         found = {str(m.get("conditionId") or ""): m for m in body}
         rows = [_gamma_row(c, found.get(c), prefixes, now) for c in chunk]
-        con.executemany(f"INSERT OR IGNORE INTO markets ({MARKET_COLS}) "
-                        f"VALUES ({','.join('?' * 10)})", rows)
+        con.executemany(
+            f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 10)}) "
+            "ON CONFLICT(condition_id) DO UPDATE SET last_seen=excluded.last_seen, "
+            "sport=COALESCE(excluded.sport, sport), "
+            "market_type=COALESCE(excluded.market_type, market_type), "
+            "start_utc=COALESCE(excluded.start_utc, start_utc), "
+            "slug=COALESCE(excluded.slug, slug), "
+            "tokens_json=COALESCE(NULLIF(excluded.tokens_json, '[]'), tokens_json)",
+            rows)
         con.commit()
         for r in rows:
             res["mapped" if r[1] and r[2] else "unmappable"] += 1
             if not (r[1] and r[2]):
                 log.info("whale market %s unmappable (sport=%s type=%s) — never scored",
                          r[0], r[1], r[2])
+                _set_meta(con, f"unmappable:{r[0]}", today)
 
 
 def _gamma_row(cond, m, prefixes, now) -> tuple:

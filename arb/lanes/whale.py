@@ -26,11 +26,11 @@ from decimal import Decimal
 
 from arb import whale_backfill, whale_exit, whale_resolve, whale_score, whale_signal
 from arb import whale_tape, whale_universe
-from arb.lanes.whale_book import (_bet_ctx, _event_key, _from_prints,
-                                  _persist_signal, _tape_market, _touch,
-                                  _zombied, best_bid, candidate, exit_payload,
-                                  note_no_bid, persist_base_rates, quote_rows,
-                                  ranked_wallets)
+from arb.lanes.whale_book import (_bet_ctx, _event_key, _fetch_books,
+                                  _from_prints, _persist_signal, _tape_market,
+                                  _touch, _zombied, best_bid, candidate,
+                                  exit_payload, note_no_bid, persist_base_rates,
+                                  quote_rows, ranked_wallets)
 from arb.logutil import get_logger
 from arb.replay import open_ro
 from arb.venues.base import get_json
@@ -42,11 +42,13 @@ from arb.whale_tape import _set_meta
 log = get_logger("arb.whale", "logs/whale.log")
 
 # The ledger's PM volume for ONE poll: served by idx_quotes_poll, exactly like
-# whale_universe.UNIVERSE_SQL. A scan by venue_market_id would read 37 GB.
+# whale_universe.UNIVERSE_SQL. `poll_id` is bound to the SAME fallback poll
+# `universe()` picked (`_poll_with_pm_rows`) — never MAX(id), or an empty
+# newest poll starves volumes and the zombie guard reads volume=None (unknown
+# -> not-a-zombie) and fails open lane-wide (2026-09-04).
 VOLUME_SQL = (
     "SELECT venue_market_id, volume_24h FROM quotes "
-    "WHERE poll_id = (SELECT MAX(id) FROM polls WHERE kind='watch') "
-    "AND venue='polymarket' AND category='sports'")
+    "WHERE poll_id = ? AND venue='polymarket' AND category='sports'")
 # §9 (pinned 2026-09-04): open FOR EXIT PURPOSES means no terminal event.
 # `lifetime_closed` is deliberately NOT terminal here — the tracker writes it
 # after `dead_checks` cycles with no re-sighting, which for this lane only
@@ -159,7 +161,10 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     res["quotes_rows"] = len(rows)
 
     # 7-8: evaluate, persist every variant, book the fired ones twice.
-    volumes = {r["venue_market_id"]: _d(r["volume_24h"]) for r in ro.execute(VOLUME_SQL)}
+    vol_poll = whale_universe._poll_with_pm_rows(
+        ro, int(w["universe_poll_lookback"]), now, int(cfg["data_stale_alarm_secs"]))
+    volumes = ({r["venue_market_id"]: _d(r["volume_24h"])
+               for r in ro.execute(VOLUME_SQL, (vol_poll,))} if vol_poll is not None else {})
     blocked = _calibration_blocked(con, cfg)
     cands = []
     for cid, m in live.items():
@@ -232,22 +237,6 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     persist_marks(cfg, store)
     beat(store, "whale", head_sha())
     return res
-
-
-def _fetch_books(cfg, fetch, priced) -> tuple[dict, bool, float | None]:
-    """A venue hiccup is a poll with no books, never a dead lane: the tracker
-    reads the venue status and CARRIES open bets instead of closing them.
-    The third element is the MEASURED /books latency in ms — None when no
-    fetch happened at all, which is not the same fact as 0 ms."""
-    tokens = [t for m in priced.values() for t, _ in m.tokens]
-    if not tokens:
-        return {}, True, None
-    t0 = time.monotonic()
-    try:
-        return fetch(cfg, tokens), True, (time.monotonic() - t0) * 1000
-    except Exception as e:  # noqa: BLE001 — venue outage, not a lane failure
-        log.warning("whale books fetch failed for %d token(s): %s", len(tokens), e)
-        return {}, False, (time.monotonic() - t0) * 1000
 
 
 def _persist(cfg, store, rows, cands, on_table, venue_ok, latency_ms, now) -> int:

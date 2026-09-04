@@ -17,16 +17,19 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import time
 from decimal import Decimal
 
 # The one best-of-book for a Polymarket CLOB book already lives in the
 # political lane; a second copy is a second place for the ask to be wrong.
 from arb.lanes.political import _best
+from arb.logutil import get_logger
 from arb.models import position_key, q6
 from arb.venues.fees import leg_fee_cost
 from arb.whale_signal import Signal, Touch, conf_stake
 from arb import whale_universe
 
+log = get_logger("arb.whale", "logs/whale.log")
 VENUE, CATEGORY = "polymarket", "sports"
 # tape `signals` DDL: arb/whale_tape.py SCHEMA (kept in sync by hand, as the
 # collector's own row modules are).
@@ -70,6 +73,24 @@ def best_bid(book: dict | None) -> tuple[Decimal | None, Decimal]:
     bid = max(Decimal(b["price"]) for b in bids)
     size = [b for b in bids if Decimal(b["price"]) == bid][0]["size"]
     return bid, q6(Decimal(size) * bid)
+
+
+def _fetch_books(cfg, fetch, priced) -> tuple[dict, bool, float | None]:
+    """A venue hiccup is a poll with no books, never a dead lane: the tracker
+    reads the venue status and CARRIES open bets instead of closing them.
+    The third element is the MEASURED /books latency in ms — None when no
+    fetch happened at all, which is not the same fact as 0 ms.
+    Moved from arb/lanes/whale.py on size alone (whale-mapper fix pass
+    2026-09-04)."""
+    tokens = [t for m in priced.values() for t, _ in m.tokens]
+    if not tokens:
+        return {}, True, None
+    t0 = time.monotonic()
+    try:
+        return fetch(cfg, tokens), True, (time.monotonic() - t0) * 1000
+    except Exception as e:  # noqa: BLE001 — venue outage, not a lane failure
+        log.warning("whale books fetch failed for %d token(s): %s", len(tokens), e)
+        return {}, False, (time.monotonic() - t0) * 1000
 
 
 def quote_rows(cfg, market, books, event_key, now) -> list[dict]:
