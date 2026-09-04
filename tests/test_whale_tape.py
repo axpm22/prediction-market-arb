@@ -13,7 +13,7 @@ import pytest
 
 from arb.config import load
 from arb.venues.base import VenueError
-from arb import whale_backfill, whale_tape, whale_universe
+from arb import whale_backfill, whale_sweep, whale_tape, whale_universe
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 NOW = datetime(2026, 9, 3, 17, 0, 0, tzinfo=timezone.utc)
@@ -107,6 +107,16 @@ def test_schema_creates_every_table_and_cannot_reach_the_ledger(tmp_path):
             "signals", "base_rates", "meta"} <= names
     # rule 9: the ledger's tables are structurally unreachable from this file
     assert "flat_bets" not in names and "bet_events" not in names
+
+
+def test_leaderboard_snapshots_is_indexed_by_snapshot_at(tmp_path):
+    """Fix 3 (V4 review): `ranked_wallets()` (arb/lanes/whale_book.py) runs
+    every 60 s cycle now, not just at backfill time — a table scan per poll
+    is wasted work once the tape has any leaderboard history."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    idx_sql = [r[0] for r in con.execute(
+        "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='leaderboard_snapshots'")]
+    assert any(sql and "snapshot_at" in sql for sql in idx_sql)
 
 
 # --- universe ---------------------------------------------------------------
@@ -928,7 +938,7 @@ def test_the_sweep_resolves_a_backfilled_market_the_60s_cycle_never_reads(tmp_pa
     _resolvable(con, resolved["conditionId"], old)
     get = FakeGet([resolved])
 
-    n = whale_backfill.resolve_sweep(_cfg(), con, NOW, get=get)
+    n = whale_sweep.resolve_sweep(_cfg(), con, NOW, get=get)
 
     assert n == 1
     row = con.execute("SELECT * FROM resolutions").fetchone()
@@ -943,7 +953,7 @@ def test_the_sweep_is_fifo_by_start_and_bounded_by_resolve_per_cycle(tmp_path):
                          "page_size": 50, "resolve_per_cycle": 2})
     get = FakeGet([])
 
-    whale_backfill.resolve_sweep(cfg, con, NOW, get=get)
+    whale_sweep.resolve_sweep(cfg, con, NOW, get=get)
 
     assert _asked(get) == ["0xm1", "0xm2"]             # oldest two starts, in order
 
@@ -969,7 +979,7 @@ def test_the_sweep_skips_markets_past_resolve_giveup_days_and_the_unresolved(tmp
     con.commit()
     get = FakeGet([])
 
-    whale_backfill.resolve_sweep(cfg, con, NOW, get=get)
+    whale_sweep.resolve_sweep(cfg, con, NOW, get=get)
 
     assert _asked(get) == []
 
@@ -991,20 +1001,20 @@ def test_the_sweep_writes_a_per_day_skip_marker_so_the_fifo_advances(tmp_path):
     get = FakeGet([])
 
     for _ in range(3):                                  # three 40 s cycles, same day
-        whale_backfill.resolve_sweep(cfg, con, NOW, get=get)
+        whale_sweep.resolve_sweep(cfg, con, NOW, get=get)
 
     assert _asked(get) == ids                           # every id asked once, FIFO order
 
     # nothing left to sweep the same day: a 4th cycle makes no Gamma call
     get2 = FakeGet([])
-    whale_backfill.resolve_sweep(cfg, con, NOW, get=get2)
+    whale_sweep.resolve_sweep(cfg, con, NOW, get=get2)
     assert get2.urls == []
 
     # the next day: stale markers, the FIFO starts over from the oldest two —
     # and this time Gamma resolves the oldest
     tomorrow = NOW + timedelta(days=1)
     get3 = FakeGet([resolved])
-    whale_backfill.resolve_sweep(cfg, con, tomorrow, get=get3)
+    whale_sweep.resolve_sweep(cfg, con, tomorrow, get=get3)
     assert _asked(get3) == [ids[0], ids[1]]
     row = con.execute("SELECT * FROM resolutions WHERE condition_id=?",
                       (ids[0],)).fetchone()
@@ -1012,7 +1022,7 @@ def test_the_sweep_writes_a_per_day_skip_marker_so_the_fifo_advances(tmp_path):
 
     # ... and a resolved market is never asked again
     get4 = FakeGet([])
-    whale_backfill.resolve_sweep(cfg, con, tomorrow, get=get4)
+    whale_sweep.resolve_sweep(cfg, con, tomorrow, get=get4)
     assert _asked(get4) == [ids[2], ids[3]]
 
 
@@ -1028,7 +1038,7 @@ def test_whale_backfill_command_runs_the_sweep(tmp_path, monkeypatch):
     monkeypatch.setattr(whale_backfill, "backfill", lambda *a, **k: {
         "wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0,
         "mapped": 0, "unmappable": 0, "status_counts": {}, "status": "ok"})
-    monkeypatch.setattr(whale_backfill, "resolve_sweep",
+    monkeypatch.setattr(whale_sweep, "resolve_sweep",
                         lambda *a, **k: calls.append(a) or 0)
 
     cmd_whale_backfill(cfg, Store(tmp_path / "arb.sqlite"), None)
@@ -1053,7 +1063,7 @@ def test_whale_backfill_runs_leaderboard_then_sweep_then_backfill_then_mapping(
     order = []
     monkeypatch.setattr(whale_backfill, "snapshot_leaderboard",
                         lambda *a, **k: order.append("leaderboard") or 0)
-    monkeypatch.setattr(whale_backfill, "resolve_sweep",
+    monkeypatch.setattr(whale_sweep, "resolve_sweep",
                         lambda *a, **k: order.append("sweep") or 0)
     monkeypatch.setattr(whale_backfill, "backfill", lambda *a, **k: order.append("backfill") or {
         "wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0, "status": "ok"})

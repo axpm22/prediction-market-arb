@@ -89,6 +89,14 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
         remaining.append(cur)
     if not remaining:
         return None
+    # V4 fix (V4 review of 3a455fd): a V4 whale's points are 1/0 rank
+    # membership, not a score — once every remaining whale has fallen off
+    # the leaderboard, `wmean`'s zero-weight fallback would otherwise average
+    # their raw `lb` back in unweighted, exactly the leak V4's rank filter
+    # exists to close. No ranked whale left to weigh is no verdict, not a
+    # mean computed over the unranked crowd.
+    if variant == "V4" and all(x["points"] <= 0 for x in remaining):
+        return None
     S = wmean(remaining, "lb")
     if S < d(ex["min_score_lb"]):
         # Pooling means a loss in another sport can lower a score here: §9 wants

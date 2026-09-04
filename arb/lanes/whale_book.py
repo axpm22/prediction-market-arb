@@ -204,12 +204,18 @@ def exit_payload(cfg, bet, decision, bid, contracts) -> dict:
 
 # ------------------------------------------------------------- tape rows
 
-# V4's filter (§7, amended 2026-09-04): the wallets of the LATEST leaderboard
-# snapshot, any window — one daily run stamps its four windows with one
-# `snapshot_at`, so MAX takes all four and yesterday's board is not a rank.
+# V4's filter (§7, amended 2026-09-04). Keyed on the DATE, not the exact
+# timestamp (fix 2026-09-04, V4 review of 3a455fd): each of the day's four
+# windows is claimed and stamped with its OWN `now`
+# (whale_backfill._snapshot_window), so a retry after a failed window lands
+# the remaining windows LATER the same UTC day. An exact `snapshot_at = MAX`
+# match then returned only the retried windows' wallets and silently dropped
+# whoever was ranked only in the windows claimed earlier that day. The ranked
+# set is every wallet from every row whose calendar date (UTC) equals the
+# latest snapshot date present — any window, still never yesterday's board.
 RANKED_SQL = """
     SELECT DISTINCT proxy_wallet FROM leaderboard_snapshots
-     WHERE snapshot_at = (SELECT MAX(snapshot_at) FROM leaderboard_snapshots)
+     WHERE date(snapshot_at) = (SELECT date(MAX(snapshot_at)) FROM leaderboard_snapshots)
        AND proxy_wallet <> ''"""
 
 

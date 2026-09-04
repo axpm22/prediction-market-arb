@@ -81,8 +81,11 @@ def test_whale_config_loads_with_spec_values():
                              # sweep's per-cycle bound (final review C1),
                              # raised 40 -> 100 once the sweep always runs
                              # first (whale-backfill fix pass); map_per_cycle
-                             # bounds the now-separate mapping step
-                             "resolve_per_cycle": 100, "map_per_cycle": 40}
+                             # bounds the now-separate mapping step, raised
+                             # 40 -> 200 (V4 review, same day): worst case
+                             # leaderboard 80 + sweep 50 + wallets 120 +
+                             # map 100 Gamma calls ~= 11 min, under the 900s cap
+                             "resolve_per_cycle": 100, "map_per_cycle": 200}
     assert w["universe_poll_lookback"] == 5
     assert w["fire"]["min_points"]["V1"] == 3
     assert w["fire"]["min_points"]["V2"] is None

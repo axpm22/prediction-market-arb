@@ -16,10 +16,8 @@ from arb.whale_tape import (DATA_API, GAMMA, GAMMA_IDS_PER_CALL, LEADERBOARD_PAG
                             _json_list, _meta, _set_backoff, _set_meta, log)
 from arb.whale_universe import MARKET_COLS, _iso
 from arb.models import q6
-# Re-exported (size only, mapper fix pass 2026-09-04): moved to
-# whale_resolve.py, which already owns SWEEP_SQL's reader; kept importable as
-# `whale_backfill.resolve_sweep` for its existing callers/tests/monkeypatches.
-from arb.whale_resolve import resolve_sweep  # noqa: F401
+# resolve_sweep/SWEEP_SQL live in arb/whale_sweep.py (size, V4 fix pass
+# 2026-09-04); callers import that module directly now.
 
 
 def _add_wallets(con, pairs, now, source) -> int:

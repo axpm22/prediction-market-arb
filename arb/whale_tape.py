@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS wallets (
 CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
     id INTEGER PRIMARY KEY, snapshot_at TEXT, category TEXT, time_period TEXT,
     order_by TEXT, rank INTEGER, proxy_wallet TEXT, user_name TEXT, vol TEXT, pnl TEXT);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_snapshots_at
+    ON leaderboard_snapshots(snapshot_at);
 CREATE TABLE IF NOT EXISTS resolutions (
     condition_id TEXT PRIMARY KEY, resolved_at TEXT, winner_outcome_index INTEGER,
     status TEXT, source TEXT, raw_json TEXT, fetched_at TEXT);

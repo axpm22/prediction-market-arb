@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from arb import invariants, reconcile, tracker, whale_resolve, whale_tape
+from arb import invariants, reconcile, tracker, whale_resolve, whale_sweep, whale_tape
 from arb.config import load
 from arb.metrics import bet_pnl_optimistic
 from arb.settlement import settle_bet
@@ -417,3 +417,15 @@ def test_invariant_3_ignores_an_exit_settled_bet(cfg, tmp_path):
 
     assert [v for v in invariants.check(cfg, store) if "invariant-3" in v] == []
     assert store.query("SELECT 1 FROM annotations WHERE kind='invariant-violation'") == []
+
+
+def test_the_sweep_moved_out_to_its_own_module_and_the_file_stays_under_300(tmp_path):
+    """V4 fix pass finding 5: whale_resolve.py hit 318 lines. SWEEP_SQL and
+    resolve_sweep move to arb/whale_sweep.py (only those two — everything
+    else about resolution reading stays here); this pins both the size and
+    that the move actually happened, not just a re-export."""
+    lines = Path("arb/whale_resolve.py").read_text().splitlines()
+    assert len(lines) <= 300
+    assert not hasattr(whale_resolve, "resolve_sweep")
+    assert not hasattr(whale_resolve, "SWEEP_SQL")
+    assert hasattr(whale_sweep, "resolve_sweep") and hasattr(whale_sweep, "SWEEP_SQL")

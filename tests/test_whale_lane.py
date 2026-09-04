@@ -27,6 +27,7 @@ import pytest
 
 from arb import whale_backfill, whale_tape
 from arb.config import load
+from arb.lanes import whale_book
 from arb.store import Store
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -444,6 +445,26 @@ def test_the_lane_books_v4_flat_and_conf_for_a_ranked_consensus(cfg, tmp_path):
     row = con.execute("SELECT * FROM signals WHERE variant='V4'").fetchone()
     assert row["fired"] == 1 and Decimal(row["points_yes"]) == 3
     assert v4[0]["signal_id"] == row["id"]
+
+
+def test_ranked_wallets_unions_every_window_from_the_latest_snapshot_date(tmp_path):
+    """Fix 1 (V4 review of 3a455fd): one daily run stamps each of the four
+    leaderboard windows with its OWN `now` (`_snapshot_window`'s per-window
+    meta claim), so a retry after a failed window lands the remaining
+    windows LATER THE SAME UTC DAY. RANKED_SQL used to key on
+    `snapshot_at = MAX(snapshot_at)` — exact match — so that same-day retry
+    returned only the retried windows' wallets and silently dropped whoever
+    was ranked only in the windows claimed earlier that day. Spec §7: "any
+    window" of the latest snapshot DATE, not the latest exact timestamp."""
+    con = _tape(tmp_path)
+    t1, t2 = NOW.replace(hour=1), NOW.replace(hour=2)   # same UTC day, t1 < t2
+    _ranked(con, ["w0"], at=t1, period="DAY")
+    _ranked(con, ["w1"], at=t2, period="WEEK")
+    _ranked(con, ["w2"], at=t2, period="MONTH")
+    _ranked(con, ["w3"], at=t2, period="ALL")
+    _ranked(con, ["stale"], at=NOW - timedelta(days=1), period="DAY")  # yesterday: not ranked
+
+    assert whale_book.ranked_wallets(con) == frozenset({"w0", "w1", "w2", "w3"})
 
 
 def test_only_the_latest_leaderboard_snapshot_ranks_a_wallet(cfg, tmp_path):

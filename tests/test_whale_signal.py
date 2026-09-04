@@ -590,6 +590,17 @@ def test_exit_confidence_ignores_sybil_dropped_whales(cfg):
     assert (d.detail["wallet"], d.detail["S"]) == ("w0", Decimal("-0.050000"))
 
 
+def test_v4_confidence_exit_is_none_when_every_remaining_whale_is_unranked(cfg):
+    """Fix 2 (V4 review): every remaining whale carries zero V4 points once
+    it has fallen off the leaderboard, so `wmean`'s zero-weight fallback
+    would otherwise average their raw `lb` back in unweighted — exactly the
+    leak V4's rank filter exists to close (a `confidence` verdict computed
+    over a crowd V4 itself says does not count). With no ranked whale left
+    to weigh, the exit is None rather than a mean of the unranked group."""
+    pos, scores = _held(scores={"w0": _score("-0.05"), "w1": _score("-0.05")})
+    assert whale_exit.exit_reason(_ctx("V4"), pos, _lookup(scores), NOW, cfg) is None
+
+
 def test_exit_none_post_start_whatever_the_signal_does(cfg):
     pos, scores = _held(sold="1000")                  # would be `left` pregame
     after = START + timedelta(seconds=60)
