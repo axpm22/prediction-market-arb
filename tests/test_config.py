@@ -149,8 +149,11 @@ def test_whale_config_loads_with_spec_values():
     # HOLDING to agree too, between exit.flip_ratio (0.50) and fire.ratio (0.80)
     assert w["fire"]["holders_ratio"] == Decimal("0.6667")
     # L14 amendment 2026-09-04 (§7 V6 dominance): a LITERAL threshold, never
-    # null — the V2/V3 null blocked the primary variant for a week
-    assert w["fire"]["min_points"]["V6"] == Decimal("0.0020")
+    # null — the V2/V3 null blocked the primary variant for a week. V6a
+    # (fixer-D review, task 0(b)): corrected 0.0020 -> 0.0008, re-derived on
+    # the venue volume_24h denominator the shipped code actually divides by
+    # (.superpowers/sdd/v6-threshold-measurement.md).
+    assert w["fire"]["min_points"]["V6"] == Decimal("0.0008")
     # L14 amendment 2026-09-04 (§7 V5 elite): both LITERAL, set from the
     # measurement before registration — top 5%/10% retain zero of the 56 fires,
     # top 40% has a cutoff below min_score_lb and degenerates into V1.
@@ -205,6 +208,40 @@ def test_holders_ratio_must_sit_between_flip_ratio_and_fire_ratio(tmp_path):
         bad.write_text(SHIPPED.read_text().replace("holders_ratio: 0.6667,",
                                                    f"holders_ratio: {value},"))
         with pytest.raises(ConfigError, match="holders_ratio"):
+            load(bad)
+
+
+def test_holders_ratio_boundary_equal_to_fire_ratio_passes(tmp_path):
+    """M7 (fixer D): the interval is closed at the top (`<=`) — holders_ratio
+    exactly equal to fire.ratio is a fired signal that is not YET flip-eligible
+    (flip needs strictly below fire.ratio's neighbour), so it must load."""
+    text = SHIPPED.read_text().replace("holders_ratio: 0.6667,", "holders_ratio: 0.80,")
+    ok = tmp_path / "config.yaml"
+    ok.write_text(text)
+    load(ok)                                # must not raise
+
+
+def test_holders_ratio_boundary_equal_to_flip_ratio_fails(tmp_path):
+    """M7 (fixer D): the interval is open at the bottom (`<`, strict) —
+    holders_ratio exactly equal to exit.flip_ratio fires a signal that is
+    already flip-eligible on the very next cycle, exactly what the band
+    exists to prevent."""
+    text = SHIPPED.read_text().replace("holders_ratio: 0.6667,", "holders_ratio: 0.50,")
+    bad = tmp_path / "config.yaml"
+    bad.write_text(text)
+    with pytest.raises(ConfigError, match="holders_ratio"):
+        load(bad)
+
+
+def test_whale_dominance_min_volume_usd_invariant(tmp_path):
+    """M6 (fixer D): `dominance.min_volume_usd` is the floor on V6's
+    normalising denominator — zero or negative would let the ratio blow up
+    (zero) or invert the sign of every V6 point (negative)."""
+    for value in ("0", "-1000"):
+        bad = tmp_path / f"config-{value}.yaml"
+        bad.write_text(SHIPPED.read_text().replace("min_volume_usd: 5000",
+                                                   f"min_volume_usd: {value}"))
+        with pytest.raises(ConfigError, match="min_volume_usd"):
             load(bad)
 
 

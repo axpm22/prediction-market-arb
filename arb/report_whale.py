@@ -100,11 +100,15 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
             # week to week (§3) — a step change must be attributable.
             "elite": {"pct": int(fire["elite_pct"]),
                       "min_score_lb": cfg["whale"]["min_score_lb"],
-                      "cutoffs": whale_elite.latest(con) if con else []},
+                      "cutoffs": whale_elite.latest(con, now) if con else []},
+            # both MAX(as_of) reads below are bound to `now` (coordinator
+            # review of a42fb14, rule 9 determinism): unbounded, a report
+            # re-run over a past day printed today's row instead of the one
+            # actually in force on the day being reported.
             "base_rates": [dict(r) for r in con.execute(
                 "SELECT root, as_of, value, n FROM base_rates b WHERE as_of = "
-                "(SELECT MAX(as_of) FROM base_rates x WHERE x.root=b.root) "
-                "ORDER BY root")] if con else [],
+                "(SELECT MAX(as_of) FROM base_rates x WHERE x.root=b.root "
+                "AND x.as_of <= ?) ORDER BY root", (now.isoformat(),))] if con else [],
             "native": {
                 "signals": {k: sum(1 for sid, cls in native_of.items()
                                    if sid in booked and cls is (k == "native"))

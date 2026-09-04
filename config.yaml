@@ -722,7 +722,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   (48%), < 0.80 in 34 (61%); at 0.6667 the lane's ~21
                                       #   fires/24h become ~11/day, ~77/week, against the
                                       #   starvation alarm of 10/week.
-          min_points: { V1: 3, V2: null, V3: null, V4: 3, V5: 2, V6: 0.0020 },
+          min_points: { V1: 3, V2: null, V3: null, V4: 3, V5: 2, V6: 0.0008 },
           elite_pct: 20,              # V5: a whale votes only if its score_lb, in THIS signal's
                                       #   bucket, is in the top 20% of the reference population
                                       #   (operator decision 2026-09-04: ALL scored wallets in
@@ -746,15 +746,27 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   threshold, so V4 fires from day one — its filter is
                                       #   leaderboard membership on top of the SAME min_score_lb
                                       #   bar, never a score input.
-                                      #   V6 (dominance, added 2026-09-04) is 0.0020, also a
-                                      #   LITERAL and never null: the V2/V3 null blocked the
-                                      #   primary variant for a week and had to be patched by
-                                      #   amendment. Measured before registration on the 56
-                                      #   fired V1 signals against the tape's own 6h print
-                                      #   volume: median +0.00236, p75 +0.0138. Re-measured on
-                                      #   the production denominator (venue volume_24h) at the
-                                      #   >=14-day V2/V3 re-calibration; a change is a dated
-                                      #   amendment naming both values.
+                                      #   V6 (dominance, added 2026-09-04) is 0.0008, a LITERAL and
+                                      #   never null: the V2/V3 null blocked the primary variant for
+                                      #   a week and had to be patched by amendment. Units: skill
+                                      #   points x live open notional USD, recency- and price-decayed,
+                                      #   per dollar of the market's own venue 24h volume (Gamma
+                                      #   volume24hr — arb/whale_dominance.py::point's denominator).
+                                      #   Originally 0.0020, measured before registration on the 56
+                                      #   fired V1 signals against the TAPE's own 6h print volume
+                                      #   (median +0.00236, p75 +0.0138) — a different denominator
+                                      #   than the one the shipped code actually divides by.
+                                      #   V6a (2026-09-04, fixer-D review, task 0(b),
+                                      #   .superpowers/sdd/v6-threshold-measurement.md): corrected to
+                                      #   0.0008 on the VENUE denominator (volume_24h), which runs
+                                      #   ~1.75x the tape figure at the median (p10 1.08x, p90 3.89x,
+                                      #   n=67 markets) — 0.0008 is the venue-denom p50 over the same
+                                      #   56 fires (p10 0.000013, p25 0.000376, p75 0.003136, p90
+                                      #   0.008909), reproducing the originally-intended median cut.
+                                      #   No formula change; dominance.min_volume_usd unchanged. No
+                                      #   V6 outcome has settled, so this is pre-data for V6.
+                                      #   Re-measured again at the >=14-day V2/V3 re-calibration; a
+                                      #   further change is a dated amendment naming both values.
                                       #   V5 (elite, added 2026-09-04, superseding the same
                                       #   day's "not shipped" note) is 2, also a LITERAL and
                                       #   never null — measured, not calibrated; the V2/V3 null
@@ -814,10 +826,13 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   the prints rather than exiting on a stale holding.
                                       #   holdings_page_size is the endpoint's `limit`; paging
                                       #   (100 -> 500 on 2026-09-04: limit=500 verified live in one call;
-                                      #   three signal whales held >100 positions and page 1 missed them)
-                                      #   beyond one page was NOT probed (rule 3), so a wallet
-                                      #   returning a full page is logged WARNING once and what
-                                      #   came back is used.
+                                      #   three signal whales held >100 positions and page 1 missed them).
+                                      #   C2 (fixer-D review of a90a08d), history note: an earlier
+                                      #   version of this comment said paging beyond one page was
+                                      #   NOT probed and a full page's rest was simply dropped — true
+                                      #   only until the SAME DAY's holdings-paging fix below, which
+                                      #   added verified offset-paging up to holdings_max_pages; a
+                                      #   full page is no longer the end of a wallet's read.
                                       #   holdings_max_pages (2026-09-04 amendment, holdings-paging
                                       #   fix): a full page now pages by `offset` (verified live
                                       #   2026-09-04, data/verified_facts.md: limit=100&offset=100

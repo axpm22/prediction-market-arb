@@ -135,6 +135,70 @@ def test_gamma_ids_per_call_is_20_and_a_bigger_batch_is_refused():
         whale_tape._gamma_url(ids20 + ["0xtoomany"])
 
 
+# --- migration (I2, review of a90a08d/fce71ea) ------------------------------
+
+def test_migrate_adds_holders_ratio_to_a_pre_1b_tape(tmp_path):
+    """A tape opened before the §7 item 1b amendment has a `signals` table
+    with no `holders_ratio` column. `open_tape` must ALTER it in, leave the
+    pre-existing row's value NULL (nothing to migrate INTO it), and let a new
+    insert use the column normally."""
+    path = tmp_path / "w.sqlite"
+    old = sqlite3.connect(str(path))
+    old.execute("""CREATE TABLE signals (
+        id INTEGER PRIMARY KEY, evaluated_at TEXT, condition_id TEXT, side TEXT, variant TEXT,
+        points_yes TEXT, points_no TEXT, ratio TEXT, whale_ids_json TEXT, vwap TEXT,
+        touch_ask TEXT, touch_bid TEXT, depth_usd TEXT, fired INTEGER, suppressed_reason TEXT,
+        bet_ids_json TEXT, flagged_edge TEXT)""")               # pre-1b DDL: no holders_ratio
+    old.execute("INSERT INTO signals (evaluated_at, condition_id, variant) "
+                "VALUES ('2026-09-01T00:00:00+00:00', '0xold', 'V1')")
+    old.commit()
+    old.close()
+
+    con = whale_tape.open_tape(path)
+
+    cols = {r[1] for r in con.execute("PRAGMA table_info(signals)")}
+    assert "holders_ratio" in cols
+    old_row = con.execute(
+        "SELECT holders_ratio FROM signals WHERE condition_id='0xold'").fetchone()
+    assert old_row["holders_ratio"] is None
+    con.execute("INSERT INTO signals (evaluated_at, condition_id, variant, holders_ratio) "
+                "VALUES ('2026-09-04T00:00:00+00:00', '0xnew', 'V1', '0.750000')")
+    con.commit()
+    new_row = con.execute(
+        "SELECT holders_ratio FROM signals WHERE condition_id='0xnew'").fetchone()
+    assert new_row["holders_ratio"] == "0.750000"
+
+
+class _RacyCon:
+    """Wraps a real, already-migrated connection so its PRAGMA table_info
+    reports `holders_ratio` missing exactly once — simulating the other
+    process (`whale` or `settle`, both call `open_tape` on start) winning the
+    ADD COLUMN race between this process's own check and its ALTER."""
+
+    def __init__(self, real):
+        self._real = real
+
+    def execute(self, sql, *a, **kw):
+        if sql.startswith("PRAGMA table_info(signals)"):
+            return [(0, "id", "INTEGER", 0, None, 1)]     # holders_ratio: missing (stale read)
+        return self._real.execute(sql, *a, **kw)
+
+    def commit(self):
+        self._real.commit()
+
+    def rollback(self):
+        self._real.rollback()
+
+
+def test_migrate_treats_a_concurrent_add_column_as_already_done(tmp_path):
+    """I2(b): the real table already has `holders_ratio` (this process's own
+    earlier `open_tape` added it) by the time the stale PRAGMA read above
+    drives another ALTER attempt — sqlite raises `duplicate column name`, and
+    `_migrate` must read that as done, not propagate it."""
+    real = whale_tape.open_tape(tmp_path / "w.sqlite")
+    whale_tape._migrate(_RacyCon(real))                    # must not raise
+
+
 # --- universe ---------------------------------------------------------------
 
 def test_universe_keeps_only_polymarket_sports_markets_inside_the_window():
@@ -1695,3 +1759,28 @@ def test_holdings_a_page_2_failure_keeps_page_1s_rows(tmp_path):
     assert rows == {"tokyes", "b"}                            # page 1 kept, not discarded
     assert whale_tape._meta(con, "holdings_at:0xw0") is None  # not half-believed
     assert whale_holdings.due(cfg, con, ["0xw0"], NOW) == ["0xw0"]   # still due, immediately
+
+
+def test_holdings_persist_commits_so_a_second_connection_sees_the_rows(tmp_path):
+    """C1 (review of a90a08d): `_persist` executed its INSERT with no
+    `con.commit()` — the previous test above reads page 1's rows back through
+    the SAME connection, which sees its own uncommitted writes and cannot
+    tell a real commit from a pending transaction that would vanish if this
+    process died before some LATER write happened to commit it (contradicting
+    the module's own docstring, "can never discard what already landed"). A
+    second, fresh connection to the same file proves the rows actually
+    reached disk."""
+    path = tmp_path / "w.sqlite"
+    con = whale_tape.open_tape(path)
+    cfg = _cfg()
+    cfg["whale"]["exit"] = {**cfg["whale"]["exit"], "holdings_page_size": 2}
+    page1 = [_position_row("0xw0", "5", asset="tokyes"), _position_row("0xw0", 1, asset="b")]
+    get = FakeGet(page1, VenueError("polymarket 503"))    # page 2 fails; no _set_meta commit follows
+
+    whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW, get=get)
+
+    fresh = sqlite3.connect(str(path))
+    rows = {r[0] for r in fresh.execute(
+        "SELECT asset FROM holdings WHERE proxy_wallet='0xw0'")}
+    fresh.close()
+    assert rows == {"tokyes", "b"}                 # page 1's rows, visible cross-connection

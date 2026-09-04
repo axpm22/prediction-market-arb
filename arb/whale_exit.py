@@ -21,7 +21,7 @@ class ExitDecision:
 
 
 def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
-                ranked=frozenset(), holdings=None, ctx=None) -> ExitDecision | None:
+                ranked=frozenset(), holdings=None, market_ctx=None) -> ExitDecision | None:
     """`bet_ctx` is what the lane stored at booking: variant, side,
     condition_id, start_utc and the contributing `whales` (wallet, lb,
     open_size — a `Signal.whales` list is exactly this shape).
@@ -37,19 +37,23 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
     prints-based size; None or empty disables that test entirely. This module
     stays pure — the tape read and the staleness bound live in the caller.
 
-    `ctx` is the market context for THIS cycle — V6's `volume` and current
-    `ask` per side from the lane's own books (arb/whale_dominance.py), and
-    V5's `elite` cutoff for this market's bucket (arb/whale_elite.py). "The
-    consensus decayed" is a statement about now, not about booking time. Every
-    key is optional and a caller with no book (the read-only dashboard) may
-    omit it entirely; `now_ts` is always this call's own `now`.
+    `market_ctx` is the market context for THIS cycle — V6's `volume` and
+    current `ask` per side from the lane's own books (arb/whale_dominance.py),
+    and V5's `elite` cutoff for this market's bucket (arb/whale_elite.py).
+    Named apart from `bet_ctx` on purpose (M8, fixer-D review of
+    a90a08d/fce71ea): the lane's own `_exit` holds a bet ctx local of the same
+    old name, and passing a same-named market ctx into its keyword read like
+    one value silently standing in for the other. "The consensus decayed" is
+    a statement about now, not about booking time. Every key is optional and
+    a caller with no book (the read-only dashboard) may omit it entirely;
+    `now_ts` is always this call's own `now`.
     """
     ex, variant = cfg["whale"]["exit"], bet_ctx["variant"]
     side, cid = int(bet_ctx["side"]), bet_ctx["condition_id"]
     start = ts(bet_ctx.get("start_utc"))
     if start is None or ts(now) >= start:
         return None
-    ctx = {**(ctx or {}), "now_ts": ts(now)}
+    market_ctx = {**(market_ctx or {}), "now_ts": ts(now)}
 
     # flip: the consensus itself moved, recomputed under this bet's variant
     # over the whales still HOLDING — every wallet's merged net position on
@@ -64,7 +68,7 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
     # ONE helper with §7's entry gate 1b (L14 amendment 2026-09-04): entry and
     # exit read the same holders tally, so the two can never drift apart again.
     ratio, ours, total = holders_share(variant, cid, open_positions_now,
-                                       score_lookup, side, now, cfg, ranked, ctx)
+                                       score_lookup, side, now, cfg, ranked, market_ctx)
     if ratio is not None and ratio < d(ex["flip_ratio"]):
         return ExitDecision("flip", {"ratio": ratio, "points_side": ours,
                                      "points_total": total})
@@ -122,7 +126,7 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
         cur = {"wallet": wallet, "lb": score.lb, "score": score,
                "open_notional": q6(notional_now.get(wallet, Decimal(0))),
                "drop": q6(d(x["lb"]) - score.lb)}
-        cur["points"] = point_of(variant, cur, cfg, ranked, ctx)
+        cur["points"] = point_of(variant, cur, cfg, ranked, market_ctx)
         remaining.append(cur)
     if not remaining:
         return None

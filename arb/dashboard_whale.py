@@ -93,7 +93,7 @@ def whale_positions(cfg, store, bets, now, con=None) -> dict[int, dict]:
             mk = state.markets.get(ctx["condition_id"], {})
             decision = whale_exit.exit_reason(
                 ctx, state.open_positions, state.lookup, now, cfg,
-                ctx={"elite": elite(mk.get("sport"), mk.get("market_type"))},
+                market_ctx={"elite": elite(mk.get("sport"), mk.get("market_type"))},
                 # the same second `left` reading the lane runs (§9 item C,
                 # 2026-09-04) — read-only, off the snapshots the lane polled,
                 # so the panel cannot say "held" about a bet the next cycle

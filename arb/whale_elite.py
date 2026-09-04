@@ -155,15 +155,23 @@ def _warn_degenerate(con, buckets, cfg, now) -> None:
                 cfg["whale"]["fire"]["elite_pct"])
 
 
-def latest(con) -> list[dict]:
-    """The newest cutoff row per bucket — what the daily report prints, the
-    same shape `base_rates` is read in. An older tape that predates the table
-    reads as no rows rather than an error."""
+def latest(con, now=None) -> list[dict]:
+    """The newest cutoff row per bucket AT OR BEFORE `now` — what the daily
+    report prints, the same shape `base_rates` is read in. `now=None` keeps
+    the unbounded read (every live caller inside a whale cycle only ever
+    writes forward, so "newest" and "newest so far" agree); a report re-run
+    over a past day must bound this or a cutoff written since that day leaks
+    backward into it (coordinator review of a42fb14, rule 9 determinism). An
+    older tape that predates the table reads as no rows rather than an error.
+    """
     import sqlite3
+    bound, params = "", ()
+    if now is not None:
+        bound, params = " AND x.as_of <= ?", (now.isoformat(),)
     try:
         return [dict(r) for r in con.execute(
             "SELECT root, bucket, as_of, cutoff, n FROM elite_cutoffs e WHERE as_of ="
-            " (SELECT MAX(as_of) FROM elite_cutoffs x WHERE x.bucket=e.bucket)"
-            " ORDER BY bucket")]
+            f" (SELECT MAX(as_of) FROM elite_cutoffs x WHERE x.bucket=e.bucket{bound})"
+            " ORDER BY bucket", params)]
     except sqlite3.Error:
         return []

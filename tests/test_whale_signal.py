@@ -523,6 +523,63 @@ def test_the_entry_gate_and_the_flip_exit_share_one_holders_helper(cfg):
     assert (entry, ours, total) == (ratio, Decimal(3), Decimal(7))
 
 
+# --------------------------------------------- gate order pins (M1, fixer D)
+
+def test_min_points_precedes_holders(cfg):
+    """Both gates would fail at once: only 2 fresh whales (V1's min_points is
+    3) AND 4 old whales holding the other side (holders would also fail, same
+    shape as `_holders`). `min-points` sits earlier in the chain and must
+    win — mirrors the sibling `..._precedes_the_later_gates` tests."""
+    pos, scores = _three(lbs=("0.05", "0.04"))
+    held, held_scores = _holders(cfg, 4)
+    s = _ev(cfg, pos + held, {**scores, **held_scores})["V1"]
+    assert (s.fired, s.suppressed_reason) == (False, "min-points")
+
+
+def test_uncalibrated_precedes_holders(cfg):
+    """Same dual failure under a null-threshold variant: V3 is `uncalibrated`
+    regardless of the holders reading, which would also fail here (3 fresh
+    vs. 4 old holders, same as `_holders`)."""
+    pos, scores = _three()
+    held, held_scores = _holders(cfg, 4)
+    sigs = _ev(cfg, pos + held, {**scores, **held_scores})
+    assert sigs["V3"].suppressed_reason == "uncalibrated"
+
+
+def test_holders_precedes_late_print(cfg):
+    """Both gates fail at once: the fresh tally is held 3-4 against (holders
+    fails) AND the newest fresh print is already >= max_print_age_secs
+    (late-print would also fail). `holders` sits earlier in the chain (spec
+    §13, amended 2026-09-04) and must win."""
+    age = int(cfg["whale"]["max_print_age_secs"])
+    pos = [_pos(f"w{i}", last=N - age - 30 * i) for i in range(3)]
+    scores = {f"w{i}": _score("0.05") for i in range(3)}
+    held, held_scores = _holders(cfg, 4)
+    s = _ev(cfg, pos + held, {**scores, **held_scores})["V1"]
+    assert (s.fired, s.suppressed_reason) == (False, "holders")
+
+
+# ------------------------------------------- holders computed once (M3, fixer D)
+
+def test_holders_list_is_computed_once_per_market_not_per_variant(cfg, monkeypatch):
+    """`holders_share` used to re-run `qualifying(..., fresh_only=False)`
+    itself once per variant (6x/market, one per `_signal` call) — `evaluate`
+    now computes the holders list once and hands it to every variant."""
+    pos, scores = _three()
+    fresh_only_values = []
+    real = whale_signal.qualifying
+
+    def counting(*a, **k):
+        fresh_only_values.append(k.get("fresh_only", True))
+        return real(*a, **k)
+
+    monkeypatch.setattr(whale_signal, "qualifying", counting)
+    sigs = _ev(cfg, pos, scores)
+
+    assert len(sigs) == 6                        # every variant still evaluated
+    assert fresh_only_values.count(False) == 1    # was 6 (once per variant) before the fix
+
+
 def test_null_min_points_evaluates_but_never_fires(cfg):
     pos, scores = _three()
     sigs = _ev(cfg, pos, scores)
@@ -648,10 +705,10 @@ def test_a_v5_bet_is_never_flipped_by_non_elite_opposition(cfg):
         pos.append(_pos(f"a{i}", idx=1, last=T0 - 60 - 30 * i))
         scores[f"a{i}"] = _score("0.01")               # qualifying, not elite
     ctx = {"elite": Decimal("0.05")}
-    v1 = whale_exit.exit_reason(_ctx("V1"), pos, _lookup(scores), NOW, cfg, ctx=ctx)
+    v1 = whale_exit.exit_reason(_ctx("V1"), pos, _lookup(scores), NOW, cfg, market_ctx=ctx)
     assert (v1.reason, v1.detail["ratio"]) == ("flip", Decimal("0.400000"))
     assert whale_exit.exit_reason(_ctx("V5"), pos, _lookup(scores), NOW, cfg,
-                                  ctx=ctx) is None
+                                  market_ctx=ctx) is None
 
 
 def test_v5_confidence_exit_is_none_when_no_remaining_whale_is_elite(cfg):
@@ -662,7 +719,7 @@ def test_v5_confidence_exit_is_none_when_no_remaining_whale_is_elite(cfg):
     over a crowd V5 itself says does not count."""
     pos, scores = _held(scores={"w0": _score("-0.05"), "w1": _score("-0.05")})
     assert whale_exit.exit_reason(_ctx("V5"), pos, _lookup(scores), NOW, cfg,
-                                  ctx={"elite": Decimal("0.05")}) is None
+                                  market_ctx={"elite": Decimal("0.05")}) is None
 
 
 def test_a_v6_bet_flips_on_dollars_not_on_head_count(cfg):

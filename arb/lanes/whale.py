@@ -299,9 +299,9 @@ def _exit(cfg, store, con, bet, ctx, open_pos, lookup, books, venue_ok, now, res
     decision = whale_exit.exit_reason(
         ctx, open_pos, lookup, now, cfg, ranked,
         holdings=whale_holdings.for_bet(cfg, con, ctx, now),
-        ctx={"volume": whale_dominance.market_volume(volumes, tokens, cid),
-             "elite": elite_cut,
-             "ask": {s: t.ask for s, t in _touch(books, tokens, cid).items()}})
+        market_ctx={"volume": whale_dominance.market_volume(volumes, tokens, cid),
+                    "elite": elite_cut,
+                    "ask": {s: t.ask for s, t in _touch(books, tokens, cid).items()}})
     if decision is None:
         return
     bid, depth = best_bid(books.get(ctx["token"]))

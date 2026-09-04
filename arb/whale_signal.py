@@ -156,7 +156,7 @@ def tally(variant, whales, cfg, ranked=frozenset(), ctx=None) -> tuple[dict, dic
 # ------------------------------------------------------- holders (§7 item 1b)
 
 def holders_share(variant, condition_id, open_positions, score_lookup, side,
-                  now, cfg, ranked=frozenset(), ctx=None) -> tuple:
+                  now, cfg, ranked=frozenset(), ctx=None, holding=None) -> tuple:
     """(`side`'s share, its points, both sides' points) over the whales still
     HOLDING this market — `qualifying(..., fresh_only=False)`, every qualifying
     wallet's merged net pregame position whatever the age of the print that
@@ -166,9 +166,17 @@ def holders_share(variant, condition_id, open_positions, score_lookup, side,
     1b and §9's `flip` exit ask the same question of the same tally, so they
     can never drift. A share of `None` — nobody qualifying holds this market —
     means the same thing in both: no reading at all, never a zero share.
+
+    `holding` lets a caller that evaluates several variants over the same
+    market (`evaluate`, M3 fixer-D review) hand in the qualifying(...,
+    fresh_only=False) list once instead of this function re-running that
+    query per variant — the list itself doesn't depend on variant, only the
+    `tally` below does. `None` (every other caller, e.g. `exit_reason`, which
+    only ever asks once) computes it here exactly as before.
     """
-    holding = qualifying(condition_id, open_positions, score_lookup, now, cfg,
-                         fresh_only=False)
+    if holding is None:
+        holding = qualifying(condition_id, open_positions, score_lookup, now, cfg,
+                             fresh_only=False)
     by_side, _ = tally(variant, holding, cfg, ranked, ctx)
     total = by_side[YES] + by_side[NO]
     return ((q6(by_side[side] / total) if total > 0 else None),
@@ -189,14 +197,20 @@ def evaluate(market, open_positions, score_lookup, touch, now, cfg, m0,
     whales = qualifying(market["condition_id"], open_positions, score_lookup, now, cfg)
     if not whales:
         return []
+    # M3 (fixer-D review of a90a08d/fce71ea): every variant's holders gate
+    # (1b) and the holders it recounts over come from the same qualifying(...,
+    # fresh_only=False) call — computed once here instead of once per variant
+    # inside holders_share, since the list itself is variant-independent.
+    holding = qualifying(market["condition_id"], open_positions, score_lookup,
+                         now, cfg, fresh_only=False)
     ctx = {"volume": volume, "now_ts": ts(now), "elite": elite,
            "ask": {s: t.ask for s, t in touch.items()}}
     return [_signal(v, market, whales, open_positions, score_lookup, touch,
-                    now, cfg, m0, ranked, ctx) for v in VARIANTS]
+                    now, cfg, m0, ranked, ctx, holding) for v in VARIANTS]
 
 
 def _signal(variant, market, whales, open_positions, score_lookup, touch, now,
-            cfg, m0, ranked, ctx=None) -> Signal:
+            cfg, m0, ranked, ctx=None, holding=None) -> Signal:
     w, f = cfg["whale"], cfg["whale"]["fire"]
     total, scored = tally(variant, whales, cfg, ranked, ctx)
     side = YES if total[YES] >= total[NO] else NO      # a tie fails `ratio` below
@@ -218,7 +232,7 @@ def _signal(variant, market, whales, open_positions, score_lookup, touch, now,
     # agree. Always computed, so the share is on every row for the report even
     # when an earlier gate is the one reported.
     held, _, _ = holders_share(variant, market["condition_id"], open_positions,
-                               score_lookup, side, now, cfg, ranked, ctx)
+                               score_lookup, side, now, cfg, ranked, ctx, holding)
 
     if ratio < d(f["ratio"]):
         reason = "ratio"

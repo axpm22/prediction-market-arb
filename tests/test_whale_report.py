@@ -595,6 +595,38 @@ def test_the_report_prints_the_v5_elite_bar_and_its_population(cfg, tmp_path):
     assert "copy of V1" in md                                # the degenerate bucket
 
 
+def test_the_report_never_prints_a_cutoff_or_base_rate_from_after_now(cfg, tmp_path):
+    """Coordinator review of a42fb14, rule 9 determinism: `whale_elite.latest`
+    and the report's own `base_rates` read both picked the globally newest row
+    (`MAX(as_of)`) with no bound to the report's `now` — so re-running `arb
+    report --daily` for a past day printed today's cutoff/base rate instead of
+    the one that was actually in force on the day being reported. The existing
+    elite-bar test above only ever inserts rows at or before `now`, so it
+    cannot catch a later row leaking backward; this one plants one after `now`
+    for both tables and asserts the report still shows the earlier reading."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    future = NOW + timedelta(days=1)
+    con.execute("INSERT INTO elite_cutoffs (root, bucket, as_of, cutoff, n)"
+                " VALUES ('sports', 'baseball_mlb:WINNER', ?, '0.0118', 170)",
+                (NOW.isoformat(),))
+    con.execute("INSERT INTO elite_cutoffs (root, bucket, as_of, cutoff, n)"
+                " VALUES ('sports', 'baseball_mlb:WINNER', ?, '0.9999', 999)",
+                (future.isoformat(),))
+    con.execute("INSERT INTO base_rates (root, as_of, value, n) VALUES ('sports', ?, '0.0428', 6713)",
+                (NOW.isoformat(),))
+    con.execute("INSERT INTO base_rates (root, as_of, value, n) VALUES ('sports', ?, '0.9999', 1)",
+                (future.isoformat(),))
+    con.commit()
+
+    frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+
+    assert [dict(c) for c in frame["elite"]["cutoffs"]] == [
+        {"root": "sports", "bucket": "baseball_mlb:WINNER", "as_of": NOW.isoformat(),
+         "cutoff": "0.0118", "n": 170}]
+    assert [dict(b) for b in frame["base_rates"]] == [
+        {"root": "sports", "as_of": NOW.isoformat(), "value": "0.0428", "n": 6713}]
+
+
 def test_the_report_writes_nothing_to_the_tape(cfg, tmp_path):
     """Rule 9's spirit: the section is a read. Base rates are the LANE's write."""
     store, con = _ledger(tmp_path), _tape(tmp_path)
@@ -838,7 +870,7 @@ def test_whale_score_calibrate_prints_the_yaml_to_paste(cfg, tmp_path, capsys):
     assert "V2: 0.150000" in out and "V3: " in out
     assert "min_points:" in out                     # the YAML lines to paste
     assert "V4: 3" in out                # the literal thresholds come along, or
-    assert "V6: 0.0020" in out           # pasting the line drops a required key
+    assert "V6: 0.0008" in out           # pasting the line drops a required key
     assert "V6 =" not in out             # ... but V6 is never CALIBRATED: its
                                          # threshold is a measured literal (§7)
 

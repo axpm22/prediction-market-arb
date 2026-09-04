@@ -102,9 +102,15 @@ def _warn_truncated_once(con, wallet, observed_at, n) -> None:
 
 
 def _persist(con, chunk, wallet, observed_at, res) -> int:
-    """One page's rows, written now — not batched with later pages, so a
-    later page's failure or cap-cut can never discard what already landed
-    (rule 7; 2026-09-04 holdings-paging fix item 2)."""
+    """One page's rows, written AND COMMITTED now — not batched with later
+    pages, so a later page's failure or cap-cut can never discard what
+    already landed (rule 7; 2026-09-04 holdings-paging fix item 2). Fixer-D
+    review of a90a08d (C1): the commit used to be missing here and relied on
+    a LATER `_set_meta` call in the same wallet's poll to flush this
+    transaction — a page-2 failure `continue`s past that call, so a
+    process death before some unrelated later write happened to commit left
+    this page's real, already-fetched rows unreadable by any other
+    connection, contradicting this docstring."""
     rows = []
     for r in chunk:
         try:
@@ -113,6 +119,7 @@ def _persist(con, chunk, wallet, observed_at, res) -> int:
             res["bad_rows"] = res.get("bad_rows", 0) + 1
             log.warning("whale skipped an unreadable holdings row: %s", e)
     con.executemany(f"INSERT INTO holdings ({COLS}) VALUES ({','.join('?' * 10)})", rows)
+    con.commit()
     return len(rows)
 
 
@@ -161,6 +168,13 @@ def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
             continue                              # earlier pages this loop already
                                                    # persisted; no stamp, so still due
         if cut_by_cap:
+            # C3 (fixer-D review of a90a08d): retried WHOLE from offset 0, not
+            # resumed, so the pages it already fetched this cycle are re-persisted
+            # again next cycle under a new observed_at — the old observed_at's rows
+            # are now orphaned, and a wallet that keeps getting cut never stops
+            # accumulating them. Unbounded today; the retention change
+            # (.superpowers/sdd/retention-brief.md) is where `holdings` gets a
+            # bound, and belongs there rather than a one-off cleanup here.
             continue                              # cut by the budget: same as unpolled,
                                                    # retried whole next cycle
         if still_full:

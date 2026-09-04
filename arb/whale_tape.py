@@ -30,6 +30,10 @@ from arb.whale_rows import _keep
 # now (size only). `_iso` is re-exported: arb/whale_resolve.py imports the
 # collector's shared helpers from here, as it always has.
 from arb.whale_universe import _iso, persist_markets  # noqa: F401
+# I2 (review of a90a08d/fce71ea): the migration guard moved out to keep this
+# module from growing past its size budget — re-exported so `whale_tape._migrate`
+# stays the call every existing reference (open_tape, tests) uses.
+from arb.whale_migrate import _MIGRATIONS, _migrate  # noqa: F401
 
 log = get_logger("arb.whale", "logs/whale.log")
 
@@ -142,21 +146,6 @@ def open_tape(path: str | Path) -> sqlite3.Connection:
     _migrate(con)
     con.commit()
     return con
-
-
-# Every DDL above is CREATE TABLE IF NOT EXISTS, so a column added to an
-# existing tape needs an ALTER: (table, column, type), applied when
-# PRAGMA table_info says it is missing. The tape is not the ledger — rule 9
-# forbids UPDATE/DELETE on flat_bets/bet_events, not schema growth here.
-_MIGRATIONS = (("signals", "holders_ratio", "TEXT"),)    # §7 item 1b, 2026-09-04
-
-
-def _migrate(con) -> None:
-    for table, column, kind in _MIGRATIONS:
-        cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
-        if column not in cols:
-            con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
-            log.info("whale tape: added %s.%s", table, column)
 
 
 class _Bucket:

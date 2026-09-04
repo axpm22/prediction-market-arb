@@ -289,6 +289,11 @@ def _check_invariants(cfg):
             "cannot see the tape, so the other half of this check — a cutoff that "
             "falls below whale.min_score_lb makes V5 a copy of V1 — is a WARNING "
             "from the lane cycle (arb/whale_elite.py) and a line in the daily report")
+    if not Decimal(whale["dominance"]["min_volume_usd"]) > 0:
+        raise ConfigError(
+            f"whale.dominance.min_volume_usd ({whale['dominance']['min_volume_usd']}) must be "
+            "> 0 — it floors V6's normalising denominator; zero admits a division by zero and "
+            "negative flips the sign of every V6 point")
     if not Decimal(whale["size"]["min_stake_usd"]) <= Decimal(whale["size"]["max_stake_usd"]):
         raise ConfigError(
             f"whale.size.min_stake_usd ({whale['size']['min_stake_usd']}) must be <= "
