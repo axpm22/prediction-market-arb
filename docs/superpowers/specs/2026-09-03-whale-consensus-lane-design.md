@@ -851,7 +851,7 @@ whale:
   hygiene: { mm_window_secs: 600, mm_market_share: 0.30, mm_max_avg_usd: 50,
              both_sides_tolerance: 0.10, wash_gap_secs: 2 }
   fire: { ratio: 0.80, holders_ratio: 0.6667,   # 1b, amended 2026-09-04: entry also needs this share of the whales still HOLDING, between exit.flip_ratio (0.50) and fire.ratio (0.80) so a fired signal is never already flip-eligible; invariant exit.flip_ratio < fire.holders_ratio <= fire.ratio
-          min_points: { V1: 3, V2: null, V3: null, V4: 3, V5: 2, V6: 0.0020 },   # V5 (elite, 2026-09-04) and V6 (dominance) are LITERALS like V1/V4, never null
+          min_points: { V1: 3, V2: null, V3: null, V4: 3, V5: 2, V6: 0.0008 },   # V5 (elite, 2026-09-04) and V6 (dominance; 0.0020 -> 0.0008 amended 2026-09-04, venue volume_24h units) are LITERALS like V1/V4, never null
           elite_pct: 20,   # V5, added 2026-09-04: the percentile bar over the reference population — ALL scored wallets in the root (>=1 resolved position, point-in-time, hygiene-excluded removed), NOT the qualifying roster. Invariant 0 < elite_pct <= 100; a cutoff at or below min_score_lb makes V5 a copy of V1 (measured: that is what top 40% does today), which the cycle WARNs once a day and the daily report prints. 30 is the pre-declared fallback if the lane starves
           calibration_days: 3, calibration_min_whales: 10,   # calibration_days 14 -> 3 amended 2026-09-04 (provisional calibration)
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
