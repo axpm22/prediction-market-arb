@@ -179,6 +179,8 @@ SCHEMA = {
               "max_print_age_secs": NUM, "min_print_usd": NUM,
               "discovery_min_notional_usd": NUM,
               "retention": {"scope": STR, "global_min_print_usd": NUM, "raw_json": STR},
+              "nonsports": {"enabled": BOOL, "tags": MAP(STR), "pages": NUM,
+                            "min_volume_24h_usd": NUM, "min_lifetime_hours": NUM},
               "backfill": {"wallets_per_cycle": NUM, "pages_per_wallet": NUM,
                            "page_size": NUM, "cadence_secs": NUM,
                            "resolve_per_cycle": NUM, "map_per_cycle": NUM},
@@ -314,6 +316,19 @@ def _check_invariants(cfg):
             raise ConfigError(f"{key} ({value!r}) must be one of {list(allowed)} — the "
                               "collector implements no other mode, and a typo here would "
                               "quietly change what is stored")
+    # Non-sports roots amendment 2026-09-04: a whale ROOT is also the leg's
+    # Polymarket fee category, so a root that is not one would be priced at the
+    # default `polymarket.fee_rate` — the proposal's own "single most likely
+    # silent bug". `sports` as a value would pool a politics record with the
+    # sports one and defeat the no-transfer decision. Both are boot errors.
+    from arb.venues.fees import _PM_CATEGORY_RATE_KEY
+    for tag, root in whale["nonsports"]["tags"].items():
+        if root == "sports" or root not in _PM_CATEGORY_RATE_KEY:
+            raise ConfigError(
+                f"whale.nonsports.tags[{tag!r}] = {root!r} must be a Polymarket fee "
+                f"category other than 'sports' (one of "
+                f"{sorted(set(_PM_CATEGORY_RATE_KEY) - {'sports'})}) — the root IS the fee "
+                "category that prices the leg and isolates the score")
     if not Decimal(whale["poll_secs"]) >= Decimal(30):
         raise ConfigError(
             f"whale.poll_secs ({whale['poll_secs']}) must be >= 30 — the collector shares "

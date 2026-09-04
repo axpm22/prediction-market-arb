@@ -26,7 +26,8 @@ from arb.logutil import get_logger
 
 log = get_logger("arb.whale", "logs/whale.log")
 
-_MIGRATIONS = (("signals", "holders_ratio", "TEXT"),)    # §7 item 1b, 2026-09-04
+_MIGRATIONS = (("signals", "holders_ratio", "TEXT"),      # §7 item 1b, 2026-09-04
+                ("markets", "volume_24h", "TEXT"))        # non-sports roots, 2026-09-04
 
 
 def _migrate(con) -> None:

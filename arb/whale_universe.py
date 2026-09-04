@@ -19,7 +19,7 @@ log = get_logger("arb.whale", "logs/whale.log")
 # in whale.slug_sport_prefixes can be re-mapped LOCALLY when that map grows —
 # without it, an unmappable market would be stuck at sport=NULL forever.
 MARKET_COLS = ("condition_id, sport, market_type, line, start_utc, event_key,"
-               " tokens_json, slug, first_seen, last_seen")
+               " tokens_json, slug, first_seen, last_seen, volume_24h")
 # The ledger's PM sports quotes for ONE poll: served by idx_quotes_poll. A
 # fetched_at range instead would scan the 37 GB table. `poll_id` is bound by
 # the caller (`_poll_with_pm_rows`), never hard-coded to MAX(id) — see there.
@@ -37,6 +37,9 @@ class Market:
     start_utc: str | None
     event_key: str | None
     tokens: tuple = ()          # ((token_id, outcome_label), ...)
+    # the venue's own 24h volume when a Gamma call already answered it (V6's
+    # denominator for a market with no watch quote — non-sports roots, 2026-09-04)
+    volume_24h: str | None = None
 
 
 def _iso(value) -> str | None:
@@ -142,15 +145,33 @@ def universe(store_ro, cfg, now, res=None) -> list[Market]:
     return out
 
 
-def persist_markets(con, markets, now):
+def persist_markets(con, markets, now, first_sight_wins=False):
+    """`first_sight_wins` (non-sports roots, 2026-09-04) pins `sport` and
+    `start_utc` to whatever the row already holds instead of letting this
+    call's answer win.
+
+    The non-sports universe needs both. `start_utc` for a non-sports market is
+    Gamma's own `endDate`, and Gamma can EDIT an endDate after the fact — a
+    moving `start_utc` retroactively changes which of a whale's positions were
+    "pregame", which is look-ahead straight into the score (proposal §1 Risks).
+    `sport` because a market already mapped to a real sport must never be
+    re-labelled `politics` by a tag page that happens to list it.
+
+    The sports universe keeps the original excluded-wins behaviour: there the
+    watch poll IS the authority on both fields."""
+    sport = "COALESCE(sport, excluded.sport)" if first_sight_wins \
+        else "COALESCE(excluded.sport, sport)"
+    start = "COALESCE(start_utc, excluded.start_utc)" if first_sight_wins \
+        else "COALESCE(excluded.start_utc, start_utc)"
     con.executemany(
-        f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 10)}) "
+        f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 11)}) "
         "ON CONFLICT(condition_id) DO UPDATE SET last_seen=excluded.last_seen, "
-        "sport=COALESCE(excluded.sport, sport), "
+        f"sport={sport}, "
         "market_type=COALESCE(excluded.market_type, market_type), "
-        "start_utc=COALESCE(excluded.start_utc, start_utc), "
-        "tokens_json=excluded.tokens_json",
+        f"start_utc={start}, "
+        "tokens_json=excluded.tokens_json, "
+        "volume_24h=COALESCE(excluded.volume_24h, volume_24h)",
         [(m.condition_id, m.sport, m.market_type, m.line, m.start_utc, m.event_key,
-          json.dumps([list(t) for t in m.tokens]), None, now.isoformat(), now.isoformat())
-         for m in markets])
+          json.dumps([list(t) for t in m.tokens]), None, now.isoformat(), now.isoformat(),
+          m.volume_24h) for m in markets])
     con.commit()

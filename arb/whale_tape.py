@@ -92,10 +92,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_prints_key
     ON prints(tx_hash, proxy_wallet, asset, side, price, size, ts);
 CREATE INDEX IF NOT EXISTS idx_prints_market ON prints(condition_id, ts);
 CREATE INDEX IF NOT EXISTS idx_prints_wallet ON prints(proxy_wallet, ts);
+-- `volume_24h` (non-sports roots amendment 2026-09-04): the venue's own 24h
+-- volume, V6's denominator. The lane reads it from the ledger's watch quotes
+-- for a sports market, but a non-sports market has no watch quote at all, and
+-- an unknown volume reads as `dominance.min_volume_usd` ($5,000) — which on a
+-- $20M/day politics market would make every signal maximally dominant. So the
+-- Gamma figure is stored here when a Gamma call already answered it.
 CREATE TABLE IF NOT EXISTS markets (
     condition_id TEXT PRIMARY KEY, sport TEXT, market_type TEXT, line TEXT,
     start_utc TEXT, event_key TEXT, tokens_json TEXT, slug TEXT,
-    first_seen TEXT, last_seen TEXT);
+    first_seen TEXT, last_seen TEXT, volume_24h TEXT);
 CREATE TABLE IF NOT EXISTS wallets (
     proxy_wallet TEXT PRIMARY KEY, pseudonym TEXT, first_seen TEXT, source TEXT,
     backfilled_at TEXT, hygiene_flag TEXT, hygiene_at TEXT);

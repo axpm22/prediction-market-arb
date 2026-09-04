@@ -612,6 +612,61 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   universe market (hygiene's `mm` test needs the sub-floor
                                       #   rows there, so they are kept whole); `all` = keep
                                       #   everywhere (+864 B/row, measured mean); `none` = never.
+  nonsports:                          # L14 non-sports ROOTS (amendment 2026-09-04, proposal §1;
+                                      #   PREREGISTRATION row of the same date). The lane stops
+                                      #   being sports-only: a market's root IS its Polymarket fee
+                                      #   category, so one field prices the leg
+                                      #   (venues/fees.py _PM_CATEGORY_RATE_KEY), segregates the
+                                      #   report and isolates the score. No transfer between roots.
+    enabled: true                     # false = the pre-2026-09-04 sports-only lane, no Gamma tag
+                                      #   calls and no non-sports market in the 60 s universe
+    tags: { politics: politics, geopolitics: geopolitics, crypto: crypto }
+                                      # Gamma tag_slug -> whale ROOT, in PRIORITY order: an event
+                                      #   carries several tags (measured 2026-09-04: one event is
+                                      #   tagged crypto AND politics AND trump-presidency), so the
+                                      #   first key of this map that appears in the event's own
+                                      #   `tags` array decides the root — deterministic whichever
+                                      #   tag's page surfaced the market. Every value must be a
+                                      #   Polymarket fee category and never `sports` (loader
+                                      #   invariant): a root that is not a fee category would be
+                                      #   priced at the default `polymarket.fee_rate`, which is the
+                                      #   single most likely silent bug in this amendment.
+                                      #   Deliberately ABSENT (operator decision 2026-09-04):
+                                      #   weather, economy/business/science and esports — see
+                                      #   KNOWN_ISSUES.md "L14 deferred non-sports roots".
+    pages: 3                          # /events?tag_slug pages per tag per refresh, 100 events a
+                                      #   page, paged by `offset` (verified live 2026-09-04,
+                                      #   data/verified_facts.md: offsets 0/2/4 returned 6 distinct
+                                      #   events with no overlap). 3 tags x 3 pages = 9 paced calls
+                                      #   per refresh, on the same bucket as every other whale call
+                                      #   — worst case for the whale-backfill child moves from ~350
+                                      #   to ~359 calls (~718 s) against its 900 s cap.
+                                      #   The refresh CADENCE is backfill.cadence_secs (600) —
+                                      #   this runs inside `whale-backfill`, never in the 60 s lane
+                                      #   cycle, so there is deliberately no second cadence key to
+                                      #   drift out of step with it.
+    min_volume_24h_usd: 1000          # nested-market Gamma `volume24hr` floor. A NULL volume24hr
+                                      #   (measured 2026-09-04: 231 of 485 open crypto nested
+                                      #   markets) fails this floor — no measured flow is not an
+                                      #   unknown to be admitted.
+    min_lifetime_hours: 6             # market endDate minus the LATEST of its own startDate, its
+                                      #   own createdAt and the event's startDate. A market that
+                                      #   lives six hours cannot host a print-to-touch follow, an
+                                      #   exit, or a +10m markout. CORRECTION (measured 2026-09-04,
+                                      #   data/verified_facts.md): the proposal called this "the
+                                      #   noise rule that removes btc-updown-5m / eth-updown-15m" —
+                                      #   it is NOT. Those events read a 23.94 h lifetime on both
+                                      #   date pairs; what excludes them is the nonsports_max_days
+                                      #   (7) horizon below. This floor is kept as a cheap bound
+                                      #   that can only ever exclude, not as the noise rule.
+                                      # The booking horizon needs no key of its own: it is the
+                                      #   ledger's existing `nonsports_max_days` (7), applied both
+                                      #   to the universe here and by arb/tracker.py at booking,
+                                      #   because a non-sports WHALE candidate's category is not
+                                      #   `sports`. Measured 2026-09-04, that horizon — not the
+                                      #   volume floor — is what binds: of the open politics
+                                      #   markets 173/1,971 resolve within 7 days and 5 of those
+                                      #   clear $1,000; crypto contributes 0 of 1,219.
   backfill: { wallets_per_cycle: 3, pages_per_wallet: 40, page_size: 50,
               cadence_secs: 600, resolve_per_cycle: 1000, map_per_cycle: 1000 }
                                       # per-cycle backfill budget for newly discovered wallets.

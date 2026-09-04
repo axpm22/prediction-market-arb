@@ -1107,11 +1107,17 @@ def cmd_whale_backfill(cfg, store, args):
     snapshot, and always gets its full budget instead of being starved by
     whichever of the other two ran long that cycle."""
     from datetime import datetime, timezone
-    from arb import whale_backfill, whale_sweep, whale_tape
+    from arb import whale_backfill, whale_nonsports, whale_sweep, whale_tape
     now = datetime.now(timezone.utc)
     con = whale_tape.open_tape(cfg["whale"]["tape_db"])
     print(f"leaderboard: {whale_backfill.snapshot_leaderboard(cfg, con, now)} new wallets")
     print(f"  resolutions swept: {whale_sweep.resolve_sweep(cfg, con, now)}")
+    # The non-sports universe (amendment 2026-09-04) refreshes HERE, at
+    # `backfill.cadence_secs`, never in the 60 s lane cycle: +9 paced Gamma
+    # calls, so the child's worst case moves from ~350 to ~359 calls.
+    nres = whale_nonsports.nonsports_universe(cfg, con, now)
+    print(f"  non-sports universe: {nres['status']} calls={nres['calls']} "
+          f"events={nres['events']} markets={nres['markets']}")
     res = whale_backfill.backfill(cfg, con, now)
     print(f"  backfill: {res['status']} wallets={res['wallets']} calls={res['calls']} "
           f"rows={res['rows']} dupes={res['dupes']} bad_rows={res['bad_rows']}")

@@ -154,12 +154,13 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
             found.update(closed)
         rows = [_gamma_row(c, found.get(c), prefixes, now) for c in chunk]
         con.executemany(
-            f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 10)}) "
+            f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 11)}) "
             "ON CONFLICT(condition_id) DO UPDATE SET last_seen=excluded.last_seen, "
             "sport=COALESCE(sport, excluded.sport), "
             "market_type=COALESCE(market_type, excluded.market_type), "
             "start_utc=COALESCE(start_utc, excluded.start_utc), "
             "slug=COALESCE(slug, excluded.slug), "
+            "volume_24h=COALESCE(excluded.volume_24h, volume_24h), "
             "tokens_json=COALESCE(NULLIF(excluded.tokens_json, '[]'), tokens_json)",
             rows)
         con.commit()
@@ -190,8 +191,13 @@ def _gamma_row(cond, m, prefixes, now) -> tuple:
         start = _iso(m.get("gameStartTime"))
         tokens = [[t, o] for t, o in zip(_json_list(m.get("clobTokenIds")),
                                          _json_list(m.get("outcomes")))]
+    # `volume24hr` is a verified market-level field of this same Gamma answer
+    # (data/verified_facts.md 2026-09-04) — free here, and the only source of a
+    # 24h volume for a market the watch lane never quotes (non-sports roots).
+    volume = None if not m or m.get("volume24hr") is None else str(m["volume24hr"])
     return (cond, sport, mtype, None, start, None, json.dumps(tokens),
-            str(m.get("slug") or "") if m else None, now.isoformat(), now.isoformat())
+            str(m.get("slug") or "") if m else None, now.isoformat(), now.isoformat(),
+            volume)
 
 
 def _sport_of(slug: str, prefixes) -> str | None:
