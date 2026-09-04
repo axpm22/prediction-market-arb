@@ -100,6 +100,28 @@ def _due(con, cfg, condition_ids, now) -> list[str]:
     return due
 
 
+def record_resolution(con, cond, market, now, source) -> bool:
+    """One `resolutions` row for a Gamma market row IF it reports resolved or
+    void — the exact insert `read_resolutions` below used to do inline,
+    factored out (legacy re-map, 2026-09-04) so the mapper's own closed=true
+    retry (F0, arb/whale_map.py) can persist a resolution it stumbles across
+    while mapping without duplicating the insert. INSERT OR IGNORE keeps it
+    idempotent: whichever caller gets there first wins, the other's insert is
+    silently dropped. Returns whether a resolved/void status was found (not
+    whether the row was NEW — a duplicate still returns True, matching
+    `read_resolutions`'s original count semantics)."""
+    status, idx = parse_resolution(market)
+    if status == "open":
+        return False
+    con.execute(
+        "INSERT OR IGNORE INTO resolutions (condition_id, resolved_at,"
+        " winner_outcome_index, status, source, raw_json, fetched_at)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (cond, _iso(market.get("closedTime")) or now.isoformat(), idx, status,
+         source, json.dumps(market), now.isoformat()))
+    return True
+
+
 def read_resolutions(cfg, con, condition_ids, now, get=get_json) -> int:
     """Persist one `resolutions` row per market Gamma reports resolved or void.
     Open markets persist nothing, so they are simply re-read next cycle."""
@@ -121,16 +143,10 @@ def read_resolutions(cfg, con, condition_ids, now, get=get_json) -> int:
             break
         for m in body:
             cond = str(m.get("conditionId") or "")
-            status, idx = parse_resolution(m)
-            if cond not in chunk or status == "open":
+            if cond not in chunk:
                 continue
-            con.execute(
-                "INSERT OR IGNORE INTO resolutions (condition_id, resolved_at,"
-                " winner_outcome_index, status, source, raw_json, fetched_at)"
-                " VALUES (?,?,?,?,?,?,?)",
-                (cond, _iso(m.get("closedTime")) or now.isoformat(), idx, status,
-                 "gamma", json.dumps(m), now.isoformat()))
-            n += 1
+            if record_resolution(con, cond, m, now, "gamma"):
+                n += 1
         con.commit()
     return n
 

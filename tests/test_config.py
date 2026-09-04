@@ -89,8 +89,16 @@ def test_whale_config_loads_with_spec_values():
                              # exactly its 900s cap with no margin; worst case
                              # at 100: leaderboard 80 + sweep 50 + wallets 120
                              # + map 100 Gamma calls ~= 11 min, under the 900s
-                             # cap with ~200s margin
-                             "resolve_per_cycle": 100, "map_per_cycle": 100}
+                             # cap with ~200s margin. Raised AGAIN, 100 -> 1000
+                             # each (legacy re-map, 2026-09-04): GAMMA_IDS_PER_
+                             # CALL 2 -> 20 (verified live) means the SAME
+                             # 350-call worst case (leaderboard 80 + sweep
+                             # ceil(1000/20)=50 + wallets 120 + map 2 x
+                             # ceil(1000/20)=100) now processes 10x more ids a
+                             # cycle — needed to drain the 12,091 legacy
+                             # slug-NULL `markets` rows REVISIT_SQL can newly
+                             # reach
+                             "resolve_per_cycle": 1000, "map_per_cycle": 1000}
     assert w["universe_poll_lookback"] == 5
     assert w["fire"]["min_points"]["V1"] == 3
     assert w["fire"]["min_points"]["V2"] is None

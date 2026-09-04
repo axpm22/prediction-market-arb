@@ -36,11 +36,14 @@ log = get_logger("arb.whale", "logs/whale.log")
 DATA_API = "https://data-api.polymarket.com"
 GAMMA = "https://gamma-api.polymarket.com"
 # Endpoint shape, not tunables: 50 is the leaderboard page size probed in
-# Task 1 (spec §14's leaderboard block deliberately has no key for it), and 2
-# is the ONLY gamma condition_ids batch size verified — a larger cap was NOT
-# PROBED and rule 3 forbids guessing one.
+# Task 1 (spec §14's leaderboard block deliberately has no key for it).
+# GAMMA_IDS_PER_CALL=20 is the largest condition_ids batch VERIFIED (legacy
+# re-map, 2026-09-04, data/verified_facts.md last row): n=2/10/20 all
+# matched fully live; n=50 silently CAPPED at 20 rows (20/50 matched, no
+# error) — 20 is a hard ceiling, not a guess (rule 3), and `_gamma_url`
+# below refuses anything past it.
 LEADERBOARD_PAGE = 50
-GAMMA_IDS_PER_CALL = 2
+GAMMA_IDS_PER_CALL = 20
 SPORTS_MARKET_TYPE = {"moneyline": "WINNER", "totals": "TOTAL"}
 
 
@@ -51,7 +54,17 @@ def _gamma_url(ids, closed=False) -> str:
     whale_map's market mapper) so the query string is written once.
     `closed=true` is the only query verified to reach a resolved/archived
     market; the default index omits it (F0, mapper fix pass 2 2026-09-04 —
-    live probe in data/verified_facts.md: 0/2 without it, 2/2 with it)."""
+    live probe in data/verified_facts.md: 0/2 without it, 2/2 with it).
+
+    A batch over GAMMA_IDS_PER_CALL is refused (legacy re-map, 2026-09-04):
+    Gamma silently caps a 50-id call at 20 rows with no error, so a caller
+    that forgot to chunk would count real markets as absent — an id count
+    check here is the only thing standing between that and dropped markets,
+    since Gamma itself gives no signal."""
+    if len(ids) > GAMMA_IDS_PER_CALL:
+        raise ValueError(f"Gamma condition_ids batch of {len(ids)} exceeds "
+                         f"GAMMA_IDS_PER_CALL={GAMMA_IDS_PER_CALL} — a bigger batch "
+                         "silently drops markets (data/verified_facts.md)")
     url = GAMMA + "/markets?" + "&".join(f"condition_ids={c}" for c in ids)
     return f"{url}&closed=true" if closed else url
 

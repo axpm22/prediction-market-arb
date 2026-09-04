@@ -13,7 +13,7 @@ import pytest
 
 from arb.config import load
 from arb.venues.base import VenueError
-from arb import whale_backfill, whale_sweep, whale_tape, whale_universe
+from arb import whale_backfill, whale_map, whale_resolve, whale_sweep, whale_tape, whale_universe
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 NOW = datetime(2026, 9, 3, 17, 0, 0, tzinfo=timezone.utc)
@@ -117,6 +117,21 @@ def test_leaderboard_snapshots_is_indexed_by_snapshot_at(tmp_path):
     idx_sql = [r[0] for r in con.execute(
         "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='leaderboard_snapshots'")]
     assert any(sql and "snapshot_at" in sql for sql in idx_sql)
+
+
+def test_gamma_ids_per_call_is_20_and_a_bigger_batch_is_refused():
+    """Legacy re-map (2026-09-04, data/verified_facts.md last row): a live
+    probe verified 20/20 ids matched in one Gamma condition_ids call (n=2,
+    10, 20 all clean); n=50 silently CAPPED at 20 rows with no error — a
+    batch above 20 would count real markets as absent with nothing to catch
+    it. `_gamma_url` is the one builder every Gamma condition_ids caller
+    (whale_map's mapper, whale_resolve's resolution reader) goes through, so
+    the guard belongs there, not in each caller."""
+    assert whale_tape.GAMMA_IDS_PER_CALL == 20
+    ids20 = [f"0x{i}" for i in range(20)]
+    whale_tape._gamma_url(ids20)                       # exactly the cap: must not raise
+    with pytest.raises(ValueError, match="GAMMA_IDS_PER_CALL"):
+        whale_tape._gamma_url(ids20 + ["0xtoomany"])
 
 
 # --- universe ---------------------------------------------------------------
@@ -799,6 +814,89 @@ def test_map_markets_reaches_an_old_market_via_a_closed_true_retry(tmp_path):
     assert whale_tape._meta(con, f"unmappable:{cond}") is None
 
 
+def test_revisit_sql_drops_the_permanent_slug_floor_and_absent_never_reasked(tmp_path):
+    """Legacy re-map (2026-09-04): 12,091 `markets` rows the OLD mapper
+    (pre-4b3bcc9) inserted from Gamma's default index alone carry
+    slug/sport/start_utc all NULL; REVISIT_SQL's permanent `slug IS NOT
+    NULL` floor meant they could never be re-asked. Dropping the floor
+    readmits them; an `absent:` marker (PERMANENT, unlike the one-day
+    `unmappable:` throttle) stops Gamma being asked forever once BOTH
+    passes come back empty for an id that just isn't there, while a legacy
+    row Gamma DOES find (closed pass — live probe: these ids exist there
+    with closed=true) gets slug/sport/start filled exactly like any other
+    revisit row."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    gamma = _fixture("whale_gamma_condition_ids_repeated")[0]
+    found_cond = gamma["conditionId"]
+    _map_row(con, found_cond, sport=None, market_type=None, start_utc=None, slug=None,
+           first_seen="2026-08-01T00:00:00+00:00")
+    _map_row(con, "0xgone", sport=None, market_type=None, start_utc=None, slug=None,
+           first_seen="2026-08-02T00:00:00+00:00")
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 40})
+
+    # Pre-fix RED: the permanent slug floor selects NEITHER row (both are
+    # legacy slug-NULL rows) — this is the bug the brief describes.
+    revisit = [r[0] for r in con.execute(whale_map.REVISIT_SQL, ("2026-09-03", 40))]
+    assert set(revisit) == {found_cond, "0xgone"}
+
+    # default pass matches `found_cond` only; closed pass finds nothing for
+    # either (so "0xgone" is absent from BOTH passes).
+    get = FakeGet([gamma], [])
+    res = whale_backfill.map_markets(cfg, con, NOW, get=get)
+
+    row = con.execute("SELECT * FROM markets WHERE condition_id=?", (found_cond,)).fetchone()
+    assert row["sport"] == "baseball_kbo" and row["market_type"] == "WINNER"
+    assert row["start_utc"] == "2026-08-09T09:00:00+00:00"
+    assert res["mapped"] == 1 and res["unmappable"] == 1
+    assert whale_tape._meta(con, f"absent:0xgone") == NOW.strftime("%Y-%m-%d")
+    assert whale_tape._meta(con, f"absent:{found_cond}") is None
+
+    # a new day clears the one-day `unmappable:` throttle, but `absent:` is
+    # permanent: REVISIT_SQL must never select "0xgone" again.
+    tomorrow = (NOW + timedelta(days=1)).strftime("%Y-%m-%d")
+    revisit_after = [r[0] for r in con.execute(whale_map.REVISIT_SQL, (tomorrow, 40))]
+    assert revisit_after == []
+
+
+def test_mapper_closed_pass_records_a_resolution_and_the_sweep_ignores_it(tmp_path):
+    """Legacy re-map (2026-09-04): the closed=true retry (F0) already fetches
+    the FULL resolved-market row for anything missing from Gamma's default
+    index — a Gamma row this mapper is about to use for sport/start mapping
+    may carry a winner (`parse_resolution`) that the resolution sweep would
+    otherwise spend its own call re-asking for once this market ages out of
+    the 60s cycle's universe. `record_resolution` (shared with
+    `read_resolutions`, arb/whale_resolve.py) persists it right here,
+    source='mapper'; SWEEP_SQL's `NOT EXISTS resolutions` then excludes the
+    market with no wasted call."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    resolved = dict(_fixture("whale_gamma_resolved"))
+    resolved["slug"] = "kbo-lot-kt-2026-08-09"            # known prefix -> baseball_kbo
+    resolved["sportsMarketType"] = "moneyline"
+    resolved["gameStartTime"] = "2026-09-01 09:00:00+00"  # within resolve_after_hours/giveup window
+    cond = resolved["conditionId"]
+    _print(con, "0xw", cond, "BUY", "900", int(NOW.timestamp()) - 100)
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40, "page_size": 50,
+                         "map_per_cycle": 40, "resolve_per_cycle": 40})
+
+    res = whale_backfill.map_markets(cfg, con, NOW, get=FakeGet([], [resolved]))
+
+    row = con.execute("SELECT sport, market_type, start_utc FROM markets "
+                      "WHERE condition_id=?", (cond,)).fetchone()
+    assert row["sport"] == "baseball_kbo" and row["market_type"] == "WINNER"
+    assert res["mapped"] == 1
+    resolution = whale_resolve.resolution_for(con, cond)
+    assert resolution is not None and resolution.status == "resolved"
+    assert con.execute("SELECT source FROM resolutions WHERE condition_id=?",
+                       (cond,)).fetchone()[0] == "mapper"
+
+    get2 = FakeGet([])
+    n = whale_sweep.resolve_sweep(cfg, con, NOW, get=get2)
+    assert n == 0 and get2.urls == []          # already resolved, never re-asked
+
+
 def test_map_markets_never_overwrites_a_seeded_sport_with_a_slug_guess(tmp_path):
     """C1 (mapper fix pass 2, 2026-09-04): the upsert used to let THIS call's
     slug-heuristic sport (`sport=COALESCE(excluded.sport, sport)`, new wins)
@@ -920,7 +1018,12 @@ def test_map_markets_prefix_only_remap_needs_no_gamma_call(tmp_path):
 def test_map_markets_marks_an_unmappable_revisit_row_for_the_day(tmp_path):
     """`unmappable:<cond>` mirrors `swept:`'s idiom: a row Gamma still can't
     map is skipped for the REST of today's cycles (no wasted calls chasing a
-    market that will never resolve) and picked back up tomorrow."""
+    market that will never resolve) and picked back up tomorrow — UNLESS
+    Gamma found nothing for it on EITHER pass (legacy re-map, 2026-09-04:
+    see test_revisit_sql_drops_the_permanent_slug_floor_and_absent_never_
+    reasked): that additionally earns the row a PERMANENT `absent:` marker,
+    so a condition_id Gamma has never heard of is asked once, not every day
+    forever."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     _map_row(con, "0xhopeless", sport=None, market_type=None, start_utc=None,
            slug="will-something-happen-2026")             # a real slug, no prefix maps it
@@ -932,13 +1035,13 @@ def test_map_markets_marks_an_unmappable_revisit_row_for_the_day(tmp_path):
     res1 = whale_backfill.map_markets(cfg, con, NOW, get=get)
     res2 = whale_backfill.map_markets(cfg, con, NOW, get=get)   # same day: must not re-ask
     tomorrow = NOW + timedelta(days=1)
-    res3 = whale_backfill.map_markets(cfg, con, tomorrow, get=get)  # new day: retried
+    res3 = whale_backfill.map_markets(cfg, con, tomorrow, get=get)  # new day: still absent
 
     # F0: Gamma finding nothing on the default pass earns the id a SECOND,
     # closed=true call before it counts as unmappable — 2 calls, not 1.
     assert res1["unmappable"] == 1 and res1["calls"] == 2
     assert res2["unmappable"] == 0 and res2["calls"] == 0       # skipped, marker still today
-    assert res3["unmappable"] == 1 and res3["calls"] == 2       # marker expired, re-asked
+    assert res3["unmappable"] == 0 and res3["calls"] == 0       # absent: is permanent
 
 
 def test_map_markets_bounds_new_ids_and_revisit_rows_together(tmp_path):

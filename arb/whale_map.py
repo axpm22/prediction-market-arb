@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 
+from arb.whale_resolve import record_resolution
 from arb.whale_tape import (GAMMA_IDS_PER_CALL, SPORTS_MARKET_TYPE, _call,
                             _gamma_url, _json_list, _set_meta, log)
 from arb.whale_universe import MARKET_COLS, _iso
@@ -29,16 +30,28 @@ MAP_SQL = """
 # once a condition_id had ANY `markets` row, MAP_SQL's LEFT JOIN could never
 # select it again, so a row stored with sport set (e.g. by a one-off prefix
 # remap) and market_type still NULL was stuck that way forever, and could
-# never enter SWEEP_SQL (which requires both). `slug IS NOT NULL` is the
-# floor: with no slug Gamma never found the market at all, and there is
-# nothing left to retry. The `unmappable` join is `swept:`'s own idiom — a
-# row Gamma still couldn't map today is skipped until tomorrow instead of
-# spending the same call every cycle for nothing.
+# never enter SWEEP_SQL (which requires both).
+#
+# The `slug IS NOT NULL` floor this query used to carry (mapper fix pass
+# 2026-09-04) is GONE (legacy re-map, 2026-09-04): it read as "no slug means
+# Gamma never found the market, nothing left to retry", but 12,091 `markets`
+# rows the OLD mapper (pre-4b3bcc9) inserted from Gamma's default index
+# alone carry slug/sport/start_utc all NULL — the floor made those rows
+# PERMANENTLY unrevisitable, and a live probe found the ids DO exist on
+# Gamma with `closed=true`. The `absent:` join below replaces it as the
+# permanent stop: only an id `_map_markets` has actually asked TWICE
+# (default pass, then closed=true) and found nowhere both times earns it, so
+# a legacy slug-NULL row gets a real chance before being excluded for good.
+# The `unmappable` join is `swept:`'s own idiom — a row Gamma still
+# couldn't map today is skipped until tomorrow instead of spending the same
+# call every cycle for nothing; `absent` is its permanent sibling, immune to
+# the day-string comparison.
 REVISIT_SQL = """
     SELECT m.condition_id FROM markets m
      LEFT JOIN meta u ON u.key = 'unmappable:' || m.condition_id
-     WHERE m.slug IS NOT NULL
-       AND (m.sport IS NULL OR m.market_type IS NULL OR m.start_utc IS NULL)
+     LEFT JOIN meta a ON a.key = 'absent:' || m.condition_id
+     WHERE (m.sport IS NULL OR m.market_type IS NULL OR m.start_utc IS NULL)
+       AND a.value IS NULL
        AND (u.value IS NULL OR u.value <> ?)
      ORDER BY m.first_seen, m.condition_id
      LIMIT ?"""
@@ -78,8 +91,9 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
     old/resolved market, so an id absent from the first (default) pass gets a
     SECOND request with `&closed=true` before it counts as not-on-Gamma —
     reuses `whale_resolve`'s own closed=true idiom (`_gamma_url`) rather than
-    duplicating it. At most GAMMA_IDS_PER_CALL=2 ids a call (rule 3: a larger
-    batch was never probed); the retry's id list is already a subset of one
+    duplicating it. At most GAMMA_IDS_PER_CALL=20 ids a call (rule 3: verified
+    live, legacy re-map 2026-09-04 — a larger batch silently drops markets);
+    the retry's id list is already a subset of one
     such chunk, so it never needs its own re-chunking.
 
     Upserts with COALESCE, EXISTING non-NULL wins (C1, mapper fix pass 2):
@@ -100,7 +114,23 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
     to skip the marker on exactly that row (previously: `r[1] and r[2]`,
     sport+market_type only, ignoring start_utc — the same miss REVISIT_SQL
     itself checks for, so an id missing only start_utc got no marker and sat
-    at the head of the revisit queue every cycle forever)."""
+    at the head of the revisit queue every cycle forever).
+
+    The `absent:` marker (legacy re-map, 2026-09-04) is set only for an id
+    still missing from `found` after BOTH passes — the permanent sibling of
+    `unmappable:` below: REVISIT_SQL excludes it forever, not just for
+    today, because two real asks (default index, then closed=true) both
+    came back with nothing. This is what lets the old mapper's 12,091
+    slug-NULL legacy rows re-enter the revisit queue (REVISIT_SQL's
+    `slug IS NOT NULL` floor is gone) without looping on Gamma forever for
+    the ones that turn out not to exist there either.
+
+    A closed-pass Gamma row this call is about to mine for sport/start_utc
+    may ALSO be a resolved market (F0's second pass is the same query
+    `read_resolutions` uses) — `record_resolution` (arb/whale_resolve.py,
+    shared with the resolution reader, source='mapper') persists it right
+    here so the resolution sweep never spends its own call re-asking the
+    same question once this market ages out of the 60s cycle's universe."""
     prefixes = cfg["whale"]["slug_sport_prefixes"]
     today = now.strftime("%Y-%m-%d")
     for i in range(0, len(todo), GAMMA_IDS_PER_CALL):
@@ -108,7 +138,10 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
         found = _gamma_fetch(cfg, bucket, get, chunk, res)
         missing = [c for c in chunk if c not in found]
         if missing:
-            found.update(_gamma_fetch(cfg, bucket, get, missing, res, closed=True))
+            closed = _gamma_fetch(cfg, bucket, get, missing, res, closed=True)
+            for cond, m in closed.items():
+                record_resolution(con, cond, m, now, "mapper")
+            found.update(closed)
         rows = [_gamma_row(c, found.get(c), prefixes, now) for c in chunk]
         con.executemany(
             f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 10)}) "
@@ -120,6 +153,9 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
             "tokens_json=COALESCE(NULLIF(excluded.tokens_json, '[]'), tokens_json)",
             rows)
         con.commit()
+        for cond in missing:
+            if cond not in found:
+                _set_meta(con, f"absent:{cond}", today)
         stored = {r["condition_id"]: r for r in con.execute(
             f"SELECT condition_id, sport, market_type, start_utc FROM markets "
             f"WHERE condition_id IN ({','.join('?' * len(chunk))})", chunk)}

@@ -346,6 +346,20 @@ supervisor:
                                     #   pass), pushing the total to 450 calls ~= 900s — exactly
                                     #   this cap, with NO margin — so map_per_cycle was lowered
                                     #   200 -> 100 to restore it.
+                                    #   Recomputed AGAIN (legacy re-map, 2026-09-04):
+                                    #   GAMMA_IDS_PER_CALL 2 -> 20 (batch of 20 ids verified
+                                    #   20/20 live, n=50 silently caps at 20 — data/
+                                    #   verified_facts.md) lets whale.backfill.map_per_cycle and
+                                    #   resolve_per_cycle both rise 100 -> 1000 for the SAME call
+                                    #   count: sweep ceil(1000/20)=50, map 2 passes (worst case,
+                                    #   every id needs the closed=true retry) x ceil(1000/20)=100
+                                    #   -> total unchanged at leaderboard 80 + sweep 50 + wallets
+                                    #   120 + map 100 = 350 calls ~= 700s, same ~200s margin as
+                                    #   before. This unlocks the 12,091 `markets` rows the
+                                    #   pre-4b3bcc9 mapper left slug/sport/start_utc NULL
+                                    #   (REVISIT_SQL's permanent slug floor on them is gone,
+                                    #   arb/whale_map.py) — at 1000/cycle the backlog drains in
+                                    #   ~12 cycles (~2h at cadence_secs=600).
   schedule_catchup_grace_mins: 30   # on (re)start, only fire scheduled slots missed within
                                     #   this window; older slots are marked done, not burst-fired (H9)
   stagger_secs: 15                  # boot offset between lanes — lockstep fan-out
@@ -547,7 +561,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
   min_print_usd: 200                  # prints smaller than this are noise, not signal
   discovery_min_notional_usd: 1000    # minimum notional for a wallet to enter whale discovery
   backfill: { wallets_per_cycle: 3, pages_per_wallet: 40, page_size: 50,
-              cadence_secs: 600, resolve_per_cycle: 100, map_per_cycle: 100 }
+              cadence_secs: 600, resolve_per_cycle: 1000, map_per_cycle: 1000 }
                                       # per-cycle backfill budget for newly discovered wallets.
                                       #   cadence_secs is the `whale-backfill` process's own
                                       #   interval (spec §14): five wallets x 40 pages is ~7 min
@@ -578,6 +592,18 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   margin the reviewed commit had — see the worst-case
                                       #   reconciliation next to max_child_runtime_secs.whale-backfill
                                       #   below.
+                                      #   Raised AGAIN, both 100 -> 1000 (legacy re-map,
+                                      #   2026-09-04): GAMMA_IDS_PER_CALL 2 -> 20 (batch of 20
+                                      #   verified live, data/verified_facts.md) means the SAME
+                                      #   call count now covers 10x more ids a cycle — sweep
+                                      #   ceil(1000/20)=50, map 2 passes x ceil(1000/20)=100 —
+                                      #   restoring the same 350-call / ~700s worst case with
+                                      #   ~200s margin. Needed to drain the 12,091 legacy
+                                      #   `markets` rows the OLD (pre-4b3bcc9) mapper left with
+                                      #   slug/sport/start_utc all NULL: REVISIT_SQL's permanent
+                                      #   `slug IS NOT NULL` floor is gone (arb/whale_map.py), so
+                                      #   they re-enter this same queue; at 1000/cycle the
+                                      #   backlog drains in ~12 cycles (~2h at cadence_secs=600).
   page_size: 10000                    # trades rows per call (10,000 verified 2026-09-03);
                                       #   paging stops on age, never on `start`
   max_offset: 10000                   # the feed 400s past this (observed 2026-09-04);
