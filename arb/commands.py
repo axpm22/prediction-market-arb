@@ -33,10 +33,13 @@ def cmd_negrisk_scan(cfg, store, args):
     import json as _json
     from datetime import datetime, timezone
 
+    from arb.logutil import get_logger
     from arb.negrisk import scan_group
     from arb.venues import polymarket
+    from arb.venues.base import VenueError
 
     from arb.tracker import candidate_from_basket, process_poll
+    log = get_logger("arb.negrisk", "logs/scan.log")
     if not cfg["negrisk"]["enabled"]:
         console.print("[yellow]negrisk disabled[/]")
         return 0
@@ -45,6 +48,7 @@ def cmd_negrisk_scan(cfg, store, args):
     console.print(f"[dim]negrisk: {len(events)} flagged events across tags {tags}[/]")
     now = datetime.now(timezone.utc)
     all_opps, all_quotes, skipped = [], [], []
+    pm_ok, pm_error = True, None
     for e in events:
         markets = [m for m in e.get("markets", []) if m.get("clobTokenIds")]
         if not markets or len(markets) > int(cfg["negrisk"]["max_outcomes"]):
@@ -56,7 +60,15 @@ def cmd_negrisk_scan(cfg, store, args):
         tokens = []
         for m in markets:
             tokens.extend(_json.loads(m["clobTokenIds"]))
-        books = polymarket.fetch_books(cfg, tokens)
+        try:
+            books = polymarket.fetch_books(cfg, tokens)
+        except VenueError as ex:
+            # transient venue outage (TLS/5xx/429, watch-lane parity §fetch_all_venues):
+            # skip this basket, never the whole cycle — the supervisor's own
+            # cadence is the retry (no retry inside the cycle)
+            pm_ok, pm_error = False, str(ex)
+            skipped.append((f"nonsports:pm:{e['id']}", "venue-error:polymarket"))
+            continue
 
         def side_of(book, key):
             if not book or not book.get(key):
@@ -96,10 +108,22 @@ def cmd_negrisk_scan(cfg, store, args):
         for b in opps:
             b["resolution_date"] = e.get("endDate")  # D2 horizon gate input
         all_opps.extend(opps)
+    if not pm_ok:
+        log.warning("negrisk: polymarket books fetch failed, baskets skipped "
+                    "this cycle: %s", pm_error)
 
+    kalshi_ok = True
     if cfg["negrisk"]["kalshi_events"]:
         from arb.nonsports.kalshi_events import scan_kalshi_events
-        k_quotes, k_baskets, n_checked = scan_kalshi_events(cfg, now)
+        try:
+            k_quotes, k_baskets, n_checked = scan_kalshi_events(cfg, now)
+        except VenueError as ex:
+            # same shape as the polymarket books fetch: a venue outage skips
+            # this cycle's Kalshi baskets, never the whole poll
+            kalshi_ok = False
+            k_quotes, k_baskets, n_checked = [], [], 0
+            log.warning("negrisk: kalshi events fetch failed, baskets skipped "
+                        "this cycle: %s", ex)
         all_quotes.extend(k_quotes)
         all_opps.extend(k_baskets)
         console.print(f"[dim]kalshi ME: {n_checked} event groups checked, "
@@ -113,11 +137,19 @@ def cmd_negrisk_scan(cfg, store, args):
         {"poll_id": poll_id, "fingerprint": "", "kind": "NEGRISK",
          "event_key": ek, "venue_pair": "polymarket:self", "legs_json": "[]",
          "reason": reason, "edge_points": None} for ek, reason in skipped])
+    venue_status = {"polymarket": {"ok": pm_ok, "n": len(all_quotes), "latency_ms": 0}}
+    if cfg["negrisk"]["kalshi_events"]:
+        venue_status["kalshi"] = {"ok": kalshi_ok, "n": len(k_quotes), "latency_ms": 0}
+    # the poll/poll_venues rows are this lane's only sign of life (negrisk
+    # never calls heartbeat.beat() — see heartbeat.py stale_lanes), so they
+    # must persist even when a venue fetch failed this cycle
+    store.insert_many("poll_venues", [
+        {"poll_id": poll_id, "venue": v, "ok": st["ok"], "n_quotes": st["n"],
+         "latency_ms": st["latency_ms"]} for v, st in venue_status.items()])
     # D1 (review 2026-07-10): baskets BOOK — $1 across the basket (§10.1)
     process_poll(cfg, store, poll_id, "negrisk",
                  [candidate_from_basket(b) for b in all_opps],
-                 {"polymarket": {"ok": True, "n": len(all_quotes),
-                                 "latency_ms": 0}}, now=now)
+                 venue_status, now=now)
     store.insert_many("opportunities", [
         {"poll_id": poll_id, "fingerprint": o["fingerprint"],
          "position_key": o["position_key"], "kind": o["kind"], "category": o["category"],
@@ -161,9 +193,35 @@ def cmd_report(cfg, store, args):
     outdir = Path(str(cfg["report_dir"]))
     whale = whale_frame(cfg, store, hashes_log_path=outdir / HASHES_LOG,
                         producing_day=day)
-    write_daily(cfg, store, day, outdir=outdir, whale_frame=whale)
+    frame = write_daily(cfg, store, day, outdir=outdir, whale_frame=whale)
     print_daily(cfg, store, day, whale_frame=whale)
+    _notify_daily(cfg, frame, whale)
     return 0
+
+
+def _notify_daily(cfg, frame, whale) -> None:
+    """notify hooks `daily_report` and `kill_rule_fired` (see arb/notify.py).
+    A notifier failure must never break the report that triggered it."""
+    try:
+        from arb.notify import post
+        events = cfg["notify"]["events"]
+        if "daily_report" in events:
+            summary = {
+                "day": frame["day"], "headline_pnl": frame["headline_pnl"],
+                "by_class": {f"{kind}/{lane}/{variant}": a
+                             for (kind, lane, variant), a in frame["by_class"].items()}}
+            if whale is not None:
+                summary["whale"] = {
+                    "signals_fired_24h": whale["signals"]["fired_24h"],
+                    "bets": whale["bets"], "exits": whale["exits"],
+                    "kill_states": {r["rule"]: r["state"] for r in whale["kill"]["rules"]}}
+            post(cfg, "daily_report", summary)
+        if whale is not None and "kill_rule_fired" in events:
+            for rule in whale["kill"]["rules"]:
+                if rule["state"] == "FIRED":
+                    post(cfg, "kill_rule_fired", rule)
+    except Exception as e:  # noqa: BLE001 — a notifier failure must never break `report`
+        console.print(f"[yellow]notify failed: {e}[/]")
 
 
 def cmd_scan(cfg, store, args):

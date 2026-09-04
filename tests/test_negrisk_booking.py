@@ -174,6 +174,40 @@ def test_negrisk_scan_lots_skipped_events(tmp_path, monkeypatch):
         [("too-many-outcomes", "nonsports:pm:BIG")]
 
 
+def test_negrisk_scan_survives_polymarket_venue_error(tmp_path, monkeypatch):
+    # reproduces the live TLS-failure crash (commands.py cmd_negrisk_scan,
+    # polymarket.fetch_books line): a VenueError from the books POST must not
+    # take the whole cycle down (watch-lane parity, arb/watch.py fetch_all_venues)
+    # — the poll/poll_venues rows are the lane's only sign of life (negrisk
+    # never calls heartbeat.beat(), see heartbeat.py stale_lanes)
+    from types import SimpleNamespace
+
+    from arb.commands import cmd_negrisk_scan
+    from arb.venues.base import VenueError
+    import arb.nonsports.kalshi_events as ke
+    import arb.venues.polymarket as pm
+    ev = {"id": "E10", "negRisk": True, "_tag": "politics", "title": "t",
+          "markets": [{"clobTokenIds": json.dumps(["y1", "n1"]),
+                       "groupItemTitle": "o0", "volume24hr": 1}]}
+
+    def boom(cfg, tokens):
+        raise VenueError("TLS failure from clob.polymarket.com: SSLV3_ALERT_BAD_RECORD_MAC")
+
+    monkeypatch.setattr(pm, "fetch_negrisk_events", lambda cfg, tags: [ev])
+    monkeypatch.setattr(pm, "fetch_books", boom)
+    monkeypatch.setattr(ke, "scan_kalshi_events", lambda cfg, now: ([], [], 0))
+    store = Store(tmp_path / "v.sqlite")
+    rc = cmd_negrisk_scan(CFG, store, SimpleNamespace(once=True))
+    assert rc == 0
+    assert [r["kind"] for r in store.query("SELECT kind FROM polls")] == ["negrisk"]
+    pv = {r["venue"]: r["ok"] for r in store.query("SELECT venue, ok FROM poll_venues")}
+    assert pv["polymarket"] == 0
+    # books nothing: no basket could be priced, so nothing gets booked
+    assert not store.query("SELECT 1 FROM flat_bets")
+    lot = store.query("SELECT reason FROM left_on_table WHERE event_key='nonsports:pm:E10'")
+    assert [r["reason"] for r in lot] == ["venue-error:polymarket"]
+
+
 def test_migration_6_indexes_exist(tmp_path):
     store = Store(tmp_path / "i.sqlite")
     idx = {r[1] for r in store.conn.execute(
