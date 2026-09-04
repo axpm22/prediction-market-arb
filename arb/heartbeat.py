@@ -145,6 +145,11 @@ def _base_lane_interval(cfg, name: str) -> float:
         return float(cfg["nonsports"]["watch_interval_secs"])
     if name == "verify":
         return float(cfg["verify"]["poll_secs"])
+    if name == "whale":
+        return float(cfg["whale"]["poll_secs"])
+    if name == "whale-backfill":
+        # its own process: ~11 min of paced calls per cycle (design §5 step 4)
+        return float(cfg["whale"]["backfill"]["cadence_secs"])
     return float(cfg["watch_interval_secs"])
 
 
@@ -165,9 +170,11 @@ def lane_interval(cfg, name: str, now_ny: datetime | None = None) -> float:
     return base
 
 
-# supervisor process name -> polls.kind. verify writes annotations, not polls.
+# supervisor process name -> polls.kind. verify writes annotations, not polls,
+# and whale-backfill writes only to the tape: both are absent here on purpose,
+# so the silence alarm never asks for a poll row they can never produce.
 POLL_KIND = {"watch": "watch", "live": "live", "negrisk": "negrisk",
-             "political": "political", "mapped": "mapped"}
+             "political": "political", "mapped": "mapped", "whale": "whale"}
 
 
 def stale_lanes(cfg, store, now_utc: datetime) -> list[tuple[str, float]]:

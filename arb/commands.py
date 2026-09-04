@@ -899,6 +899,24 @@ def cmd_whale_tape(cfg, store, args):
     print(f"  discovered: {whale_backfill.discover_wallets(cfg, con, now)} new wallets")
 
 
+def cmd_whale(cfg, store, args):
+    """One L14 lane cycle (design §5 steps 1-9): collect, score, signal, book,
+    exit. Never backfills — that is `whale-backfill --once`, its own process."""
+    from datetime import datetime, timezone
+    from arb.lanes.whale import run_whale_cycle
+    from arb.whale_tape import open_tape
+    con = open_tape(cfg["whale"]["tape_db"])
+    res = run_whale_cycle(cfg, store, con, datetime.now(timezone.utc))
+    print(f"whale: {res['status']} markets={res['markets']} prints={res['prints']} "
+          f"bad_rows={res['bad_rows']} new_wallets={res['wallets']} "
+          f"hygiene_excluded={res['hygiene_excluded']}")
+    print(f"  signals: evaluated={res['signals_evaluated']} fired={res['fired']} "
+          f"suppressed={res['suppressed']}")
+    print(f"  booked={res['booked']} exited={res['exited']} "
+          f"exit_no_bid={res['exit_no_bid']} quotes_rows={res['quotes_rows']}")
+    return 0
+
+
 def cmd_whale_backfill(cfg, store, args):
     """Daily leaderboard snapshot plus the per-wallet trade-history backfill."""
     from datetime import datetime, timezone

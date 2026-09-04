@@ -97,8 +97,13 @@ def main(argv=None):
                                                 "whale lane (keyless, 0 credits)")
     p_whale.add_argument("--once", action="store_true",
                          help="one collector cycle (the only mode until the lane lands)")
-    sub.add_parser("whale-backfill", help="daily leaderboard snapshot + per-wallet "
-                                          "trade-history backfill for the L14 whale lane")
+    p_wl = sub.add_parser("whale", help="L14 whale-consensus lane: score, signal, "
+                                        "book and exit (supervisor-owned, keyless)")
+    p_wl.add_argument("--once", action="store_true")
+    p_wb = sub.add_parser("whale-backfill", help="daily leaderboard snapshot + per-wallet "
+                                                 "trade-history backfill for the L14 whale "
+                                                 "lane (its own process: ~11 min a cycle)")
+    p_wb.add_argument("--once", action="store_true")
     p_bench = sub.add_parser("bench", help="score and rank every STRATEGIES.md lane on "
                                            "the data we hold (read-only)")
     p_bench.add_argument("--pull", action="store_true",

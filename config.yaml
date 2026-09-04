@@ -308,17 +308,25 @@ supervisor:
   processes: { watch: true, live: true,    # add lanes deliberately, one at a time
                negrisk: true, political: true,    # non-sports pivot (plan Phase 2)
                mapped: true,                      # adjudicated cross-venue pairs
-               verify: true }                     # 10s re-quote of fresh locked flags.
+               verify: true,                      # 10s re-quote of fresh locked flags.
                                                   #   Implemented since Phase 7 and never
                                                   #   run: 1 annotation in 21 days. Keyless
                                                   #   Kalshi/PM reads only (rule 2 safe).
+               whale: true,                       # L14 whale-consensus lane (60s cycle)
+               whale-backfill: true }             # its leaderboard + per-wallet history
+                                                  #   process: ~11 min of paced calls per
+                                                  #   cycle, so NEVER inside the 60s lane
   commands:  { watch: "watch --once", live: "live --once",
                negrisk: "negrisk-scan --once", political: "political --once",
-               mapped: "mapped --once", verify: "verify --once" }
-  max_child_runtime_secs: { default: 600, settle: 1800, live: 120, verify: 30 }
+               mapped: "mapped --once", verify: "verify --once",
+               whale: "whale --once", whale-backfill: "whale-backfill --once" }
+  max_child_runtime_secs: { default: 600, settle: 1800, live: 120, verify: 30,
+                            whale: 120, whale-backfill: 900 }
                                     #   verify polls at 10s — a 30s child is already hung
                                     # per-process; settle+reconcile runs long;
-                                    #   a live cycle past 120s is force-restarted
+                                    #   a live cycle past 120s is force-restarted;
+                                    #   a whale cycle past 120s is 2 missed polls;
+                                    #   whale-backfill measured 353 calls / 11 min
   schedule_catchup_grace_mins: 30   # on (re)start, only fire scheduled slots missed within
                                     #   this window; older slots are marked done, not burst-fired (H9)
   stagger_secs: 15                  # boot offset between lanes — lockstep fan-out
@@ -498,8 +506,12 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   prints are still stored and scored regardless
   min_print_usd: 200                  # prints smaller than this are noise, not signal
   discovery_min_notional_usd: 1000    # minimum notional for a wallet to enter whale discovery
-  backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50 }
-                                      # per-cycle backfill budget for newly discovered wallets
+  backfill: { wallets_per_cycle: 5, pages_per_wallet: 40, page_size: 50,
+              cadence_secs: 600 }
+                                      # per-cycle backfill budget for newly discovered wallets.
+                                      #   cadence_secs is the `whale-backfill` process's own
+                                      #   interval (spec §14): five wallets x 40 pages is ~7 min
+                                      #   of paced calls, so it never runs in the 60s lane cycle
   page_size: 10000                    # trades rows per call (10,000 verified 2026-09-03);
                                       #   paging stops on age, never on `start`
   taker_only: true                    # Task 1 probe 3: one row per fill; `false` returns every
