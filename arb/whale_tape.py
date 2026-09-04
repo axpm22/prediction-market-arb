@@ -124,6 +124,16 @@ CREATE TABLE IF NOT EXISTS holdings (
     total_bought TEXT, redeemable INTEGER, raw_json TEXT);
 CREATE INDEX IF NOT EXISTS idx_holdings_wallet
     ON holdings(proxy_wallet, observed_at);
+-- holdings_snapshots columns/INSERT: arb/whale_holdings.py SNAP_COLS. One row
+-- per wallet POLL (retention addendum 2026-09-04): `holdings` above now keeps
+-- only the positions in a market this tape tracks, so this is where the
+-- whole-page fact survives (rule 7) — how many positions the wallet held and
+-- what they were worth, whether or not any of them were ours.
+CREATE TABLE IF NOT EXISTS holdings_snapshots (
+    id INTEGER PRIMARY KEY, observed_at TEXT, proxy_wallet TEXT,
+    n_positions INTEGER, total_value_usd TEXT, partial INTEGER);
+CREATE INDEX IF NOT EXISTS idx_holdings_snapshots_wallet
+    ON holdings_snapshots(proxy_wallet, observed_at);
 CREATE TABLE IF NOT EXISTS base_rates (
     root TEXT, as_of TEXT, value TEXT, n INTEGER, PRIMARY KEY (root, as_of));
 -- V5's percentile bar, per bucket per cycle (§7 V5, 2026-09-04): the cutoff
@@ -254,8 +264,9 @@ def _json_list(value) -> list:
 
 def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
     """One collector cycle (spec §5 step 2). Global mode: one marketless call,
-    kept rows filtered client-side, paging by `offset` only while a page is
-    full AND its oldest row is still newer than last_seen - overlap_secs."""
+    rows kept through `whale_rows.doors` (universe in full, the rest above the
+    global floor and compact — amendment 2026-09-04), paging by `offset` only
+    while a page is full AND its oldest row is newer than last_seen - overlap."""
     w = cfg["whale"]
     res = {"calls": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "gap_secs": 0,
            "status_counts": {}, "status": "ok"}
@@ -276,7 +287,7 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
                 csv = ",".join(ordered[i:i + per])   # comma CSV verified for /trades
                 body = _call(bucket, get, f"{DATA_API}/trades?market={csv}"
                              f"&takerOnly={taker}&limit={size}", cfg, res)
-                newest = max([newest] + _keep(con, body, ids, now, res))
+                newest = max([newest] + _keep(con, body, ids, now, res, cfg=cfg))
         else:
             # No last_seen => cold start, no gap to catch up on: one page and
             # stop, or the age rule would walk the venue's whole history.
@@ -287,7 +298,7 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
                 url = f"{DATA_API}/trades?takerOnly={taker}&limit={size}"
                 body = _call(bucket, get, url + (f"&offset={offset}" if offset else ""),
                              cfg, res)
-                stamps = _keep(con, body, ids, now, res)
+                stamps = _keep(con, body, ids, now, res, cfg=cfg)
                 # A body with rows but zero parsed timestamps is an unreadable
                 # page, not a quiet end of the feed: `not stamps` below would
                 # otherwise read as "caught up" and silently advance nothing,

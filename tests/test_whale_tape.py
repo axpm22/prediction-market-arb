@@ -13,8 +13,8 @@ import pytest
 
 from arb.config import load
 from arb.venues.base import VenueError
-from arb import (whale_backfill, whale_holdings, whale_map, whale_resolve, whale_score,
-                 whale_sweep, whale_tape, whale_universe)
+from arb import (whale_backfill, whale_holdings, whale_hygiene, whale_map, whale_resolve,
+                 whale_score, whale_sweep, whale_tape, whale_universe)
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 NOW = datetime(2026, 9, 3, 17, 0, 0, tzinfo=timezone.utc)
@@ -293,17 +293,81 @@ def _global_markets(n=2):
                               tokens=(("t1", "Yes"),)) for c in top]
 
 
-def test_global_mode_makes_one_marketless_call_and_keeps_only_universe_rows(tmp_path):
+def test_global_mode_makes_one_marketless_call_and_keeps_the_two_doors(tmp_path):
+    """Retention amendment 2026-09-04: one marketless call as before, but the
+    keep rule now has TWO doors — every row in a universe market, plus any row
+    anywhere at or above `retention.global_min_print_usd`. The fixture holds 70
+    rows in its busiest market and 3 more, in 2 other markets, over $1,000."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     mk = _global_markets(1)
     get = FakeGet(_fixture("whale_trades_global"))
     res = whale_tape.poll_prints(_cfg(page_size=10000), con, mk, NOW, get=get)
     assert len(get.urls) == 1 and "market=" not in get.urls[0]
     kept = con.execute("SELECT COUNT(*), COUNT(DISTINCT condition_id) FROM prints").fetchone()
-    assert kept[1] == 1 and kept[0] == 70          # the fixture's busiest market
-    assert res["rows"] == 70 and res["calls"] == 1 and res["status"] == "ok"
-    row = con.execute("SELECT * FROM prints LIMIT 1").fetchone()
+    assert kept[1] == 3 and kept[0] == 73          # 70 in-universe + 3 over the floor
+    assert res["rows"] == 73 and res["calls"] == 1 and res["status"] == "ok"
+    row = con.execute("SELECT * FROM prints WHERE condition_id=? LIMIT 1",
+                      (mk[0].condition_id,)).fetchone()
     assert row["observed_at"] == NOW.isoformat() and row["source"] == "tape"
+
+
+def test_retention_scope_universe_restores_the_pre_amendment_tape(tmp_path):
+    """`scope: universe` is the documented way back: the universe door alone,
+    exactly the collector's behaviour before 2026-09-04."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    mk = _global_markets(1)
+    cfg = _cfg(page_size=10000)
+    cfg["whale"]["retention"] = {**cfg["whale"]["retention"], "scope": "universe"}
+    res = whale_tape.poll_prints(cfg, con, mk, NOW, get=FakeGet(_fixture("whale_trades_global")))
+    kept = con.execute("SELECT COUNT(*), COUNT(DISTINCT condition_id) FROM prints").fetchone()
+    assert kept[1] == 1 and kept[0] == 70 and res["rows"] == 70
+
+
+def _trade(cond, wallet, notional, ts, tx, idx=0, side="BUY"):
+    """One `/trades` row, priced so price x size is exactly `notional`."""
+    return {"proxyWallet": wallet, "side": side, "asset": f"tok{cond}{idx}",
+            "conditionId": cond, "size": notional * 2, "price": 0.5, "timestamp": ts,
+            "title": "A vs B", "slug": "mlb-a-b-2026-09-03", "eventSlug": "mlb-a-b",
+            "outcome": "Yes", "outcomeIndex": idx, "pseudonym": "p",
+            "transactionHash": tx}
+
+
+def _two_door_page(ts):
+    """$150/$500/$5,000 inside and outside the universe (`0xin` is polled)."""
+    return [_trade("0xin", "0xw", 150, ts, "0x1"),
+            _trade("0xin", "0xw", 5000, ts, "0x2"),
+            _trade("0xout", "0xsmall", 150, ts, "0x3"),
+            _trade("0xout", "0xmid", 500, ts, "0x4"),
+            _trade("0xout", "0xbig", 5000, ts, "0x5")]
+
+
+def _universe(cond="0xin"):
+    return [whale_universe.Market(condition_id=cond, sport="baseball_mlb",
+                                  market_type="WINNER", line=None, start_utc=IN_WINDOW,
+                                  event_key="ek", tokens=(("t1", "Yes"),))]
+
+
+def test_a_non_universe_print_is_kept_only_above_the_global_floor_and_without_raw_json(
+        tmp_path):
+    """The two doors (proposal §2, registered 2026-09-04). Inside a universe
+    market EVERY print is kept in full — hygiene's `mm` test reads prints far
+    below `min_print_usd` and would go blind without them. Outside every
+    universe a print is kept only at or above the global floor, and compact:
+    `raw_json` and `title` NULL, every other column as usual."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    ts = int(NOW.timestamp()) - 30
+
+    res = whale_tape.poll_prints(_cfg(), con, _universe(), NOW,
+                                 get=FakeGet(_two_door_page(ts)))
+
+    rows = {r["tx_hash"]: r for r in con.execute("SELECT * FROM prints")}
+    assert sorted(rows) == ["0x1", "0x2", "0x5"] and res["rows"] == 3
+    assert rows["0x1"]["notional_usd"] == "150.000000"       # sub-floor, in universe
+    assert json.loads(rows["0x1"]["raw_json"])["size"] == 300
+    assert rows["0x1"]["title"] == "A vs B"
+    assert rows["0x5"]["notional_usd"] == "5000.000000"      # over the floor, outside
+    assert rows["0x5"]["raw_json"] is None and rows["0x5"]["title"] is None
+    assert rows["0x5"]["proxy_wallet"] == "0xbig" and rows["0x5"]["side"] == "BUY"
 
 
 def test_notional_is_a_six_place_decimal_string_of_price_times_size(tmp_path):
@@ -565,8 +629,9 @@ def test_one_malformed_row_is_skipped_not_the_whole_page(tmp_path):
     ours[1]["price"] = "abc"
     res = whale_tape.poll_prints(_cfg(page_size=10000), con, mk, NOW, get=FakeGet(page))
     assert res["status"] == "ok" and res["bad_rows"] == 2
-    assert res["rows"] == len(ours) - 2
-    assert con.execute("SELECT COUNT(*) FROM prints").fetchone()[0] == len(ours) - 2
+    # + the 3 rows over retention.global_min_print_usd in the fixture's OTHER markets
+    assert res["rows"] == len(ours) - 2 + 3
+    assert con.execute("SELECT COUNT(*) FROM prints").fetchone()[0] == len(ours) - 2 + 3
     assert whale_tape._meta(con, "backoff_until") is None
 
 
@@ -767,11 +832,58 @@ def test_discovery_counts_pregame_buys_only_and_honours_the_threshold(tmp_path):
     assert con.execute("SELECT source FROM wallets").fetchone()[0] == "tape"
 
 
+def test_discovery_admits_a_wallet_that_printed_outside_the_polled_universe(tmp_path):
+    """Retention amendment 2026-09-04: the discovery door keeps its $1,000
+    value and its mapped-root requirement, but is now evaluated over the whole
+    platform rather than over the markets this cycle happened to poll — the
+    $5,000 print in `0xelsewhere` is on the tape now, so its wallet is a
+    candidate whale. A market the mapper could give no root (`sport IS NULL`)
+    still counts for nothing, which is what stops churn in the unfollowable
+    5-minute markets from manufacturing whales."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    start = (NOW + timedelta(hours=2)).isoformat()
+    _market(con, "0xelsewhere", start)                       # mapped, never polled
+    con.execute("INSERT INTO markets (condition_id, sport, market_type, start_utc,"
+                " tokens_json, first_seen, last_seen) VALUES ('0xnoroot', NULL,"
+                " 'WINNER', ?, '[]', ?, ?)", (start, NOW.isoformat(), NOW.isoformat()))
+    con.commit()
+    ts = int(NOW.timestamp()) - 30
+    page = [_trade("0xelsewhere", "0xbig", 5000, ts, "0xa"),
+            _trade("0xnoroot", "0xchurn", 5000, ts, "0xb")]
+
+    whale_tape.poll_prints(_cfg(), con, _universe(), NOW, get=FakeGet(page))
+
+    assert con.execute("SELECT COUNT(*) FROM prints").fetchone()[0] == 2
+    assert whale_backfill.discover_wallets(_cfg(), con, NOW) == 1
+    assert [r[0] for r in con.execute("SELECT proxy_wallet FROM wallets")] == ["0xbig"]
+
+
+def test_mm_detection_still_sees_sub_floor_prints_in_universe_markets(tmp_path):
+    """Why the universe door keeps FULL fidelity (proposal §2): `mm` is "both
+    outcomes bought inside mm_window_secs on >=30% of the wallet's markets with
+    mean print notional < $50". A single $1,000 floor would delete exactly the
+    rows that define a market maker and make every one of them invisible."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    ts = int(NOW.timestamp()) - 30
+    page = [_trade("0xin", "0xmaker", 10, ts, "0xm1", idx=0),
+            _trade("0xin", "0xmaker", 10, ts + 1, "0xm2", idx=1)]
+
+    whale_tape.poll_prints(_cfg(), con, _universe(), NOW, get=FakeGet(page))
+
+    prints = [dict(r) for r in con.execute("SELECT * FROM prints")]
+    assert len(prints) == 2                              # both far below the floor
+    assert whale_hygiene.hygiene_flags(prints, [], _cfg()).wallets["0xmaker"] == {"mm"}
+
+
 # --- backfill ---------------------------------------------------------------
 
-def _wallet(con, w, first_seen):
+def _wallet(con, w, first_seen, source="tape"):
+    """A wallet already in `wallets`. `source` matters to the backfill queue
+    since the 2026-09-04 retention amendment: a `tape` wallet was discovered by
+    printing in a market with a mapped root, so it has one, while a
+    `leaderboard` seed has no prints at all until backfill fetches them."""
     con.execute("INSERT INTO wallets (proxy_wallet, pseudonym, first_seen, source) "
-                "VALUES (?,?,?,'tape')", (w, "p", first_seen))
+                "VALUES (?,?,?,?)", (w, "p", first_seen, source))
 
 
 def _map_row(con, cond, sport=None, market_type=None, start_utc=None, slug=None,
@@ -790,7 +902,7 @@ def _map_row(con, cond, sport=None, market_type=None, start_utc=None, slug=None,
 
 def test_backfill_pulls_activity_pages_until_a_short_page(tmp_path):
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
-    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00", source="leaderboard")
     con.commit()
     acts = _fixture("whale_activity")
     # the Gamma ladder is ~36 calls: pace them off the clock, not at 30/min
@@ -807,11 +919,41 @@ def test_backfill_pulls_activity_pages_until_a_short_page(tmp_path):
     assert con.execute("SELECT backfilled_at FROM wallets").fetchone()[0] == NOW.isoformat()
 
 
+def test_the_backfill_queue_is_fifo_within_relevant_wallets_only(tmp_path):
+    """Retention amendment 2026-09-04: with discovery reading the whole
+    platform, the wallet queue must not fill with wallets whose whole history
+    is in markets no root will ever score — at `wallets_per_cycle` a cycle it
+    would never drain, and the roster would silently become "whoever was
+    discovered first". A wallet SEEDED by another source (the leaderboard) has
+    no prints yet BECAUSE backfill is what fetches them, so it is never judged
+    by this filter — that would be a filter on edge, which this is not."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    _market(con, "0xmapped", (NOW + timedelta(hours=2)).isoformat())     # has a root
+    _map_row(con, "0xnoroot", sport=None, market_type="WINNER",
+             start_utc=(NOW + timedelta(hours=2)).isoformat())
+    _wallet(con, "0xchurn", "2026-09-01T00:00:00+00:00")      # source='tape'
+    _wallet(con, "0xrelevant", "2026-09-02T00:00:00+00:00")   # source='tape'
+    con.execute("INSERT INTO wallets (proxy_wallet, pseudonym, first_seen, source) "
+                "VALUES ('0xseed', 'p', '2026-09-03T00:00:00+00:00', 'leaderboard')")
+    ts = int(NOW.timestamp()) - 60
+    _print(con, "0xchurn", "0xnoroot", "BUY", "5000", ts)
+    _print(con, "0xrelevant", "0xmapped", "BUY", "5000", ts)
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 1, "page_size": 50})
+
+    res = whale_backfill.backfill(cfg, con, NOW, get=FakeGet([]))
+
+    assert res["wallets"] == 2
+    assert [r[0] for r in con.execute(
+        "SELECT proxy_wallet FROM wallets WHERE backfilled_at IS NOT NULL "
+        "ORDER BY first_seen")] == ["0xrelevant", "0xseed"]
+
+
 def test_backfill_is_fifo_by_first_seen_and_respects_wallets_per_cycle(tmp_path):
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
-    _wallet(con, "0xthird", "2026-09-03T00:00:00+00:00")
-    _wallet(con, "0xfirst", "2026-09-01T00:00:00+00:00")
-    _wallet(con, "0xsecond", "2026-09-02T00:00:00+00:00")
+    _wallet(con, "0xthird", "2026-09-03T00:00:00+00:00", source="leaderboard")
+    _wallet(con, "0xfirst", "2026-09-01T00:00:00+00:00", source="leaderboard")
+    _wallet(con, "0xsecond", "2026-09-02T00:00:00+00:00", source="leaderboard")
     con.commit()
     cfg = _cfg(backfill={"wallets_per_cycle": 2, "pages_per_wallet": 1, "page_size": 50})
     get = FakeGet([])
@@ -830,7 +972,10 @@ def test_backfill_writes_prints_only_and_map_markets_maps_them_through_gamma(tmp
     to mean walking every condition_id THIS cycle's wallets had ever touched
     in one unbounded pass, which is what blew the child's 900s cap."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
-    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")
+    # `/activity?user=W` returns W's OWN trades, so every print this writes
+    # carries W in proxy_wallet — which is what MAP_SQL's relevance guard reads.
+    wallet = _fixture("whale_activity")[0]["proxyWallet"]
+    _wallet(con, wallet, "2026-09-01T00:00:00+00:00", source="leaderboard")
     con.commit()
     gamma = _fixture("whale_gamma_condition_ids_repeated")
     known, other = gamma[0]["conditionId"], gamma[1]["conditionId"]
@@ -840,6 +985,7 @@ def test_backfill_writes_prints_only_and_map_markets_maps_them_through_gamma(tmp
                          "map_per_cycle": 40})
     whale_backfill.backfill(cfg, con, NOW, get=FakeGet(acts))
     assert con.execute("SELECT COUNT(*) FROM markets").fetchone()[0] == 0  # not mapped yet
+    assert con.execute("SELECT COUNT(DISTINCT proxy_wallet) FROM prints").fetchone()[0] == 1
 
     get = FakeGet([gamma[0]])                       # gamma answers for `known` only
     whale_backfill.map_markets(cfg, con, NOW, get=get)
@@ -896,6 +1042,7 @@ def test_map_markets_reaches_an_old_market_via_a_closed_true_retry(tmp_path):
     gamma = _fixture("whale_gamma_condition_ids_repeated")[0]
     cond = gamma["conditionId"]
     _print(con, "0xw", cond, "BUY", "900", int(NOW.timestamp()) - 100)
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")   # MAP_SQL's relevance guard
     con.commit()
     cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
                          "page_size": 50, "map_per_cycle": 40})
@@ -982,6 +1129,7 @@ def test_a_non_list_gamma_body_raises_instead_of_being_coerced_to_absent(tmp_pat
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     cond = "0xdegraded"
     _print(con, "0xw", cond, "BUY", "900", int(NOW.timestamp()) - 100)
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")   # MAP_SQL's relevance guard
     con.commit()
     cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
                          "page_size": 50, "map_per_cycle": 40})
@@ -1015,6 +1163,7 @@ def test_mapper_closed_pass_records_a_resolution_and_the_sweep_ignores_it(tmp_pa
     resolved["gameStartTime"] = "2026-09-01 09:00:00+00"  # within resolve_after_hours/giveup window
     cond = resolved["conditionId"]
     _print(con, "0xw", cond, "BUY", "900", int(NOW.timestamp()) - 100)
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")   # MAP_SQL's relevance guard
     con.commit()
     cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40, "page_size": 50,
                          "map_per_cycle": 40, "resolve_per_cycle": 40})
@@ -1075,6 +1224,7 @@ def test_map_markets_marks_unmappable_when_only_start_utc_is_missing(tmp_path):
     gamma["gameStartTime"] = None
     cond = gamma["conditionId"]
     _print(con, "0xw", cond, "BUY", "900", int(NOW.timestamp()) - 100)
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")   # MAP_SQL's relevance guard
     con.commit()
     cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
                          "page_size": 50, "map_per_cycle": 40})
@@ -1107,6 +1257,7 @@ def test_map_markets_budget_reserves_a_floor_for_each_queue(tmp_path):
         _map_row(con, f"0xold{i}", sport="baseball_mlb", market_type=None,
                start_utc="2026-01-01T00:00:00+00:00", slug=f"mlb-x-y-{i}",
                first_seen=(NOW - timedelta(days=100 - i)).isoformat())
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")   # MAP_SQL's relevance guard
     con.commit()
 
     new_ids, revisit = whale_backfill._queue(con, 40, NOW.strftime("%Y-%m-%d"))
@@ -1126,6 +1277,7 @@ def test_map_markets_budget_flows_a_short_revisit_queue_back_to_new(tmp_path):
         _map_row(con, f"0xold{i}", sport="baseball_mlb", market_type=None,
                start_utc="2026-01-01T00:00:00+00:00", slug=f"mlb-x-y-{i}",
                first_seen=(NOW - timedelta(days=100 - i)).isoformat())
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")   # MAP_SQL's relevance guard
     con.commit()
 
     new_ids, revisit = whale_backfill._queue(con, 40, NOW.strftime("%Y-%m-%d"))
@@ -1196,6 +1348,7 @@ def test_map_markets_bounds_new_ids_and_revisit_rows_together(tmp_path):
     _map_row(con, "0xold2", sport="baseball_mlb", market_type=None,
            start_utc="2026-01-01T00:00:00+00:00", slug="mlb-a-b-2026-01-01",
            first_seen="2026-08-02T00:00:00+00:00")
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")   # MAP_SQL's relevance guard
     con.commit()
     cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
                          "page_size": 50, "map_per_cycle": 2})
@@ -1232,12 +1385,31 @@ def test_the_2026_09_04_census_prefixes_resolve_to_the_right_sport():
     assert whale_backfill._sport_of("will-trump-win-2026", prefixes) is None  # question, unmapped
 
 
+def test_the_mapping_queue_ignores_markets_no_known_wallet_has_traded(tmp_path):
+    """Retention amendment 2026-09-04, the guard that has to land in the same
+    commit: once prints are kept platform-wide, MAP_SQL's queue would otherwise
+    inherit EVERY market on Polymarket — about 300 five-minute crypto markets a
+    day, forever, each costing Gamma calls that map nothing. A market is only
+    worth a call once a wallet we already follow has traded in it."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    ts = int(NOW.timestamp())
+    _print(con, "0xknown", "0xworth_mapping", "BUY", "5000", ts - 100)
+    _print(con, "0xstranger", "0xbtc_updown_4h", "BUY", "5000", ts - 200)  # older, still skipped
+    _wallet(con, "0xknown", "2026-09-01T00:00:00+00:00")
+    con.commit()
+
+    new_ids, revisit = whale_backfill._queue(con, 40, NOW.strftime("%Y-%m-%d"))
+
+    assert (new_ids, revisit) == (["0xworth_mapping"], [])
+
+
 def test_map_markets_is_bounded_and_fifo_by_first_print(tmp_path):
     """Fix 1's actual bound: three markets never seen before, `map_per_cycle`
     covers only two, oldest first print first; the third waits."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     for i, age in enumerate((100, 300, 200)):        # insertion order != age
         _print(con, "0xw", f"0xm{i}", "BUY", "900", int(NOW.timestamp()) - age)
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")   # MAP_SQL's relevance guard
     con.commit()
     cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40, "page_size": 50,
                          "map_per_cycle": 2})
@@ -1263,7 +1435,7 @@ def test_map_markets_short_circuits_while_a_backoff_is_live(tmp_path):
 
 def test_backfill_short_circuits_while_a_backoff_is_live(tmp_path):
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
-    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00", source="leaderboard")
     con.execute("INSERT INTO meta (key, value) VALUES ('backoff_until', ?)",
                 ((NOW + timedelta(seconds=60)).isoformat(),))
     con.commit()
@@ -1276,7 +1448,7 @@ def test_a_backoff_written_late_in_a_long_cycle_is_still_in_the_future(tmp_path)
     """A backfill cycle runs ~11 min against backoff_secs=300, so a pause
     stamped from the CYCLE-START clock has already expired when it is written."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
-    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00")
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00", source="leaderboard")
     con.commit()
     started = datetime.now(timezone.utc) - timedelta(minutes=20)
     boom = FakeGet(VenueError("503 from https://data-api.polymarket.com/activity"))
@@ -1507,16 +1679,29 @@ def test_a_market_whose_tokens_cannot_be_told_apart_is_skipped_and_counted():
 
 # --- holdings: the authoritative "what do they still hold" check (§9, item C)
 
-def _position_row(wallet, size, asset="tokyes", cid=MAKER_CID, idx=0):
+def _position_row(wallet, size, asset="tokyes", cid=MAKER_CID, idx=0, value=17):
     """One `positions?user=` row. Every field is from the live-probed row in
     data/verified_facts.md (2026-09-04); the collector reads only conditionId,
-    asset, outcomeIndex, size, avgPrice, totalBought and redeemable."""
+    asset, outcomeIndex, size, avgPrice, totalBought, redeemable and (since the
+    2026-09-04 retention amendment) currentValue, for the summary row."""
     return {"proxyWallet": wallet, "conditionId": cid, "asset": asset,
             "outcomeIndex": idx, "size": size, "avgPrice": 0.182,
             "totalBought": 1000, "redeemable": False, "curPrice": 0.115,
-            "outcome": "Rays", "slug": "mlb-tb-nyy-2026-09-03-tb",
+            "currentValue": value, "outcome": "Rays",
+            "slug": "mlb-tb-nyy-2026-09-03-tb",
             "eventSlug": "mlb-tb-nyy-2026-09-03", "title": "Rays vs Yankees",
             "negativeRisk": False, "mergeable": False}
+
+
+def _holdings_tape(tmp_path):
+    """A tape that TRACKS the market every `_position_row` belongs to. Since
+    the 2026-09-04 retention amendment a holdings snapshot keeps only the rows
+    whose condition_id is in `markets` (plus one summary row), so a holdings
+    test has to say which markets it tracks."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    _market(con, MAKER_CID, IN_WINDOW)
+    con.commit()
+    return con
 
 
 def _ctx(wallets, side=0, token="tokyes"):
@@ -1528,7 +1713,7 @@ def _ctx(wallets, side=0, token="tokyes"):
 
 def test_holdings_poll_persists_every_snapshot_row(tmp_path):
     """Rule 7: what we observed is stored whether or not it moves an exit."""
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     get = FakeGet([_position_row("0xw0", 400), _position_row("0xw0", 900, asset="tokno", idx=1)])
     res = whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW, get=get)
 
@@ -1546,7 +1731,7 @@ def test_holdings_poll_persists_every_snapshot_row(tmp_path):
 def test_holdings_poll_caps_the_calls_per_cycle_and_round_robins_by_staleness(tmp_path):
     """<=holdings_calls_per_cycle wallets a 60 s cycle, stalest first, so a
     roster bigger than the cap is still refreshed rather than starved."""
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     wallets = [f"0xw{i:02d}" for i in range(25)]
     cap = int(_cfg()["whale"]["exit"]["holdings_calls_per_cycle"])
     assert cap == 10
@@ -1562,7 +1747,7 @@ def test_holdings_poll_caps_the_calls_per_cycle_and_round_robins_by_staleness(tm
 
 
 def test_holdings_a_wallet_polled_within_the_cadence_is_not_polled_again(tmp_path):
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW, get=FakeGet([]))
     cadence = int(_cfg()["whale"]["exit"]["holdings_poll_secs"])
     soon = whale_holdings.poll_holdings(_cfg(), con, ["0xw0"],
@@ -1573,7 +1758,7 @@ def test_holdings_a_wallet_polled_within_the_cadence_is_not_polled_again(tmp_pat
 
 
 def test_holdings_for_bet_reads_the_freshest_snapshot_and_zeroes_a_missing_token(tmp_path):
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     get = FakeGet([_position_row("0xw0", 400)], [_position_row("0xw1", 900, asset="tokno", idx=1)])
     whale_holdings.poll_holdings(_cfg(), con, ["0xw0", "0xw1"], NOW, get=get)
 
@@ -1589,7 +1774,7 @@ def test_holdings_older_than_the_max_age_are_ignored_not_believed(tmp_path):
     reading at all: that wallet falls back to the prints (absent from the
     mapping), because exiting on a stale holding is exactly the failure item A
     just fixed on the other rule."""
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     cfg = _cfg()
     ex = cfg["whale"]["exit"]
     max_age = int(ex["holdings_poll_secs"]) * int(ex["holdings_max_age_polls"])
@@ -1606,7 +1791,7 @@ def test_holdings_older_than_the_max_age_are_ignored_not_believed(tmp_path):
 def test_holdings_a_failed_wallet_costs_only_that_wallet(tmp_path):
     """One venue error is not an outage: the other wallets are still read and
     the print collector's own backoff is untouched (it is a different feed)."""
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     get = FakeGet(VenueError("polymarket 503"), [_position_row("0xw1", 400)])
     res = whale_holdings.poll_holdings(_cfg(), con, ["0xw0", "0xw1"], NOW, get=get)
 
@@ -1623,12 +1808,71 @@ def test_holdings_an_empty_page_is_no_reading_not_a_verified_zero(tmp_path):
     under `taker_only: false` anyway. So the wallet is absent from the
     mapping — the prints stand — while the poll still counts as done, so the
     round-robin moves on rather than retrying it forever."""
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     res = whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW, get=FakeGet([]))
 
     assert (res["wallets"], res["rows"], res["errors"]) == (1, 0, 0)
     assert whale_tape._meta(con, "holdings_at:0xw0") == NOW.isoformat()
     assert whale_holdings.for_bet(_cfg(), con, _ctx(["0xw0"]), NOW) == {}
+    # ... and the summary says the page really was empty, which is what makes
+    # "no reading" distinguishable from "held nothing we track" below.
+    summary = con.execute("SELECT * FROM holdings_snapshots").fetchone()
+    assert (summary["n_positions"], summary["partial"]) == (0, 0)
+
+
+# --- holdings retention (addendum 2026-09-04): keep the tracked rows ---------
+
+def test_holdings_keeps_only_tracked_markets_plus_one_wallet_summary(tmp_path):
+    """`holdings` grew ~39k rows in ~2.5 h over 20 wallets — every poll stored
+    the wallet's WHOLE positions page. The observation the lane USES is the
+    size of a signal whale's position in a market we hold or track, so a poll
+    keeps the rows whose condition_id is in `markets` and one compact summary
+    row for the page as a whole (rule 7: the full-page fact is not lost)."""
+    con = _holdings_tape(tmp_path)
+    page = ([_position_row("0xw0", 10, asset=f"f{i}", cid=f"0xuntracked{i}", value=2)
+             for i in range(488)]
+            + [_position_row("0xw0", 10, asset=f"t{i}", value=3) for i in range(12)])
+    get = FakeGet(page, [])                       # a full page, then a short one
+
+    res = whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW, get=get)
+
+    assert (res["wallets"], res["rows"], res["calls"]) == (1, 12, 2)
+    kept = [dict(r) for r in con.execute("SELECT * FROM holdings")]
+    assert len(kept) == 12 and {r["condition_id"] for r in kept} == {MAKER_CID}
+    summary = con.execute("SELECT * FROM holdings_snapshots").fetchone()
+    assert (summary["observed_at"], summary["proxy_wallet"]) == (NOW.isoformat(), "0xw0")
+    assert summary["n_positions"] == 500                    # the whole page, both calls
+    assert summary["total_value_usd"] == "1012.000000"      # 488 x 2 + 12 x 3
+    assert summary["partial"] == 0
+
+
+def test_holdings_keep_all_stores_the_whole_page(tmp_path):
+    """`exit.holdings_keep: all` is the documented way back to storing every
+    row of every page."""
+    con = _holdings_tape(tmp_path)
+    cfg = _cfg()
+    cfg["whale"]["exit"] = {**cfg["whale"]["exit"], "holdings_keep": "all"}
+    page = [_position_row("0xw0", 10, asset=f"f{i}", cid=f"0xuntracked{i}") for i in range(3)]
+
+    res = whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW, get=FakeGet(page))
+
+    assert res["rows"] == 3
+    assert con.execute("SELECT COUNT(*) FROM holdings").fetchone()[0] == 3
+
+
+def test_holdings_a_page_holding_none_of_our_markets_is_still_a_real_zero(tmp_path):
+    """The summary row is what keeps `for_bet`'s three-way reading intact once
+    the rows are filtered: a wallet whose page held 300 positions, none of them
+    in a market we track, has been READ and genuinely holds none of the bet's
+    token — a zero, not an absence. Only an EMPTY page is no reading."""
+    con = _holdings_tape(tmp_path)
+    page = [_position_row("0xw0", 10, asset=f"f{i}", cid=f"0xuntracked{i}")
+            for i in range(300)]
+
+    whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW, get=FakeGet(page))
+
+    assert con.execute("SELECT COUNT(*) FROM holdings").fetchone()[0] == 0
+    assert whale_holdings.for_bet(_cfg(), con, _ctx(["0xw0"]), NOW) == {"0xw0": Decimal(0)}
 
 
 # --- holdings paging fix (2026-09-04): a full page keeps going ---------------
@@ -1639,7 +1883,7 @@ def test_holdings_poll_pages_past_one_page_until_a_short_page(tmp_path):
     page 3 — the poll continues by `offset` (verified live 2026-09-04) until
     a short page or holdings_max_pages, and every page lands under the SAME
     observed_at so `for_bet` sees the real size wherever it lands."""
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     page1 = [_position_row("0xw0", 10, asset=f"filler{i}") for i in range(500)]
     page2 = [_position_row("0xw0", 10, asset=f"filler{500 + i}") for i in range(500)]
     page3 = ([_position_row("0xw0", 10, asset=f"filler{1000 + i}") for i in range(36)]
@@ -1659,7 +1903,7 @@ def test_holdings_marks_a_still_full_snapshot_partial(tmp_path):
     fully read. The snapshot is marked partial; a token PRESENT in it is
     still a valid size, but a token ABSENT from it may simply be on the page
     that was never fetched — no reading, not a verified zero."""
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     cfg = _cfg()
     cfg["whale"]["exit"] = {**cfg["whale"]["exit"],
                             "holdings_page_size": 2, "holdings_max_pages": 2}
@@ -1679,7 +1923,7 @@ def test_holdings_truncation_warns_once_per_wallet_per_day(tmp_path, caplog):
     """Item 3: the truncation WARNING is keyed by (wallet, UTC day), not a
     module-level set — a second poll of the same wallet the same day is
     silent, and a poll on a new day warns again."""
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     cfg = _cfg()
     cfg["whale"]["exit"] = {**cfg["whale"]["exit"],
                             "holdings_page_size": 1, "holdings_max_pages": 1}
@@ -1710,7 +1954,7 @@ def test_holdings_cap_is_checked_before_every_page_not_just_between_wallets(tmp_
     is cut after its first page (the 3rd call) — exactly 3 calls total. 0xb
     is left unmarked (no POLLED stamp) so it stays the stalest and the very
     next cycle finishes it, starting over from offset 0."""
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     cfg = _cfg()
     cfg["whale"]["exit"] = {**cfg["whale"]["exit"], "holdings_page_size": 2,
                             "holdings_calls_per_cycle": 3, "holdings_max_pages": 4}
@@ -1745,7 +1989,7 @@ def test_holdings_a_page_2_failure_keeps_page_1s_rows(tmp_path):
     ("every snapshot is persisted"). Each page is now written as it lands, so
     page 1 survives a page-2 VenueError; the wallet is left unmarked (no
     POLLED stamp) so it is retried whole, not half-believed, next cycle."""
-    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    con = _holdings_tape(tmp_path)
     cfg = _cfg()
     cfg["whale"]["exit"] = {**cfg["whale"]["exit"], "holdings_page_size": 2}
     page1 = [_position_row("0xw0", "5", asset="tokyes"), _position_row("0xw0", 1, asset="b")]
@@ -1771,7 +2015,7 @@ def test_holdings_persist_commits_so_a_second_connection_sees_the_rows(tmp_path)
     second, fresh connection to the same file proves the rows actually
     reached disk."""
     path = tmp_path / "w.sqlite"
-    con = whale_tape.open_tape(path)
+    con = _holdings_tape(tmp_path)                # the tape TRACKS _position_row's market
     cfg = _cfg()
     cfg["whale"]["exit"] = {**cfg["whale"]["exit"], "holdings_page_size": 2}
     page1 = [_position_row("0xw0", "5", asset="tokyes"), _position_row("0xw0", 1, asset="b")]

@@ -110,10 +110,20 @@ def test_whale_config_loads_with_spec_values():
     assert w["taker_only"] is False
     # item C of the same amendment: the authoritative holdings check reads
     # data-api `positions?user=` for the wallets behind an open bet.
+    # `holdings_keep` added by the 2026-09-04 retention amendment: a poll keeps
+    # the positions in markets we track plus one summary row, not the whole page
     assert w["exit"] == {"flip_ratio": Decimal("0.50"), "sold_fraction": Decimal("0.50"),
                          "min_score_lb": Decimal("-0.01"), "holdings_poll_secs": 300,
                          "holdings_calls_per_cycle": 10, "holdings_page_size": 500,
-                         "holdings_max_age_polls": 3, "holdings_max_pages": 4}
+                         "holdings_max_age_polls": 3, "holdings_max_pages": 4,
+                         "holdings_keep": "markets"}
+    # retention amendment 2026-09-04: prints are kept platform-wide, in full
+    # inside the universes and at or above the global floor outside them
+    assert w["retention"] == {"scope": "global", "global_min_print_usd": 1000,
+                              "raw_json": "universe"}
+    # the same value as the discovery door on purpose: a print that can never
+    # contribute to discovery has nothing to contribute at all
+    assert w["retention"]["global_min_print_usd"] == w["discovery_min_notional_usd"]
     assert w["backfill"] == {"wallets_per_cycle": 3, "pages_per_wallet": 40,
                              "page_size": 50, "cadence_secs": 600,
                              # spec §14, amended 2026-09-04: the resolution
@@ -255,6 +265,53 @@ def test_elite_pct_must_be_a_percentage(tmp_path):
                                                    f"elite_pct: {value},"))
         with pytest.raises(ConfigError, match="elite_pct"):
             load(bad)
+
+
+def test_retention_and_holdings_modes_must_be_ones_the_code_implements(tmp_path):
+    """Retention amendment 2026-09-04. These three keys decide what is written
+    to disk and what is dropped; a typo in any of them would silently pick the
+    permissive branch (or the destructive one) with nothing logged, so the
+    loader refuses a value the code does not implement."""
+    for old, new, match in (("scope: global", "scope: universal", "retention.scope"),
+                            ("raw_json: universe", "raw_json: yes", "retention.raw_json"),
+                            ("holdings_keep: markets", "holdings_keep: tracked",
+                             "holdings_keep")):
+        bad = tmp_path / f"config-{new}.yaml".replace(" ", "-").replace(":", "")
+        bad.write_text(SHIPPED.read_text().replace(old, new))
+        with pytest.raises(ConfigError, match=re.escape(match)):
+            load(bad)
+
+
+def test_the_retention_comment_carries_arithmetic_that_adds_up():
+    """The operator signed up for a disk bill, so the measurement behind the
+    floor is part of the key's comment (rule 4) — and has to stay consistent:
+    rows/day x KB/row = MB/day, x 365 = GB/year. Measured 2026-09-04 at 1.0 KB
+    of table+index per compact row."""
+    text = SHIPPED.read_text()
+    block = text[text.index("  retention:"):text.index("  page_size: 10000")]
+    kb = Decimal(re.search(r"([\d.]+) KB/compact row", block).group(1))
+    rows = Decimal(re.search(r"~(\d+)k rows/day", block).group(1)) * 1000
+    mb = Decimal(re.search(r"~(\d+) MB/day", block).group(1))
+    gb = Decimal(re.search(r"~(\d+) GB/year", block).group(1))
+    assert kb == Decimal("1.0")
+    assert round(rows * kb / 1000) == mb
+    assert round(mb * 365 / 1000) == gb
+
+
+def test_the_holdings_keep_comment_carries_the_before_and_after_row_rate():
+    """Addendum 2026-09-04: `holdings` was the bigger storage hog of the two —
+    ~39k rows in ~2.5 h over 20 wallets. The key's comment states that measured
+    before-rate and the after-rate the change bounds it to (one summary row per
+    wallet poll), so the next operator can see what was traded for what."""
+    text = SHIPPED.read_text()
+    block = text[text.index("  exit:"):text.index("  rank:")]
+    before = Decimal(re.search(r"~(\d+)k rows/day before", block).group(1)) * 1000
+    wallets = Decimal(re.search(r"over (\d+) wallets", block).group(1))
+    summaries = Decimal(re.search(r"~([\d,]+) summary rows/day",
+                                  block).group(1).replace(",", ""))
+    cadence = Decimal(re.search(r"holdings_poll_secs: (\d+)", text).group(1))
+    assert round(Decimal(39000) / Decimal("2.5") * 24 / 1000) * 1000 == before
+    assert wallets * (Decimal(86400) / cadence) == summaries
 
 
 def test_whale_size_stake_invariant(tmp_path):

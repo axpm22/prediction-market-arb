@@ -575,7 +575,33 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   print is younger than this (spec §13 "Poll latency");
                                       #   prints are still stored and scored regardless
   min_print_usd: 200                  # prints smaller than this are noise, not signal
-  discovery_min_notional_usd: 1000    # minimum notional for a wallet to enter whale discovery
+  discovery_min_notional_usd: 1000    # minimum notional for a wallet to enter whale discovery.
+                                      #   Unchanged in value by the retention amendment below, but
+                                      #   now evaluated over the whole platform instead of over the
+                                      #   markets this cycle polled — and it keeps its requirement
+                                      #   that the market have a MAPPED ROOT (`markets.sport IS NOT
+                                      #   NULL`), which is what stops churn in the unfollowable
+                                      #   5-minute crypto markets from manufacturing whales.
+  retention:                          # global print tape (amendment 2026-09-04, proposal §2;
+                                      #   PREREGISTRATION row of the same date)
+    scope: global                     # `universe` restores the pre-2026-09-04 behaviour (keep only
+                                      #   prints in a polled market)
+    global_min_print_usd: 1000        # a print in a market outside EVERY universe is stored only at
+                                      #   or above this. Same value as discovery_min_notional_usd on
+                                      #   purpose: a print that can never contribute to discovery
+                                      #   has nothing to contribute at all. MEASURED 2026-09-04 on
+                                      #   data/whale_tape.sqlite (read-only): ~35% of the
+                                      #   >=min_print_usd rows clear it, so ~47k rows/day, and at
+                                      #   the measured 1.0 KB/compact row of table+index that is
+                                      #   ~47 MB/day, ~17 GB/year. (At
+                                      #   the $200 floor it would be ~133k rows/day, ~49 GB/year —
+                                      #   the order of the 37 GB arb.sqlite this project already
+                                      #   cannot open.) Re-measure after one week of global
+                                      #   collection and amend if the arrival rate differs by >2x.
+    raw_json: universe                # `universe` = raw_json and title kept only for a print in a
+                                      #   universe market (hygiene's `mm` test needs the sub-floor
+                                      #   rows there, so they are kept whole); `all` = keep
+                                      #   everywhere (+864 B/row, measured mean); `none` = never.
   backfill: { wallets_per_cycle: 3, pages_per_wallet: 40, page_size: 50,
               cadence_secs: 600, resolve_per_cycle: 1000, map_per_cycle: 1000 }
                                       # per-cycle backfill budget for newly discovered wallets.
@@ -797,7 +823,8 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       # paper stake sizing for whale-lane fills
   exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01,
           holdings_poll_secs: 300, holdings_calls_per_cycle: 10,
-          holdings_page_size: 500, holdings_max_age_polls: 3, holdings_max_pages: 4 }
+          holdings_page_size: 500, holdings_max_age_polls: 3, holdings_max_pages: 4,
+          holdings_keep: markets }
                                       # signal-driven exit: consensus flip / sell-off thresholds —
                                       #   invariant: exit.flip_ratio < fire.ratio.
                                       #   The four holdings_* keys are the L14 amendment of
@@ -844,6 +871,24 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   token missing from a partial snapshot is no reading (falls
                                       #   back to prints), never a verified zero — presence is still
                                       #   trusted at its real size wherever it lands.
+                                      #   holdings_keep (retention amendment 2026-09-04): which rows
+                                      #   of a snapshot are persisted. `markets` keeps the positions
+                                      #   whose condition_id is in the tape's `markets` table (the
+                                      #   universe plus everything backfill has mapped) plus ONE
+                                      #   compact `holdings_snapshots` row per wallet poll
+                                      #   (observed_at, wallet, n_positions, total_value_usd,
+                                      #   partial), so the full-page fact survives (rule 7) without
+                                      #   the page. `all` keeps every row, the pre-amendment
+                                      #   behaviour. MEASURED 2026-09-04: ~374k rows/day before
+                                      #   (39k rows in 2.5 h over 20 wallets, every poll storing the
+                                      #   whole positions page). After: ~5,760 summary rows/day
+                                      #   (20 wallets x 86400/holdings_poll_secs) plus only the
+                                      #   positions in markets we track — the untracked remainder,
+                                      #   which was nearly all of it, is dropped. The rows the lane
+                                      #   actually reads (whale_holdings.for_bet) are all in
+                                      #   `markets` by construction: a bet's own market is in the
+                                      #   universe. `holdings` was the bigger of the two storage
+                                      #   hogs — more rows/day than the global print tape above.
   rank: { min_n: 5, top: 15 }         # read-time trader ranking (`arb whale-rank`,
                                       #   /api/whale/traders, the daily "Top traders"
                                       #   table — design §12 "Trader profiles").

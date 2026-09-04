@@ -22,6 +22,31 @@ from arb.models import q6
 # `whale_backfill._sport_of`).
 
 
+# The backfill queue, FIFO by discovery time WITHIN the relevant wallets
+# (retention amendment 2026-09-04, proposal §2). With discovery reading the
+# whole platform, `wallets` grows far faster than `wallets_per_cycle` drains
+# it, and a queue that never drains stops being FIFO and becomes "whoever was
+# discovered first" — a silent selection on top of discovery. Relevance is
+# "has printed in a market with a mapped root", never anything about edge.
+#
+# A wallet seeded by another source (the leaderboard) is exempt: it has no
+# prints yet BECAUSE backfill is what fetches them, and judging it on prints it
+# cannot have would drop exactly the wallets we picked for skill. Under today's
+# discovery door — which already requires a mapped root — every `source='tape'`
+# wallet satisfies the EXISTS by construction, so this is the invariant that
+# keeps the queue honest if that door is ever widened, not a filter that bites
+# now. Rule 9 does not reach here: this is the tape, not the ledger.
+RELEVANT_WALLETS_SQL = """
+    SELECT w.proxy_wallet FROM wallets w
+     WHERE w.backfilled_at IS NULL
+       AND (w.source <> 'tape'
+            OR EXISTS (SELECT 1 FROM prints p
+                        JOIN markets m ON m.condition_id = p.condition_id
+                       WHERE p.proxy_wallet = w.proxy_wallet AND m.sport IS NOT NULL))
+     ORDER BY w.first_seen, w.proxy_wallet
+     LIMIT ?"""
+
+
 def _add_wallets(con, pairs, now, source) -> int:
     """New wallets only: a wallet's source is whichever lane saw it first."""
     before = con.total_changes
@@ -102,14 +127,23 @@ def _snapshot_window(cfg, con, now, get, bucket, res, period) -> tuple[int, bool
 
 def discover_wallets(cfg, con, now) -> int:
     """A wallet becomes a candidate whale once its cumulative PREGAME BUY
-    notional in tracked markets clears discovery_min_notional_usd (spec §5
-    step 3). Summed in Decimal, never in SQL floats (rule 5)."""
+    notional in markets with a MAPPED ROOT clears discovery_min_notional_usd
+    (spec §5 step 3). Summed in Decimal, never in SQL floats (rule 5).
+
+    Retention amendment 2026-09-04: the door keeps its $1,000 value but is now
+    evaluated over the whole platform, because `prints` is no longer restricted
+    to the markets a cycle polled. `m.sport IS NOT NULL` is what makes that
+    safe: a market the mapper could give no root — the unfollowable 5-minute
+    crypto series, where churn is cheapest — counts for nothing, so it cannot
+    manufacture a whale. `start_utc IS NOT NULL` alone would not do it: Gamma
+    answers `gameStartTime` for non-sports markets too (weather, live probe
+    2026-09-04)."""
     floor = Decimal(str(cfg["whale"]["discovery_min_notional_usd"]))
     totals: dict[str, list] = {}
     for wallet, pseudonym, notional in con.execute(
             "SELECT p.proxy_wallet, p.pseudonym, p.notional_usd FROM prints p "
             "JOIN markets m ON m.condition_id = p.condition_id "
-            "WHERE p.side='BUY' AND m.start_utc IS NOT NULL "
+            "WHERE p.side='BUY' AND m.start_utc IS NOT NULL AND m.sport IS NOT NULL "
             "AND p.ts < CAST(strftime('%s', m.start_utc) AS INTEGER)"):
         row = totals.setdefault(wallet, [Decimal(0), pseudonym])
         row[0] += Decimal(notional)
@@ -133,9 +167,8 @@ def backfill(cfg, con, now, get=get_json) -> dict:
     if _backoff_active(con, now):
         res["status"] = "backoff"
         return res
-    wallets = [r[0] for r in con.execute(
-        "SELECT proxy_wallet FROM wallets WHERE backfilled_at IS NULL "
-        "ORDER BY first_seen, proxy_wallet LIMIT ?", (int(bf["wallets_per_cycle"]),))]
+    wallets = [r[0] for r in con.execute(RELEVANT_WALLETS_SQL,
+                                         (int(bf["wallets_per_cycle"]),))]
     bucket = _bucket(cfg)
     size = int(bf["page_size"])
     try:

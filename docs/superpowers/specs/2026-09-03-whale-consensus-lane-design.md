@@ -131,9 +131,38 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    repeated-param form). Persist every kept row to `prints` with `observed_at`.
    Duplicates rejected by a unique index on
    `(tx_hash, proxy_wallet, asset, side, price, size, ts)`.
-3. **Discover.** Any wallet whose cumulative pregame BUY notional in tracked
-   markets exceeds `whale.discovery_min_notional_usd` (1,000) enters
-   `wallets` with `source='tape'`. Leaderboard wallets enter with
+
+   **Retention (amended 2026-09-04).** The global feed is fetched exactly as
+   before; what changes is which rows are kept. A row whose `conditionId` is in
+   a universe is kept in full, `raw_json` included — the hygiene filters (§13)
+   read sub-`min_print_usd` prints and would go blind without them. A row
+   outside every universe is kept only when its notional is at least
+   `whale.retention.global_min_print_usd` ($1,000), and is stored compact:
+   `raw_json` and `title` NULL, every other column as usual
+   (`whale.retention.raw_json` moves that line; `whale.retention.scope:
+   universe` restores the pre-amendment tape). The collector's one keep-or-drop
+   function — `whale_rows._keep`, reading `whale_rows.doors` once per page —
+   takes both doors; nothing else in the paging, watermark or gap logic
+   changes. Cost, measured 2026-09-04: ~1.0 KB of table+index per compact row,
+   ≈47k rows/day at this floor ≈ 47 MB/day ≈ 17 GB/year. The floor is
+   re-measured after one week of global collection and amended if the arrival
+   rate differs by more than 2×. Two guards land WITH it (both in this same
+   commit, neither optional): the Gamma **mapping queue** (`whale_map.MAP_SQL`)
+   is bounded to condition_ids a wallet already in `wallets` has printed in,
+   or the queue inherits every market on Polymarket; and the **backfill queue**
+   (`whale_backfill.RELEVANT_WALLETS_SQL`) is FIFO within the wallets that have
+   printed in a mapped-root market, so a queue that cannot drain at
+   `wallets_per_cycle` never turns into "whoever was discovered first".
+3. **Discover.** A wallet enters `wallets` with `source='tape'` once its
+   cumulative pregame BUY notional **in markets with a mapped root**
+   (`markets.sport IS NOT NULL`) exceeds `whale.discovery_min_notional_usd`
+   (1,000) — unchanged in value, but since the 2026-09-04 retention amendment
+   evaluated platform-wide instead of over the markets the cycle polled.
+   Markets the mapper cannot give a root (unknown slug, not on Gamma, or simply
+   not a sport) never count toward the door, so churn in unfollowable markets
+   cannot manufacture a whale; `start_utc` alone would not do it, since Gamma
+   answers `gameStartTime` for non-sports markets too (weather, live probe
+   2026-09-04 in `data/verified_facts.md`). Leaderboard wallets enter with
    `source='leaderboard'` from a daily snapshot of every window in
    `whale.leaderboard.time_periods` (DAY, WEEK, MONTH, ALL; amended
    2026-09-04 from MONTH only) up to `whale.leaderboard.pages` (20, the
@@ -509,6 +538,19 @@ full at `holdings_max_pages` is marked `partial`, and a row-level absence in
 a partial snapshot is read as no reading (falls back to prints) rather than
 a verified zero — presence is still trusted wherever it lands.
 
+**Amended 2026-09-04 (retention addendum).** A poll no longer stores the
+wallet's whole positions page. `holdings` keeps the rows whose `condition_id`
+is in the tape's `markets` table — the universe plus everything backfill has
+mapped, which by construction includes every market we could hold a bet in —
+and one compact `holdings_snapshots` row per wallet poll (`observed_at`,
+`proxy_wallet`, `n_positions`, `total_value_usd`, `partial`) carries the
+whole-page fact (rule 7). Measured before: ~374k rows/day (39k rows in 2.5 h
+over 20 wallets); after: ~5,760 summary rows/day plus the tracked positions.
+`whale.exit.holdings_keep: all` restores the old behaviour. The three-way
+reading above is unchanged, because `n_positions` is what now tells an EMPTY
+page (no reading) from a page that held nothing of ours (a real zero): zero
+stored rows alone no longer means the page was empty.
+
 Exit price = best bid − taker fee, priced from a fresh `fetch_books`. No bid,
 or depth at the bid below `min_executable_usd`: no exit, annotation
 `exit-no-bid`, re-evaluated next cycle. A position that is still held (an
@@ -720,6 +762,17 @@ Filters, all pre-registered, applied at scoring and signalling:
 | `dust` | Print notional < `min_print_usd` (200) | print ignored |
 | `wash` | Opposite prints by the same wallet within `wash_gap_secs` (2) at the same price | exclude |
 
+**Stated blind spot (retention amendment 2026-09-04), not fixed.** Inside a
+universe every print is still kept, so `mm` sees the sub-`min_print_usd` rows
+that define a market maker. OUTSIDE every universe only prints at or above
+`whale.retention.global_min_print_usd` ($1,000) are kept, so the `mm`
+mean-notional test is biased upward there and a maker in such a market is
+invisible to it; `both_sides`, which reads positions rather than prints, is the
+only filter that still fires on it. Accepted deliberately: keeping every print
+platform-wide is ~49 GB/year (measured), and a wallet whose whole record is
+outside the universes cannot reach a signal anyway without first clearing a
+mapped-root discovery door.
+
 Threats and their status:
 
 - **Taking pays the spread.** This project has already measured that
@@ -769,7 +822,11 @@ whale:
   backoff_secs: 300
   max_print_age_secs: 300
   min_print_usd: 200
-  discovery_min_notional_usd: 1000
+  discovery_min_notional_usd: 1000  # now platform-wide, still mapped-root only (amended 2026-09-04)
+  retention:                        # global print tape (amended 2026-09-04, proposal §2)
+    scope: global                   # `universe` restores the pre-2026-09-04 behaviour
+    global_min_print_usd: 1000      # a print outside EVERY universe is stored only at or above this; measured ~35% of the >=min_print_usd rows, ~47k rows/day, ~47 MB/day at 1.0 KB/compact row
+    raw_json: universe              # `universe` = raw_json and title kept only for a universe market; `all` = everywhere (+864 B/row); `none` = never
   backfill: { wallets_per_cycle: 3, pages_per_wallet: 40, page_size: 50,   # 5 -> 3 amended 2026-09-04: the child twice exceeded its 900 s cap
               cadence_secs: 600, resolve_per_cycle: 100, map_per_cycle: 100 }   # own supervisor process; order: leaderboard -> resolution sweep -> wallet pages -> Gamma mapping; resolve 40->100 and map_per_cycle added 2026-09-04 after the child hit its 900 s cap on unbounded mapping; map_per_cycle 40->200 amended 2026-09-04 (V4 review): worst case leaderboard 80 + sweep 50 + wallets 120 + map 100 Gamma calls ~= 11 min, under the 900s cap; map_per_cycle 200->100 amended 2026-09-04 (mapper fix pass 2): the mapper's Gamma query gained a second, closed=true pass for any id the default index misses (F0), which can double mapping's Gamma calls — at 200 that pushed the worst case to 450 calls ~= 900s, exactly this cap with no margin; 100 restores the same 350-call / ~700s worst case (2 passes x ceil(100/2) calls) with ~200s margin — amended 2026-09-04 (legacy re-map): GAMMA_IDS_PER_CALL verified live at 20, not 2 (data/verified_facts.md); shipped resolve_per_cycle and map_per_cycle are both 1000, ten times this block's 100, exactly offsetting the ten-times-larger Gamma batch — worst case is unchanged: sweep ceil(1000/20)=50 + mapping 2 x ceil(1000/20)=100, so leaderboard 80 + sweep 50 + wallets 120 + map 100 = 350 calls, ~700s of the 900s cap, same margin as before
   universe_poll_lookback: 5         # watch polls searched backwards for one with Polymarket rows (2026-09-04); older than data_stale_alarm_secs -> no universe
@@ -802,7 +859,7 @@ whale:
   size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10 }
   exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01,
           holdings_poll_secs: 300, holdings_calls_per_cycle: 10,          # L14 amendment 2026-09-04, item 3 of §9's amendment: the authoritative holdings check. Per-wallet cadence and the per-cycle GET budget (10 of whale.max_calls_per_min 30, on the same shared bucket) — a roster of <=50 wallets is fully refreshed inside one cadence, a bigger one rotates stalest-first rather than starving
-          holdings_page_size: 500, holdings_max_age_polls: 3 }            # `limit` on positions?user= (100 -> 500 amended 2026-09-04, M12/fixer-D: limit=500 verified live in one call; three signal whales held >100 positions and page 1 missed them — see the holdings-paging fix below, which added offset-paging past one page rather than leaving it unprobed), and how many cadences old a snapshot may be (300 x 3 = 900 s) before that wallet falls back to its prints-based size
+          holdings_page_size: 500, holdings_max_age_polls: 3, holdings_keep: markets }   # holdings_keep (retention addendum 2026-09-04): `markets` stores only the positions in a market this tape tracks plus one holdings_snapshots summary row per poll (~374k rows/day -> ~5,760 summaries + the tracked rows); `all` stores the whole page.            # `limit` on positions?user= (100 -> 500 amended 2026-09-04, M12/fixer-D: limit=500 verified live in one call; three signal whales held >100 positions and page 1 missed them — see the holdings-paging fix below, which added offset-paging past one page rather than leaving it unprobed), and how many cadences old a snapshot may be (300 x 3 = 900 s) before that wallet falls back to its prints-based size
   primary_variant: V2
   kill: { decision_n: 100, null_n: 1200, fast_kill_min_marked: 50,
           min_signals_per_week_alarm: 10 }

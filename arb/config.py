@@ -177,6 +177,7 @@ SCHEMA = {
               "markets_per_call": NUM, "max_calls_per_min": NUM, "backoff_secs": NUM,
               "max_print_age_secs": NUM, "min_print_usd": NUM,
               "discovery_min_notional_usd": NUM,
+              "retention": {"scope": STR, "global_min_print_usd": NUM, "raw_json": STR},
               "backfill": {"wallets_per_cycle": NUM, "pages_per_wallet": NUM,
                            "page_size": NUM, "cadence_secs": NUM,
                            "resolve_per_cycle": NUM, "map_per_cycle": NUM},
@@ -205,7 +206,7 @@ SCHEMA = {
               "exit": {"flip_ratio": NUM, "sold_fraction": NUM, "min_score_lb": NUM,
                        "holdings_poll_secs": NUM, "holdings_calls_per_cycle": NUM,
                        "holdings_page_size": NUM, "holdings_max_age_polls": NUM,
-                       "holdings_max_pages": NUM},
+                       "holdings_max_pages": NUM, "holdings_keep": STR},
               "rank": {"min_n": NUM, "top": NUM},
               "primary_variant": STR,
               "kill": {"decision_n": NUM, "null_n": NUM, "fast_kill_min_marked": NUM,
@@ -298,6 +299,20 @@ def _check_invariants(cfg):
         raise ConfigError(
             f"whale.size.min_stake_usd ({whale['size']['min_stake_usd']}) must be <= "
             f"whale.size.max_stake_usd ({whale['size']['max_stake_usd']})")
+    # Retention amendment 2026-09-04. These three decide what reaches disk and
+    # what is dropped; a typo would silently pick a branch (the permissive one
+    # for `scope`/`raw_json`, the destructive one for `holdings_keep`) with
+    # nothing logged, so an unimplemented value is a startup error, not a
+    # default. Kept here rather than at the use site so it fails at boot.
+    for key, value, allowed in (
+            ("whale.retention.scope", whale["retention"]["scope"], ("global", "universe")),
+            ("whale.retention.raw_json", whale["retention"]["raw_json"],
+             ("universe", "all", "none")),
+            ("whale.exit.holdings_keep", whale["exit"]["holdings_keep"], ("markets", "all"))):
+        if value not in allowed:
+            raise ConfigError(f"{key} ({value!r}) must be one of {list(allowed)} — the "
+                              "collector implements no other mode, and a typo here would "
+                              "quietly change what is stored")
     if not Decimal(whale["poll_secs"]) >= Decimal(30):
         raise ConfigError(
             f"whale.poll_secs ({whale['poll_secs']}) must be >= 30 — the collector shares "

@@ -17,10 +17,20 @@ from arb.whale_universe import MARKET_COLS, _iso
 # `markets` has NO row for at all. Mirrors SWEEP_SQL's shape on purpose — same
 # bounded-FIFO-off-the-tape idiom, same reason (a cycle must never walk an
 # unbounded backlog).
+#
+# The `wallets` EXISTS is the relevance guard the retention amendment
+# (2026-09-04, proposal §2) had to land WITH the global print door: `prints`
+# now holds every $1,000-plus trade on Polymarket, so without it this queue
+# inherits every market on the platform — of the order of 300 five-minute
+# crypto markets a day, forever, each spending Gamma calls to map a market no
+# root will ever score. A market is worth a call once a wallet we already
+# follow has traded in it; anything a universe builder brings in of its own
+# accord already has its `markets` row and never enters this queue at all.
 MAP_SQL = """
     SELECT p.condition_id FROM prints p
      LEFT JOIN markets m ON m.condition_id = p.condition_id
      WHERE m.condition_id IS NULL AND p.condition_id <> ''
+       AND EXISTS (SELECT 1 FROM wallets w WHERE w.proxy_wallet = p.proxy_wallet)
      GROUP BY p.condition_id
      ORDER BY MIN(p.ts), p.condition_id
      LIMIT ?"""

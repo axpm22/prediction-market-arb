@@ -9,14 +9,19 @@ from under us and see nothing move. This module is the second reading.
 
 Rule 1: public, unauthenticated GETs only, paced by the collector's own shared
         token bucket (one bucket per process, whale.max_calls_per_min).
-Rule 3: `positions?user=<wallet>&limit=N&offset=M` and the seven fields read
-        below are the live-probed rows dated 2026-09-04 in
+Rule 3: `positions?user=<wallet>&limit=N&offset=M` and the eight fields read
+        below (conditionId, asset, outcomeIndex, size, avgPrice, totalBought,
+        redeemable, currentValue) are the live-probed rows dated 2026-09-04 in
         data/verified_facts.md — including the offset-paging row that lets a
         full page keep going rather than being read as the whole wallet.
-Rule 4: the cadence, the per-cycle cap, the page size, the page cap and the
-        staleness bound all come from `whale.exit`.
-Rule 5: size, avg_price and total_bought are 6-place Decimal strings.
-Rule 7: every snapshot is persisted, whether or not it moves an exit.
+Rule 4: the cadence, the per-cycle cap, the page size, the page cap, the
+        staleness bound and what is kept all come from `whale.exit`.
+Rule 5: size, avg_price, total_bought and the summary's total_value_usd are
+        6-place Decimal strings.
+Rule 7: every poll is persisted, whether or not it moves an exit — the
+        positions in markets this tape tracks as `holdings` rows, and the page
+        as a whole as one `holdings_snapshots` row (retention addendum
+        2026-09-04: storing every row of every page was ~374k rows/day).
 Rule 9: writes go to the whale tape only — flat_bets is unreachable from here.
 """
 from __future__ import annotations
@@ -36,6 +41,8 @@ log = get_logger("arb.whale", "logs/whale.log")
 # holdings columns/DDL: arb/whale_tape.py SCHEMA's `holdings` table.
 COLS = ("observed_at, proxy_wallet, condition_id, asset, outcome_index, size,"
         " avg_price, total_bought, redeemable, raw_json")
+# ... and the per-poll summary of the WHOLE page (`holdings_snapshots`).
+SNAP_COLS = "observed_at, proxy_wallet, n_positions, total_value_usd, partial"
 # The poll ATTEMPT, per wallet. A wallet that holds nothing returns an empty
 # list and writes no `holdings` row, so the rows alone cannot say whether it
 # was read — and "read, holds nothing" is precisely the reading that exits.
@@ -101,26 +108,58 @@ def _warn_truncated_once(con, wallet, observed_at, n) -> None:
                 wallet, n)
 
 
-def _persist(con, chunk, wallet, observed_at, res) -> int:
-    """One page's rows, written AND COMMITTED now — not batched with later
-    pages, so a later page's failure or cap-cut can never discard what
-    already landed (rule 7; 2026-09-04 holdings-paging fix item 2). Fixer-D
-    review of a90a08d (C1): the commit used to be missing here and relied on
-    a LATER `_set_meta` call in the same wallet's poll to flush this
-    transaction — a page-2 failure `continue`s past that call, so a
-    process death before some unrelated later write happened to commit left
-    this page's real, already-fetched rows unreadable by any other
-    connection, contradicting this docstring."""
-    rows = []
+def _tracked(con, cfg) -> set[str] | None:
+    """The condition_ids this tape follows — the polled universe plus every
+    market backfill has mapped. `None` under `holdings_keep: all`, which stores
+    the page whole. One read per cycle: `markets` is tens of thousands of rows
+    against the hundreds of thousands the same cycle already loads from
+    `prints`, and it is read once for every wallet and page of the cycle."""
+    if str(cfg["whale"]["exit"]["holdings_keep"]) == "all":
+        return None
+    return {r[0] for r in con.execute("SELECT condition_id FROM markets")}
+
+
+def _persist(con, chunk, wallet, observed_at, res, tracked) -> tuple[int, Decimal]:
+    """One page: the rows worth keeping, written AND COMMITTED now — not
+    batched with later pages, so a later page's failure or cap-cut can never
+    discard what already landed (rule 7; 2026-09-04 holdings-paging fix item 2).
+    Fixer-D review of a90a08d (C1): the commit used to be missing here and
+    relied on a LATER `_set_meta` call in the same wallet's poll to flush this
+    transaction — a page-2 failure `continue`s past that call, so a process
+    death before some unrelated later write happened to commit left this page's
+    real, already-fetched rows unreadable by any other connection,
+    contradicting this docstring. Returns `(rows stored, total currentValue of
+    the WHOLE page)`; the caller turns the page totals into the one
+    `holdings_snapshots` row.
+
+    Retention addendum 2026-09-04: a poll used to store the wallet's entire
+    positions page — 500-2,000 rows a wallet every ~5 min, ~374k rows/day
+    measured — when the fact the lane reads is the size of a signal whale's
+    position in a market we hold or track. Rows outside `tracked` are dropped
+    here, BEFORE `_row`'s json.dumps, and the page's shape survives in the
+    summary row."""
+    rows, value = [], Decimal(0)
     for r in chunk:
         try:
+            value += Decimal(str(r.get("currentValue") or 0))
+            if tracked is not None and str(r.get("conditionId") or "") not in tracked:
+                continue
             rows.append(_row(r, wallet, observed_at))
         except BAD_ROW as e:
             res["bad_rows"] = res.get("bad_rows", 0) + 1
             log.warning("whale skipped an unreadable holdings row: %s", e)
     con.executemany(f"INSERT INTO holdings ({COLS}) VALUES ({','.join('?' * 10)})", rows)
     con.commit()
-    return len(rows)
+    return len(rows), value
+
+
+def _persist_summary(con, wallet, observed_at, n, value, partial) -> None:
+    """The whole-page fact, one row per poll — including a poll that found
+    nothing, which is what lets `for_bet` tell "read, holds none of ours" (a
+    real zero) from "read nothing at all" (no reading)."""
+    con.execute(f"INSERT INTO holdings_snapshots ({SNAP_COLS}) VALUES (?,?,?,?,?)",
+                (observed_at, wallet, int(n), str(q6(value)), int(bool(partial))))
+    con.commit()
 
 
 def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
@@ -144,10 +183,13 @@ def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
     cap = int(ex["holdings_calls_per_cycle"])
     res = {"wallets": 0, "rows": 0, "calls": 0, "errors": 0}
     bucket, observed_at = _bucket(cfg), now.isoformat()
-    for wallet in due(cfg, con, wallets, now):
+    todo = due(cfg, con, wallets, now)
+    tracked = _tracked(con, cfg) if todo else None
+    for wallet in todo:
         if res["calls"] >= cap:
             break
         offset, n_seen, cut_by_cap, still_full = 0, 0, False, False
+        value = Decimal(0)
         try:
             for _ in range(max_pages):
                 if res["calls"] >= cap:
@@ -156,7 +198,9 @@ def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
                 chunk = _call(bucket, get, f"{DATA_API}/positions?user={wallet}"
                               f"&limit={page}&offset={offset}", cfg, res)
                 n_seen += len(chunk)
-                res["rows"] += _persist(con, chunk, wallet, observed_at, res)
+                kept, page_value = _persist(con, chunk, wallet, observed_at, res, tracked)
+                res["rows"] += kept
+                value += page_value
                 if len(chunk) < page:
                     break
                 offset += page
@@ -179,10 +223,22 @@ def poll_holdings(cfg, con, wallets, now, get=get_json) -> dict:
                                                    # retried whole next cycle
         if still_full:
             _warn_truncated_once(con, wallet, observed_at, n_seen)
+        _persist_summary(con, wallet, observed_at, n_seen, value, still_full)
         _set_meta(con, POLLED + wallet, observed_at)
         _set_meta(con, PARTIAL + wallet, observed_at if still_full else "")  # commits both
         res["wallets"] += 1
     return res
+
+
+def _n_positions(con, wallet, at) -> int:
+    """How many positions that snapshot's page actually held. Since the
+    2026-09-04 addendum `holdings` keeps only the rows in markets we track, so
+    zero rows no longer means an empty page — this is what still tells the two
+    apart. A snapshot older than the addendum has no summary row and reads 0,
+    which is exactly the pre-addendum behaviour for it."""
+    row = con.execute("SELECT n_positions FROM holdings_snapshots "
+                      "WHERE proxy_wallet=? AND observed_at=?", (wallet, at)).fetchone()
+    return int(row[0] or 0) if row else 0
 
 
 def for_bet(cfg, con, ctx, now) -> dict[str, Decimal]:
@@ -197,6 +253,9 @@ def for_bet(cfg, con, ctx, now) -> dict[str, Decimal]:
 
     A wallet that IS fresh but whose snapshot no longer lists the token holds
     zero of it — a reading, not an absence, and the one this rule exists for.
+    Since the 2026-09-04 retention addendum "no rows stored" no longer implies
+    "held nothing": rows outside `markets` are dropped, so the page's own
+    `n_positions` (`holdings_snapshots`) is what separates the two readings.
     An ENTIRELY EMPTY page is the one exception and is treated as no reading:
     rule 3 verified only that `positions?user=<w>` returns a live wallet's
     open positions, never what an empty body means. It could be a genuine
@@ -225,7 +284,7 @@ def for_bet(cfg, con, ctx, now) -> dict[str, Decimal]:
         held = {r[0]: r[1] for r in con.execute(
             "SELECT asset, size FROM holdings WHERE proxy_wallet=? AND observed_at=?",
             (wallet, at))}
-        if not held:
+        if not held and not _n_positions(con, wallet, at):
             continue                                        # empty page: no reading
         if token in held:
             out[wallet] = Decimal(held[token])
