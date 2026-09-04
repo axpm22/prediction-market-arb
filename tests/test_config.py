@@ -61,6 +61,15 @@ def test_watch_venues_bad_name_is_startup_error(tmp_path):
         load(bad)
 
 
+def test_watch_venues_empty_list_is_startup_error(tmp_path):
+    # review of 7528050: the non-empty invariant had no test of its own
+    text = SHIPPED.read_text().replace("watch_venues: [polymarket, sx]", "watch_venues: []")
+    bad = tmp_path / "config.yaml"
+    bad.write_text(text)
+    with pytest.raises(ConfigError, match="watch_venues"):
+        load(bad)
+
+
 def test_shipped_watch_venues_excludes_kalshi():
     # operator decision 2026-09-04: watch only names the PM universe for the
     # whale lane; nothing reads kalshi's ~1.3M rows/day. Add it back by
