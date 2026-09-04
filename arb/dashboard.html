@@ -534,7 +534,7 @@ const TCOLS = [{k:'wallet',t:'wallet'},{k:'root',t:'root'},{k:'sport',t:'sport'}
   {k:'implied',t:'implied%',r:1},{k:'excess_win_rate',t:'excess%',r:1},
   {k:'edge_mean',t:'edge pts',r:1},{k:'roi_at_risk',t:'ROI at risk',r:1},
   {k:'t_stat',t:'t',r:1},{k:'lb80',t:'lb80',r:1},{k:'notional',t:'notional',r:1},
-  {k:'hygiene_flag',t:'flag'}];
+  {k:'hygiene',t:'flag'}];
 let tRows = [], tView = [], tSort = 'lb80', tDesc = true, tOpen = null, tBest = '';
 
 function drawTraders(t){
@@ -557,7 +557,8 @@ function toggleTrader(i){
 const pct = v => v == null ? '—' : (Number(v)*100).toFixed(1) + '%';
 function tCell(r, k){
   if(k === 'wallet') return String(r.wallet||'').slice(0, 12) + '…';
-  if(k === 'hygiene_flag') return r.hygiene_flag ? 'hygiene' : '';
+  if(k === 'hygiene') return r.hygiene || '';
+  if(k === 'n') return r.flagged_n ? `${r.clean_n}/${r.n}` : String(r.n);
   if(k === 'key') return r.level === 'bucket' ? r.key : '—';
   if(k === 'win_rate' || k === 'implied' || k === 'excess_win_rate') return pct(r[k]);
   return r[k] == null ? '—' : r[k];
@@ -580,7 +581,7 @@ function renderTraders(){
     `${c.k===tSort?(tDesc?' ▾':' ▴'):''}</a></th>`).join('');
   const body = tView.map((r, i) => {
     const cells = TCOLS.map(c =>
-      `<td class="${c.r?'r':''} ${c.k==='hygiene_flag'&&r.hygiene_flag?'lane-review':''}">` +
+      `<td class="${c.r?'r':''} ${c.k==='hygiene'&&r.hygiene?'lane-review':''}">` +
       `${esc(tCell(r, c.k))}</td>`).join('');
     const open = r.wallet === tOpen
       ? `<tr><td colspan="${TCOLS.length}" class="ell">best markets: ${esc(tBest)}</td></tr>`

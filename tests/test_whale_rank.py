@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from arb import commands, whale_rank, whale_score, whale_tape
+from arb import commands, whale_hygiene, whale_rank, whale_score, whale_tape
 from arb.config import load
 from arb.models import q6
 from arb.whale_state import WhaleState
@@ -176,6 +176,65 @@ def test_a_hygiene_excluded_wallet_is_ranked_and_flagged_never_hidden(cfg):
     assert "wB" in {r["wallet"] for r in whale_rank.rank(rows, cfg)}
     # the clean wallet's score is untouched by its neighbour's exclusion
     assert _find(rows, "wA", "bucket")["hygiene_flag"] is False
+
+
+def _two_sided(wallet, res, price="0.50", size="100", sport="basketball_nba",
+              mtype="WINNER"):
+    """Two live positions, opposite outcome_index, in ONE market — equal size
+    on each side trips whale_hygiene's real both_sides predicate (default
+    tolerance 0.10: min(live) > tolerance * max(live))."""
+    cid = f"0x{wallet}bothsides"
+    out = [whale_score.Position(
+        wallet=wallet, condition_id=cid, outcome_index=idx,
+        avg_price=q6(Decimal(price)), size=Decimal(size),
+        notional_usd=q6(Decimal(price) * Decimal(size)), entry_ts=T,
+        last_ts=T, pregame=True, sport=sport, market_type=mtype,
+        root=whale_score.root_of(sport, mtype), source="tape") for idx in (0, 1)]
+    res[cid] = {"status": "resolved", "resolved_at": RESOLVED_AT,
+                "winner_outcome_index": 0}
+    return out
+
+
+def _real_state(cfg, positions, resolutions):
+    """Same assembly as `_state`, but `open_positions` comes from the REAL
+    `whale_hygiene.hygiene_flags` both_sides predicate (no prints needed —
+    that scope reads `positions` directly) instead of dropping a wallet by
+    name. This is what exercises the PER-MARKET exclusion the rank bug is
+    about: two of a seven-position bucket flagged, five clean."""
+    hyg = whale_hygiene.hygiene_flags([], positions, cfg)
+    open_pos = [p for p in positions if not hyg.excludes(p)]
+    outcomes = whale_score.resolved_outcomes(open_pos, resolutions, AS_OF)
+    agg = whale_score.aggregate(outcomes)
+    rates = {r: whale_score.base_rate(outcomes, r, AS_OF, cfg)[0]
+             for r in ("sports", "nonsports")}
+    return WhaleState(
+        prints=[], markets={}, resolutions=resolutions, positions=positions,
+        open_positions=open_pos, hygiene_excluded=len(positions) - len(open_pos),
+        rates=rates, rate_n={}, agg=agg,
+        lookup=lambda w, s, m: whale_score.score_for(agg, w, s, m, cfg, rates))
+
+
+def test_a_partly_flagged_bucket_reports_clean_n_and_flagged_n_not_one_bool(cfg):
+    """Review of ecb7e8a: a wallet with 5 clean positions and 2 positions from
+    one both_sides-flagged market in the SAME bucket used to show n=7,
+    hygiene_flag=True — indistinguishable from a wholly excluded market
+    maker, and lb80 spanning more positions than the lane's own score used.
+    clean_n/flagged_n and a tri-state `hygiene` fix that."""
+    res = {}
+    clean = _bucket("wP", "0.60", 3, 2, res)             # 5 clean positions
+    flagged = _two_sided("wP", res)                       # 2 positions, one market
+    whole = _two_sided("wF", res)                         # wholly-excluded wallet
+    state = _real_state(cfg, clean + flagged + whole, res)
+
+    rows = whale_rank.profiles(state, cfg, AS_OF)
+
+    p = _find(rows, "wP", "bucket", "basketball_nba:WINNER")
+    assert (p["n"], p["clean_n"], p["flagged_n"]) == (7, 5, 2)
+    assert p["hygiene"] == "partial"
+
+    f = _find(rows, "wF", "bucket", "basketball_nba:WINNER")
+    assert (f["n"], f["clean_n"], f["flagged_n"]) == (2, 0, 2)
+    assert f["hygiene"] == "full"
 
 
 def test_best_markets_names_where_the_wallet_is_actually_good(cfg):

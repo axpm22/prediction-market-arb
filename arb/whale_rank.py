@@ -45,7 +45,7 @@ HEADER = (f"{'wallet':<14}{'level':<7}{'key':<26}{'n':>4} {'win%':>6} "
 def _blank():
     return {"n": 0, "wins": 0, "size": Decimal(0), "cost": Decimal(0),
             "gain": Decimal(0), "notional": Decimal(0), "e": [], "last": None,
-            "hygiene": False, "root": None}
+            "clean_n": 0, "flagged_n": 0, "root": None}
 
 
 def profiles(state, cfg, as_of) -> list[dict]:
@@ -81,7 +81,10 @@ def profiles(state, cfg, as_of) -> list[dict]:
             c["notional"] += p.notional_usd
             c["e"].append(o.e)
             c["last"] = max(c["last"] or o.resolved_at, o.resolved_at)
-            c["hygiene"] = c["hygiene"] or id(p) not in open_ids
+            if id(p) in open_ids:
+                c["clean_n"] += 1
+            else:
+                c["flagged_n"] += 1
     agg = whale_score.aggregate(outcomes)
     return [_row(wallet, level, key, cell, agg, state, cfg)
             for (wallet, level, key), cell in cells.items()]
@@ -118,6 +121,12 @@ def _row(wallet, level, key, c, agg, state, cfg) -> dict:
     raw_mean = sum(c["e"], Decimal(0)) / n
     edge_mean = q6(raw_mean)
     win_rate, implied = q6(Decimal(c["wins"]) / n), q6(c["cost"] / c["size"])
+    # Three-valued, not one bool (review of ecb7e8a): "" no exclusion in this
+    # cell, "partial" some positions excluded and some not (a single wallet
+    # market maker looks identical to a mostly-clean wallet with one bad
+    # market unless the two counts are kept apart), "full" every position in
+    # the cell is hygiene-excluded.
+    hygiene = "" if c["flagged_n"] == 0 else ("full" if c["clean_n"] == 0 else "partial")
     return {
         "wallet": wallet, "level": level, "key": key, "root": root,
         "sport": _sport_of(level, key),
@@ -135,7 +144,10 @@ def _row(wallet, level, key, c, agg, state, cfg) -> dict:
         # a bucket row is the wallet's own record in that market type; sport
         # and root rows are aggregates over several
         "native": level == "bucket",
-        "hygiene_flag": c["hygiene"]}
+        # clean_n: positions the lane's own score used (state.open_positions).
+        # flagged_n: hygiene-excluded ones counted into this same cell's `n`.
+        "clean_n": c["clean_n"], "flagged_n": c["flagged_n"], "hygiene": hygiene,
+        "hygiene_flag": c["flagged_n"] > 0}   # kept for compatibility
 
 
 # ---------------------------------------------------------------- ordering
@@ -186,13 +198,19 @@ def _n(v) -> str:
     return "—" if v is None else str(v)
 
 
+def _n_ratio(r) -> str:
+    """`clean_n/n` once anything in the cell is flagged, else plain `n` — the
+    ratio is the whole point (a cell can be `partial` with most of it clean)."""
+    return f"{r['clean_n']}/{r['n']}" if r["flagged_n"] else str(r["n"])
+
+
 def line(r) -> str:
     """One `arb whale-rank` row, aligned under HEADER."""
     return (f"{r['wallet'][:13]:<14}{r['level']:<7}{r['key'][:25]:<26}"
-            f"{r['n']:>4} {_pct(r['win_rate']):>6} {_pct(r['implied']):>6} "
+            f"{_n_ratio(r):>4} {_pct(r['win_rate']):>6} {_pct(r['implied']):>6} "
             f"{_pct(r['excess_win_rate']):>8} {r['edge_mean']:>9} "
             f"{_n(r['roi_at_risk']):>10} {_n(r['t_stat']):>10} {r['lb80']:>10} "
-            f"{r['notional']:>12}  {'HYGIENE' if r['hygiene_flag'] else ''}")
+            f"{r['notional']:>12}  {r['hygiene']}")
 
 
 def traders_frame(cfg, state, as_of) -> dict:
@@ -223,10 +241,10 @@ def traders_md(frame: dict) -> list[str]:
           "", "| trader | bucket | n | win% | implied% | excess% | edge pts | "
           "ROI at risk | t | lb80 | flag |", "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in frame["top"]:
-        md.append(f"| {r['wallet']} | {r['key']} | {r['n']} | {_pct(r['win_rate'])} | "
+        md.append(f"| {r['wallet']} | {r['key']} | {_n_ratio(r)} | {_pct(r['win_rate'])} | "
                   f"{_pct(r['implied'])} | {_pct(r['excess_win_rate'])} | "
                   f"{r['edge_mean']} | {_n(r['roi_at_risk'])} | {_n(r['t_stat'])} | "
-                  f"{r['lb80']} | {'hygiene' if r['hygiene_flag'] else '—'} |")
+                  f"{r['lb80']} | {r['hygiene'] or '—'} |")
     if not frame["top"]:
         md.append("| — | — | 0 | — | — | — | — | — | — | — | — |")
     md.append("")
