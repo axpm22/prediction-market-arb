@@ -358,7 +358,7 @@ def test_shipped_dashboard_cache_secs():
     # live 2026-09-04: /api/whale recompute pileup fix. TTL == refresh_secs —
     # a read-only panel may lag the tape by one refresh, never more.
     cfg = load(SHIPPED)
-    assert cfg["dashboard"]["cache_secs"] == 60
+    assert cfg["dashboard"]["cache_secs"] == 300   # 60 -> 300 on 2026-09-05: four heavy endpoints per refresh saturated the CPU the live lane shares
     assert cfg["dashboard"]["cache_secs"] == cfg["dashboard"]["refresh_secs"]
 
 
