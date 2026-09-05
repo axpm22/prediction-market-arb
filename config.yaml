@@ -700,17 +700,25 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   (measured 2026-09-04: 231 of 485 open crypto nested
                                       #   markets) fails this floor — no measured flow is not an
                                       #   unknown to be admitted.
-    max_days: 7                       # the LANE's own booking horizon, in days, for a non-sports
+    max_days: 90                      # the LANE's own booking horizon, in days, for a non-sports
                                       #   market: how far ahead of `now` its Gamma endDate may
                                       #   fall, applied by whale_nonsports (universe) and by
                                       #   arb/tracker.py (booking) for WHALE rows only — every
-                                      #   other kind keeps the ledger's shared `nonsports_max_days`.
-                                      #   Shipped at 7, today's shared value, so this key changes
-                                      #   NOTHING as it stands. OPERATOR DECISION PENDING: raising
-                                      #   it widens the non-sports universe — the 7-day probe of
-                                      #   2026-09-04 found ~5 politics markets over $1k and 0
-                                      #   crypto, and this horizon, not the volume floor, is what
-                                      #   binds. The registered amendment will set the value.
+                                      #   other kind keeps the ledger's shared `nonsports_max_days`
+                                      #   (7), which this key is now deliberately NOT equal to.
+                                      #   7 -> 90 on 2026-09-05 (OPERATOR DECISION "what do we need
+                                      #   for the non sports"; PREREGISTRATION row of that date):
+                                      #   a quarter, so the universe is "markets resolving within
+                                      #   this quarter" rather than "within the week". MEASURED
+                                      #   live the same day (data/verified_facts.md), at the
+                                      #   shipped pages: 3 depth: 6 markets clear every filter at
+                                      #   7 days (politics 5, geopolitics 1, crypto 0) against 89
+                                      #   at 90 (politics 45, geopolitics 42, crypto 2) — a 15x
+                                      #   surface for ZERO extra Gamma calls, since `pages` x
+                                      #   `tags` is the whole call cost and the horizon is a
+                                      #   client-side filter on markets already in those pages.
+                                      #   Thresholds, roots, tags, volume floor and lifetime floor
+                                      #   are all UNCHANGED by this amendment.
     min_lifetime_hours: 6             # market endDate minus the LATEST of its own startDate, its
                                       #   own createdAt and the event's startDate. A market that
                                       #   lives six hours cannot host a print-to-touch follow, an

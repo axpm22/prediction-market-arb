@@ -66,7 +66,7 @@ def test_the_builder_keeps_exactly_the_open_liquid_long_lived_market(cfg):
         _market("0xthin", slug="thin", volume="999"),
         _market("0xnovol", slug="novol", volume=None),
         _market("0xshort", slug="short", lifetime_hours=0.25),
-        _market("0xfar", slug="far", ends_in_days=30),
+        _market("0xfar", slug="far", ends_in_days=120),
         _market("0xpast", slug="past", ends_in_days=-1),
     ])
     got = whale_nonsports.markets_of(cfg, ev, NOW)
@@ -160,25 +160,27 @@ def test_a_kept_market_lands_in_the_tape_and_the_lane_reads_it_back(cfg, con):
 
 
 def test_the_lane_universe_is_bounded_by_the_nonsports_horizon(cfg, con):
+    """Both ends of `[now, now + max_days]`. The market resolves at NOW+3d, so
+    the LOWER bound is tested from a `now` past its own deadline — not from a
+    `now` before it, which the 90-day window (amendment 2026-09-05) admits."""
     _persist(cfg, con, [_event(tags=("politics",), markets=[_market("0xp")])])
     late = NOW + timedelta(days=int(cfg["whale"]["nonsports"]["max_days"]) + 1)
     assert whale_nonsports.tape_universe(con, cfg, late) == []
-    assert whale_nonsports.tape_universe(con, cfg, NOW - timedelta(days=10)) == []
+    assert whale_nonsports.tape_universe(con, cfg, NOW + timedelta(days=5)) == []
 
 
 def test_the_universe_reads_the_lanes_own_horizon_key(cfg, con):
-    """H (fix pass): `whale.nonsports.max_days` is the lane's OWN booking
-    horizon, shipped at today's shared `nonsports_max_days` (7) so nothing
-    moves. A politics market 20 days out is excluded at 7 and admitted at 30 —
-    in the builder and in the tape read alike."""
+    """`whale.nonsports.max_days` is the lane's OWN booking horizon, amended
+    7 -> 90 on 2026-09-05. A politics market 20 days out — a 2026-midterm
+    market, the class the amendment was measured on — is admitted at 90 and
+    excluded at 7, in the builder and in the tape read alike."""
     ev = _event(tags=("politics",), markets=[_market("0xfar", ends_in_days=20)])
-    assert whale_nonsports.markets_of(cfg, ev, NOW) == []
-    cfg["whale"]["nonsports"]["max_days"] = 30
     assert [m.condition_id for m in whale_nonsports.markets_of(cfg, ev, NOW)] == ["0xfar"]
     _persist(cfg, con, [ev])
     assert [m.condition_id for m in whale_nonsports.tape_universe(con, cfg, NOW)] \
         == ["0xfar"]
     cfg["whale"]["nonsports"]["max_days"] = 7
+    assert whale_nonsports.markets_of(cfg, ev, NOW) == []
     assert whale_nonsports.tape_universe(con, cfg, NOW) == []
 
 

@@ -235,18 +235,23 @@ def _book_politics(cfg, tmp_path, days_out, fp):
 
 
 def test_a_whale_nonsports_row_reads_the_lanes_own_horizon_key(cfg, tmp_path):
-    """The lane's non-sports horizon is `whale.nonsports.max_days`, shipped at
-    today's shared `nonsports_max_days` (7) so nothing moves. Raising it must
-    widen the WHALE lane and nothing else."""
-    assert cfg["whale"]["nonsports"]["max_days"] == cfg["nonsports_max_days"]
-    store = _book_politics(cfg, tmp_path, 20, "fp-pol-7")
+    """The lane's non-sports horizon is `whale.nonsports.max_days`, amended
+    7 -> 90 on 2026-09-05, and it is the WHALE lane's alone — the ledger's
+    shared `nonsports_max_days` stays 7 (the test below pins that half)."""
+    assert cfg["whale"]["nonsports"]["max_days"] == 90 > cfg["nonsports_max_days"]
+    # the 2026-11 midterm markets the amendment was measured on: 20 days out,
+    # left on the table at 7, booked at 90
+    store = _book_politics(cfg, tmp_path, 20, "fp-pol-90")
+    assert store.query("SELECT COUNT(*) c FROM flat_bets")[0]["c"] == 1
+
+    store = _book_politics(cfg, tmp_path, 120, "fp-pol-120")
     assert store.query("SELECT COUNT(*) c FROM flat_bets")[0]["c"] == 0
     assert store.query("SELECT reason FROM left_on_table ORDER BY id DESC LIMIT 1"
                        )[0]["reason"] == "too-far-to-settlement"
 
-    cfg["whale"]["nonsports"]["max_days"] = 30
-    store = _book_politics(cfg, tmp_path, 20, "fp-pol-30")
-    assert store.query("SELECT COUNT(*) c FROM flat_bets")[0]["c"] == 1
+    cfg["whale"]["nonsports"]["max_days"] = 7
+    store = _book_politics(cfg, tmp_path, 20, "fp-pol-7")
+    assert store.query("SELECT COUNT(*) c FROM flat_bets")[0]["c"] == 0
 
 
 def test_a_nonsports_row_of_another_kind_keeps_the_shared_horizon(cfg, tmp_path):

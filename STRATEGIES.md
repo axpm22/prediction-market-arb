@@ -157,7 +157,9 @@ the same field prices the leg (politics 0.04, crypto 0.07, geopolitics 0.00
 against the sports 0.03), segregates the report and isolates the score. The
 universe comes from Gamma by tag inside `whale-backfill` (never the watch lane,
 never the 60 s cycle), filtered to open markets over $1,000 of 24h volume, at
-least 6 hours of lifetime and resolving within `nonsports_max_days` (7); the
+least 6 hours of lifetime and resolving within `whale.nonsports.max_days`
+(amended 7 → **90** on 2026-09-05, the lane's own key and no longer the
+ledger's shared `nonsports_max_days`, which stays 7); the
 pregame gate becomes the market's own resolution deadline, so "600 s before
 kickoff" reads as "not inside the last ten minutes before resolution" with no
 change to a single line of scoring, exits or settlement. **Two things stated
@@ -165,9 +167,17 @@ before the data.** Adverse selection should be WORSE here, not better: a
 politics market has no kickoff, so the whale's information may be hours old and
 already in the price, and only the print-age and drift gates — both tuned on
 sports — stand against it; the markout is therefore reported per root. And the
-surface is THIN: measured 2026-09-04, the 7-day horizon (not the volume floor)
-binds, leaving 5 politics markets over $1,000 resolving inside it and nothing at
-all in crypto. The primary metric stays the SPORTS-root V2/flat figure; each new
+surface is THIN: measured 2026-09-04, the horizon (not the volume floor) binds,
+leaving 5 politics markets over $1,000 resolving inside 7 days and nothing at
+all in crypto. **Amended 2026-09-05** (operator: "what do we need for the non
+sports"): the horizon becomes 90 days — a quarter — which at the same page
+depth takes that surface from 6 markets to 89 (politics 45, geopolitics 42,
+crypto 2) for zero extra Gamma calls, since the pages fetched are the whole
+call cost and the horizon only filters what is already inside them. What it
+buys is the 2026 midterm and year-end political book (senate/house/balance of
+power, $8k–$31k of 24h volume each), which a one-week horizon can never see —
+and it does NOT admit the short-horizon crypto series, which the same
+measurement shows were already inside the 7-day window. The primary metric stays the SPORTS-root V2/flat figure; each new
 root accumulates its own n against the same kill rules and is never pooled with
 sports.
 

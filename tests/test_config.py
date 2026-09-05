@@ -424,7 +424,11 @@ def test_sports_as_a_nonsports_root_is_a_boot_error(tmp_path):
 
 
 def test_the_whale_lane_ships_its_own_nonsports_horizon(tmp_path):
-    """H (fix pass): pre-plumbed at today's shared `nonsports_max_days`, so the
-    key exists for the operator to raise without moving every other lane."""
+    """Amended 2026-09-05 (operator: "what do we need for the non sports"):
+    the lane's horizon is 90 days — a quarter — and is now DELIBERATELY not
+    the ledger's shared `nonsports_max_days`, which stays 7 for every other
+    lane. Measured the same day, this is the difference between 6 and 89
+    non-sports markets in the universe at the shipped page depth."""
     cfg = load(SHIPPED)
-    assert cfg["whale"]["nonsports"]["max_days"] == cfg["nonsports_max_days"] == 7
+    assert cfg["whale"]["nonsports"]["max_days"] == 90
+    assert cfg["nonsports_max_days"] == 7

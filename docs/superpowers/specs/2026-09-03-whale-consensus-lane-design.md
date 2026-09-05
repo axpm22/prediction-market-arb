@@ -149,6 +149,32 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    **Surface, measured the same day:** the horizon, not the volume floor, is
    what binds — 173 of 1,971 open politics markets resolve within 7 days and 5
    of those clear $1,000; crypto contributes 0 of 1,219.
+   **Amended 2026-09-05 (horizon 7 → 90, operator decision; PREREGISTRATION
+   row of that date).** `whale.nonsports.max_days` is 90 — a quarter — so the
+   universe reads "resolving within this quarter". Nothing else in this step
+   changes: same tags, same pages, same volume floor, same lifetime floor,
+   same `start_utc := endDate`. **The call cost is unchanged at
+   `tags × pages` = 9**, because the horizon is a client-side filter on
+   markets already inside the pages fetched; only the yield per page moves.
+   Re-measured live 2026-09-05 (data/verified_facts.md), at the shipped
+   `pages: 3`: 7 d → 6 markets (politics 5, geopolitics 1, crypto 0) against
+   90 d → 89 (politics 45, geopolitics 42, crypto 2). What 90 days buys is the
+   2026 midterm and year-end political book (`which-party-will-win-the-senate/
+   house-in-2026`, `balance-of-power-2026-midterms`, `putin-out-before-2027`),
+   $8k–$31k of 24 h volume each, which a one-week horizon can never see.
+   **Second correction, dated 2026-09-05:** the correction above says the
+   horizon is what excludes the 5-/15-minute crypto series. Measured over
+   every available page, it is NOT — 136 crypto markets clear every filter
+   INSIDE 7 days (the daily strike ladders, `bitcoin-above-on-september-5`
+   and kin), so they were already admitted before this amendment and 90 days
+   does not add them. No registered filter excludes that series today; the
+   `min_lifetime_hours` floor and the horizon both fail to, and that is
+   stated rather than fixed here.
+   **Page depth is a SEPARATE, unmade decision:** politics and crypto both
+   have more than 1,200 open tag events, so `pages: 3` sees 300 of them and
+   yields 45 of the 158 politics markets that clear the filters platform-wide.
+   Raising `pages` costs `tags` calls a page (+3 calls ≈ +6 s at
+   `max_calls_per_min` 30); it is not part of this amendment.
 
 2. **Collect.** `whale.collector_mode: global` (Task 1 fix pass: the global
    feed returns 10,000 rows per call against a platform rate of about
@@ -1037,11 +1063,19 @@ wallet still full at the cap is marked `partial` in the tape (see §9).
 non-sports WHALE candidate is `whale.nonsports.max_days`, applied by
 `arb/tracker.py` when the candidate's `category != "sports"` AND its
 `kind == "WHALE"`, and by the universe builder so the lane never prices a
-market it could not book. It ships at **7** — the ledger's shared
-`nonsports_max_days`, which every other kind still reads — so the key is
-pre-plumbed at NO behaviour change; raising it widens the non-sports whale
-universe and nothing else, and that value is the operator's to set in a dated
-amendment (the 7-day probe found ~5 politics markets over $1k and 0 crypto). A new loader invariant: every
+market it could not book. It shipped at **7** — the ledger's shared
+`nonsports_max_days`, which every other kind still reads — pre-plumbed at NO
+behaviour change, with the value left for the operator to set in a dated
+amendment. **Amended 2026-09-05: it is 90** (operator decision "what do we
+need for the non sports"; PREREGISTRATION row of that date), and is therefore
+now deliberately NOT equal to `nonsports_max_days`, which stays 7 for the
+political and negrisk lanes. Cost: **zero extra Gamma calls** — the builder's
+9 calls a refresh are `tags × pages` and the horizon filters client-side, and
+the 60 s cycle's own resolution read skips any market whose `start_utc` is
+still ahead of `now` (`whale_resolve._due`), which every market admitted by
+this horizon is by construction — so the `whale-backfill` child stays at its
+359-call / ~718 s worst case against `max_child_runtime_secs.whale-backfill`
+(900). Measured effect at the shipped page depth: 6 markets → 89. A new loader invariant: every
 `whale.nonsports.tags` value must be a Polymarket fee category other than
 `sports`; a root that is not one would be priced at the venue's default
 `fee_rate`, and `sports` as a value would defeat the no-transfer decision.
