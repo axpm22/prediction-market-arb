@@ -37,7 +37,8 @@ def _tail_errors(cfg, limit: int = 30) -> list[dict]:
     import os
     root = Path(os.environ.get("ARB_LOG_DIR") or ".")
     out = []
-    for name in ("supervisor.log", "scan.log", "regrade.log", "unmatched.log"):
+    for name in ("supervisor.log", "scan.log", "regrade.log", "unmatched.log",
+                 "whale.log"):
         p = root / "logs" / name
         if not p.exists():
             continue
@@ -58,27 +59,6 @@ def _tail_errors(cfg, limit: int = 30) -> list[dict]:
                             "msg": parts[4][:300], "file": name})
     out.sort(key=lambda e: e["at"], reverse=True)
     return dashboard_mode.filter_errors(cfg, out)[:limit]
-
-
-def _lane_timing(cfg, store, day_start: str) -> list[dict]:
-    """Per-lane cadence: configured interval vs last poll actually persisted.
-    `enabled` labels a lane supervisor.processes has switched off — its
-    history can still show (e.g. after a mode change) without pretending
-    it's running today."""
-    from arb.heartbeat import lane_interval
-    last = {r["kind"]: dict(r) for r in store.query(
-        """SELECT kind, MAX(started_at) last_poll, COUNT(*) polls_today,
-                  COALESCE(SUM(n_quotes),0) quotes_today
-           FROM polls WHERE started_at >= ? GROUP BY kind""", (day_start,))}
-    procs = cfg["supervisor"]["processes"]
-    lanes = [k for k, v in procs.items() if v]
-    lanes += [k for k in last if k not in lanes]
-    return [{"name": k, "enabled": bool(procs.get(k, False)),
-             "interval_secs": lane_interval(cfg, k),
-             "last_poll": (last.get(k) or {}).get("last_poll"),
-             "polls_today": (last.get(k) or {}).get("polls_today", 0),
-             "quotes_today": (last.get(k) or {}).get("quotes_today", 0)}
-            for k in lanes]
 
 
 def _daily_schedule(cfg, now) -> list[dict]:
@@ -173,7 +153,7 @@ def state(cfg, store) -> dict:
     return {
         "generated_at": now.isoformat(timespec="seconds"),
         "day": day,
-        "lanes": _lane_timing(cfg, store, start),
+        "lanes": dashboard_mode.lane_timing(cfg, store, start),
         "errors": _tail_errors(cfg),
         "schedule": _daily_schedule(cfg, now),
         "supervisor": "ALIVE" if (fresh or lock_alive) else ("STALE" if beats else "DEAD"),

@@ -594,8 +594,17 @@ def test_whale_mode_js_hides_the_arb_only_pieces_and_filters_positions():
 def test_tail_errors_whale_mode_drops_disabled_venues_and_lanes(tmp_path):
     """Fix pass on 5c9bbb5: the errors feed still showed sx/kalshi watch
     failures and disabled-lane warnings (negrisk etc.) in whale mode. Drop
-    those; never drop arb.whale*/arb.supervisor lines, or an arb.watch line
-    about an enabled venue (polymarket, per config.yaml watch_venues)."""
+    those; never drop arb.whale*/arb.supervisor/arb.oddsapi lines (rule 2:
+    the low-credit WARNING must always survive — oddsapi can never be in
+    watch_venues, so routing it through the venue check hid it forever), or
+    an arb.watch line about an enabled venue (polymarket, per config.yaml
+    watch_venues). arb.kalshi_events IS the negrisk lane (it's what
+    nonsports/kalshi_events.py logs as), so it's dropped in whale mode too
+    (negrisk is off in config.yaml's whale-mode processes block) — the
+    generic `source.split(".",1)[1]` lane guess used to miss this because
+    "kalshi_events" isn't a supervisor.processes key. arb.whale logs to
+    whale.log, not scan.log (arb/whale_tape.py etc.) — exercised here so a
+    regression on _tail_errors' log-file list regresses this test too."""
     import os
 
     from arb.dashboard import _tail_errors
@@ -604,23 +613,39 @@ def test_tail_errors_whale_mode_drops_disabled_venues_and_lanes(tmp_path):
     (logdir / "scan.log").write_text(
         "2026-09-05 00:01:00,000 WARNING arb.watch venue fetch failed: sx: 400 from https://x\n"
         "2026-09-05 00:01:01,000 WARNING arb.negrisk something broke\n"
-        "2026-09-05 00:01:02,000 WARNING arb.whale wallet backfill slow\n"
         "2026-09-05 00:01:03,000 WARNING arb.watch venue fetch failed: polymarket: 500 from https://y\n"
         "2026-09-05 00:01:04,000 WARNING arb.supervisor child restart\n"
-        "2026-09-05 00:01:05,000 WARNING arb.kalshi pagination cap hit\n")
+        "2026-09-05 00:01:05,000 WARNING arb.kalshi pagination cap hit\n"
+        "2026-09-05 00:01:06,000 WARNING arb.oddsapi x-requests-remaining: 42, low\n"
+        "2026-09-05 00:01:07,000 WARNING arb.kalshi_events something broke\n")
+    (logdir / "whale.log").write_text(
+        "2026-09-05 00:01:02,000 WARNING arb.whale wallet backfill slow\n")
 
     cfg = _cfg()
     cfg["dashboard"]["mode"] = "whale"
+    assert cfg["scan_times"] == []                 # rule-2 warning must survive even so
     whale = _tail_errors(cfg)
     cfg_full = copy.deepcopy(cfg)
     cfg_full["dashboard"]["mode"] = "full"
     full = _tail_errors(cfg_full)
 
-    assert {e["source"] for e in whale} == {"arb.watch", "arb.whale", "arb.supervisor"}
+    assert {e["source"] for e in whale} == \
+        {"arb.watch", "arb.whale", "arb.supervisor", "arb.oddsapi"}
     assert {e["msg"] for e in whale if e["source"] == "arb.watch"} == \
         {"venue fetch failed: polymarket: 500 from https://y"}
     assert {e["source"] for e in full} == \
-        {"arb.watch", "arb.negrisk", "arb.whale", "arb.supervisor", "arb.kalshi"}
+        {"arb.watch", "arb.negrisk", "arb.whale", "arb.supervisor", "arb.kalshi",
+         "arb.oddsapi", "arb.kalshi_events"}
+
+
+def test_unknown_logger_is_never_hidden_in_whale_mode():
+    """dashboard_mode can't classify every logger name into a
+    supervisor.processes lane; when it can't, keep the line rather than
+    guess — a hidden real error is worse than a noisy unclassified one."""
+    from arb.dashboard_mode import _keep_error_line
+    cfg = _cfg()
+    cfg["dashboard"]["mode"] = "whale"
+    assert _keep_error_line(cfg, "some.other.logger", "whatever") is True
 
 
 def test_lanes_and_venues_stay_visible_in_whale_mode_but_scoped(tmp_path):
@@ -675,6 +700,20 @@ def test_whale_mode_hides_the_remaining_arb_only_sections():
     assert "'lanes'" not in apply_mode and "'venues'" not in apply_mode
 
 
+def test_full_mode_js_never_hides_the_arb_only_sections():
+    """Companion to test_whale_mode_hides_the_remaining_arb_only_sections:
+    applyMode's hides are guarded by an early return on MODE — in full mode
+    (MODE === 'full') every hide below that guard is unreachable, so the
+    seven ids stay visible. Checked the same way as the whale-mode test:
+    at the source level, on the guard that makes it true, since MODE is
+    templated server-side and there's no JS engine here to execute it."""
+    html = (ROOT / "arb" / "dashboard.html").read_text()
+    script = html.split("<script>")[1]
+    apply_mode = script[script.index("function applyMode("):script.index("applyMode();")]
+    first_stmt = apply_mode[apply_mode.index("{") + 1:].strip().splitlines()[0].strip()
+    assert first_stmt == "if(MODE !== 'whale') return;"
+
+
 def test_exit_rows_walk_their_own_root_set_not_rois():
     """drawWhale's exitRows used to reuse `roots` (built from f.roi), so an
     exits-only root absent from f.roi silently dropped its exit row."""
@@ -691,7 +730,7 @@ def test_whale_mode_helpers_moved_to_dashboard_mode_and_dashboard_py_stays_lean(
     dashboard.py calls in thin."""
     from arb import dashboard, dashboard_mode
     dashboard_lines = len(Path("arb/dashboard.py").read_text().splitlines())
-    assert dashboard_lines < 338            # was 338 before the move
+    assert dashboard_lines <= 300            # CLAUDE.md: modules stay ~300 lines
     assert len(Path("arb/dashboard_mode.py").read_text().splitlines()) <= 150
     for name in ("_TITLES", "_WHALE_FRONT", "_whale_first", "_extract_marked"):
         assert not hasattr(dashboard, name)

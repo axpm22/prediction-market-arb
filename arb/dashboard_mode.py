@@ -17,10 +17,35 @@ WHALE_FRONT = ("whale1", "whale2", "positions", "lamps", "errsec")
 
 # arb.watch logs every venue fetch under one logger, name embedded in the
 # message ("venue fetch failed: sx: 400 from ..."); these loggers instead
-# carry the venue in their own name.
+# carry the venue in their own name. arb.oddsapi is NOT here — it's never
+# filtered at all (rule 2, see _keep_error_line) and oddsapi can never be a
+# member of watch_venues (the config loader restricts that to kalshi/
+# polymarket/sx), so routing it through this venue check hid it forever.
 _VENUE_LOGGERS = {"arb.kalshi": "kalshi", "arb.sx": "sx",
-                   "arb.polymarket": "polymarket", "arb.oddsapi": "oddsapi"}
+                   "arb.polymarket": "polymarket"}
 _WATCH_VENUE = re.compile(r"venue fetch \w+: (\w+):")
+
+# Logger name -> supervisor.processes lane, explicit rather than guessed from
+# the dotted name: arb.kalshi_events (nonsports/kalshi_events.py) IS the
+# negrisk lane's non-sports leg, but "kalshi_events" is not a processes key,
+# so a name-derived guess let it through even with negrisk disabled.
+_LANE_LOGGERS = {"arb.negrisk": "negrisk", "arb.kalshi_events": "negrisk",
+                  "arb.consensus": "scan"}
+_LANE_PREFIXES = (("arb.political", "political"), ("arb.mapped", "mapped"),
+                   ("arb.verify", "verify"), ("arb.live", "live"),
+                   ("arb.scan", "scan"))
+
+
+def _lane_of(source: str) -> str | None:
+    """The supervisor.processes lane `source` belongs to, or None when it
+    can't be classified. Callers must KEEP a line whose lane is None — a
+    hidden real error is worse than a noisy unclassified one."""
+    if source in _LANE_LOGGERS:
+        return _LANE_LOGGERS[source]
+    for prefix, lane in _LANE_PREFIXES:
+        if source.startswith(prefix):
+            return lane
+    return None
 
 
 def extract_marked(html: str, name: str) -> tuple[str, str]:
@@ -55,9 +80,11 @@ def _disabled_lanes(cfg) -> set[str]:
 
 def _keep_error_line(cfg, source: str, msg: str) -> bool:
     """Whale mode only: drop a log line about a venue outside watch_venues or
-    a lane supervisor.processes has switched off. arb.whale*/arb.supervisor
-    lines, and arb.watch lines about an enabled venue, are never dropped."""
-    if source.startswith("arb.whale") or source == "arb.supervisor":
+    a lane supervisor.processes has switched off. arb.whale*/arb.supervisor/
+    arb.oddsapi lines (rule 2: the Odds API low-credit WARNING must always be
+    visible), arb.watch lines about an enabled venue, and any logger this
+    module can't classify into a lane, are never dropped."""
+    if source.startswith("arb.whale") or source in ("arb.supervisor", "arb.oddsapi"):
         return True
     if source == "arb.watch":
         m = _WATCH_VENUE.search(msg)
@@ -65,8 +92,8 @@ def _keep_error_line(cfg, source: str, msg: str) -> bool:
     venue = _VENUE_LOGGERS.get(source)
     if venue is not None:
         return venue in cfg["watch_venues"]
-    lane = source.split(".", 1)[1] if source.startswith("arb.") else source
-    return lane not in _disabled_lanes(cfg)
+    lane = _lane_of(source)
+    return lane is None or lane not in _disabled_lanes(cfg)
 
 
 def filter_errors(cfg, errors: list[dict]) -> list[dict]:
@@ -74,3 +101,24 @@ def filter_errors(cfg, errors: list[dict]) -> list[dict]:
     if str(cfg["dashboard"]["mode"]) != "whale":
         return errors
     return [e for e in errors if _keep_error_line(cfg, e["source"], e["msg"])]
+
+
+def lane_timing(cfg, store, day_start: str) -> list[dict]:
+    """Per-lane cadence: configured interval vs last poll actually persisted.
+    `enabled` labels a lane supervisor.processes has switched off — its
+    history can still show (e.g. after a mode change) without pretending
+    it's running today."""
+    from arb.heartbeat import lane_interval
+    last = {r["kind"]: dict(r) for r in store.query(
+        """SELECT kind, MAX(started_at) last_poll, COUNT(*) polls_today,
+                  COALESCE(SUM(n_quotes),0) quotes_today
+           FROM polls WHERE started_at >= ? GROUP BY kind""", (day_start,))}
+    procs = cfg["supervisor"]["processes"]
+    lanes = [k for k, v in procs.items() if v]
+    lanes += [k for k in last if k not in lanes]
+    return [{"name": k, "enabled": bool(procs.get(k, False)),
+             "interval_secs": lane_interval(cfg, k),
+             "last_poll": (last.get(k) or {}).get("last_poll"),
+             "polls_today": (last.get(k) or {}).get("polls_today", 0),
+             "quotes_today": (last.get(k) or {}).get("quotes_today", 0)}
+            for k in lanes]
