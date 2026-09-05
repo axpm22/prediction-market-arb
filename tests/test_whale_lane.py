@@ -837,7 +837,7 @@ def test_heartbeat_knows_both_whale_processes(cfg):
     assert cfg["supervisor"]["processes"]["whale-backfill"] is True
     assert cfg["supervisor"]["commands"]["whale"] == "whale --once"
     assert cfg["supervisor"]["commands"]["whale-backfill"] == "whale-backfill --once"
-    assert cfg["supervisor"]["max_child_runtime_secs"]["whale"] == 120
+    assert cfg["supervisor"]["max_child_runtime_secs"]["whale"] == 300   # 120 -> 300 insurance 2026-09-05 (see config comment)
 
 
 def test_stale_lanes_recognises_a_silent_whale_lane(cfg, tmp_path):
