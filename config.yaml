@@ -739,6 +739,26 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   `slug IS NOT NULL` floor is gone (arb/whale_map.py), so
                                       #   they re-enter this same queue; at 1000/cycle the
                                       #   backlog drains in ~12 cycles (~2h at cadence_secs=600).
+  mat:                                # per-wallet materialization of positions + hygiene
+                                      #   (matpos 2026-09-05, arb/whale_mat.py). The 60 s
+                                      #   scoring pass used to rebuild every wallet from
+                                      #   every print: 29.4 s on the 763,786-row tape of
+                                      #   2026-09-05, growing ~700k rows/day. Only the
+                                      #   wallets whose prints changed are recomputed now,
+                                      #   into the derived `positions_mat`/`hygiene_mat`
+                                      #   cache; `prints` is still the record (rule 7) and
+                                      #   `arb whale-mat --rebuild` rebuilds the cache from it.
+    max_wallets_per_cycle: 400        # wallets recomputed per call, oldest-dirty first;
+                                      #   leftovers go to the next cycle, so the lane never
+                                      #   stalls on the first pass over an existing tape.
+                                      #   MEASURED (synthetic 800k prints / 3,000 wallets,
+                                      #   see .superpowers/sdd/materialized-positions-report.md):
+                                      #   a full first materialization is ~8 cycles at this cap
+                                      #   for 3,000 wallets, ~8 min at poll_secs=60, during which
+                                      #   the lane scores off a PARTIAL cache (KNOWN_ISSUES.md,
+                                      #   "L14 materialized-positions rebuild window"). Steady
+                                      #   state is a few dozen dirty wallets a cycle, far under
+                                      #   this cap, so it binds only on a rebuild.
   page_size: 10000                    # trades rows per call (10,000 verified 2026-09-03);
                                       #   paging stops on age, never on `start`
   max_offset: 10000                   # the feed 400s past this (observed 2026-09-04);

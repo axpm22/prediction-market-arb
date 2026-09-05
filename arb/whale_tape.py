@@ -12,8 +12,10 @@ Rule 9: writes only to whale.tape_db, so flat_bets is structurally
         unreachable from this lane — the arb/pm_tape.py defence.
 
 I/O only. Positions, scores and signals are pure functions elsewhere.
-One print row (parse + persist) lives in arb/whale_rows.py, and the market
-universe in arb/whale_universe.py — both on size alone.
+One print row (parse + persist) lives in arb/whale_rows.py, the market
+universe in arb/whale_universe.py, and the derived positions/hygiene cache's
+own DDL in arb/whale_mat.py (MAT_SCHEMA, appended by `open_tape`) — all three
+on size alone.
 """
 from __future__ import annotations
 
@@ -171,7 +173,13 @@ def open_tape(path: str | Path) -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA busy_timeout=30000")
-    con.executescript(SCHEMA)
+    # matpos (2026-09-05): the derived positions/hygiene cache's own DDL lives
+    # with the only module that reads or writes it (arb/whale_mat.py MAT_SCHEMA)
+    # — this file is already over its ~300-line budget, which is why
+    # arb/whale_migrate.py was split out of it too. Imported inside the call so
+    # neither module has to import the other at module scope.
+    from arb.whale_mat import MAT_SCHEMA
+    con.executescript(SCHEMA + MAT_SCHEMA)
     _migrate(con)
     con.commit()
     return con

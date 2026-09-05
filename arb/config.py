@@ -185,6 +185,7 @@ SCHEMA = {
               "backfill": {"wallets_per_cycle": NUM, "pages_per_wallet": NUM,
                            "page_size": NUM, "cadence_secs": NUM,
                            "resolve_per_cycle": NUM, "map_per_cycle": NUM},
+              "mat": {"max_wallets_per_cycle": NUM},
               "page_size": NUM, "max_offset": NUM, "taker_only": BOOL,
               "slug_sport_prefixes": MAP(STR),
               "leaderboard": {"enabled": BOOL, "category": STR, "time_periods": LIST,

@@ -25,13 +25,13 @@ from datetime import datetime
 from decimal import Decimal
 
 from arb import whale_backfill, whale_dominance, whale_elite, whale_exit, whale_holdings
-from arb import (whale_nonsports, whale_resolve, whale_score, whale_signal,
-                 whale_sizing, whale_tape, whale_universe)
+from arb import (whale_mat, whale_nonsports, whale_resolve, whale_score,
+                 whale_signal, whale_sizing, whale_tape, whale_universe)
 from arb.lanes.whale_book import (_bet_ctx, _event_key, _fetch_books,
-                                  _from_prints, _persist_signal, _tape_market,
-                                  _touch, _zombied, best_bid, candidate,
-                                  exit_payload, note_no_bid, persist_base_rates,
-                                  quote_rows, ranked_wallets)
+                                  _persist_signal, _tape_market, _touch,
+                                  _zombied, best_bid, candidate, exit_payload,
+                                  market_tokens, note_no_bid,
+                                  persist_base_rates, quote_rows, ranked_wallets)
 from arb.logutil import get_logger
 from arb.replay import open_ro
 from arb.venues.base import get_json
@@ -99,6 +99,7 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
            "wallets": 0, "hygiene_excluded": 0, "signals_evaluated": 0, "fired": 0,
            "suppressed": {}, "booked": 0, "exited": 0, "exit_no_bid": 0,
            "quotes_rows": 0, "market_errors": 0, "label_collision": 0, "poll_id": None,
+           "mat": {},
            "holdings": {}}
     if not w["enabled"]:
         return res
@@ -151,13 +152,18 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     # 6: score. Hygiene is applied by the LANE, before scoring and signalling
     # (Task 5 decision), so an excluded wallet never becomes a vote. The
     # assembly itself is shared with the report (arb/whale_state.py).
+    # matpos (2026-09-05): the cycle brings the derived positions/hygiene cache
+    # up to date FIRST — bounded by whale.mat.max_wallets_per_cycle, so a first
+    # pass over an existing tape spreads over cycles instead of stalling this
+    # one — and `score_state` then reads that cache instead of every print.
+    # This is the only writer of it in the lane's own process (arb/whale_mat.py).
+    res["mat"] = whale_mat.materialize(con, cfg, now)
     state = score_state(cfg, con, now)
-    prints, tape_markets = state.prints, state.markets
+    tape_markets = state.markets
     open_pos = state.open_positions
     res["hygiene_excluded"] = state.hygiene_excluded
     persist_base_rates(con, state, now)
     lookup, rates = state.lookup, state.rates
-    tokens, slugs = _from_prints(prints)
     # V4 (§7, amended 2026-09-04): one read per cycle, shared by the signals
     # this cycle evaluates and the exits it re-evaluates, so both sides of a
     # V4 position are judged against the same board. V5's elite cutoff is the
@@ -177,6 +183,10 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
         cid = ctx["condition_id"] if ctx else None
         if cid and cid not in priced and cid in tape_markets:
             priced[cid] = _tape_market(tape_markets[cid])
+    # The token/event_slug maps, read for the markets this cycle prices and no
+    # others (matpos 2026-09-05 — this used to walk every print on the tape).
+    # Everything below reads them by a cid that is already in `priced`.
+    tokens, slugs = market_tokens(con, priced)
     books, venue_ok, latency_ms = _fetch_books(cfg, fetch, priced)
     keys = {cid: _event_key(cid, slugs, tape_markets) for cid in priced}
     rows = [r for cid, m in priced.items()

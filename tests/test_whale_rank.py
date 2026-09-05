@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from arb import commands, whale_hygiene, whale_rank, whale_score, whale_tape
+from arb import (commands, whale_hygiene, whale_mat, whale_rank, whale_score,
+                 whale_tape)
 from arb.config import load
 from arb.models import q6
 from arb.whale_state import WhaleState
@@ -63,7 +64,7 @@ def _state(cfg, positions, resolutions, excluded=()):
     rates = {r: whale_score.base_rate(outcomes, r, AS_OF, cfg)[0]
              for r in ("sports", "nonsports")}
     return WhaleState(
-        prints=[], markets={}, resolutions=resolutions, positions=positions,
+        markets={}, resolutions=resolutions, positions=positions,
         open_positions=open_pos, hygiene_excluded=len(positions) - len(open_pos),
         rates=rates, rate_n={}, agg=agg,
         lookup=lambda w, s, m: whale_score.score_for(agg, w, s, m, cfg, rates))
@@ -208,7 +209,7 @@ def _real_state(cfg, positions, resolutions):
     rates = {r: whale_score.base_rate(outcomes, r, AS_OF, cfg)[0]
              for r in ("sports", "nonsports")}
     return WhaleState(
-        prints=[], markets={}, resolutions=resolutions, positions=positions,
+        markets={}, resolutions=resolutions, positions=positions,
         open_positions=open_pos, hygiene_excluded=len(positions) - len(open_pos),
         rates=rates, rate_n={}, agg=agg,
         lookup=lambda w, s, m: whale_score.score_for(agg, w, s, m, cfg, rates))
@@ -272,7 +273,13 @@ def test_wallet_profile_is_root_then_sport_then_bucket(cfg):
 def _tape(tmp_path, cfg, now=None):
     """A tape one wallet has six resolved pregame positions on (5 won), dated
     relative to `now` — the real clock by default, because that is the `as_of`
-    the CLI and the dashboard run at; the daily report passes its day's end."""
+    the CLI and the dashboard run at; the daily report passes its day's end.
+
+    Materialized before it is handed back (matpos 2026-09-05): `score_state`
+    reads the derived `positions_mat`/`hygiene_mat` cache, which the LANE keeps
+    current on its 60 s cycle. A read-only reader — the CLI, the dashboard, the
+    daily report — sees what the lane last materialized, so a fixture that
+    never runs a cycle has to stand in for it here."""
     now = now or datetime.now(timezone.utc)
     start, resolved = now - timedelta(days=2), (now - timedelta(days=1)).isoformat()
     path = tmp_path / "tape.sqlite"
@@ -295,6 +302,7 @@ def _tape(tmp_path, cfg, now=None):
             "winner_outcome_index, status) VALUES (?,?,?,?)",
             (cid, resolved, 0 if i < 5 else 1, "resolved"))
     con.commit()
+    whale_mat.materialize(con, cfg, now)
     con.close()
     cfg["whale"]["tape_db"] = str(path)
     return path

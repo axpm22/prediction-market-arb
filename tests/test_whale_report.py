@@ -11,7 +11,6 @@ Nothing here touches the network or the production DBs.
 """
 import json
 import random
-import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -1296,10 +1295,14 @@ def test_whale_score_without_calibrate_prints_the_roster(cfg, tmp_path, capsys):
 
 # ------------------------------------------- per-cycle whole-tape work (I5)
 
-def test_score_state_reads_only_the_print_columns_it_uses(cfg, tmp_path):
+def test_the_materialized_print_read_takes_only_the_columns_it_uses(cfg, tmp_path):
     """I5(a): `SELECT *` pulled `raw_json` — the whole venue payload of every
-    print ever collected — into memory on every 60 s cycle."""
-    from arb.whale_state import score_state
+    print ever collected — into memory on every 60 s cycle. matpos
+    (2026-09-05) moved that read out of `score_state`, which now touches no
+    print at all (tests/test_whale_mat.py), and into the per-wallet
+    materialization — where the same column discipline still binds, because
+    the backfill child re-materializes thousands of wallets an hour."""
+    from arb import whale_mat
     con = _tape(tmp_path)
     con.execute(
         "INSERT INTO prints (observed_at, ts, tx_hash, proxy_wallet, condition_id,"
@@ -1309,12 +1312,17 @@ def test_score_state_reads_only_the_print_columns_it_uses(cfg, tmp_path):
          "0.500000", "1000.000000", "500.000000", "e", "x" * 10000))
     con.commit()
 
-    state = score_state(cfg, con, NOW)
+    seen = []
+    con.set_trace_callback(seen.append)
+    try:
+        whale_mat.materialize(con, cfg, NOW)
+    finally:
+        con.set_trace_callback(None)
 
-    assert "raw_json" not in state.prints[0]
+    assert not [q for q in seen if "raw_json" in q], seen
     assert {"ts", "proxy_wallet", "condition_id", "outcome_index", "side", "price",
             "size", "notional_usd", "source", "asset",
-            "event_slug"} <= set(state.prints[0])
+            "event_slug"} == set(whale_mat._PRINT_FIELDS)
 
 
 def test_score_state_query_constants_select_no_raw_json_and_no_star():
@@ -1373,7 +1381,7 @@ def test_score_state_matches_the_select_star_reference_on_a_mixed_tape(cfg, tmp_
     wash-flagged (hygiene-excluded) one, so positions, open_positions,
     hygiene_excluded, agg and a scored lookup all have something to disagree
     on if the trim ever drops a column a reader actually needs."""
-    from arb import whale_score
+    from arb import whale_mat, whale_score
     from arb.whale_hygiene import hygiene_flags
     from arb.whale_state import WhaleState, score_state
 
@@ -1394,7 +1402,7 @@ def test_score_state_matches_the_select_star_reference_on_a_mixed_tape(cfg, tmp_
         def lookup(wallet, sport, market_type):
             return whale_score.score_for(agg, wallet, sport, market_type, cfg, rates)
 
-        return WhaleState(prints=prints, markets=markets, resolutions=resolutions,
+        return WhaleState(markets=markets, resolutions=resolutions,
                           positions=positions, open_positions=open_pos,
                           hygiene_excluded=len(positions) - len(open_pos),
                           rates=rates, rate_n=rate_n, agg=agg, lookup=lookup)
@@ -1425,6 +1433,7 @@ def test_score_state_matches_the_select_star_reference_on_a_mixed_tape(cfg, tmp_
                 (start.isoformat(), at, f"0x{wallet}{j}", wallet, cid, "tok",
                  side, px, size, str(Decimal(px) * Decimal(size))))
     con.commit()
+    whale_mat.materialize(con, cfg, NOW)
 
     got = score_state(cfg, con, NOW)
     want = _reference(cfg, con, NOW)
@@ -1473,7 +1482,7 @@ def _reference_score_state(cfg, con, now):
     def lookup(wallet, sport, market_type):
         return whale_score.score_for(agg, wallet, sport, market_type, cfg, rates)
 
-    return WhaleState(prints=prints, markets=markets, resolutions=resolutions,
+    return WhaleState(markets=markets, resolutions=resolutions,
                       positions=positions, open_positions=open_pos,
                       hygiene_excluded=len(positions) - len(open_pos),
                       rates=rates, rate_n=rate_n, agg=agg, lookup=lookup)
@@ -1530,10 +1539,12 @@ def test_score_state_printrow_matches_the_dict_reference_on_a_seeded_tape(cfg, t
     is something for positions, open_positions, hygiene_excluded, agg, rates
     and a per-wallet lookup to disagree on if the row object ever leaks a
     wrong value."""
+    from arb import whale_mat
     from arb.whale_state import score_state
     rng = random.Random(20260905)
     con = _tape(tmp_path)
     wallets = _random_score_state_tape(con, rng, n_prints=3000)
+    whale_mat.materialize(con, cfg, NOW)
 
     got = score_state(cfg, con, NOW)
     want = _reference_score_state(cfg, con, NOW)
@@ -1548,25 +1559,19 @@ def test_score_state_printrow_matches_the_dict_reference_on_a_seeded_tape(cfg, t
                 == want.lookup(wallet, "baseball_mlb", "WINNER"))
 
 
-def test_score_state_completes_in_bounded_time_on_a_400k_tape(cfg, tmp_path):
-    """rowperf regression guard (2026-09-05): live-profiled at 23.7s for
-    score_state's own body alone on 763,786 production prints (module
-    docstring). 15.0s is regression headroom on a 400k synthetic tape, not a
-    tight target — see arb/whale_state.py's docstring for the measured
-    before/after and the isolated-read-loop ratio this guards. Started at
-    8.0s (the ask) but flaked at 8.507s under full-`pytest -q` load on this
-    dev box, which also runs the real supervisor's `whale --once`/dashboard
-    against the 763k-row production tape concurrently — same shape of flake,
-    same fix, as positions_from_prints's own guard (11e6e01: 1.3s -> 4.0s)."""
-    from arb.whale_state import score_state
-    rng = random.Random(1)
-    con = _tape(tmp_path)
-    _random_score_state_tape(con, rng, n_prints=400_000, n_wallets=500, n_markets=2000)
-
-    t0 = time.perf_counter()
-    score_state(cfg, con, NOW)
-    dt = time.perf_counter() - t0
-    assert dt < 15.0, f"score_state took {dt:.3f}s on 400k rows"
+# The 400k-row ABSOLUTE timing guard that used to sit here is gone (matpos,
+# 2026-09-05). Two reasons, both from the review of 94ef331: at a 15.0 s bound
+# it could not catch a regression (the pre-rowperf code passed it too — the
+# bound had already been widened twice to stop it flaking on this dev box,
+# which runs the real supervisor against the 763k-row production tape while
+# the suite runs), and it measured seconds on a host whose background load
+# swings wider than anything it was guarding. What it was reaching for —
+# "the 60 s scoring pass does not grow with the tape" — is now asserted
+# directly and without a clock: tests/test_whale_mat.py
+# ::test_score_state_never_reads_the_prints_table (structural: it issues no
+# query against `prints` at all) and ::test_score_state_work_does_not_grow_
+# with_the_tape (relative: the SQLite VM steps it costs are unchanged when the
+# tape carries 4x the prints for the same positions).
 
 
 def test_signals_by_id_loads_only_the_ids_it_was_asked_for(cfg, tmp_path):

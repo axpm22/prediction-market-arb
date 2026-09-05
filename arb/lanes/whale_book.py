@@ -248,6 +248,29 @@ def _tape_market(row) -> whale_universe.Market:
         tokens=tuple((t[0], t[1]) for t in json.loads(row["tokens_json"] or "[]")))
 
 
+def market_tokens(con, cids) -> tuple[dict, dict]:
+    """`_from_prints` over the prints of the markets this cycle actually
+    prices, instead of over the whole tape.
+
+    matpos (2026-09-05): `state.prints` — every print ever collected, 763,786
+    rows on 2026-09-05 — existed only to feed `_from_prints`, and its two maps
+    are read for nothing but the condition_ids in `priced` (the live universe
+    plus every open bet's own market): a few dozen. `idx_prints_market` serves
+    this by condition_id. The maps are venue facts constant per key (a token IS
+    a (market, outcome_index), an event_slug IS a market), so scoping the read
+    cannot change a value a caller reads back — only how many it never asked
+    for.
+    """
+    rows, cids = [], list(cids)
+    for i in range(0, len(cids), 400):          # well under SQLITE_MAX_VARIABLE_NUMBER
+        chunk = cids[i:i + 400]
+        rows += con.execute(
+            "SELECT condition_id, outcome_index, asset, event_slug FROM prints "
+            f"WHERE condition_id IN ({','.join('?' * len(chunk))}) "
+            "ORDER BY condition_id, ts", chunk).fetchall()
+    return _from_prints(rows)
+
+
 def _from_prints(prints) -> tuple[dict, dict]:
     """(token by (condition_id, outcome_index), event_slug by condition_id).
     Both are venue facts carried on every print row — the ledger's quotes give

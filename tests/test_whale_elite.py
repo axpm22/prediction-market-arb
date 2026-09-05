@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from arb import whale_elite, whale_score, whale_signal, whale_tape
+from arb import whale_elite, whale_mat, whale_score, whale_signal, whale_tape
 from arb.config import load
 from arb.whale_state import score_state
 
@@ -191,6 +191,9 @@ def test_elite_excludes_hygiene_flagged_wallets_from_the_population(cfg, tmp_pat
     for i in range(10):
         _history(con, f"w{i}", 2, Decimal("0.01") * i, yesterday)
     _history(con, "washer", 2, Decimal("0.30"), yesterday, wash=True)
+    # matpos (2026-09-05): score_state reads the materialized cache the LANE
+    # keeps current; a hand-built tape has to stand in for that cycle.
+    whale_mat.materialize(con, cfg, NOW)
 
     state = score_state(cfg, con, NOW)
 
@@ -218,6 +221,7 @@ def test_an_earlier_cycles_cutoff_is_not_moved_by_a_wallet_scored_later(cfg, tmp
     for i in range(10):
         _history(con, f"w{i}", 2, Decimal("0.01") * i, NOW - timedelta(days=1))
     _history(con, "late", 2, Decimal("0.50"), NOW + timedelta(hours=1))
+    whale_mat.materialize(con, cfg, NOW)
 
     def cut(at):
         state = score_state(cfg, con, at)
