@@ -643,3 +643,28 @@ def test_the_lane_suppresses_v5_while_a_rebuild_drains(cfg, tmp_path):
 
     assert res["mat"]["dirty"], "the rebuild must still be draining"
     assert res["suppressed"].get("cache-partial") == 1, res["suppressed"]
+
+
+def test_markets_upsert_with_a_queued_wallet_does_not_hit_the_dirty_unique(tmp_path):
+    # live 2026-09-05: `INSERT OR IGNORE` inside the markets trigger is overridden by
+    # the outer upsert's conflict clause -> `UNIQUE constraint failed: mat_dirty.proxy_wallet`
+    # crashed the backfill child at the non-sports universe step every cycle
+    import sqlite3
+    from datetime import datetime, timezone
+    from arb import whale_tape
+    from arb.whale_universe import Market, persist_markets
+    con = whale_tape.open_tape(str(tmp_path / "tape.sqlite"))
+    now = datetime(2026, 9, 5, 12, tzinfo=timezone.utc)
+    con.execute("INSERT INTO markets (condition_id, sport, market_type, start_utc, tokens_json, "
+                "slug, first_seen, last_seen) VALUES ('0xc', 'politics', 'BINARY', "
+                "'2026-10-01T00:00:00+00:00', '[]', 'x', '2026-09-01', '2026-09-01')")
+    con.execute("INSERT INTO prints (observed_at, ts, tx_hash, proxy_wallet, condition_id, asset, "
+                "outcome, outcome_index, side, price, size, notional_usd, source) VALUES "
+                "('2026-09-01', 1, 'h', '0xw', '0xc', 'a', 'Yes', 0, 'BUY', '0.5', '10', '5', 'tape')")
+    con.execute("INSERT INTO mat_dirty (proxy_wallet) VALUES ('0xw')")   # already queued
+    con.commit()
+    m = Market(condition_id="0xc", sport="politics", market_type="BINARY", line=None,
+               start_utc="2026-11-01T00:00:00+00:00", event_key="pm:x", tokens=(),
+               volume_24h="1000")
+    persist_markets(con, [m], now, first_sight_wins=False)   # upsert -> UPDATE trigger fires
+    assert con.execute("SELECT COUNT(*) FROM mat_dirty WHERE proxy_wallet='0xw'").fetchone()[0] == 1

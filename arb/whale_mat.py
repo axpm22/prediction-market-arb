@@ -102,20 +102,20 @@ CREATE TABLE IF NOT EXISTS mat_dirty (proxy_wallet TEXT PRIMARY KEY);
 -- never the 60 s lane, and only when a mapping actually changes. ponytail: a
 -- covering prints(condition_id, proxy_wallet) index would cut that, deliberately
 -- not added — a 5th index on the hottest write table for a rare path.
-CREATE TRIGGER IF NOT EXISTS trg_markets_mat_update AFTER UPDATE ON markets
-    WHEN NEW.sport IS NOT OLD.sport OR NEW.market_type IS NOT OLD.market_type
-         OR NEW.start_utc IS NOT OLD.start_utc
+DROP TRIGGER IF EXISTS trg_markets_mat_update;  -- NOT EXISTS below: an upsert overrides OR IGNORE (2026-09-05)
+CREATE TRIGGER trg_markets_mat_update AFTER UPDATE ON markets
+    WHEN NEW.sport IS NOT OLD.sport OR NEW.market_type IS NOT OLD.market_type OR NEW.start_utc IS NOT OLD.start_utc
     BEGIN
-        INSERT OR IGNORE INTO mat_dirty (proxy_wallet)
-            SELECT DISTINCT proxy_wallet FROM prints
-             WHERE condition_id = NEW.condition_id;
+        INSERT INTO mat_dirty (proxy_wallet) SELECT DISTINCT p.proxy_wallet FROM prints p
+         WHERE p.condition_id = NEW.condition_id
+           AND NOT EXISTS (SELECT 1 FROM mat_dirty d WHERE d.proxy_wallet = p.proxy_wallet);
     END;
-CREATE TRIGGER IF NOT EXISTS trg_markets_mat_insert AFTER INSERT ON markets
-    WHEN NEW.sport IS NOT NULL
+DROP TRIGGER IF EXISTS trg_markets_mat_insert;
+CREATE TRIGGER trg_markets_mat_insert AFTER INSERT ON markets WHEN NEW.sport IS NOT NULL
     BEGIN
-        INSERT OR IGNORE INTO mat_dirty (proxy_wallet)
-            SELECT DISTINCT proxy_wallet FROM prints
-             WHERE condition_id = NEW.condition_id;
+        INSERT INTO mat_dirty (proxy_wallet) SELECT DISTINCT p.proxy_wallet FROM prints p
+         WHERE p.condition_id = NEW.condition_id
+           AND NOT EXISTS (SELECT 1 FROM mat_dirty d WHERE d.proxy_wallet = p.proxy_wallet);
     END;
 """
 
