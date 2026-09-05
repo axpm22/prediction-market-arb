@@ -245,10 +245,10 @@ def lane_status_lines(cfg, store, beats) -> list[tuple[str, str]]:
     return out
 
 
-def _reap_finished(procs: list) -> list:
-    """Return the still-running children; poll() reaps any that have exited, so
-    one-shot scheduled children never linger as zombies (H9)."""
-    return [p for p in procs if p.poll() is None]
+def _reap_finished(caps: list) -> list:
+    """Return the still-running captures; poll() reaps any whose process has
+    exited, so one-shot scheduled children never linger as zombies (H9)."""
+    return [c for c in caps if c.proc.poll() is None]
 
 
 def _terminate(proc, timeout: float) -> None:
@@ -280,85 +280,67 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
     _notify("supervisor_started")
     # children inherit the supervisor's --db/--config, or data silently splits
     flags = (["--db", db] if db else []) + (["--config", config] if config else [])
-    children: dict[str, subprocess.Popen] = {}
-    started: dict[str, float] = {}
-    child_logs: dict[str, object] = {}  # open capture file per running lane child
+    children: dict[str, child_log.Capture] = {}
     # suppress the boot-time burst: slots long past are pre-marked as fired (H9)
     last_fired: dict[str, str] = initial_last_fired(cfg, datetime.now(NY))
     next_run: dict[str, float] = initial_next_run(cfg, time.monotonic())
     offsets = lane_offsets(cfg)   # fixed phase plan; re-armed against the grid
-    # read-only handle for the per-lane silence alarm; the lanes remain the sole
-    # writers (§13.3 one-writer-per-table). Checked at most once a minute, not
-    # on every 2s tick.
+    # silence-alarm handle for stale_lanes, AND the child_exits writer for
+    # child_log.reap/record_exit below (§13.3 one-writer-per-table: the lanes
+    # themselves are still the sole writers of their own poll/heartbeat rows —
+    # this store only ever appends to child_exits, which nothing else writes).
+    # stale_lanes itself is checked at most once a minute, not every 2s tick.
     from arb.cli import DEFAULT_DB
     from arb.store import Store
     silence_store, next_silence_check = Store(db or DEFAULT_DB), 0.0
-    scheduled: list[subprocess.Popen] = []  # one-shot clock children, reaped each tick
+    scheduled: list[child_log.Capture] = []  # one-shot clock children, reaped each tick
 
     def _spawn(*cmd):
         # cmd[0] IS the process name (scan/settle/report/backup/archive/
         # shape-check/canary) — reused as the child_exits process key and the
         # capture-file name, same as the lane children below.
-        name = cmd[0]
-        logf = child_log.open_child_log(cfg, name)
-        proc = subprocess.Popen([sys.executable, "-m", "arb", *flags, *cmd],
-                                stdout=logf, stderr=subprocess.STDOUT)
-        proc._child_name, proc._child_started, proc._child_logf = (
-            name, time.monotonic(), logf)
-        scheduled.append(proc)
+        scheduled.append(child_log.spawn(
+            cfg, cmd[0], [sys.executable, "-m", "arb", *flags, *cmd]))
 
     try:
         while True:
             if STOP_FLAG.exists():
                 log.info("stop-all flag present — halting cleanly")
-                for name, proc in children.items():
-                    _terminate(proc, _cap(cfg, name))
-                for proc in scheduled:
-                    _terminate(proc, _cap(cfg, "default"))
+                for name, cap in children.items():
+                    _terminate(cap.proc, _cap(cfg, name))
+                for cap in scheduled:
+                    _terminate(cap.proc, _cap(cfg, "default"))
                 _notify("supervisor_stopped", {"reason": "stop-all"})
                 return 0
             now = time.monotonic()
             now_ny = datetime.now(NY)
             still_scheduled = _reap_finished(scheduled)
-            for proc in scheduled:  # reap finished one-shots (H9), now logged (2026-09-05)
-                if proc not in still_scheduled:
-                    child_log.record_exit(cfg, silence_store, proc._child_name,
-                                          proc.returncode, now - proc._child_started,
-                                          child_log.log_path(cfg, proc._child_name))
-                    proc._child_logf.close()
+            for cap in scheduled:  # reap finished one-shots (H9), now logged (2026-09-05)
+                if cap not in still_scheduled:
+                    child_log.reap(cfg, silence_store, cap)
             scheduled[:] = still_scheduled
 
             # one-shot loop children on their cadence
             for name, enabled in cfg["supervisor"]["processes"].items():
                 if not enabled:
                     continue
-                proc = children.get(name)
-                if proc is not None:
-                    if proc.poll() is None:
-                        if now - started[name] > _cap(cfg, name):
+                cap = children.get(name)
+                if cap is not None:
+                    if cap.proc.poll() is None:
+                        if now - cap.started > _cap(cfg, name):
                             log.critical("child %s past runtime cap — force restart",
                                          name)
-                            proc.kill()
-                            proc.wait()  # reap the killed child, don't leave a zombie (H9)
-                            child_log.record_exit(
-                                cfg, silence_store, name, proc.returncode,
-                                now - started[name], child_log.log_path(cfg, name),
-                                killed=True)
-                            child_logs.pop(name).close()
+                            cap.proc.kill()
+                            cap.proc.wait()  # reap the killed child, don't leave a zombie (H9)
+                            child_log.reap(cfg, silence_store, cap, killed=True)
                             children.pop(name)
                         continue
-                    child_log.record_exit(cfg, silence_store, name, proc.returncode,
-                                          now - started[name],
-                                          child_log.log_path(cfg, name))
-                    child_logs.pop(name).close()
+                    child_log.reap(cfg, silence_store, cap)
                     children.pop(name)
                 if now >= next_run.get(name, 0):
                     cmd = cfg["supervisor"]["commands"][name].split()
-                    child_logs[name] = child_log.open_child_log(cfg, name)
-                    children[name] = subprocess.Popen(
-                        [sys.executable, "-m", "arb", *flags, *cmd],
-                        stdout=child_logs[name], stderr=subprocess.STDOUT)
-                    started[name] = now
+                    children[name] = child_log.spawn(
+                        cfg, name, [sys.executable, "-m", "arb", *flags, *cmd])
                     # absolute grid, never now+interval: the loop's 2s tick
                     # overshoots by 0-2s and that error used to accumulate
                     next_run[name] = next_grid_run(
@@ -398,10 +380,10 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                     log.warning("stale-lane check failed: %s", e)
 
             if once:
-                for name, proc in children.items():
-                    _terminate(proc, _cap(cfg, name))
-                for proc in scheduled:
-                    _terminate(proc, _cap(cfg, "default"))
+                for name, cap in children.items():
+                    _terminate(cap.proc, _cap(cfg, name))
+                for cap in scheduled:
+                    _terminate(cap.proc, _cap(cfg, "default"))
                 _notify("supervisor_stopped", {"reason": "once"})
                 return 0
             time.sleep(2)

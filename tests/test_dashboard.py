@@ -935,6 +935,27 @@ def test_unknown_logger_is_never_hidden_in_whale_mode():
     assert _keep_error_line(cfg, "some.other.logger", "whatever") is True
 
 
+def test_disabled_lane_child_traceback_is_hidden_in_whale_mode():
+    """I2 (review of 9cb356b): tail_child_errors synthesises sources
+    child:<name>, which _keep_error_line used to fail to classify (fell
+    through to the "unclassified -> keep" default) — so a disabled lane's
+    child traceback was never filtered in whale mode. child:<name> must map
+    to lane <name> (the capture filename IS the supervisor.processes key)
+    and obey the same disabled-lane rule; whale/whale-backfill/watch are core
+    to whale mode and stay visible even when switched off."""
+    from arb.dashboard_mode import _keep_error_line
+    cfg = _cfg()
+    cfg["dashboard"]["mode"] = "whale"
+    cfg["supervisor"]["processes"] = {**cfg["supervisor"]["processes"],
+                                      "negrisk": False, "watch": False, "whale": False}
+    assert _keep_error_line(cfg, "child:negrisk", "Traceback...") is False
+    assert _keep_error_line(cfg, "child:whale-backfill", "Traceback...") is True
+    assert _keep_error_line(cfg, "child:whale", "Traceback...") is True
+    assert _keep_error_line(cfg, "child:watch", "Traceback...") is True
+    # a clock command (e.g. settle) is never a processes key, so never "disabled"
+    assert _keep_error_line(cfg, "child:settle", "Traceback...") is True
+
+
 def test_lanes_and_venues_stay_visible_in_whale_mode_but_scoped(tmp_path):
     """dashboard.mode: whale keeps #lanes (all lanes, disabled ones labeled)
     and #venues (watch_venues only) rather than hiding either."""
@@ -1018,7 +1039,9 @@ def test_whale_mode_helpers_moved_to_dashboard_mode_and_dashboard_py_stays_lean(
     from arb import dashboard, dashboard_mode
     dashboard_lines = len(Path("arb/dashboard.py").read_text().splitlines())
     assert dashboard_lines <= 300            # CLAUDE.md: modules stay ~300 lines
-    assert len(Path("arb/dashboard_mode.py").read_text().splitlines()) <= 150
+    # 150 -> 160 in the 2026-09-05 child-log fix pass (I2): _keep_error_line
+    # learned to map child:<name> onto its supervisor.processes lane
+    assert len(Path("arb/dashboard_mode.py").read_text().splitlines()) <= 160
     for name in ("_TITLES", "_WHALE_FRONT", "_whale_first", "_extract_marked"):
         assert not hasattr(dashboard, name)
     assert hasattr(dashboard_mode, "TITLES")

@@ -49,6 +49,25 @@ def test_log_sinks_redact_query_strings():
         "https://api.the-odds-api.com/v4/sports/?apiKey=SECRET")
 
 
+def test_child_log_drain_redacts_each_line():
+    # sibling sink to test_log_sinks_redact_query_strings (C1, review of
+    # 9cb356b): a child's stdout/stderr used to hit logs/children/<name>.log
+    # via a raw fd, bypassing every logging-based redaction path entirely.
+    # arb/child_log.py's drain thread must apply the SAME redact() line by
+    # line as it writes, not just at read time.
+    import io
+
+    from arb.child_log import _drain
+    pipe = io.BytesIO(
+        b"GET https://api.the-odds-api.com/v4/sports/?apiKey=SECRET&regions=us -> 200\n"
+        b"plain line, nothing to redact\n")
+    out = io.BytesIO()
+    _drain(pipe, out)
+    written = out.getvalue().decode()
+    assert "apiKey" not in written and "SECRET" not in written
+    assert "plain line, nothing to redact" in written
+
+
 def test_regrade_never_touches_the_odds_api():
     # rule 2: arb regrade reads ONLY the local DB + the keyless MLB Stats API
     text = (ARB / "regrade.py").read_text()

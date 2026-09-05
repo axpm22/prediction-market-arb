@@ -86,9 +86,15 @@ def _keep_error_line(cfg, source: str, msg: str) -> bool:
     a lane supervisor.processes has switched off. arb.whale*/arb.supervisor/
     arb.oddsapi lines (rule 2: the Odds API low-credit WARNING must always be
     visible), arb.watch lines about an enabled venue, and any logger this
-    module can't classify into a lane, are never dropped."""
+    module can't classify into a lane, are never dropped. child:<name> maps
+    to lane <name> (capture filename IS the processes key, or an unlisted
+    clock command that is therefore never "disabled"); watch/whale/whale-
+    backfill are core to whale mode and stay visible even if switched off."""
     if source.startswith("arb.whale") or source in ("arb.supervisor", "arb.oddsapi"):
         return True
+    if source.startswith("child:"):
+        name = source[len("child:"):]
+        return name in ("watch", "whale", "whale-backfill") or name not in _disabled_lanes(cfg)
     if source == "arb.watch":
         m = _WATCH_VENUE.search(msg)
         return m is None or m.group(1) in cfg["watch_venues"]
@@ -108,11 +114,11 @@ def filter_errors(cfg, errors: list[dict]) -> list[dict]:
 
 def tail_child_errors(cfg) -> list[dict]:
     """Traceback/Error lines from arb/heartbeat.py's per-child capture files
-    (supervisor.child_log_dir), verbatim — raw subprocess output, no
-    per-line timestamp to parse like dashboard.py's named logger files."""
+    (supervisor.child_log_dir) — `redact` again here too, defence in depth on
+    top of arb/child_log.py's drain thread already redacting on the way to disk."""
     from datetime import datetime, timezone
 
-    from arb.logutil import resolve_log_path
+    from arb.logutil import redact, resolve_log_path
     d = resolve_log_path(cfg["supervisor"]["child_log_dir"])
     if not d.is_dir():
         return []
@@ -123,7 +129,7 @@ def tail_child_errors(cfg) -> list[dict]:
             f.seek(max(0, p.stat().st_size - 65536))
             lines = f.read().decode("utf-8", "replace").splitlines()
         out += [{"at": now_iso, "level": "ERROR", "source": f"child:{p.stem}",
-                "msg": ln[:300], "file": f"children/{p.name}"}
+                "msg": redact(ln)[:300], "file": f"children/{p.name}"}
                for ln in lines if "Traceback" in ln or "Error" in ln]
     return out
 

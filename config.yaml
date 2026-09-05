@@ -407,18 +407,18 @@ supervisor:
   cadence_windows: {}               # optional per-lane time-of-day cadence, NY hours:
                                     #   { watch: [[19, 23, 20]] } polls watch every 20s
                                     #   from 19:00 to 22:59 and at watch_interval_secs
-  child_log_dir: logs/children      # every spawned child's stdout+stderr, appended to
-                                    #   <dir>/<process-name>.log (2026-09-05 incident: a
-                                    #   crashing one-shot child's traceback went to the
-                                    #   supervisor's own stdout, nowhere logs/ ever looked)
-  child_fail_alarm: 3               # the SAME process failing this many times in a row
-                                    #   escalates the exit WARNING to CRITICAL
                                     #   otherwise. Triples are [start_hr, end_hr, secs],
                                     #   start inclusive, end exclusive; first match wins.
                                     #   EMPTY BY DEFAULT — measured yield (hr20: 482 flags
                                     #   /1k polls vs hrs 04-08: 3 flags in 1,816 polls) says
                                     #   this should be used, but the numbers are a
                                     #   pre-registered policy decision, not a code default.
+  child_log_dir: logs/children      # every spawned child's stdout+stderr, appended to
+                                    #   <dir>/<process-name>.log (2026-09-05 incident: a
+                                    #   crashing one-shot child's traceback went to the
+                                    #   supervisor's own stdout, nowhere logs/ ever looked)
+  child_fail_alarm: 3               # the SAME process failing this many times in a row
+                                    #   escalates the exit WARNING to CRITICAL
 data_stale_alarm_secs: 900
 heartbeat_stale_polls: 3            # supervisor beat older than this many watch
                                     #   intervals reads STALE (status + dashboard)

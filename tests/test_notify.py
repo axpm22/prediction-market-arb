@@ -3,6 +3,7 @@
 run_supervisor). No network: every test injects the poster or monkeypatches
 `arb.notify._default_poster`."""
 import copy
+import io
 import json
 import logging
 import socket
@@ -258,6 +259,7 @@ def test_stale_lane_alarm_posts_lane_silent_once(cfg, tmp_path, monkeypatch):
 
     class FakeProc:
         returncode = 0
+        stdout = io.BytesIO(b"")  # child_log.spawn's drain thread reads this
 
         def poll(self):
             return 0
@@ -280,7 +282,8 @@ def test_stale_lane_alarm_posts_lane_silent_once(cfg, tmp_path, monkeypatch):
     cfg["supervisor"]["processes"]["negrisk"] = True
     monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
     monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "absent-stop")
-    # spawn calls now pass stdout=/stderr= for child-log capture (2026-09-05)
+    # spawn calls now pass stdout=PIPE/stderr=STDOUT for the redacting drain
+    # thread (child_log.py, 2026-09-05 fix pass) rather than the log file directly
     monkeypatch.setattr(hb.subprocess, "Popen", lambda argv, **kw: FakeProc())
     db_path = tmp_path / "t.sqlite"
     store = Store(db_path)
@@ -307,6 +310,7 @@ def test_stale_lane_alarm_posts_lane_silent_for_each_distinct_lane(cfg, tmp_path
 
     class FakeProc:
         returncode = 0
+        stdout = io.BytesIO(b"")  # child_log.spawn's drain thread reads this
 
         def poll(self):
             return 0
@@ -330,7 +334,8 @@ def test_stale_lane_alarm_posts_lane_silent_for_each_distinct_lane(cfg, tmp_path
     cfg["supervisor"]["processes"]["political"] = True
     monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
     monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "absent-stop")
-    # spawn calls now pass stdout=/stderr= for child-log capture (2026-09-05)
+    # spawn calls now pass stdout=PIPE/stderr=STDOUT for the redacting drain
+    # thread (child_log.py, 2026-09-05 fix pass) rather than the log file directly
     monkeypatch.setattr(hb.subprocess, "Popen", lambda argv, **kw: FakeProc())
     db_path = tmp_path / "t.sqlite"
     store = Store(db_path)

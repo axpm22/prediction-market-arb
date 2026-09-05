@@ -1,5 +1,6 @@
 """Phase 7 ops: markout hook, supervisor lock/stop-flag semantics, canary."""
 import copy
+import io
 import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -133,7 +134,11 @@ def test_reap_finished_drops_exited_children():
         def poll(self):
             return self._c
 
-    a, b = Stub(None), Stub(0)  # a still running, b exited
+    class Cap:  # stand-in for child_log.Capture — _reap_finished only reads .proc
+        def __init__(self, code):
+            self.proc = Stub(code)
+
+    a, b = Cap(None), Cap(0)  # a still running, b exited
     assert _reap_finished([a, b]) == [a]
 
 
@@ -235,6 +240,7 @@ def test_supervisor_children_inherit_db_and_config(cfg, tmp_path, monkeypatch):
         def __init__(self, argv):
             argvs.append(argv)
             self.returncode = 0
+            self.stdout = io.BytesIO(b"")  # child_log.spawn's drain thread reads this
 
         def poll(self):
             return 0
@@ -247,7 +253,8 @@ def test_supervisor_children_inherit_db_and_config(cfg, tmp_path, monkeypatch):
 
     monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
     monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "absent-stop")
-    # spawn calls now pass stdout=/stderr= for child-log capture (2026-09-05)
+    # spawn calls now pass stdout=PIPE/stderr=STDOUT for the redacting drain
+    # thread (child_log.py, 2026-09-05 fix pass) rather than the log file directly
     monkeypatch.setattr(hb.subprocess, "Popen", lambda argv, **kw: FakeProc(argv))
     hb.run_supervisor(cfg, once=True, db="other.sqlite", config="alt.yaml")
     assert argvs, "no children spawned"
@@ -307,6 +314,46 @@ def test_supervisor_captures_child_output_and_warns_on_failure(
     assert any("watch" in m and "rc=2" in m for m in msgs)
 
 
+def test_child_output_is_redacted_before_it_hits_disk(cfg, tmp_path, monkeypatch, caplog):
+    """C1 (review of 9cb356b): heartbeat.py handed a child's stdout/stderr fd
+    straight to disk unredacted, so a leaked secret (a `requests` exception
+    embeds the Odds API key in the URL, rule 2 / SPEC §6.4) would persist to
+    logs/children/<name>.log for 90 days and reach the dashboard's child-
+    error tail verbatim. child_log.spawn's redacting drain thread must scrub
+    it before it ever touches disk — checked at all three surfaces: the raw
+    file, the dashboard row, and the supervisor's own exit WARNING."""
+    import sys
+
+    from arb import child_log
+    from arb.dashboard_mode import tail_child_errors
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))  # isolate child logs to this test
+    store = Store(tmp_path / "t.sqlite")
+    script = (
+        "import sys\n"
+        "sys.stderr.write('Traceback (most recent call last):\\n')\n"
+        "sys.stderr.write('requests.exceptions.ConnectionError: "
+        "https://api.the-odds-api.com/v4/sports/"
+        "?apiKey=SECRET123&regions=us\\n')\n"
+        "sys.exit(1)\n")
+    cap = child_log.spawn(cfg, "leaktest", [sys.executable, "-c", script])
+    cap.proc.wait(timeout=10)
+
+    with caplog.at_level("WARNING", logger="arb.supervisor"):
+        child_log.reap(cfg, store, cap)
+
+    on_disk = child_log.log_path(cfg, "leaktest").read_text()
+    assert "SECRET123" not in on_disk
+    assert "<redacted>" in on_disk
+
+    warn_msgs = [r.getMessage() for r in caplog.records if r.name == "arb.supervisor"]
+    assert any("leaktest" in m for m in warn_msgs)
+    assert not any("SECRET123" in m for m in warn_msgs)
+
+    rows = [r for r in tail_child_errors(cfg) if r["source"] == "child:leaktest"]
+    assert rows
+    assert all("SECRET123" not in r["msg"] for r in rows)
+
+
 def test_record_exit_escalates_to_critical_after_consecutive_failures(
         cfg, tmp_path, caplog):
     """The same process failing supervisor.child_fail_alarm times in a row
@@ -332,6 +379,17 @@ def test_record_exit_escalates_to_critical_after_consecutive_failures(
     with caplog.at_level("WARNING", logger="arb.supervisor"):
         child_log.record_exit(cfg2, store, "whale-backfill", 1, 5.0, path)
     assert [r.levelname for r in caplog.records if r.name == "arb.supervisor"] == ["WARNING"]
+
+
+def test_heartbeat_module_size_is_pinned():
+    """I3 (review of 9cb356b): heartbeat.py had grown to 409 lines carrying
+    three near-identical record_exit+close/join reap blocks. They now all go
+    through child_log.reap (Capture/spawn/reap in arb/child_log.py), which
+    got it back down — still over CLAUDE.md's ~300-line guideline (a
+    stateful supervisor loop with its own scheduling, silence alarm and
+    shutdown paths), so pin the count rather than let it silently regrow."""
+    lines = Path("arb/heartbeat.py").read_text().splitlines()
+    assert len(lines) <= 395
 
 
 def test_open_child_log_purges_only_stale_siblings(cfg, tmp_path):
