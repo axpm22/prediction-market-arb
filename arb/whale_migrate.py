@@ -122,7 +122,10 @@ def _migrate(con) -> None:
 # ledger (rule 9 governs `flat_bets`/`bet_events`, not this), so a targeted
 # UPDATE is allowed, and it trips the `markets` UPDATE trigger (arb/
 # whale_mat.py design §5 item 5), so every wallet holding one of these
-# positions re-materialises on its own.
+# positions re-materialises on its own. The marker carries the census DATE
+# on purpose (fix pass 5, review of 333e264): a future `_sport_of` reading
+# needs its own repair pass over a different `doomed` set, and reusing this
+# marker would skip it as already-done — give that pass a NEW dated marker.
 SLUG_PREFIX_FIX_MARK = "slug_prefix_fix_2026-09-05"
 
 
@@ -139,22 +142,35 @@ def repair_slug_prefix_mismap(cfg, con) -> int:
     `sport` becomes NULL, which no longer equals the PRE-fix reading either,
     so the affected set is not naturally self-excluding the way a still-
     non-sports-rooted row is — without the marker this would rescan every
-    non-NULL-sport row in `markets` every cycle forever for a bug fixed once."""
+    non-NULL-sport row in `markets` every cycle forever for a bug fixed once.
+
+    Check, UPDATE and marker share ONE `BEGIN IMMEDIATE` (fix pass 5, review
+    of 333e264), like `_migrate_triggers` above: unlike that DROP+CREATE pair,
+    a reset here is not naturally idempotent under a race — two processes
+    both reading the marker as absent could both compute `doomed` and both
+    log/UPDATE it. The lock forces a loser to see the marker the winner just
+    set."""
     from arb.whale_map import _sport_of
     from arb.whale_tape import _meta, _set_meta
-    if _meta(con, SLUG_PREFIX_FIX_MARK) is not None:
-        return 0
-    prefixes = cfg["whale"]["slug_sport_prefixes"]
-    doomed = [r["condition_id"] for r in con.execute(
-        "SELECT condition_id, slug, sport FROM markets"
-        " WHERE sport IS NOT NULL AND slug IS NOT NULL")
-        if _sport_of(r["slug"], prefixes, require_date_for_inexact=False) == r["sport"]
-        and _sport_of(r["slug"], prefixes) is None]
+    con.execute("BEGIN IMMEDIATE")
+    try:
+        if _meta(con, SLUG_PREFIX_FIX_MARK) is not None:
+            con.rollback()
+            return 0
+        prefixes = cfg["whale"]["slug_sport_prefixes"]
+        doomed = [r["condition_id"] for r in con.execute(
+            "SELECT condition_id, slug, sport FROM markets"
+            " WHERE sport IS NOT NULL AND slug IS NOT NULL")
+            if _sport_of(r["slug"], prefixes, require_date_for_inexact=False) == r["sport"]
+            and _sport_of(r["slug"], prefixes) is None]
+        if doomed:
+            con.executemany(
+                "UPDATE markets SET sport=NULL, market_type=NULL, start_utc=NULL"
+                " WHERE condition_id=?", [(c,) for c in doomed])
+        _set_meta(con, SLUG_PREFIX_FIX_MARK, str(len(doomed)))  # commits the txn
+    except Exception:
+        con.rollback()
+        raise
     if doomed:
-        con.executemany(
-            "UPDATE markets SET sport=NULL, market_type=NULL, start_utc=NULL"
-            " WHERE condition_id=?", [(c,) for c in doomed])
-        con.commit()
         log.info("whale tape: reset %d slug-prefix-mismapped market row(s)", len(doomed))
-    _set_meta(con, SLUG_PREFIX_FIX_MARK, str(len(doomed)))
     return len(doomed)

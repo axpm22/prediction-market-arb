@@ -55,11 +55,20 @@ def _patterns(cfg) -> list:
     `coin_tokens`, longest first so `bitcoin` is never shadowed by `btc`
     (I2, fix pass 3: three patterns described a COIN family with a bare
     `[a-z]+` and excluded `will-trump-reach-50-approval-in-march` and
-    `oil-price-in-london-march-3` — and `no-root:` is permanent)."""
+    `oil-price-in-london-march-3` — and `no-root:` is permanent).
+
+    An EMPTY `coin_tokens` drops the `{coin}` patterns instead of expanding
+    them (minor, fix pass 5, review of 333e264): `{coin}` -> `(?:)` — an
+    empty group with no coin name to require — degenerates each of the three
+    patterns into an anchor a market slug could satisfy by accident, not the
+    coin-shaped exclusion the pattern was written to be."""
     ns = cfg["whale"]["nonsports"]
+    patterns = ns["exclude_slug_patterns"]
     tokens = sorted((t for t in ns["coin_tokens"] if t), key=len, reverse=True)
+    if not tokens:
+        return [p for p in patterns if "{coin}" not in p]
     coin = "(?:%s)" % "|".join(re.escape(t) for t in tokens)
-    return [p.replace("{coin}", coin) for p in ns["exclude_slug_patterns"]]
+    return [p.replace("{coin}", coin) for p in patterns]
 
 
 def _when(value) -> datetime | None:

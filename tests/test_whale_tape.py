@@ -1598,6 +1598,32 @@ def test_map_markets_prefix_only_remap_needs_no_gamma_call(tmp_path):
     assert res["mapped"] == 1 and res["calls"] == 0 and get.urls == []
 
 
+def test_map_markets_counts_inexact_prefix_matches_for_the_census(tmp_path):
+    """Fix pass 5 (review of 333e264, part b): KNOWN_ISSUES #36 names a
+    ceiling `_sport_of`'s date requirement narrows but does not close (a
+    DATED non-sports slug can still false-positive), so the mapper counts
+    every row it roots via an INEXACT match into `res["inexact_prefix"]` —
+    a future census has a number to watch. `chi1-lax-sea-2026-09-05`
+    (inexact, dated, a genuine soccer slug per the census) counts; an EXACT
+    `nba-...` match does not, because it was never the inexact case the
+    ceiling is about."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    _map_row(con, "0xchi1", sport=None, market_type="BINARY",
+             start_utc="2026-09-05T18:00:00+00:00", slug="chi1-lax-sea-2026-09-05")
+    _map_row(con, "0xnba", sport=None, market_type="BINARY",
+             start_utc="2026-09-05T18:00:00+00:00",
+             slug="nba-playoffs-knicks-vs-76ers-total-games-ou-5pt5")
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 40})
+    get = FakeGet()                                  # raises if ever called: no Gamma needed
+
+    res = whale_backfill.map_markets(cfg, con, NOW, get=get)
+
+    assert res["mapped"] == 2 and res["calls"] == 0
+    assert res["inexact_prefix"] == 1
+
+
 def test_map_markets_marks_an_unmappable_revisit_row_for_the_day(tmp_path):
     """`unmappable:<cond>` mirrors `swept:`'s idiom: a row Gamma still can't
     map is skipped for the REST of today's cycles (no wasted calls chasing a

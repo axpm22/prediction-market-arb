@@ -87,11 +87,15 @@ def _local_remap(con, ids, prefixes, now, res) -> list[str]:
     for cond in ids:
         row = con.execute("SELECT sport, market_type, start_utc, slug FROM markets "
                           "WHERE condition_id=?", (cond,)).fetchone()
-        sport = row["sport"] or _sport_of(row["slug"] or "", prefixes)
+        slug = row["slug"] or ""
+        sport = row["sport"] or _sport_of(slug, prefixes)
         if sport and row["market_type"] and row["start_utc"]:
             con.execute("UPDATE markets SET sport=?, last_seen=? WHERE condition_id=?",
                         (sport, now.isoformat(), cond))
             res["mapped"] += 1
+            # `.get`, not `+=`: this can run before `_map_markets`' own
+            # `res.setdefault` (whale_backfill.map_markets calls this first).
+            res["inexact_prefix"] = res.get("inexact_prefix", 0) + _is_inexact(slug, prefixes)
         else:
             todo.append(cond)
     con.commit()
@@ -108,55 +112,37 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
     """Gamma mapping for a bounded, ordered slice of condition_ids (already
     decided by `whale_backfill.map_markets`, or a test).
 
-    Two Gamma passes per chunk (F0, mapper fix pass 2 2026-09-04, live probe
-    dated in data/verified_facts.md): Gamma's default index omits an
-    old/resolved market, so an id absent from the first (default) pass gets a
-    SECOND request with `&closed=true` before it counts as not-on-Gamma —
-    reuses `whale_resolve`'s own closed=true idiom (`_gamma_url`) rather than
-    duplicating it. At most GAMMA_IDS_PER_CALL=20 ids a call (rule 3: verified
-    live, legacy re-map 2026-09-04 — a larger batch silently drops markets);
-    the retry's id list is already a subset of one
-    such chunk, so it never needs its own re-chunking.
+    Two Gamma passes per chunk (F0, verified live, data/verified_facts.md):
+    an id absent from the default-index pass gets a SECOND `&closed=true`
+    request (`_gamma_url`, shared with `whale_resolve`) before it counts as
+    not-on-Gamma. At most GAMMA_IDS_PER_CALL=20 ids a call (rule 3 — a larger
+    batch silently drops markets); the retry list is already a chunk subset.
 
-    Upserts with COALESCE, EXISTING non-NULL wins (C1, mapper fix pass 2):
-    the old `COALESCE(excluded.x, x)` let a revisit call's answer overwrite a
-    field an earlier, more authoritative source had already set — `sport` in
-    particular, which for a market also seen by the watch lane was set from
-    its own sport TAG (ground truth), not the slug-prefix heuristic
-    `_gamma_row` falls back to. Filling NULLs only never loses that. `slug`
-    gets the same treatment for the same reason. `tokens_json` keeps its own
-    pre-existing guard: a Gamma miss (`[]`) never blanks out tokens an
-    earlier call already found.
+    Upserts with COALESCE, EXISTING non-NULL wins (C1): a revisit call's
+    answer must never overwrite a field an earlier, more authoritative
+    source already set — `sport` in particular, which the watch lane may
+    have set from a verified sport TAG rather than this slug-prefix
+    heuristic. `slug` gets the same guard; `tokens_json` keeps its own
+    NULLIF guard so a Gamma miss (`[]`) never blanks tokens an earlier call
+    found.
 
-    The `unmappable:` marker (C2, mapper fix pass 2) is decided from the row
-    AS STORED after the upsert, not from this call's own Gamma answer: with
-    C1's COALESCE now filling NULLs only, a revisit row can already be fully
-    mapped in every field but the ONE this call was fetching for, even when
-    THIS call's own answer was empty — checking the local answer alone used
-    to skip the marker on exactly that row (previously: `r[1] and r[2]`,
-    sport+market_type only, ignoring start_utc — the same miss REVISIT_SQL
-    itself checks for, so an id missing only start_utc got no marker and sat
-    at the head of the revisit queue every cycle forever).
+    The `unmappable:` marker (C2) reads the row AS STORED after the upsert,
+    not this call's own answer — a revisit row can already be fully mapped
+    in every OTHER field, so checking only this call's own answer used to
+    miss the marker on exactly that row. `absent:` (legacy re-map) is
+    `unmappable:`'s PERMANENT sibling: set only when an id is still missing
+    from `found` after BOTH passes, so an id Gamma has genuinely never heard
+    of stops re-asking for good instead of looping forever.
 
-    The `absent:` marker (legacy re-map, 2026-09-04) is set only for an id
-    still missing from `found` after BOTH passes — the permanent sibling of
-    `unmappable:` below: REVISIT_SQL excludes it forever, not just for
-    today, because two real asks (default index, then closed=true) both
-    came back with nothing. This is what lets the old mapper's 12,091
-    slug-NULL legacy rows re-enter the revisit queue (REVISIT_SQL's
-    `slug IS NOT NULL` floor is gone) without looping on Gamma forever for
-    the ones that turn out not to exist there either.
-
-    A closed-pass Gamma row this call is about to mine for sport/start_utc
-    may ALSO be a resolved market (F0's second pass is the same query
-    `read_resolutions` uses) — `record_resolution` (arb/whale_resolve.py,
-    shared with the resolution reader, source='mapper') persists it right
-    here so the resolution sweep never spends its own call re-asking the
-    same question once this market ages out of the 60s cycle's universe."""
+    A closed-pass row may ALSO be a resolved market (same query
+    `read_resolutions` uses) — `record_resolution` persists it here so the
+    resolution sweep never spends its own call re-asking once this market
+    ages out of the 60s cycle's universe."""
     prefixes = cfg["whale"]["slug_sport_prefixes"]
     today = now.strftime("%Y-%m-%d")
     res.setdefault("root_calls", 0)
     res.setdefault("no_root", 0)
+    res.setdefault("inexact_prefix", 0)
     for i in range(0, len(todo), GAMMA_IDS_PER_CALL):
         chunk = todo[i:i + GAMMA_IDS_PER_CALL]
         found = _gamma_fetch(cfg, bucket, get, chunk, res)
@@ -176,6 +162,7 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
         roots = whale_ns_map.event_roots(cfg, bucket, get, found,
                                          unrooted - no_root, res)
         rows = [_gamma_row(c, found.get(c), prefixes, now) for c in chunk]
+        res["inexact_prefix"] += sum(_is_inexact(r[7] or "", prefixes) for r in rows if r[1])
         con.executemany(
             f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 11)}) "
             "ON CONFLICT(condition_id) DO UPDATE SET last_seen=excluded.last_seen, "
@@ -230,6 +217,8 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
                          "— never scored", cond, row["sport"], row["market_type"],
                          row["start_utc"])
                 _set_meta(con, f"unmappable:{cond}", today)
+    if res["inexact_prefix"]:  # KNOWN_ISSUES #36 census counter
+        log.info("whale mapping: %d row(s) via inexact prefix", res["inexact_prefix"])
 
 
 def _gamma_row(cond, m, prefixes, now) -> tuple:
@@ -271,17 +260,17 @@ def _gamma_row(cond, m, prefixes, now) -> tuple:
             volume)
 
 
-# Fix pass 4 (controller, live tape read-only census 2026-09-05 over every
-# `markets.slug`): an INEXACT prefix match (`head` merely STARTS WITH the
-# key, `head != key`) is a genuine league code only when the slug also
-# carries a `YYYY-MM-DD` date — every inexact match WITHOUT one, grouped by
-# head, was a false positive: israel 38, china 6, israeli 4, nflx 3
-# (Netflix), denzel 1. Every inexact match WITH one was a real league code:
-# chi1 106, chi2 75, nor2 71, cricipl 66, argcopa 55, nbasl 49, bra3 48,
-# crichundred 29, mlbb 26, plus ~25 more cric* families. EXACT head matches
-# (`nba-playoffs-...`, `ufc-319-...`: 65 rows) never carry a date and are
-# unaffected either way.
+# Fix pass 4 (2026-09-05 census): dated vs undated inexact prefix matches —
+# ceiling: a DATED non-sports slug still false-positives; see KNOWN_ISSUES #36.
 _DATED_SLUG = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _is_inexact(slug: str, prefixes) -> bool:
+    """True iff `_sport_of` roots `slug` via an INEXACT match — an exact
+    match always wins, so "matched, and head isn't a key" is the whole rule.
+    Feeds `res["inexact_prefix"]` (KNOWN_ISSUES #36 census counter)."""
+    head = slug.split("-")[0].lower()
+    return head not in prefixes and _sport_of(slug, prefixes) is not None
 
 
 def _sport_of(slug: str, prefixes, require_date_for_inexact: bool = True) -> str | None:

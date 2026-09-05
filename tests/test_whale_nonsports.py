@@ -598,6 +598,26 @@ def test_a_cadence_slug_is_excluded_whatever_its_dates_say(cfg):
     assert [m.condition_id for m in whale_nonsports.markets_of(cfg, long, NOW)] == ["0xd"]
 
 
+def test_empty_coin_tokens_drops_the_coin_patterns_instead_of_matching_everywhere(cfg):
+    """MINOR, fix pass 5 (review of 333e264): `coin_tokens: []` used to expand
+    `{coin}` to `(?:)`, an empty group with no coin name to require — each of
+    the three `{coin}` patterns degenerated into an anchor a slug could
+    satisfy by accident instead of the coin-shaped exclusion it was written
+    to be. Fixed by dropping the `{coin}` patterns entirely when there are no
+    tokens, leaving the three coin-independent patterns (updown/up-or-down/
+    what-price-will) doing their job untouched."""
+    cfg["whale"]["nonsports"]["coin_tokens"] = []
+    patterns = whale_nonsports._patterns(cfg)
+    assert len(patterns) == 3 and not any("{coin}" in p or "(?:)" in p for p in patterns)
+    # a genuine crypto ladder slug is no longer excluded (no tokens to name it)
+    assert whale_nonsports._excluded(
+        cfg, {"slug": "x"}, {"slug": "bitcoin-above-115k-on-september-5-2026"}) is False
+    # ...but the coin-independent cadence family is still caught
+    assert whale_nonsports._excluded(
+        cfg, {"slug": "btc-updown-5m-1785140700"},
+        {"slug": "btc-updown-5m-1785140700"}) is True
+
+
 # --------------------- the `events?id=` tag shape (fix pass 2, review I1)
 
 def test_root_of_event_reads_the_live_events_by_id_tag_shape(cfg):

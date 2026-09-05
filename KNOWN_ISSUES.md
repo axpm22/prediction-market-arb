@@ -425,7 +425,7 @@ day-7 whale calibration scheduled for 2026-09-07 covers this period and
 should be read with that caveat — it is measuring a collector that was
 dropping stale-cached duplicates and missing pages, not the fixed one.
 
-### 36. `_sport_of` inexact-prefix false positives — geopolitics/stock slugs stored as `sport=soccer`/`nfl`, fixed and repaired 2026-09-05
+### 36. `_sport_of` inexact-prefix false positives — geopolitics/stock slugs stored as `sport=soccer`/`nfl`, fixed and repaired 2026-09-05 (52 rows reset, matching the census)
 Found by a live-tape read-only census (2026-09-05, over every `markets.slug`)
 run alongside the fix-pass-4 review of 5f0c2db. `arb/whale_map.py::_sport_of`
 matched `head.startswith(key)` with no further check, so a slug whose FIRST
@@ -446,6 +446,17 @@ a `\d{4}-\d{2}-\d{2}` date somewhere in the slug (`_DATED_SLUG` in
 `require_date_for_inexact` flag (default `True`) so both readings share one
 function.
 
+**Ceiling (still open, fix pass 5):** the date requirement NARROWS the
+false-positive class, it does not CLOSE it — a slug whose first token merely
+starts with a league code and also happens to carry a real `YYYY-MM-DD` date
+still roots as that sport (a geopolitics slug like `china-invades-taiwan-
+by-2026-12-31`, head `china`, starts with league key `chi`). No new rule
+closes this here; `arb/whale_map.py::_is_inexact` instead counts every
+inexact match `_sport_of` actually roots a row with into
+`res["inexact_prefix"]`, logged once a mapping cycle finds any (`whale
+mapping: N row(s) via inexact prefix`), so a future census has a number to
+watch rather than a silent recurrence.
+
 **Repaired 2026-09-05:** the already-mislabelled live rows had
 `sport`/`market_type`/`start_utc` all non-NULL — the shape REVISIT_SQL
 treats as fully mapped, so they never revisited on their own and their
@@ -455,13 +466,15 @@ the rows whose stored `sport` matches the PRE-fix (undated-inexact) reading
 but not the fixed one, back to NULL — a mutable-cache UPDATE (rule 9 governs
 `flat_bets`/`bet_events`, not `markets`), which trips the `markets` UPDATE
 trigger so affected wallets re-materialize on their own. One-shot and
-marker-gated (`meta` key `slug_prefix_fix_2026-09-05`); called from
-`whale_backfill.map_markets` every cycle (cfg + con both live there, unlike
-`open_tape`), where it costs one `meta` lookup once the marker is set. Count
-reset verified in `tests/test_whale_tape.py::
-test_repair_slug_prefix_mismap_resets_only_the_undated_inexact_matches` (not
-re-run against the live tape as part of this fix); the live count from the
-census is ~52 rows.
+marker-gated (`meta` key `slug_prefix_fix_2026-09-05`, dated on purpose — a
+future repair over a different `doomed` set needs its own new dated marker,
+not this one); called from `whale_backfill.map_markets` every cycle (cfg +
+con both live there, unlike `open_tape`), where it costs one `meta` lookup
+once the marker is set. Count reset verified in `tests/test_whale_tape.py::
+test_repair_slug_prefix_mismap_resets_only_the_undated_inexact_matches`, and
+now confirmed against the live tape too: the backfill child logged `whale
+tape: reset 52 slug-prefix-mismapped market row(s)` at 2026-09-05 17:13:57
+local (15:13:57Z) — 52, exactly matching the census.
 
 ---
 
