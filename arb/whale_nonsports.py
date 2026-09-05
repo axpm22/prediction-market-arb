@@ -57,7 +57,8 @@ def _patterns(cfg) -> list:
     `[a-z]+` and excluded `will-trump-reach-50-approval-in-march` and
     `oil-price-in-london-march-3` — and `no-root:` is permanent)."""
     ns = cfg["whale"]["nonsports"]
-    coin = "(?:%s)" % "|".join(sorted(ns["coin_tokens"], key=len, reverse=True))
+    tokens = sorted((t for t in ns["coin_tokens"] if t), key=len, reverse=True)
+    coin = "(?:%s)" % "|".join(re.escape(t) for t in tokens)
     return [p.replace("{coin}", coin) for p in ns["exclude_slug_patterns"]]
 
 

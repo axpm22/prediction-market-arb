@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from arb.venues.base import get_json
-from arb import whale_ns_map
+from arb import whale_migrate, whale_ns_map
 from arb.whale_map import MAP_SQL, REVISIT_SQL, _local_remap, _map_markets, _sport_of  # noqa: F401
 from arb.whale_rows import _keep
 from arb.whale_tape import (DATA_API, LEADERBOARD_PAGE, _backoff_active, _bucket,
@@ -250,6 +250,10 @@ def map_markets(cfg, con, now, get=get_json) -> dict:
     # root is cleared. Self-terminating and free (tape only), so it runs every
     # cycle without a budget key.
     res["unrooted"] = whale_ns_map.unroot_mechanical(cfg, con, now)
+    # Fix pass 4 repair: one-shot and marker-gated (arb/whale_migrate.py), so
+    # this costs one `meta` lookup on every cycle after the first that finds
+    # anything to reset.
+    whale_migrate.repair_slug_prefix_mismap(cfg, con)
     limit = int(w["backfill"]["map_per_cycle"])
     today = now.strftime("%Y-%m-%d")
     new_ids, revisit = _queue(con, limit, today)

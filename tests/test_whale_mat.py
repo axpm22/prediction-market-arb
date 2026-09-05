@@ -775,14 +775,25 @@ def test_open_tape_takes_no_write_lock_on_an_already_migrated_tape(tmp_path):
     path = tmp_path / "w.sqlite"
     open_tape(path).close()
     holder = sqlite3.connect(str(path), timeout=30)
-    holder.execute("PRAGMA journal_mode=WAL")
-    holder.execute("BEGIN IMMEDIATE")
-    holder.execute("INSERT INTO markets (condition_id) VALUES ('0xheld')")
-    done = []
-    t = threading.Thread(target=lambda: done.append(open_tape(path)), daemon=True)
+    done: list = []
 
-    t.start()
-    t.join(timeout=10)
+    def _open_and_close():
+        # sqlite3 connections are thread-bound (check_same_thread=True,
+        # open_tape's default): close it HERE, not from the main thread
+        # after join, or a passing run leaks it (minor, fix pass 4).
+        open_tape(path).close()
+        done.append(True)
 
-    assert not t.is_alive() and done, "open_tape blocked on the write lock"
-    holder.rollback()
+    try:
+        holder.execute("PRAGMA journal_mode=WAL")
+        holder.execute("BEGIN IMMEDIATE")
+        holder.execute("INSERT INTO markets (condition_id) VALUES ('0xheld')")
+        t = threading.Thread(target=_open_and_close, daemon=True)
+
+        t.start()
+        t.join(timeout=10)
+
+        assert not t.is_alive() and done, "open_tape blocked on the write lock"
+        holder.rollback()
+    finally:
+        holder.close()

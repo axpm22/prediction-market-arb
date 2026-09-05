@@ -43,6 +43,8 @@ _MIGRATIONS = (("signals", "holders_ratio", "TEXT"),      # §7 item 1b, 2026-09
 # on every open, permanently so if the script aborted mid-way. The marker below
 # is what a NEW body carries and the pre-df97ad3 `INSERT OR IGNORE` one does
 # not, so `_migrate_triggers` can replace exactly the old ones, exactly once.
+# Change this string whenever `_ENQUEUE` changes — it is a one-shot STAMP a
+# trigger body carries, not a version number to bump for its own sake.
 MAT_TRIGGER_MARK = "NOT EXISTS (SELECT 1 FROM mat_dirty"
 _ENQUEUE = f"""
     BEGIN
@@ -105,3 +107,54 @@ def _migrate(con) -> None:
                       "open_tape treated as done", table, column)
         con.commit()
     _migrate_triggers(con)
+
+
+# Fix pass 4 (controller, live tape census 2026-09-05): the ~52 `markets`
+# rows the pre-fix `_sport_of` (arb/whale_map.py) inexact-prefix-without-a-
+# date bug mislabelled — `sport`/`market_type`/`start_utc` all land non-NULL
+# for one of these (an inexact false positive stores exactly like a real
+# sports row), so REVISIT_SQL never reconsiders them and their prints keep
+# contaminating the wrong sport's wallet buckets, permanently. Not schema, so
+# it does not belong in `_MIGRATIONS`/`_migrate` above (no `cfg` reaches
+# `open_tape`, and `slug_sport_prefixes` is what decides which rows are
+# affected) — this one is called from `whale_backfill.map_markets`, which
+# already has both. `markets` is a mutable CACHE table, not the append-only
+# ledger (rule 9 governs `flat_bets`/`bet_events`, not this), so a targeted
+# UPDATE is allowed, and it trips the `markets` UPDATE trigger (arb/
+# whale_mat.py design §5 item 5), so every wallet holding one of these
+# positions re-materialises on its own.
+SLUG_PREFIX_FIX_MARK = "slug_prefix_fix_2026-09-05"
+
+
+def repair_slug_prefix_mismap(cfg, con) -> int:
+    """One-shot, idempotent: reset every `markets` row whose stored `sport`
+    is exactly what the PRE-fix `_sport_of` would have matched from its own
+    slug (`require_date_for_inexact=False`) but the FIXED reading no longer
+    matches — i.e. exactly the rows fix pass 4 now roots differently. Reuses
+    `_sport_of` for both readings so the matching rule lives in the one
+    place, never re-typed here for comparison.
+
+    Marker-gated like `_migrate_triggers` above, and unlike `unroot_mechanical`
+    (arb/whale_ns_map.py, self-terminating by its own SELECT): a reset row's
+    `sport` becomes NULL, which no longer equals the PRE-fix reading either,
+    so the affected set is not naturally self-excluding the way a still-
+    non-sports-rooted row is — without the marker this would rescan every
+    non-NULL-sport row in `markets` every cycle forever for a bug fixed once."""
+    from arb.whale_map import _sport_of
+    from arb.whale_tape import _meta, _set_meta
+    if _meta(con, SLUG_PREFIX_FIX_MARK) is not None:
+        return 0
+    prefixes = cfg["whale"]["slug_sport_prefixes"]
+    doomed = [r["condition_id"] for r in con.execute(
+        "SELECT condition_id, slug, sport FROM markets"
+        " WHERE sport IS NOT NULL AND slug IS NOT NULL")
+        if _sport_of(r["slug"], prefixes, require_date_for_inexact=False) == r["sport"]
+        and _sport_of(r["slug"], prefixes) is None]
+    if doomed:
+        con.executemany(
+            "UPDATE markets SET sport=NULL, market_type=NULL, start_utc=NULL"
+            " WHERE condition_id=?", [(c,) for c in doomed])
+        con.commit()
+        log.info("whale tape: reset %d slug-prefix-mismapped market row(s)", len(doomed))
+    _set_meta(con, SLUG_PREFIX_FIX_MARK, str(len(doomed)))
+    return len(doomed)

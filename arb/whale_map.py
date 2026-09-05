@@ -6,6 +6,7 @@ at the store boundary, nothing here can reach data/arb.sqlite.
 from __future__ import annotations
 
 import json
+import re
 
 from arb import whale_nonsports, whale_ns_map
 from arb.whale_resolve import record_resolution
@@ -174,7 +175,7 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
         no_root = whale_ns_map.no_root(cfg, found, unrooted)
         roots = whale_ns_map.event_roots(cfg, bucket, get, found,
                                          unrooted - no_root, res)
-        rows = [_gamma_row(c, found.get(c), prefixes, now, roots) for c in chunk]
+        rows = [_gamma_row(c, found.get(c), prefixes, now) for c in chunk]
         con.executemany(
             f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 11)}) "
             "ON CONFLICT(condition_id) DO UPDATE SET last_seen=excluded.last_seen, "
@@ -198,6 +199,10 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
         # with a known sport but a NULL market_type is in REVISIT_SQL, and
         # Gamma's slug for it need not carry a league prefix) and replaced a
         # real kickoff with an endDate, which `first_sight_wins` protects.
+        # The `sport=?` in the WHERE is idempotent re-application, not a
+        # retag: a root, once set, never changes — a market's event getting
+        # re-tagged on a later Gamma answer does not re-root an already-
+        # rooted row (minor, fix pass 4).
         if roots:
             con.executemany("UPDATE markets SET sport=?, market_type=?, start_utc=? "
                             "WHERE condition_id=? AND (sport IS NULL OR sport=?)",
@@ -227,10 +232,19 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
                 _set_meta(con, f"unmappable:{cond}", today)
 
 
-def _gamma_row(cond, m, prefixes, now, roots=None) -> tuple:
-    """`roots` is `whale_ns_map.event_roots`' answer for this chunk: the
-    non-sports root a market's own EVENT tags give it, used only where the
-    slug gives none."""
+def _gamma_row(cond, m, prefixes, now) -> tuple:
+    """The non-sports root a market's own EVENT tags give it (`roots`, from
+    `whale_ns_map.event_roots`) is deliberately NOT read here (fix pass 4,
+    review of 5f0c2db): this function sees only the FRESH Gamma answer, never
+    the row already stored, so writing a root straight into the INSERT means
+    `excluded.*` can carry a non-sports `market_type`/`start_utc` for a
+    condition_id whose stored `sport` is a verified sports code — and
+    COALESCE picks that non-NULL `excluded` value whenever the stored field
+    is still NULL, permanently. The guarded `UPDATE ... WHERE sport IS NULL
+    OR sport=?` after the upsert (below) is the SOLE writer of a non-sports
+    root; this function only ever leaves sport/market_type/start_utc NULL for
+    a market it cannot root by slug, and COALESCE then preserves whatever
+    `markets` already had."""
     sport = mtype = start = None
     tokens: list = []
     if m:
@@ -243,12 +257,6 @@ def _gamma_row(cond, m, prefixes, now, roots=None) -> tuple:
         # would then keep whichever landed first, so a kickoff pinned here
         # would stand forever.
         start = _iso(m.get("gameStartTime")) if sport else None
-        if sport is None and roots and cond in roots:
-            # ... and that is exactly what the tag builder would have written
-            # for this market, computed from the same helper (amendment
-            # 2026-09-05): root, LADDER/BINARY from the event's negRisk, and
-            # `start_utc` = the MARKET's own endDate, never the event's.
-            sport, mtype, start = roots[cond]
         # I3 (fix pass 2): the SAME two-sided guard the by-tag builder has
         # always applied. Colliding outcome labels share a fingerprint in the
         # lane, so they are not stored at all — `[]` leaves whatever an earlier
@@ -263,12 +271,33 @@ def _gamma_row(cond, m, prefixes, now, roots=None) -> tuple:
             volume)
 
 
-def _sport_of(slug: str, prefixes) -> str | None:
+# Fix pass 4 (controller, live tape read-only census 2026-09-05 over every
+# `markets.slug`): an INEXACT prefix match (`head` merely STARTS WITH the
+# key, `head != key`) is a genuine league code only when the slug also
+# carries a `YYYY-MM-DD` date — every inexact match WITHOUT one, grouped by
+# head, was a false positive: israel 38, china 6, israeli 4, nflx 3
+# (Netflix), denzel 1. Every inexact match WITH one was a real league code:
+# chi1 106, chi2 75, nor2 71, cricipl 66, argcopa 55, nbasl 49, bra3 48,
+# crichundred 29, mlbb 26, plus ~25 more cric* families. EXACT head matches
+# (`nba-playoffs-...`, `ufc-319-...`: 65 rows) never carry a date and are
+# unaffected either way.
+_DATED_SLUG = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _sport_of(slug: str, prefixes, require_date_for_inexact: bool = True) -> str | None:
     """Polymarket sports slugs lead with a league code: `kbo-lot-kt-2026-08-09`.
     Longest configured prefix wins, so one `cric` key covers crict20max,
-    cricjcl, cricodc ... Unknown code -> None -> the market is never scored."""
+    cricjcl, cricodc ... Unknown code -> None -> the market is never scored.
+    An INEXACT match (the head only STARTS WITH the key) additionally
+    requires a date in the slug — see `_DATED_SLUG` above.
+
+    `require_date_for_inexact=False` recovers the PRE-fix-pass-4 reading (no
+    date required at all) — `arb/whale_migrate.py`'s repair uses it to find
+    exactly the rows the fix now roots differently, so the matching rule
+    lives in this one function rather than being re-typed for comparison."""
     head = slug.split("-")[0].lower()
     for key in sorted(prefixes, key=len, reverse=True):
-        if head == key or head.startswith(key):
+        if head == key or (head.startswith(key) and
+                            (not require_date_for_inexact or _DATED_SLUG.search(slug))):
             return prefixes[key]
     return None

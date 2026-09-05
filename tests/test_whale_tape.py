@@ -13,8 +13,8 @@ import pytest
 
 from arb.config import load
 from arb.venues.base import VenueError
-from arb import (whale_backfill, whale_holdings, whale_hygiene, whale_map, whale_resolve,
-                 whale_score, whale_sweep, whale_tape, whale_universe)
+from arb import (whale_backfill, whale_holdings, whale_hygiene, whale_map, whale_migrate,
+                 whale_resolve, whale_score, whale_sweep, whale_tape, whale_universe)
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 NOW = datetime(2026, 9, 3, 17, 0, 0, tzinfo=timezone.utc)
@@ -1678,6 +1678,31 @@ def test_the_2026_09_04_census_prefixes_resolve_to_the_right_sport():
     assert whale_backfill._sport_of("will-trump-win-2026", prefixes) is None  # question, unmapped
 
 
+def test_an_inexact_prefix_match_without_a_date_is_not_a_sport():
+    """Fix pass 4 (controller, live tape read-only census 2026-09-05 over
+    every `markets.slug`): `_sport_of` matched `head.startswith(key)`, so the
+    GEOPOLITICS market `israel-closes-its-airspace-by-september-30` (head
+    `israel`) matched league key `isr` and was stored `sport=soccer` — 93
+    prints, a fabricated `start_utc` off the Gamma endDate. Every INEXACT
+    match without a date was the same story: `china` (6), `israeli` (4),
+    `nflx` (Netflix, 3), `denzel` (1) — none of them sports. Every INEXACT
+    match WITH a date is a genuine league code the census sampled: chi1 106,
+    chi2 75, nor2 71, cricipl 66, argcopa 55, nbasl 49, bra3 48, crichundred
+    29, mlbb 26, plus ~25 more cric* families. EXACT head matches never carry
+    a date (`nba-playoffs-...`, `ufc-319-...`) and are unaffected either way."""
+    prefixes = _cfg()["whale"]["slug_sport_prefixes"]
+    assert whale_backfill._sport_of(
+        "israel-closes-its-airspace-by-september-30", prefixes) is None
+    assert whale_backfill._sport_of("china-gdp-growth-in-2026", prefixes) is None
+    assert whale_backfill._sport_of("nflx-stock-price-eoy", prefixes) is None
+    assert whale_backfill._sport_of("chi1-lax-sea-2026-09-05", prefixes) == "soccer"
+    assert whale_backfill._sport_of(
+        "cricipl-mi-csk-2026-05-01", prefixes) == "cricket"
+    assert whale_backfill._sport_of(
+        "nba-playoffs-knicks-vs-76ers-total-games-ou-5pt5", prefixes) == "basketball_nba"
+    assert whale_backfill._sport_of("ufc-319-du-plessis-vs-chimaev", prefixes) == "mma"
+
+
 def test_the_mapping_queue_ignores_markets_no_known_wallet_has_traded(tmp_path):
     """Retention amendment 2026-09-04, the guard that has to land in the same
     commit: once prints are kept platform-wide, MAP_SQL's queue would otherwise
@@ -2647,20 +2672,75 @@ def test_a_nonsports_root_never_clobbers_a_tag_verified_sports_row(tmp_path):
     rewrote `baseball_mlb` to `politics` and replaced the real KICKOFF with
     the market's endDate, which `first_sight_wins` exists to protect. Only a
     row with no sport at all, or one already carrying THIS non-sports root, is
-    the rooting helper's to write."""
+    the rooting helper's to write.
+
+    Fix pass 4 (review of 5f0c2db): `_gamma_row` itself was still substituting
+    `roots[cond]` whenever the FRESH Gamma slug rooted no sport, regardless of
+    what the STORED row already carried — so a REVISIT_SQL row with
+    `start_utc` ALSO still NULL (never merely a kickoff already on file) got
+    the non-sports `(sport, market_type, start_utc)` written straight into the
+    INSERT's `excluded.*`, and COALESCE picks a non-NULL `excluded` value over
+    a NULL stored one every time. That is the PERMANENT case: `market_type`
+    and `start_utc` land non-NULL, `sport` stays `baseball_mlb`, and the row
+    never revisits again. `0xmlb2` below is the reviewer's exact repro."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     cond, kickoff = "0xmlb", "2026-08-09T09:00:00+00:00"
     _map_row(con, cond, sport="baseball_mlb", start_utc=kickoff,   # market_type NULL
              slug="mlb-nyy-bos-2026-08-09")
+    cond2 = "0xmlb2"                       # market_type AND start_utc both NULL
+    _map_row(con, cond2, sport="baseball_mlb", slug="mlb-nyy-bos-2026-08-10")
     con.commit()
-    get = _RootGet([_hist_market(cond, "yankees-red-sox-series-winner", 33228)],
-                   [_hist_event(33228)])
+    get = _RootGet([_hist_market(cond, "yankees-red-sox-series-winner", 33228),
+                    _hist_market(cond2, "yankees-red-sox-series-winner-2", 33229)],
+                   [_hist_event(33228), _hist_event(33229)])
 
     whale_backfill.map_markets(_map_cfg(), con, NOW, get=get)
 
     row = con.execute("SELECT * FROM markets WHERE condition_id=?", (cond,)).fetchone()
     assert row["sport"] == "baseball_mlb", "a tag-verified sports root was clobbered"
     assert row["start_utc"] == kickoff, "first_sight_wins' start_utc was rewritten"
+
+    row2 = con.execute("SELECT * FROM markets WHERE condition_id=?", (cond2,)).fetchone()
+    assert row2["sport"] == "baseball_mlb", "a tag-verified sports row lost its sport"
+    assert row2["market_type"] is None, \
+        "a non-sports root wrote market_type onto a tag-verified sports row"
+    assert row2["start_utc"] is None, \
+        "a non-sports root wrote a fake start_utc onto a tag-verified sports row"
+
+
+def test_repair_slug_prefix_mismap_resets_only_the_undated_inexact_matches(tmp_path):
+    """Fix pass 4 repair (controller, live tape census 2026-09-05): the
+    `_sport_of` inexact-match-without-a-date fix left live rows already
+    stored non-NULL sport/market_type/start_utc from the OLD (buggy) reading
+    behind — REVISIT_SQL never revisits a row with all three filled, so
+    these were permanent, and their prints kept contaminating the wrong
+    sport's wallet buckets. `israel-closes-its-airspace-by-september-30`
+    (head `israel`, matched league key `isr` with no date) is the
+    controller's live repro; `chi1-lax-sea-2026-09-05` (head `chi1`,
+    inexact but DATED — a genuine soccer slug per the census) must survive
+    untouched, and a second run must reset nothing further."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    _map_row(con, "0xisr", sport="soccer", market_type="BINARY",
+             start_utc="2026-10-01T03:59:00+00:00",
+             slug="israel-closes-its-airspace-by-september-30")
+    _map_row(con, "0xchi1", sport="soccer", market_type="BINARY",
+             start_utc="2026-09-05T18:00:00+00:00", slug="chi1-lax-sea-2026-09-05")
+    con.commit()
+    cfg = _map_cfg()
+
+    n = whale_migrate.repair_slug_prefix_mismap(cfg, con)
+
+    assert n == 1
+    isr = con.execute("SELECT sport, market_type, start_utc FROM markets"
+                      " WHERE condition_id='0xisr'").fetchone()
+    assert (isr["sport"], isr["market_type"], isr["start_utc"]) == (None, None, None)
+    chi1 = con.execute("SELECT sport, market_type, start_utc FROM markets"
+                       " WHERE condition_id='0xchi1'").fetchone()
+    assert (chi1["sport"], chi1["market_type"], chi1["start_utc"]) == \
+        ("soccer", "BINARY", "2026-09-05T18:00:00+00:00")
+    assert whale_tape._meta(con, whale_migrate.SLUG_PREFIX_FIX_MARK) == "1"
+    # idempotent: the marker makes a second run a no-op
+    assert whale_migrate.repair_slug_prefix_mismap(cfg, con) == 0
 
 
 def test_the_no_root_marker_is_counted_on_its_own_and_never_written_when_disabled(tmp_path):
