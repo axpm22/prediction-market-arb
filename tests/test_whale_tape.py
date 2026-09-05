@@ -1883,6 +1883,69 @@ def test_a_collector_backoff_does_not_pause_backfill(tmp_path):
     assert res2["status"] == "ok" and quiet.urls != []
 
 
+def test_a_resolve_backoff_does_not_pause_poll_prints_or_backfill(tmp_path):
+    """Mirror of the backfill<->collector pair above, for the third family: a
+    resolution-read failure must not pause the print collector or the wallet
+    backfill either — three unrelated callers of the same venue."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    old = NOW - timedelta(days=3)
+    # a synthetic id, not the real fixture's own conditionId: that id is also
+    # the busiest market in whale_trades_global (same live capture), and
+    # poll_prints below would collide with this test's raw `markets` insert.
+    cond = "0xresolveisolation1"
+    resolved = dict(_fixture("whale_gamma_resolved"), conditionId=cond)
+    _resolvable(con, cond, old)
+    boom = FakeGet(VenueError("503 from https://gamma-api.polymarket.com/markets"))
+
+    n = whale_resolve.read_resolutions(_cfg(), con, [cond], NOW, get=boom)
+
+    assert n == 0
+    assert whale_tape._meta(con, "backoff_until:resolve") is not None
+    assert whale_tape._meta(con, "backoff_until:collector") is None
+    assert whale_tape._meta(con, "backoff_until:backfill") is None
+
+    quiet = FakeGet([])
+    res2 = whale_tape.poll_prints(_cfg(), con, _global_markets(1), NOW, get=quiet)
+    assert res2["status"] == "ok" and quiet.urls != []
+
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00", source="leaderboard")
+    con.commit()
+    quiet2 = FakeGet([])
+    res3 = whale_backfill.backfill(_cfg(), con, NOW, get=quiet2)
+    assert res3["status"] == "ok" and quiet2.urls != []
+
+
+def test_a_collector_backoff_does_not_pause_read_resolutions(tmp_path):
+    """Mirror of the above: a print-collector failure must not pause the
+    resolution reader either."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    boom = FakeGet(VenueError("503 from https://data-api.polymarket.com/trades"))
+    res = whale_tape.poll_prints(_cfg(), con, _global_markets(1), NOW, get=boom)
+    assert res["status"] == "error"
+    assert whale_tape._meta(con, "backoff_until:collector") is not None
+    assert whale_tape._meta(con, "backoff_until:resolve") is None
+
+    old = NOW - timedelta(days=3)
+    cond = "0xresolveisolation2"          # synthetic id, see note above
+    resolved = dict(_fixture("whale_gamma_resolved"), conditionId=cond)
+    _resolvable(con, cond, old)
+    quiet = FakeGet([resolved])
+
+    n = whale_resolve.read_resolutions(_cfg(), con, [cond], NOW, get=quiet)
+
+    assert n == 1 and quiet.urls != []
+
+
+def test_an_unregistered_backoff_family_fails_loudly(tmp_path):
+    """Every call site must name one of the registered families — a typo'd
+    or new, unregistered family should never silently no-op the guard."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    with pytest.raises(AssertionError):
+        whale_tape._backoff_active(con, NOW, "bogus")
+    with pytest.raises(AssertionError):
+        whale_tape._set_backoff(con, _cfg(), NOW, "bogus")
+
+
 def test_the_backoff_warning_names_the_family(tmp_path, caplog):
     """The shared warning used to always say 'whale collector backing off',
     regardless of which family actually failed — useless for telling a

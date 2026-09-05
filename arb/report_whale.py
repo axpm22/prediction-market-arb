@@ -16,7 +16,7 @@ import json
 import os
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from pathlib import Path
 
 from arb import whale_elite, whale_mat, whale_rank
@@ -228,13 +228,11 @@ def _collector(cfg, con, now) -> dict:
     `holdings` rows over the 24h before `now`, by `observed_at` like the 1h
     count — a function of the report day, printed in the md. `tape_bytes` is a
     stat of the configured file (never an open, so a WAL tape its writer holds
-    still reports). `bytes_per_day` is an ESTIMATE (2026-09-05 fix — the prior
-    version scaled `tape_bytes` by the age of the whole tape, a lifetime
-    average that stayed wrong for a full day after any compaction): rows
-    written across prints/holdings/signals in the trailing 24h, times the
-    tape's mean bytes/row over ALL rows of those tables (`tape_bytes / total
-    rows`) — both LIVE, so the console line and the dashboard, never the md.
-
+    still reports); `bytes_per_day` is mean bytes per row over the whole file
+    (all tables) × rows written in the trailing 24h — an estimate, not a
+    measurement, LIVE like tape_bytes; below 24h old (rows_24h == total_rows
+    collapses it to `tape_bytes`) it scales by 86400/age_secs off the oldest
+    print's age instead, flagged `bytes_per_day_confidence: "low"`.
     `backoff_until` is the COLLECTOR family's own pause (kept under this name
     for callers that only ever cared about the print collector); `backoff`
     surfaces all three families the tape's callers can pause independently
@@ -245,7 +243,7 @@ def _collector(cfg, con, now) -> dict:
            "backoff_until": None, "backoff": {f: None for f in BACKOFF_FAMILIES},
            "prints_per_min": Decimal(0), "prints_24h": 0,
            "holdings_24h": 0, "tape_bytes": None, "bytes_per_day": None,
-           "mat": {}, "mat_stale": None}
+           "bytes_per_day_confidence": None, "mat": {}, "mat_stale": None}
     path = Path(str(cfg["whale"]["tape_db"]))
     if path.exists():
         out["tape_bytes"] = os.path.getsize(path)
@@ -291,6 +289,12 @@ def _collector(cfg, con, now) -> dict:
         " + (SELECT COUNT(*) FROM signals)").fetchone()[0]
     if out["tape_bytes"] is not None and total_rows:
         rows_24h = out["prints_24h"] + out["holdings_24h"] + signals_24h
-        out["bytes_per_day"] = int(Decimal(out["tape_bytes"]) * rows_24h / total_rows)
+        est = Decimal(out["tape_bytes"]) * rows_24h / total_rows
+        oldest = con.execute("SELECT MIN(observed_at) m FROM prints").fetchone()["m"]
+        age = int((now - datetime.fromisoformat(oldest)).total_seconds()) if oldest else 86400
+        if age < 86400:                    # rows_24h == total_rows for a tape this young
+            est = (est * 86400 / Decimal(max(age, 1))).quantize(Decimal(1), ROUND_HALF_EVEN)
+        out["bytes_per_day"] = int(est)
+        out["bytes_per_day_confidence"] = "low" if age < 86400 else "ok"
     return out
 

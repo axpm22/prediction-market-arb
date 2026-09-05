@@ -921,6 +921,53 @@ def test_the_ops_line_watches_the_tape_size_and_the_rows_per_day(cfg, tmp_path):
             in report_whale.whale_line(frame))
 
 
+def test_bytes_per_day_scales_up_for_a_tape_younger_than_24h(cfg, tmp_path):
+    """Review follow-up (2026-09-05): when the tape is younger than 24h every
+    row falls in the trailing-24h window, so rows_24h == total_rows and the
+    raw estimate collapses to tape_bytes itself — understating a young tape's
+    true daily rate. Scale by 86400/age_secs off the oldest print's age and
+    flag the estimate low-confidence."""
+    import os
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
+    for age_h in (6, 3, 1):                        # oldest print is 6h old
+        at = NOW - timedelta(hours=age_h)
+        con.execute("INSERT INTO prints (observed_at, ts, proxy_wallet, condition_id, "
+                    "asset, outcome_index, side, price, size, notional_usd) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (at.isoformat(), int(at.timestamp()), "w1", CID, "0xyes", 0,
+                     "BUY", "0.50", "1000", "500"))
+    con.commit()
+    size = os.path.getsize(tmp_path / "tape.sqlite")
+
+    c = report_whale.whale_frame(cfg, store, now=NOW, con=con)["collector"]
+
+    # all 3 rows are within the trailing 24h AND the tape's whole lifetime, so
+    # the raw estimate is tape_bytes * 3/3 == tape_bytes; scaled 86400/21600 == 4x
+    assert c["bytes_per_day"] == int(Decimal(size) * 4)
+    assert c["bytes_per_day_confidence"] == "low"
+
+
+def test_bytes_per_day_confidence_is_ok_for_a_tape_older_than_24h(cfg, tmp_path):
+    """The existing (>24h) tape from test_the_ops_line_watches_the_tape_size_
+    and_the_rows_per_day gets no scaling applied to its estimate."""
+    import os
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
+    for age_h in (25, 23, 1):
+        at = NOW - timedelta(hours=age_h)
+        con.execute("INSERT INTO prints (observed_at, ts, proxy_wallet, condition_id, "
+                    "asset, outcome_index, side, price, size, notional_usd) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (at.isoformat(), int(at.timestamp()), "w1", CID, "0xyes", 0,
+                     "BUY", "0.50", "1000", "500"))
+    con.commit()
+
+    c = report_whale.whale_frame(cfg, store, now=NOW, con=con)["collector"]
+
+    assert c["bytes_per_day_confidence"] == "ok"
+
+
 def test_the_ops_line_watches_the_position_cache(cfg, tmp_path):
     """matpos (2026-09-05): the scoring pass reads a per-wallet cache the lane
     keeps current, so the ops line has to say whether it IS current — how many
