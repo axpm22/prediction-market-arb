@@ -12,8 +12,11 @@ TITLES = {"whale": "Whale lane — instrument panel",
           "full": "ArbitrageModel — instrument panel"}
 # blocks moved to the top, in order, when mode is whale — everything else
 # (including the arb-only pieces the page's own templated MODE hides) keeps
-# its original relative position.
-WHALE_FRONT = ("whale1", "whale2", "positions", "lamps", "errsec")
+# its original relative position. Operator 2026-09-05: headline (P&L +
+# general stats) first, then ROI/exits, open positions, traders, errors, and
+# the supervisor lamp strip last (supersedes 2026-09-04's whale1/whale2/
+# positions/lamps/errsec order).
+WHALE_FRONT = ("headline", "whale1", "positions", "whale2", "errsec", "lamps")
 
 # arb.watch logs every venue fetch under one logger, name embedded in the
 # message ("venue fetch failed: sx: 400 from ..."); these loggers instead

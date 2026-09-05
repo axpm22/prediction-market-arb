@@ -28,9 +28,10 @@ from arb.replay import open_ro
 # existing caller.
 from arb.report_whale_md import _root_md, whale_line, whale_md  # noqa: F401
 from arb.whale_kill import kill_status
-from arb.whale_metrics import (SPORTS_ROOT, exit_stats, is_native,
-                               markout_stats, roi_by_root, roi_cell, roi_rows,
-                               roots_first, signals_by_id)
+from arb.whale_metrics import (SPORTS_ROOT, exit_stats, exits_recent,
+                               is_native, markout_stats, realized_pnl,
+                               roi_by_root, roi_cell, roi_rows, roots_first,
+                               signals_by_id)
 
 
 def open_tape_ro(cfg) -> sqlite3.Connection | None:
@@ -125,6 +126,10 @@ def _frame_from_state(cfg, store, con, now, state, hashes_log_path,
     return {
         "as_of": now.isoformat(timespec="seconds"),
         "tape_ok": con is not None,
+        # dashboard headline strip's P&L tile (2026-09-05): dollars, every
+        # settled WHALE bet row, ledger-only — deterministic per day, unlike
+        # the unrealized mark the dashboard adds client-side from /api/positions.
+        "pnl": realized_pnl(store),
         "primary_variant": f"{cfg['whale']['primary_variant']}/flat",
         "wallets": {**_wallets(con),
                     "hygiene_excluded": qualifying.pop("hygiene_excluded", 0)},
@@ -141,6 +146,9 @@ def _frame_from_state(cfg, store, con, now, state, hashes_log_path,
         "roi": roi_by_root(cfg, rows),
         "markouts": markout_stats(store),
         "exits": exit_stats(store, con, signals),
+        # headline strip's "exits 24h" tile — exit_stats above is cumulative
+        # and per-root; this is the same source column, windowed, root-agnostic.
+        "exits_24h": exits_recent(store, day_ago),
         # §7 V5: the percentile bar this lane is currently firing on, and
         # the population behind it. Printed because the elite set moves
         # week to week (§3) — a step change must be attributable.
@@ -252,9 +260,10 @@ def _collector(cfg, con, now) -> dict:
     still reports), and `bytes_per_day` scales it by the age of the first
     print — both LIVE, so the console line and the dashboard, never the md."""
     out = {"status": None, "rows": None, "bad_rows": None, "at": None,
-           "last_seen_age_secs": None, "last_gap": None, "backoff_until": None,
-           "prints_per_min": Decimal(0), "prints_24h": 0, "holdings_24h": 0,
-           "tape_bytes": None, "bytes_per_day": None, "mat": {}, "mat_stale": None}
+           "duration_secs": None, "last_seen_age_secs": None, "last_gap": None,
+           "backoff_until": None, "prints_per_min": Decimal(0), "prints_24h": 0,
+           "holdings_24h": 0, "tape_bytes": None, "bytes_per_day": None,
+           "mat": {}, "mat_stale": None}
     path = Path(str(cfg["whale"]["tape_db"]))
     if path.exists():
         out["tape_bytes"] = os.path.getsize(path)
@@ -264,6 +273,7 @@ def _collector(cfg, con, now) -> dict:
     last = json.loads(meta.get("last_cycle") or "{}")
     out.update(status=last.get("status"), rows=last.get("prints"),
                bad_rows=last.get("bad_rows"), at=last.get("at"),
+               duration_secs=last.get("duration_secs"),
                backoff_until=meta.get("backoff_until"),
                # matpos (2026-09-05): cached positions, wallets still queued
                # for recompute, and what the last pass cost. LIVE like every

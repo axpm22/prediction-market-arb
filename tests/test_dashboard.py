@@ -103,7 +103,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from arb import bench, dashboard_data, dashboard_whale, schema
+from arb import bench, dashboard_data, dashboard_whale, report_whale, schema
 from arb.report import daily_frame
 
 from tests.test_whale_lane import CID, NOW, _ledger, _run, _tape
@@ -665,10 +665,11 @@ def test_a_broken_whale_section_says_so_in_the_kill_block_too():
 
 # -------------------------------------------------- dashboard.mode: whale
 
-def test_whale_mode_leads_with_whale_sections_then_positions_then_strip(tmp_path):
-    """Operator instruction 2026-09-04: PM whales only, for now. The two whale
-    sections come first, then Open positions, then the supervisor/errors
-    strip; the arb-only sections stay out of that front block."""
+def test_whale_mode_leads_with_headline_then_roi_positions_traders_errors_strip(tmp_path):
+    """Operator instruction 2026-09-05: the headline (P&L + general stats)
+    strip leads, then the ROI/exits section, open positions, traders, errors,
+    and the supervisor lamp strip last — supersedes 2026-09-04's whale1/
+    whale2/positions/lamps/errsec order."""
     cfg = _cfg()
     cfg["dashboard"]["mode"] = "whale"
     Store(tmp_path / "t.sqlite")
@@ -678,15 +679,87 @@ def test_whale_mode_leads_with_whale_sections_then_positions_then_strip(tmp_path
     try:
         html = urllib.request.urlopen(f"http://127.0.0.1:{httpd.server_port}/").read().decode()
         assert "<title>Whale lane — instrument panel</title>" in html
+        i_header = html.index("</header>")
+        i_headline = html.index('id="whale-headline"')
         i_whale1 = html.index("L14 whale-consensus lane")
-        i_whale2 = html.index("Traders — where each wallet is good")
         i_positions = html.index("Open positions — marked")
-        i_lamps = html.index('id="lamps"')
+        i_whale2 = html.index("Traders — where each wallet is good")
         i_errsec = html.index('id="errsec"')
-        assert i_whale1 < i_whale2 < i_positions < i_lamps < i_errsec
+        i_lamps = html.index('id="lamps"')
+        assert i_header < i_headline < i_whale1 < i_positions < i_whale2 \
+            < i_errsec < i_lamps
         assert 'const MODE = "whale";' in html
     finally:
         httpd.shutdown()
+
+
+def test_headline_strip_first_tile_is_pnl_in_whale_mode():
+    """The headline strip's very first tile is P&L (operator 2026-09-05)."""
+    html = (ROOT / "arb" / "dashboard.html").read_text()
+    script = html.split("<script>")[1]
+    assert '<section id="whale-headline" hidden>' in html
+    draw = script[script.index("function drawHeadline("):
+                  script.index("function drawWhale(")]
+    v = draw.index("$('wh-tiles').innerHTML =")
+    pnl_pos = draw.index("P&amp;L", v)
+    next_tile_pos = draw.index("'open positions", v)
+    assert v < pnl_pos < next_tile_pos
+
+
+def test_headline_frame_carries_realized_pnl_dollars_not_per_dollar_roi(whale_cfg, tmp_path):
+    """The dashboard headline's P&L tile needs true dollars: `roi_rows`
+    divides pnl by stake for the per-root/variant CI tables, but the headline
+    wants Σ pnl across every settled WHALE row — every sizing (flat/conf/
+    kelly) is its own real paper stake, so all three count."""
+    store = Store(tmp_path / "t.sqlite")
+    _whale_row(store, "V2/flat", 1, "pm:a", pnl="1.50", stake="1")
+    _whale_row(store, "V2/conf", 1, "pm:a", pnl="3.75", stake="2.5")
+    _whale_row(store, "V2/kelly", 1, "pm:a", pnl="-0.80", stake="4")
+
+    frame = report_whale.whale_frame(whale_cfg, store, now=NOW)
+
+    assert frame["pnl"] == {"realized": Decimal("4.45"), "realized_n": 3}
+
+
+def test_headline_frame_pnl_is_zero_not_none_on_an_empty_ledger(whale_cfg, tmp_path):
+    """Zero settled bets must read as $0, never crash / NaN: `realized_pnl`
+    always returns a concrete Decimal, not None, on an empty ledger."""
+    store = Store(tmp_path / "t.sqlite")
+
+    frame = report_whale.whale_frame(whale_cfg, store, now=NOW)
+
+    assert frame["pnl"] == {"realized": Decimal("0"), "realized_n": 0}
+
+
+def test_full_mode_headline_strip_stays_hidden_and_unmoved(tmp_path):
+    """Full mode must render unchanged: the new strip exists in the markup
+    (mode is server-templated) but stays `hidden` and is never spliced to the
+    top — whale_first() only runs for dashboard.mode: whale."""
+    cfg = _cfg()
+    cfg["dashboard"]["mode"] = "full"
+    from arb.dashboard import render_page
+    html = render_page(cfg).decode()
+    assert '<section id="whale-headline" hidden>' in html
+    # unmoved: still sits after the pnl/bench sections that keep their
+    # original position ahead of it, exactly as before this change
+    assert html.index('id="pnl"') < html.index('id="whale-headline"') \
+        < html.index("L14 whale-consensus lane")
+
+
+def test_whale_md_ignores_the_new_realized_pnl_frame_field(whale_cfg, tmp_path):
+    """report_whale._frame_from_state now carries frame['pnl'] (realized $ for
+    the dashboard headline strip) — whale_md must keep printing exactly what
+    it printed before, so write_daily's hashed markdown (rule 9's chain) is
+    unaffected by this change."""
+    store = Store(tmp_path / "t.sqlite")
+    _whale_row(store, "V2/flat", 1, "pm:a", pnl="1.50", stake="1")
+
+    frame = report_whale.whale_frame(whale_cfg, store, now=NOW)
+    assert frame["pnl"]["realized"] == Decimal("1.50")   # the field really is there
+
+    stripped = dict(frame)
+    del stripped["pnl"]
+    assert report_whale.whale_md(frame) == report_whale.whale_md(stripped)
 
 
 def test_full_mode_keeps_todays_layout(tmp_path):

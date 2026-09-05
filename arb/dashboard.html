@@ -144,6 +144,16 @@
     <div id="bench"></div>
   </section>
 
+  <!--WM:headline--><section id="whale-headline" hidden>
+    <h2>Headline — P&amp;L &amp; lane health</h2>
+    <div class="hint">Realized P&amp;L is every settled WHALE bet's own dollar pnl (all
+      three sizings count, not per-$1 ROI); unrealized marks open WHALE positions at
+      the same bid the positions table below prices them at — omitted until a mark
+      exists. The V2/flat figure alongside it is the legacy arb headline (top of page),
+      shown for scale, never pooled with L14's own number.</div>
+    <div class="tiles" id="wh-tiles"></div>
+  </section><!--/WM-->
+
   <!--WM:whale1--><section>
     <h2>L14 whale-consensus lane</h2>
     <div class="hint">REVIEW lane, never headline. Bounds are one-sided (§12):
@@ -311,6 +321,10 @@ function killCls(state){ return state === 'FIRED' ? 'lane-invalid'
 // server names a different interval: a /api/state that fails (or takes 40s) once
 // used to leave the whole page frozen forever, because the timer was set after it
 let timer = null, timerSecs = 0;
+// headline strip (whale mode): the three sources land on their own schedule
+// (/api/whale, /api/positions, /api/state), so each paints with whatever the
+// other two last supplied — drawHeadline re-renders on every arrival.
+let hlFrame = null, hlPositions = null, hlState = null;
 function scheduleRefresh(secs){
   if(secs === timerSecs) return;
   if(timer) clearInterval(timer);
@@ -379,6 +393,7 @@ async function refresh(){
       (s.schedule||[]).map(sl=>[{t:sl.key},{t:sl.at,r:1},{t:dur(sl.due_in_secs),r:1}]));
     $('headline').textContent = `$${s.headline_pnl}`;
     $('hl-n').textContent = `${s.headline_n} settled bet${s.headline_n===1?'':'s'}`;
+    hlState = s; drawHeadline();
     $('gates').textContent =
       `EV lane: ${s.ev_enabled?'ENABLED':'frozen (pre-registered; would-be flags still recorded)'} · trusted pairs: ` +
       (s.trusted_pairs.length?s.trusted_pairs.join(', '):'none — cross-venue stays in review until the whitelist gate clears');
@@ -455,11 +470,15 @@ function drawPnl(p){
 }
 
 function drawPositions(p){
-  if(!section('positions', p)) return;
+  if(!section('positions', p)) { hlPositions = null; drawHeadline(); return; }
   // whale mode: this is the promoted, top-of-page positions table — WHALE
   // rows only. /api/positions itself stays every-kind (other callers, §9).
   const rows = MODE === 'whale'
     ? (p.positions||[]).filter(b => b.kind === 'WHALE') : (p.positions||[]);
+  // the headline strip's open-positions/unrealized tiles: always WHALE-only,
+  // independent of MODE (drawHeadline itself no-ops outside whale mode).
+  hlPositions = (p.positions||[]).filter(b => b.kind === 'WHALE');
+  drawHeadline();
   $('positions').innerHTML = table(
     [{t:'kind'},{t:'variant'},{t:'event'},{t:'outcome'},{t:'stake',r:1},{t:'entry',r:1},
      {t:'bid',r:1},{t:'unrealized',r:1},{t:'age',r:1},{t:'starts'},{t:'whales / exit'}],
@@ -502,12 +521,51 @@ function rootsFirst(obj, primary){
     .concat(keys.filter(k => k !== primary).sort());
 }
 
+// headline strip (whale mode only): P&L tile first (realized ledger $ +
+// unrealized mark from the positions panel + the legacy V2/flat figure for
+// scale), then general stats. Renders off whatever of hlFrame/hlPositions/
+// hlState has arrived so far — never NaN: every number defaults to '—'
+// until its source lands, and a genuinely empty ledger reads as $0, not '—'.
+function drawHeadline(){
+  if(MODE !== 'whale') return;
+  const f = hlFrame, ps = hlPositions, s = hlState;
+  const atRisk = (ps||[]).reduce((sum,b) => sum + Number(b.stake_usd||0), 0);
+  const marked = (ps||[]).filter(b => b.unrealized_pnl != null);
+  const unreal = ps == null ? null
+    : (marked.length ? marked.reduce((sum,b) => sum + Number(b.unrealized_pnl), 0) : null);
+  const realized = f ? Number(f.pnl.realized) : null;
+  const total = realized == null ? null : realized + (unreal || 0);
+  const pnlSub = [
+    realized == null ? null : `realized $${realized.toFixed(2)} (${f.pnl.realized_n} settled)`,
+    unreal == null ? null : `unrealized $${unreal.toFixed(2)}`,
+    s == null ? null : `V2/flat headline $${s.headline_pnl} (${s.headline_n})`,
+  ].filter(Boolean).join(' · ');
+  const baseRate = f && f.base_rates.length
+    ? (f.base_rates.find(r => r.root === f.primary_root) || f.base_rates[0]) : null;
+  $('wh-tiles').innerHTML =
+    `<div class="tile"><div class="v">${total==null?'—':'$'+total.toFixed(2)}</div>` +
+    `<div class="k">P&amp;L${pnlSub?' · '+esc(pnlSub):''}</div></div>` +
+    tile(ps==null?'—':fmt(ps.length),
+         ps==null?'open positions':`open positions · $${atRisk.toFixed(2)} at risk`) +
+    tile(f?`${fmt(f.signals.fired_24h)} / ${fmt(f.signals.fired_7d)}`:'—',
+         'signals fired 24h / 7d') +
+    tile(f?`${f.exits_24h.flip} flip / ${f.exits_24h.left} left`:'—', 'exits 24h') +
+    tile(f?fmt(f.qualifying.n):'—', 'qualifying whales') +
+    tile(baseRate?`${baseRate.value} (n=${baseRate.n})`:'—', 'base rate') +
+    tile(f?(f.collector.mat_stale||'fresh'):'—', 'cache freshness') +
+    tile(f?`${ago(f.collector.at)} · ${f.collector.duration_secs==null?'—'
+           :f.collector.duration_secs.toFixed(1)+'s'}`:'—', 'lane health') +
+    tile(f?`${mb(f.collector.tape_bytes)} MB`:'—', 'tape size');
+}
+
 function drawWhale(w){
   // the kill block lives in its own section, so it must say the same thing when
   // /api/whale is the thing that broke — an empty #kill reads as "no rules"
   if(w && w.error) section('kill', w);
-  if(!section('whale', w)) return;
+  if(!section('whale', w)) { hlFrame = null; drawHeadline(); return; }
   const f = w.whale;
+  hlFrame = f || null;
+  drawHeadline();
   if(!f){ $('whale').innerHTML = '<div class="empty">whale lane not configured</div>';
     $('kill').innerHTML = ''; return; }
   const c = f.collector, q = f.qualifying, sg = f.signals;
@@ -624,6 +682,7 @@ function renderTraders(){
 // `hidden` — nothing here stops these sections computing, they just don't show.
 function applyMode(){
   if(MODE !== 'whale') return;
+  $('whale-headline').hidden = false;
   $('tiles').hidden = true;
   $('gates').hidden = true;
   $('pnl').closest('section').hidden = true;
