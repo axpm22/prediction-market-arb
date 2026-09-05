@@ -5,8 +5,14 @@ Rule 3: every endpoint and field below was verified live and dated in
         data/verified_facts.md BEFORE this module was written. Task 3's own
         step 0 (2026-09-03) established the three facts it leans on: the
         global /trades feed is NEWEST-FIRST, `offset` continues that same
-        feed, and `start`/`end` do filter — which the collector still does
-        not use (spec §5 step 2: filter client-side, page by offset, age).
+        feed, and `start`/`end` do filter (spec §5 step 2: filter
+        client-side, page by offset, age). A warm poll's global-mode URL now
+        also carries `start=<watermark floor>` (2026-09-05) — not a
+        server-side replacement for that client-side filtering, but a
+        cache-key varier: the feed sits behind a Cloudflare edge cache keyed
+        on the full URL (max-age=300s, verified 2026-09-05), and the same
+        unchanging URL every poll_secs=60 cycle was serving 4 of every 5
+        cycles a stale, all-dupes page.
 Rule 5: price/size/notional are 6-place Decimal strings (arb.models.q6).
 Rule 9: writes only to whale.tape_db, so flat_bets is structurally
         unreachable from this lane — the arb/pm_tape.py defence.
@@ -330,10 +336,21 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
             last_seen = int(_meta(con, "last_seen_ts") or 0)
             floor = last_seen - int(w["overlap_secs"])
             cap, offset, oldest = int(w["max_offset"]), 0, None
+            # `start=` varies the URL every warm poll (the watermark only ever
+            # advances), so Cloudflare's edge cache (max-age=300, keyed on the
+            # full URL — verified 2026-09-05, data/verified_facts.md) cannot
+            # serve a stale page: without it 4 of every 5 cycles at poll_secs=60
+            # replayed the same cached response as all-dupes, and the one fresh
+            # page that did land only spanned ~183s of flow against the 300s
+            # cache window, so max_offset dropped the rest as a false gap. This
+            # is a cache-key varier on top of the existing client-side filter
+            # and paging below, not a replacement for either.
+            base = f"{DATA_API}/trades?takerOnly={taker}&limit={size}"
+            if last_seen:
+                base += f"&start={floor}"
             while True:
-                url = f"{DATA_API}/trades?takerOnly={taker}&limit={size}"
-                body = _call(bucket, get, url + (f"&offset={offset}" if offset else ""),
-                             cfg, res)
+                url = base + (f"&offset={offset}" if offset else "")
+                body = _call(bucket, get, url, cfg, res)
                 stamps = _keep(con, body, ids, now, res, cfg=cfg)
                 # A body with rows but zero parsed timestamps is an unreadable
                 # page, not a quiet end of the feed: `not stamps` below would

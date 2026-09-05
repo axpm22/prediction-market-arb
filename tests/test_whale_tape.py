@@ -596,6 +596,54 @@ def test_a_full_page_older_than_the_overlap_window_stops_paging(tmp_path):
     assert len(get.urls) == 1
 
 
+def test_a_warm_poll_puts_start_on_every_page_url(tmp_path):
+    """2026-09-05 cache fix: the global feed sits behind a Cloudflare edge
+    cache keyed on the full URL (max-age=300s), so a warm poll's UNCHANGING
+    URL was replaying the same stale, all-dupes page 4 cycles out of 5. A
+    `start=<watermark floor>` on every page (offset included) makes the URL
+    advance with the watermark instead."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    page = _fixture("whale_trades_global")
+    cfg = _cfg(page_size=len(page), overlap_secs=120)
+    con.execute("INSERT INTO meta (key, value) VALUES ('last_seen_ts', '1')")
+    get = FakeGet(page, [])                             # second page short -> stop
+    whale_tape.poll_prints(cfg, con, _global_markets(1), NOW, get=get)
+    assert len(get.urls) == 2
+    for url in get.urls:
+        assert "start=-119" in url                      # floor = 1 - overlap_secs(120)
+    assert "offset=200" in get.urls[1] and "start=-119" in get.urls[1]
+
+
+def test_a_cold_start_poll_carries_no_start_param(tmp_path):
+    """No last_seen => nothing to varying the URL around, and no server-side
+    window to apply — cold start stays exactly as before this fix: one page,
+    no `start=`."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    page = _fixture("whale_trades_global")
+    cfg = _cfg(page_size=len(page) + 1)                 # short page -> one call
+    get = FakeGet(page)
+    whale_tape.poll_prints(cfg, con, _global_markets(1), NOW, get=get)
+    assert len(get.urls) == 1 and "start=" not in get.urls[0]
+
+
+def test_two_consecutive_warm_polls_request_different_urls(tmp_path):
+    """The watermark advances every completed poll, so back-to-back cycles
+    against the SAME URL (the cache-poisoning failure mode) become back-to-back
+    cycles against two different URLs, one per completed poll."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    page = _fixture("whale_trades_global")
+    cfg = _cfg(page_size=len(page) + 1, overlap_secs=120)
+    con.execute("INSERT INTO meta (key, value) VALUES ('last_seen_ts', '1')")
+    get1 = FakeGet(page)
+    whale_tape.poll_prints(cfg, con, _global_markets(1), NOW, get=get1)
+    newest = whale_tape._meta(con, "last_seen_ts")
+    assert newest != "1"                                 # watermark advanced
+    get2 = FakeGet(page)
+    whale_tape.poll_prints(cfg, con, _global_markets(1), NOW, get=get2)
+    assert get1.urls[0] != get2.urls[0]
+    assert f"start={int(newest) - 120}" in get2.urls[0]
+
+
 def _pages(n, per_page, cond):
     """`n` full pages of distinct rows on one condition id, newest-first across
     pages (the global feed's own order), 10 s apart."""

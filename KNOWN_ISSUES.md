@@ -393,6 +393,36 @@ waiting for cycles. *Not fixed, by choice:* a bounded per-cycle rebuild is what
 keeps the lane from stalling on its 300 s child cap, and blocking the lane for
 a whole rebuild would be the worse failure.
 
+### 35. L14 print collector fed from a stale Cloudflare edge cache, 2026-09-04 taker-only flip to 2026-09-05 fix — ~40% of prints missing, whale fills up to 5 min late
+Opened by the `takerOnly=false` flip (2026-09-04, entry above) and closed
+2026-09-05. `arb/whale_tape.py::poll_prints`'s global-mode URL
+(`/trades?takerOnly=false&limit=10000`, plus `&offset=` only when paging) was
+IDENTICAL every `whale.poll_secs`=60 cycle, and Polymarket serves `/trades`
+through a Cloudflare edge cache keyed on the full URL, `max-age=300`
+(verified live 2026-09-05, `data/verified_facts.md`). Measured in the live
+child log: prints=843, four cycles of prints=0 (all-dupes, replaying the same
+cached page), prints=245, four more zeros, prints=591 — 4 of every 5 cycles
+read stale, and the one fresh page landed spanned only ~183s of flow against
+the 300s cache window, so `max_offset` dropped the remainder every time as a
+recorded gap (`whale poll capped at offset=10000 … recorded as a gap`,
+`logs/whale.log`). Net effect: roughly 40% of prints lost and whale fills
+(including SELLS through a resting order, the operator's "keep checking
+whales selling, very important") seen up to 5 minutes late.
+
+**Fixed 2026-09-05:** a warm poll now appends `&start=<last_seen - overlap
+secs>` to every page of the global-mode URL, so the URL — and therefore the
+cache key — advances with the watermark every cycle; cold start (no
+watermark yet) is unchanged. Client-side filtering, paging, the `max_offset`
+cap and the gap-recording logic are all untouched.
+
+**Not fixed retroactively:** prints collected between the 2026-09-04
+taker-only flip and this fix carry the ~40% gap rate and up to 5 min of lag
+described above, visible on the tape as `meta.last_gap` rows spanning that
+window. The day-7 whale calibration scheduled for 2026-09-07 covers this
+period and should be read with that caveat — it is measuring a collector
+that was dropping stale-cached duplicates and missing pages, not the fixed
+one.
+
 ---
 
 ## The two numbers that matter most
