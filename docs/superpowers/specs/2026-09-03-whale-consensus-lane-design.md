@@ -212,6 +212,60 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    yields 45 of the 158 politics markets that clear the filters platform-wide.
    Raising `pages` costs `tags` calls a page (+3 calls ≈ +6 s at
    `max_calls_per_min` 30); it is not part of this amendment.
+   **Mechanical price series EXCLUDED, added 2026-09-05 (fix pass 2, review
+   C1; operator decision, option 1: keep the crypto root, exclude the
+   series).** `whale.nonsports.exclude_slug_patterns` is a list of anchored
+   regexes matched against the EVENT slug and the MARKET slug inside
+   `whale_nonsports.root_row` — the one shared rooting helper, so this step
+   and the historical-roots path above can never disagree about it. Four
+   registered families, six patterns: the up/down cadence events
+   `<coin>-updown-<n>[mh]-<epoch>`; their named daily twin
+   `<coin>-up-or-down[-on]-<month>-<day>-…`; the strike ladders
+   `what-price-will-<coin>-hit-…` and `<coin>-(above|price)-…on-<month>-<day>`
+   (trailing year optional — older tape slugs omit it); and the NESTED market
+   slugs those ladder events ship, which are what the print mapper actually
+   stores, `will-the-price-of-<coin>-be-between-…` and
+   `will-<coin>-(reach|dip-to)-<n>-…`. A NEGATIVE guard backs the list:
+   an event slug ending in a cadence token plus an epoch whose cadence is
+   shorter than `min_lifetime_hours` is excluded whatever its dates say, so
+   the next cadence family Gamma ships cannot walk in ahead of a config edit.
+   **Why (measured 2026-09-05 over the whole crypto tag surface,
+   data/verified_facts.md): 173 of the 180 crypto markets that cleared every
+   registered filter were this series**, and the live tape holds 3,669
+   `*-updown-*` markets carrying 14,853 followed-wallet prints — the crypto
+   base rate, the per-root markout and kill rule 2 would all have been
+   measured on 5-minute coin flips. The 7 survivors are genuine crypto event
+   markets (token launches, `will-microstrategy-announce-a-bitcoin-purchase`).
+   **Politics and geopolitics lose nothing: 0 of 158 and 0 of 91.** In the
+   mapper, an excluded row takes a PERMANENT `no-root:` marker (the `absent:`
+   idiom, a third `REVISIT_SQL` join) instead of the daily `unmappable:`
+   churn, and spends no `events?id=` call at all — the exclusion is decided
+   from the market's own slug and the slug its nested `events[0]` carries.
+   **The exclusion also reaches BACKWARDS** (`whale_ns_map.unroot_mechanical`,
+   run once per `map_markets` cycle, tape only, no Gamma call): a `markets`
+   row rooted before the patterns existed would keep its root, keep being
+   scored and keep being priced, so any row still carrying a non-sports root
+   whose slug — or, for a by-tag row with no slug, whose `pm:<event_slug>`
+   `event_key` — matches has `sport`/`market_type`/`start_utc` cleared and
+   takes the same permanent `no-root:` marker. The pass is self-terminating
+   (clearing the root removes the row from its own query) so it needs no
+   budget key, and the `markets` UPDATE trips the mat triggers, which is how
+   the affected wallets re-materialize. Measured read-only on the live tape
+   2026-09-05: **11 of the 182 already-rooted non-sports rows match** — 10
+   `crypto` and 1 `politics` (`will-solana-reach-150-in-november`, rooted
+   politics off a multi-tagged event). 0 of the 3,669 `*-updown-*` rows are
+   rooted today, so none of those needs un-rooting.
+   **Resolved markets and colliding outcomes (review I2/I3, same date):**
+   `tape_universe` now also excludes a market with a `resolutions` row — the
+   mapper's `closed=true` pass writes those for markets it roots in the same
+   call, and Polymarket resolves early, so a resolved market with a future
+   stored deadline could be priced — and one whose stored `tokens_json` is not
+   exactly two distinguishable outcomes; the mapper applies that same
+   two-sided guard when it writes `tokens_json`, which only the by-tag builder
+   had. **File layout:** `arb/whale_nonsports.py` kept the Gamma half (rooting
+   rules + the by-tag builder); the lane's tape read moved to
+   `arb/whale_ns_lane.py` and the mapper's non-sports rooting to
+   `arb/whale_ns_map.py`, all three under the 300-line rule.
 
 2. **Collect.** `whale.collector_mode: global` (Task 1 fix pass: the global
    feed returns 10,000 rows per call against a platform rate of about

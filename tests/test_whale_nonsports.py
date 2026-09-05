@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from arb import whale_nonsports, whale_tape
+from arb import whale_nonsports, whale_ns_lane, whale_tape
 from arb.whale_universe import Market
 from arb.config import load
 
@@ -154,7 +154,7 @@ def test_a_kept_market_lands_in_the_tape_and_the_lane_reads_it_back(cfg, con):
     row = con.execute("SELECT * FROM markets WHERE condition_id='0xp'").fetchone()
     assert (row["sport"], row["market_type"]) == ("politics", "BINARY")
     assert row["volume_24h"] == "25000"
-    lane = whale_nonsports.tape_universe(con, cfg, NOW)
+    lane = whale_ns_lane.tape_universe(con, cfg, NOW)
     assert [m.condition_id for m in lane] == ["0xp"]
     assert lane[0].tokens == (("t0", "Yes"), ("t1", "No"))
     assert lane[0].volume_24h == "25000"
@@ -166,8 +166,8 @@ def test_the_lane_universe_is_bounded_by_the_nonsports_horizon(cfg, con):
     `now` before it, which the 90-day window (amendment 2026-09-05) admits."""
     _persist(cfg, con, [_event(tags=("politics",), markets=[_market("0xp")])])
     late = NOW + timedelta(days=int(cfg["whale"]["nonsports"]["max_days"]) + 1)
-    assert whale_nonsports.tape_universe(con, cfg, late) == []
-    assert whale_nonsports.tape_universe(con, cfg, NOW + timedelta(days=5)) == []
+    assert whale_ns_lane.tape_universe(con, cfg, late) == []
+    assert whale_ns_lane.tape_universe(con, cfg, NOW + timedelta(days=5)) == []
 
 
 def test_the_universe_reads_the_lanes_own_horizon_key(cfg, con):
@@ -178,11 +178,11 @@ def test_the_universe_reads_the_lanes_own_horizon_key(cfg, con):
     ev = _event(tags=("politics",), markets=[_market("0xfar", ends_in_days=20)])
     assert [m.condition_id for m in whale_nonsports.markets_of(cfg, ev, NOW)] == ["0xfar"]
     _persist(cfg, con, [ev])
-    assert [m.condition_id for m in whale_nonsports.tape_universe(con, cfg, NOW)] \
+    assert [m.condition_id for m in whale_ns_lane.tape_universe(con, cfg, NOW)] \
         == ["0xfar"]
     cfg["whale"]["nonsports"]["max_days"] = 7
     assert whale_nonsports.markets_of(cfg, ev, NOW) == []
-    assert whale_nonsports.tape_universe(con, cfg, NOW) == []
+    assert whale_ns_lane.tape_universe(con, cfg, NOW) == []
 
 
 def test_a_moved_end_date_never_rewrites_a_stored_start(cfg, con):
@@ -435,7 +435,7 @@ def test_a_market_with_no_measured_volume_never_enters_the_lane_universe(cfg, co
                                      start_utc=(NOW + timedelta(days=3)).isoformat(),
                                      event_key=None, tokens=(("t0", "Yes"), ("t1", "No")),
                                      volume_24h=volume)], NOW, first_sight_wins=True)
-    assert [m.condition_id for m in whale_nonsports.tape_universe(con, cfg, NOW)] \
+    assert [m.condition_id for m in whale_ns_lane.tape_universe(con, cfg, NOW)] \
         == ["0xfat"]
 
 
@@ -524,3 +524,160 @@ def test_a_five_minute_crypto_market_fails_the_lifetime_floor(cfg):
     # long-lived (the builder's own reading)
     nostart = _gamma_market(start=None, created=None)
     assert whale_nonsports.root_row(cfg, _gamma_event(start=None), nostart) is None
+
+
+# ------------- mechanical price series (fix pass 2, review C1, 2026-09-05)
+#
+# `root_row`/`markets_of` rooted Polymarket's MECHANICAL crypto price series
+# as `crypto`: the up/down cadence events (`btc-updown-5m-<epoch>`, whose
+# measured lifetime is 23.9 h, so `min_lifetime_hours` cannot stop them — the
+# live tape holds 3,669 of them carrying 14,853 followed-wallet prints) and
+# the daily strike ladders. Measured live 2026-09-05 over the whole crypto tag
+# surface (1,200 events): 180 markets cleared every registered filter and 173
+# of them were that series, so the crypto base rate would have been measured
+# on coin flips. Politics and geopolitics lose NOTHING to the exclusion
+# (0 of 158 and 0 of 91 at the same depth).
+
+MECHANICAL = ["btc-updown-5m-1785140700", "eth-updown-15m-1785140700",
+              "btc-updown-1h-1785140700", "sol-updown-4h-1785140700",
+              "bitcoin-above-on-september-5-2026",
+              "ethereum-above-on-september-6-2026",
+              "what-price-will-bitcoin-hit-august-31-september-6-2026",
+              "what-price-will-solana-hit-in-september-2026",
+              "bitcoin-price-on-september-5-2026",
+              "bitcoin-up-or-down-on-september-5-2026",
+              "bitcoin-up-or-down-september-5-2026-10am-et"]
+
+
+@pytest.mark.parametrize("slug", MECHANICAL)
+def test_a_mechanical_price_series_is_never_rooted_nor_built(cfg, slug):
+    """Both paths — the by-tag builder and the mapper's historical rooting —
+    go through the one shared helper, so neither can admit the series."""
+    ev = _event(slug=slug, tags=("crypto",), markets=[_market("0xm", slug=slug)])
+    assert whale_nonsports.markets_of(cfg, ev, NOW) == []
+    assert whale_nonsports.root_row(cfg, ev, ev["markets"][0]) is None
+
+
+def test_a_genuine_crypto_event_market_still_roots_crypto(cfg):
+    """The root is KEPT (operator decision 2026-09-05, option 1) — only the
+    mechanical series is excluded. These three are what survived the exclusion
+    on the live crypto surface."""
+    for eslug, mslug in (("will-base-launch-a-token-in-2026-341",
+                          "will-base-launch-a-token-by-june-30-2026"),
+                         ("will-pacifica-launch-a-token-by",
+                          "will-pacifica-launch-a-token-by-december-31-2026"),
+                         ("will-rise-launch-a-token-by", "will-rise-launch-a-token")):
+        ev = _event(slug=eslug, tags=("crypto",), markets=[_market("0xg", slug=mslug)])
+        assert [m.condition_id for m in whale_nonsports.markets_of(cfg, ev, NOW)] == ["0xg"]
+        assert whale_nonsports.root_row(cfg, ev, ev["markets"][0])[0] == "crypto"
+
+
+def test_the_exclusion_reads_the_market_slug_as_well_as_the_events(cfg):
+    """A strike-ladder market under an event slug no pattern names is still
+    the same series — `bitcoin-above-115k-on-september-5-2026` is the market
+    slug Gamma actually ships under `bitcoin-above-on-september-5-2026`."""
+    ev = _event(slug="crypto-prices-today", tags=("crypto",),
+                markets=[_market("0xa", slug="bitcoin-above-115k-on-september-5-2026"),
+                         _market("0xb", slug="xrp-above-2pt8-on-september-5-2026")])
+    assert whale_nonsports.markets_of(cfg, ev, NOW) == []
+
+
+def test_a_cadence_slug_is_excluded_whatever_its_dates_say(cfg):
+    """The NEGATIVE guard: a slug whose cadence token names a life shorter
+    than `min_lifetime_hours` is excluded regardless of the dates, because the
+    dates on this series lie (the 5-minute events read a 23.9 h lifetime).
+    Registered patterns cannot be the only defence — a cadence family Gamma
+    has not shipped yet would walk straight in."""
+    ev = _event(slug="foo-bar-15m-1790000000", tags=("crypto",),
+                markets=[_market("0xc", slug="foo-bar-15m-1790000000")])
+    assert whale_nonsports.markets_of(cfg, ev, NOW) == []
+    assert whale_nonsports.root_row(cfg, ev, ev["markets"][0]) is None
+    # ... and a cadence at or above the floor is NOT excluded by this guard
+    long = _event(slug="foo-bar-12h-1790000000", tags=("crypto",),
+                  markets=[_market("0xd", slug="foo-bar-12h-1790000000")])
+    assert [m.condition_id for m in whale_nonsports.markets_of(cfg, long, NOW)] == ["0xd"]
+
+
+# --------------------- the `events?id=` tag shape (fix pass 2, review I1)
+
+def test_root_of_event_reads_the_live_events_by_id_tag_shape(cfg):
+    """`tests/fixtures/whale_gamma_events_by_id.json` is the LITERAL body of
+    `GET gamma-api.polymarket.com/events?id=750976&id=33228` (2026-09-05):
+    `tags` is a list of OBJECTS carrying `slug`/`label`/`id`, not a list of
+    bare strings, and `startDate` is present on both rows."""
+    body = json.loads((ROOT / "tests/fixtures/whale_gamma_events_by_id.json").read_text())
+    by_slug = {e["slug"]: e for e in body}
+    politics = by_slug["which-party-wins-2028-us-presidential-election"]
+    updown = by_slug["btc-updown-5m-1785140700"]
+    assert all(isinstance(t, dict) and t.get("slug") for t in politics["tags"])
+    assert politics.get("startDate") and updown.get("startDate")
+    assert whale_nonsports.root_of_event(cfg, politics) == "politics"
+    assert whale_nonsports.root_of_event(cfg, updown) == "crypto"
+    # ... and the mechanical series that same crypto tag would have admitted
+    # is excluded by slug, from the live body
+    assert whale_nonsports.root_row(cfg, updown, updown["markets"][0]) is None
+
+
+def test_root_of_event_also_accepts_a_bare_string_tag_list(cfg):
+    """A literal string list must not raise inside `_event_roots` — an
+    exception there aborts the whole mapping cycle and arms the whale-wide
+    backoff every cycle. Defensive, both shapes, one helper."""
+    assert whale_nonsports.root_of_event(
+        cfg, {"tags": ["us-presidential-election", "politics"]}) == "politics"
+    assert whale_nonsports.root_of_event(cfg, {"tags": ["weather"]}) is None
+    assert whale_nonsports.root_of_event(cfg, {"tags": None}) is None
+
+
+def test_a_missing_event_start_date_rejects_rather_than_admits(cfg):
+    """`events?id=` DOES carry `startDate` (probe 2026-09-05), but if it ever
+    stops, the lifetime floor must reject — never assume long-lived."""
+    m = dict(_market("0xn"), startDate=None, createdAt=None)
+    ev = _event(slug="will-x-happen", tags=("politics",), markets=[m])
+    ev["startDate"] = None
+    assert whale_nonsports.root_row(cfg, ev, m) is None
+    assert whale_nonsports.markets_of(cfg, ev, NOW) == []
+
+
+# --------------- the lane's tape read (fix pass 2, review I2/I3, 2026-09-05)
+
+def _lane_row(con, cid, *, days=3, volume="25000",
+              tokens=(("t0", "Yes"), ("t1", "No"))):
+    from arb.whale_universe import persist_markets
+    persist_markets(con, [Market(condition_id=cid, sport="politics",
+                                 market_type="BINARY", line=None,
+                                 start_utc=(NOW + timedelta(days=days)).isoformat(),
+                                 event_key=None, tokens=tokens,
+                                 volume_24h=volume)], NOW, first_sight_wins=True)
+
+
+def test_a_resolved_market_never_enters_the_lane_universe(cfg, con):
+    """I2: `tape_universe` re-applied root, window and volume but never asked
+    whether the market had already RESOLVED — and the mapper's `closed=true`
+    pass writes exactly those rows (`whale_resolve.record_resolution`,
+    source='mapper'), rooted by `_event_roots` since 2026-09-05. A resolved
+    market with a future stored deadline would have been priced and fired on.
+    Both halves of the guard: a `resolutions` row, and a deadline in the
+    past."""
+    _lane_row(con, "0xopen")
+    _lane_row(con, "0xdone")
+    con.execute("INSERT INTO resolutions (condition_id, resolved_at, "
+                "winner_outcome_index, status, source, fetched_at) "
+                "VALUES (?,?,?,?,?,?)",
+                ("0xdone", NOW.isoformat(), 0, "resolved", "mapper", NOW.isoformat()))
+    con.commit()
+    assert [m.condition_id for m in whale_ns_lane.tape_universe(con, cfg, NOW)] \
+        == ["0xopen"]
+    # ... and past its own deadline it is gone whether or not it resolved
+    assert whale_ns_lane.tape_universe(con, cfg, NOW + timedelta(days=4)) == []
+
+
+def test_a_market_without_two_distinguishable_outcomes_never_enters_the_lane(cfg, con):
+    """I3: the mapper wrote `tokens_json` with no two-sided guard, so a market
+    whose outcomes collide could reach the lane under a fingerprint both
+    tokens share. `_touch` reads outcome indices 0 and 1; anything else is not
+    bookable here."""
+    _lane_row(con, "0xgood")
+    _lane_row(con, "0xdupe", tokens=(("t0", "Yes"), ("t1", "Yes")))
+    _lane_row(con, "0xone", tokens=(("t0", "Yes"),))
+    assert [m.condition_id for m in whale_ns_lane.tape_universe(con, cfg, NOW)] \
+        == ["0xgood"]

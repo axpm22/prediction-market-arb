@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import json
 
-from arb import whale_nonsports
+from arb import whale_nonsports, whale_ns_map
 from arb.whale_resolve import record_resolution
-from arb.whale_tape import (GAMMA, GAMMA_IDS_PER_CALL, SPORTS_MARKET_TYPE, _call,
-                            _gamma_url, _json_list, _set_meta, log)
+from arb.whale_tape import (GAMMA_IDS_PER_CALL, SPORTS_MARKET_TYPE, _call,
+                            _gamma_url, _set_meta, log)
 from arb.whale_universe import MARKET_COLS, _iso
 
 # New condition_ids, FIFO by first print (any deterministic order is fine —
@@ -57,12 +57,22 @@ MAP_SQL = """
 # couldn't map today is skipped until tomorrow instead of spending the same
 # call every cycle for nothing; `absent` is its permanent sibling, immune to
 # the day-string comparison.
+#
+# `no-root:` is the THIRD marker and the second permanent one (fix pass 2,
+# review C1): a market whose slug says it is one of Polymarket's mechanical
+# price series can never be rooted, whatever Gamma answers, so re-asking is
+# pure waste — 3,669 `*-updown-*` rows sit in this queue on the live tape and
+# `unmappable:` would offer every one of them again tomorrow. Permanent in the
+# `absent:` sense: only `whale.nonsports.exclude_slug_patterns` changing could
+# make one of these rows interesting again, and that is a registered decision,
+# not a daily accident.
 REVISIT_SQL = """
     SELECT m.condition_id FROM markets m
      LEFT JOIN meta u ON u.key = 'unmappable:' || m.condition_id
      LEFT JOIN meta a ON a.key = 'absent:' || m.condition_id
+     LEFT JOIN meta n ON n.key = 'no-root:' || m.condition_id
      WHERE (m.sport IS NULL OR m.market_type IS NULL OR m.start_utc IS NULL)
-       AND a.value IS NULL
+       AND a.value IS NULL AND n.value IS NULL
        AND (u.value IS NULL OR u.value <> ?)
      ORDER BY m.first_seen, m.condition_id
      LIMIT ?"""
@@ -85,58 +95,6 @@ def _local_remap(con, ids, prefixes, now, res) -> list[str]:
             todo.append(cond)
     con.commit()
     return todo
-
-
-def _event_roots(cfg, bucket, get, found, prefixes, res) -> dict:
-    """{condition_id: (root, market_type, start_utc)} for the rows of ONE
-    chunk that no sport slug can root — the non-sports half of the mapper
-    (amendment 2026-09-05, Opus review C2).
-
-    Until this existed, `_gamma_row` rooted a market from its slug prefix
-    alone, so every HISTORICAL politics or crypto market a whale had traded
-    stayed `sport=NULL`, `whale_score.positions_from_prints` dropped it as
-    unmapped, and no politics whale could ever be scored — while the by-tag
-    universe builder, which roots exactly these markets, only ever sees the
-    OPEN ones on today's tag pages.
-
-    Why a second call at all (rule 3, all live-probed): Gamma's
-    `markets?condition_ids=` row carries no `tags` and no `category`, and its
-    nested `events[0]` carries no `tags` key either (2026-09-04, re-probed
-    2026-09-05) — it carries the event's `id`, and `events?id=` DOES return a
-    populated `tags` array, for closed events too and with no `closed=true`
-    needed. That call takes the same repeated-param form and the same silent
-    20-id ceiling as `markets?condition_ids=` (2026-09-05: n=3 -> 3/3,
-    n=20 -> 20/20, n=25 -> 20 rows), so it reuses `GAMMA_IDS_PER_CALL`.
-
-    Cost: at most ONE extra call per chunk — a chunk is 20 condition_ids, so
-    its distinct events never exceed the 20-id ceiling — and at most
-    `whale.nonsports.root_calls_per_cycle` of them in a mapping cycle. A row
-    the cap skips is not lost: it takes the ordinary `unmappable:` marker and
-    comes back through REVISIT_SQL on the next day's queue.
-    """
-    ns = cfg["whale"]["nonsports"]
-    if not ns["enabled"] or res["root_calls"] >= int(ns["root_calls_per_cycle"]):
-        return {}
-    want: dict = {}
-    for cond, m in found.items():
-        if _sport_of(str(m.get("slug") or ""), prefixes) is not None:
-            continue
-        event_id = ((m.get("events") or [{}])[0] or {}).get("id")
-        if event_id is not None:
-            want.setdefault(str(event_id), []).append(cond)
-    if not want:
-        return {}
-    ids = list(want)[:GAMMA_IDS_PER_CALL]
-    body = _call(bucket, get, f"{GAMMA}/events?"
-                 + "&".join(f"id={i}" for i in ids), cfg, res)
-    res["root_calls"] += 1
-    out = {}
-    for event in body:
-        for cond in want.get(str(event.get("id")), []):
-            row = whale_nonsports.root_row(cfg, event, found[cond])
-            if row:
-                out[cond] = row
-    return out
 
 
 def _gamma_fetch(cfg, bucket, get, ids, res, closed=False) -> dict:
@@ -206,7 +164,15 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
             for cond, m in closed.items():
                 record_resolution(con, cond, m, now, "mapper")
             found.update(closed)
-        roots = _event_roots(cfg, bucket, get, found, prefixes, res)
+        # One `_sport_of` pass decides which rows the sport slugs already
+        # root; only the rest are the non-sports half's business, and passing
+        # that set (never `prefixes`) is what keeps arb/whale_ns_map.py free
+        # of any import back into this module.
+        unrooted = {c for c, m in found.items()
+                    if _sport_of(str(m.get("slug") or ""), prefixes) is None}
+        no_root = whale_ns_map.no_root(cfg, found, unrooted)
+        roots = whale_ns_map.event_roots(cfg, bucket, get, found,
+                                         unrooted - no_root, res)
         rows = [_gamma_row(c, found.get(c), prefixes, now, roots) for c in chunk]
         con.executemany(
             f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 11)}) "
@@ -218,16 +184,32 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
             "volume_24h=COALESCE(excluded.volume_24h, volume_24h), "
             "tokens_json=COALESCE(NULLIF(excluded.tokens_json, '[]'), tokens_json)",
             rows)
+        # M4 (fix pass 2): "existing non-NULL wins" above is right for a sports
+        # row and wrong for one the rooting helper roots NON-sports. The
+        # pre-4b3bcc9 mapper wrote `gameStartTime` as `start_utc` for every row
+        # it touched, and a `sportsMarketType` market_type with it, so a
+        # politics row can be carrying a kickoff — and COALESCE would keep it
+        # forever. For a non-sports root the helper's values (the market's own
+        # endDate, LADDER/BINARY off the event's negRisk) ARE the authority.
+        if roots:
+            con.executemany("UPDATE markets SET sport=?, market_type=?, start_utc=? "
+                            "WHERE condition_id=?", [(*roots[c], c) for c in roots])
         con.commit()
         for cond in missing:
             if cond not in found:
                 _set_meta(con, f"absent:{cond}", today)
         stored = {r["condition_id"]: r for r in con.execute(
-            f"SELECT condition_id, sport, market_type, start_utc FROM markets "
-            f"WHERE condition_id IN ({','.join('?' * len(chunk))})", chunk)}
+            f"SELECT condition_id, sport, market_type, start_utc, tokens_json "
+            f"FROM markets WHERE condition_id IN ({','.join('?' * len(chunk))})",
+            chunk)}
         for cond in chunk:
             row = stored[cond]
-            if row["sport"] and row["market_type"] and row["start_utc"]:
+            if cond in no_root:
+                res["unmappable"] += 1
+                _set_meta(con, f"no-root:{cond}", today)
+            elif (row["sport"] and row["market_type"] and row["start_utc"]
+                    and whale_nonsports.two_sided(
+                        json.loads(row["tokens_json"] or "[]")) is not None):
                 res["mapped"] += 1
             else:
                 res["unmappable"] += 1
@@ -238,8 +220,9 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
 
 
 def _gamma_row(cond, m, prefixes, now, roots=None) -> tuple:
-    """`roots` is `_event_roots`' answer for this chunk: the non-sports root a
-    market's own EVENT tags give it, used only where the slug gives none."""
+    """`roots` is `whale_ns_map.event_roots`' answer for this chunk: the
+    non-sports root a market's own EVENT tags give it, used only where the
+    slug gives none."""
     sport = mtype = start = None
     tokens: list = []
     if m:
@@ -258,8 +241,11 @@ def _gamma_row(cond, m, prefixes, now, roots=None) -> tuple:
             # 2026-09-05): root, LADDER/BINARY from the event's negRisk, and
             # `start_utc` = the MARKET's own endDate, never the event's.
             sport, mtype, start = roots[cond]
-        tokens = [[t, o] for t, o in zip(_json_list(m.get("clobTokenIds")),
-                                         _json_list(m.get("outcomes")))]
+        # I3 (fix pass 2): the SAME two-sided guard the by-tag builder has
+        # always applied. Colliding outcome labels share a fingerprint in the
+        # lane, so they are not stored at all — `[]` leaves whatever an earlier
+        # call found intact (the upsert's own NULLIF guard).
+        tokens = [list(p) for p in (whale_nonsports._tokens(m) or ())]
     # `volume24hr` is a verified market-level field of this same Gamma answer
     # (data/verified_facts.md 2026-09-04) — free here, and the only source of a
     # 24h volume for a market the watch lane never quotes (non-sports roots).

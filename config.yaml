@@ -390,7 +390,11 @@ supervisor:
                                     #   -> total unchanged at leaderboard 80 + sweep 50 + wallets
                                     #   120 + map 100 = 350 calls, PLUS the non-sports universe's
                                     #   9 (whale.nonsports.tags 3 x pages 3, amendment 2026-09-04)
-                                    #   = 359 calls ~= 718s, ~180s margin (was ~200s before the non-sports builder). This unlocks the 12,091 `markets` rows the
+                                    #   = 359 calls, PLUS whale.nonsports.root_calls_per_cycle's
+                                    #   25 historical-root event lookups (amendment 2026-09-05)
+                                    #   = 384 calls ~= 768s, ~130s margin (was ~180s before those
+                                    #   lookups, ~200s before the non-sports builder). This
+                                    #   unlocks the 12,091 `markets` rows the
                                     #   pre-4b3bcc9 mapper left slug/sport/start_utc NULL
                                     #   (REVISIT_SQL's permanent slug floor on them is gone,
                                     #   arb/whale_map.py) — at 1000/cycle the backlog drains in
@@ -685,13 +689,81 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   Deliberately ABSENT (operator decision 2026-09-04):
                                       #   weather, economy/business/science and esports — see
                                       #   KNOWN_ISSUES.md "L14 deferred non-sports roots".
+    exclude_slug_patterns:            # MECHANICAL PRICE SERIES, excluded from every non-sports
+                                      #   root (fix pass 2, review C1; OPERATOR DECISION
+                                      #   2026-09-05 option 1: "keep the crypto root but exclude
+                                      #   the mechanical price series"). Anchored regexes, matched
+                                      #   with re.match against the EVENT slug and the MARKET slug
+                                      #   in the one shared rooting helper
+                                      #   (whale_nonsports.root_row), so the by-tag builder and
+                                      #   the mapper's historical rooting can never disagree.
+                                      #   WHY: Polymarket's recurring crypto price series clears
+                                      #   every other registered filter. `min_lifetime_hours`
+                                      #   cannot stop the up/down cadence events — their dates
+                                      #   read a 23.94 h lifetime (measured 2026-09-04) — and the
+                                      #   horizon never could either (correction of 2026-09-05).
+                                      #   MEASURED live 2026-09-05 over the whole crypto tag
+                                      #   surface (1,200 events, 12 pages): 180 markets cleared
+                                      #   every registered filter and 173 of them were this
+                                      #   series; the 7 survivors are genuine crypto EVENT
+                                      #   markets (`will-base-launch-a-token-in-2026`,
+                                      #   `will-microstrategy-announce-a-bitcoin-purchase-...`).
+                                      #   On the live tape the same day: 3,669 `*-updown-*`
+                                      #   markets carrying 14,853 followed-wallet prints — the
+                                      #   crypto base rate would have been measured on coin
+                                      #   flips. Politics and geopolitics lose NOTHING to these
+                                      #   patterns (0 of 158 and 0 of 91 markets at the same
+                                      #   depth), verified in the same run.
+      - '^[a-z0-9]+-updown-\d+[mh]-\d+$'
+                                      #   the cadence series: btc-updown-5m-1785140700,
+                                      #   eth-updown-15m-*, btc-updown-1h-*, sol-updown-4h-*.
+                                      #   3,669 tape markets / 14,853 prints
+      - '^[a-z]+-up-or-down(-on)?-[a-z]+-\d+.*$'
+                                      #   its named daily twin: bitcoin-up-or-down-on-september-
+                                      #   5-2026, bitcoin-up-or-down-september-5-2026-10am-et
+      - '^what-price-will-[a-z]+-hit-.*$'
+                                      #   the strike ladders: what-price-will-bitcoin-hit-august-
+                                      #   31-september-6-2026 (34 markets), -hit-in-september-2026
+                                      #   (41)
+      - '^[a-z]+-(above|price)-[a-z0-9-]*on-[a-z]+-\d+(-\d+)?$'
+                                      #   the daily strike ladders, event AND market slug:
+                                      #   bitcoin-above-on-september-5-2026 (36),
+                                      #   ethereum-above-on-september-6-2026 (23),
+                                      #   bitcoin-price-on-september-5-2026 (12), and the nested
+                                      #   bitcoin-above-115k-on-september-5-2026 /
+                                      #   xrp-above-2pt8-on-september-5-2026 the same events ship.
+                                      #   The year is OPTIONAL because the older slugs already on
+                                      #   the tape omit it (solana-above-160-on-august-9)
+      - '^will-the-price-of-[a-z]+-be-between-.*$'
+      - '^will-[a-z]+-(reach|dip-to)-\d[a-z0-9.]*-.*$'
+                                      #   the NESTED markets those ladder events ship, which are
+                                      #   what the print mapper stores (it keeps the market slug,
+                                      #   never the event's): will-the-price-of-bitcoin-be-between-
+                                      #   110000-115000-on-september-5-2026,
+                                      #   will-ethereum-reach-3000-in-october,
+                                      #   will-solana-dip-to-130-in-october
+                                      # A NEGATIVE guard backs this list up and needs no key of
+                                      #   its own: a slug ending in a cadence token plus an epoch
+                                      #   (`-<n>m-<epoch>` / `-<n>h-<epoch>`) whose cadence is
+                                      #   shorter than `min_lifetime_hours` is excluded whatever
+                                      #   its dates say, so a cadence family Gamma has not shipped
+                                      #   yet cannot walk in ahead of a new pattern here.
     pages: 3                          # /events?tag_slug pages per tag per refresh, 100 events a
                                       #   page, paged by `offset` (verified live 2026-09-04,
                                       #   data/verified_facts.md: offsets 0/2/4 returned 6 distinct
                                       #   events with no overlap). 3 tags x 3 pages = 9 paced calls
                                       #   per refresh, on the same bucket as every other whale call
                                       #   — worst case for the whale-backfill child moves from ~350
-                                      #   to ~359 calls (~718 s) against its 900 s cap.
+                                      #   to ~359 calls (~718 s), and to 384 (~768 s) once
+                                      #   root_calls_per_cycle is counted, against its 900 s cap.
+                                      #   3 pages is a ~25% SAMPLE, not the surface: politics and
+                                      #   crypto each list more than 1,200 open tag events, so
+                                      #   this sees 300 of them, in an order Gamma does not
+                                      #   document and this project has explicitly refused to rely
+                                      #   on (`order`/`ascending` unverified — whale_nonsports
+                                      #   sends neither). Measured 2026-09-05: 45 of the 158
+                                      #   politics markets that clear every filter platform-wide.
+                                      #   Raising it costs `tags` = 3 calls (~6 s) a page.
                                       #   The refresh CADENCE is backfill.cadence_secs (600) —
                                       #   this runs inside `whale-backfill`, never in the 60 s lane
                                       #   cycle, so there is deliberately no second cadence key to
@@ -751,17 +823,27 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   data/verified_facts.md): the proposal called this "the
                                       #   noise rule that removes btc-updown-5m / eth-updown-15m" —
                                       #   it is NOT. Those events read a 23.94 h lifetime on both
-                                      #   date pairs; what excludes them is the nonsports_max_days
-                                      #   (7) horizon below. This floor is kept as a cheap bound
-                                      #   that can only ever exclude, not as the noise rule.
-                                      # The booking horizon needs no key of its own: it is the
-                                      #   ledger's existing `nonsports_max_days` (7), applied both
-                                      #   to the universe here and by arb/tracker.py at booking,
-                                      #   because a non-sports WHALE candidate's category is not
-                                      #   `sports`. Measured 2026-09-04, that horizon — not the
-                                      #   volume floor — is what binds: of the open politics
-                                      #   markets 173/1,971 resolve within 7 days and 5 of those
-                                      #   clear $1,000; crypto contributes 0 of 1,219.
+                                      #   date pairs. SECOND CORRECTION (2026-09-05, fix pass 2):
+                                      #   the horizon does not exclude them either, and never
+                                      #   did — what excludes them is `exclude_slug_patterns`
+                                      #   above. This floor is kept as a cheap bound that can only
+                                      #   ever exclude, not as the noise rule.
+                                      # The booking horizon is `max_days` above (90 since
+                                      #   2026-09-05), NOT the ledger's shared `nonsports_max_days`
+                                      #   (7) this comment used to name: arb/tracker.py reads the
+                                      #   whale key for a WHALE row whose category is not `sports`
+                                      #   and the shared key for every other kind.
+                                      #   MEASURED 2026-09-05 at the shipped `pages: 3` depth,
+                                      #   every registered filter applied: 6 markets clear at 7
+                                      #   days against 89 at 90 — but see `pages` above, that 89
+                                      #   is a ~25% SAMPLE of the tag surface in an order Gamma
+                                      #   does not document. Over every page: 442 at 90 days
+                                      #   (politics 158, geopolitics 91, crypto 193) — of which
+                                      #   the crypto figure is almost entirely the mechanical
+                                      #   price series `exclude_slug_patterns` now removes
+                                      #   (173 of 180 measured). The 2026-09-04 claim that "crypto
+                                      #   contributes 0 of 1,219" inside 7 days was taken over 3
+                                      #   pages of an unordered index: over the surface it is 136.
   backfill: { wallets_per_cycle: 3, pages_per_wallet: 40, page_size: 50,
               cadence_secs: 600, resolve_per_cycle: 1000, map_per_cycle: 1000 }
                                       # per-cycle backfill budget for newly discovered wallets.

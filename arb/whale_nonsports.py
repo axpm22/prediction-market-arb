@@ -8,13 +8,12 @@ every other collector file: rule 1 (public, unauthenticated GETs only), rule 3
 (every threshold from `cfg["whale"]["nonsports"]`), rule 5 (the volume floor
 compares Decimals), rule 9 (this file can only write the tape).
 
-Two halves, and they never run together:
-
-* `nonsports_universe` makes the Gamma calls and runs inside `whale-backfill`
-  (cadence 600 s) — NEVER in the 60 s lane cycle, and never off the watch
-  lane, which stays sports-only.
-* `tape_universe` is the pure tape read the 60 s cycle uses, so a lane cycle
-  costs no extra Gamma call for its non-sports half.
+This module is the GAMMA half: it roots a market and decides whether it is
+ours. `nonsports_universe` makes the tag calls and runs inside `whale-backfill`
+(cadence 600 s) — NEVER in the 60 s lane cycle, and never off the watch lane,
+which stays sports-only. The other half, the pure tape read the 60 s cycle uses,
+is `arb/whale_ns_lane.py` (split out on size, fix pass 2 2026-09-05); nothing
+in that file imports GAMMA or `_call`, which is the point of the boundary.
 
 Ordering parameters are deliberately not used: `order`/`ascending` were sent
 in the 2026-09-04 census probe and their effect was NOT verified, so every
@@ -22,27 +21,33 @@ filter here is client-side (`data/verified_facts.md`).
 """
 from __future__ import annotations
 
-import json
+import re
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 
 from arb.venues.base import get_json
 from arb.whale_tape import (GAMMA, _backoff_active, _bucket, _call, _json_list,
                             _set_backoff, log)
-from arb.whale_universe import MARKET_COLS, Market, persist_markets
+from arb.whale_universe import Market, persist_markets
 
 # Endpoint shape, not a tunable: `limit=100` is the page the 2026-09-04 census
 # was taken at, and `offset = page * 100` is the paging verified the same day.
 EVENTS_PAGE = 100
 
-# The lane's own half of the universe. Epoch comparison through strftime, the
-# idiom whale_sweep.SWEEP_SQL already uses on this column — never a string
-# compare, because `start_utc` is whatever ISO form its source wrote.
-TAPE_SQL = f"""
-    SELECT {MARKET_COLS} FROM markets
-     WHERE sport IN ({{roots}}) AND start_utc IS NOT NULL AND market_type IS NOT NULL
-       AND CAST(strftime('%s', start_utc) AS INTEGER) BETWEEN ? AND ?
-     ORDER BY CAST(strftime('%s', start_utc) AS INTEGER), condition_id"""
+# The NEGATIVE half of the mechanical-price-series exclusion (fix pass 2,
+# review C1): a slug that ends in a cadence token plus an epoch —
+# `btc-updown-5m-1785140700`, `eth-updown-15m-…`, `…-1h-…`, `…-4h-…`. Anchored
+# at the end so a dollar figure in a market slug (`over-12m-committed-to-…`)
+# can never read as twelve minutes. A registered pattern list alone would let
+# the next cadence family Gamma ships walk in before anyone edits config.
+_CADENCE = re.compile(r"-(\d+)([mh])-\d+$")
+
+
+@lru_cache(maxsize=64)
+def _rx(pattern: str):
+    """Config patterns are a short, constant list; compile each one once."""
+    return re.compile(pattern)
 
 
 def _when(value) -> datetime | None:
@@ -77,12 +82,46 @@ def root_of_event(cfg, event) -> str | None:
     not depend on which tag's page surfaced the market or the same market would
     land in a different root on a different refresh. The FIRST configured tag
     present wins, and `whale.nonsports.tags` is an ordered map for exactly that
-    reason. An event carrying none of them is not ours."""
-    tags = {str(t.get("slug") or "") for t in (event.get("tags") or [])}
+    reason. An event carrying none of them is not ours.
+
+    BOTH tag shapes are accepted (fix pass 2, review I1): the live
+    `events?id=` body — `tests/fixtures/whale_gamma_events_by_id.json`, probed
+    2026-09-05 — sends objects carrying `slug`/`label`/`id`, but a bare string
+    list must not raise here: this runs inside `whale_map._event_roots`, and an
+    exception there aborts the whole mapping cycle and arms the whale-wide
+    backoff, every cycle, forever."""
+    tags = {t.get("slug") if isinstance(t, dict) else str(t)
+            for t in (event.get("tags") or [])}
     for tag, root in cfg["whale"]["nonsports"]["tags"].items():
         if tag in tags:
             return root
     return None
+
+
+def _excluded(cfg, event, market) -> bool:
+    """True when this market is one of Polymarket's MECHANICAL PRICE SERIES —
+    the recurring crypto up/down cadence events and the daily strike ladders
+    (config `whale.nonsports.exclude_slug_patterns`; operator decision
+    2026-09-05, option 1: keep the crypto root, exclude the series).
+
+    Called from `root_row`, the ONE shared rooting helper, so the by-tag
+    builder and the mapper's historical rooting cannot disagree about it.
+
+    No other registered filter reaches this series: the cadence events read a
+    23.94 h lifetime (measured 2026-09-04) so `min_lifetime_hours` cannot stop
+    them, and the horizon never did either. Counts, per-pattern yields and the
+    zero-collateral check on politics/geopolitics are in the config comment
+    and data/verified_facts.md, dated 2026-09-05."""
+    ns = cfg["whale"]["nonsports"]
+    event_slug = str(event.get("slug") or "")
+    slugs = [s for s in (event_slug, str(market.get("slug") or "")) if s]
+    if any(_rx(p).match(s) for p in ns["exclude_slug_patterns"] for s in slugs):
+        return True
+    # The cadence token names the EVENT's own life, so it is read off the event
+    # slug alone (and this series ships the same slug on both).
+    return any(int(n) * (1 if unit == "h" else 1 / 60)
+               < float(ns["min_lifetime_hours"])
+               for n, unit in _CADENCE.findall(event_slug))
 
 
 def _market_type(event) -> str:
@@ -121,10 +160,15 @@ def root_row(cfg, event, market) -> tuple | None:
     the `volume24hr` floor and the `max_days` horizon all ask "can the lane
     trade this now", which a resolved market cannot and need not answer — its
     only use is scoring a whale's past. The lifetime floor IS applied: it is a
-    statement about the market, not about the moment.
+    statement about the market, not about the moment. So is `_excluded` (fix
+    pass 2, review C1) — a mechanical price series is not a market about
+    anything, whenever you ask.
+
+    `markets_of` calls THIS, so there is exactly one rooting rule and one
+    exclusion, and adding a filter here can never leave the other path behind.
     """
     root, end = root_of_event(cfg, event), _when(market.get("endDate"))
-    if root is None or end is None:
+    if root is None or end is None or _excluded(cfg, event, market):
         return None
     life = _lifetime(event, market, end)
     if life is None or life < timedelta(
@@ -133,18 +177,31 @@ def root_row(cfg, event, market) -> tuple | None:
     return root, _market_type(event), end.isoformat()
 
 
-def _tokens(market) -> tuple | None:
+def two_sided(pairs) -> tuple | None:
     """((token_id, label), ...) for a two-sided market, else None.
 
     The lane BUYS one token and `_touch` reads outcome indices 0 and 1, so
     anything but exactly two distinguishable outcomes is not bookable here —
     skipped rather than booked under a fingerprint two tokens would share
-    (`whale_universe._labels`' rule, on the shape Gamma sends for events)."""
-    pairs = tuple(zip(_json_list(market.get("clobTokenIds")),
-                      _json_list(market.get("outcomes"))))
+    (`whale_universe._labels`' rule). Takes already-paired (token, label)
+    tuples so the mapper (`whale_map._gamma_row`, which zips them itself) and
+    the lane's tape read (`whale_ns_lane`, which parses them out of stored
+    `tokens_json`) can apply the SAME guard the builder always did — I3, fix
+    pass 2: only the builder had it, so the mapper could store colliding
+    labels."""
+    try:
+        pairs = tuple((str(t), str(o)) for t, o in pairs)
+    except (TypeError, ValueError):
+        return None
     if len(pairs) != 2 or len({p[1] for p in pairs}) != 2 or not all(p[0] for p in pairs):
         return None
-    return tuple((str(t), str(o)) for t, o in pairs)
+    return pairs
+
+
+def _tokens(market) -> tuple | None:
+    """`two_sided` on the shape Gamma sends for a nested event market."""
+    return two_sided(zip(_json_list(market.get("clobTokenIds")),
+                         _json_list(market.get("outcomes"))))
 
 
 def markets_of(cfg, event, now) -> list[Market]:
@@ -159,33 +216,34 @@ def markets_of(cfg, event, now) -> list[Market]:
     shared `nonsports_max_days`), read by `arb/tracker.py` for WHALE rows, so
     the lane never prices a market it could not book.
 
-    Lifetime is `_lifetime` — shared with `root_row`, which the mapper uses to
-    root the same kind of market from its history rather than from a tag page.
+    Root, market_type, the lifetime floor and the mechanical-price-series
+    exclusion are `root_row`'s — the one shared helper the mapper also uses to
+    root this same kind of market from a whale's history rather than from a tag
+    page. Only the three BOOKING filters are this function's own.
     """
     ns = cfg["whale"]["nonsports"]
-    root = root_of_event(cfg, event)
-    if root is None:
+    if root_of_event(cfg, event) is None:
         return []
     floor = Decimal(str(ns["min_volume_24h_usd"]))
-    life = timedelta(hours=float(ns["min_lifetime_hours"]))
     horizon = now + timedelta(days=int(ns["max_days"]))
-    market_type = _market_type(event)
     out = []
     for m in (event.get("markets") or []):
-        cond, end = str(m.get("conditionId") or ""), _when(m.get("endDate"))
+        cond, row = str(m.get("conditionId") or ""), root_row(cfg, event, m)
         volume = _volume(m.get("volume24hr"))
-        lifetime = _lifetime(event, m, end) if end is not None else None
         tokens = _tokens(m)
-        if (not cond or m.get("closed") or end is None or lifetime is None
-                or tokens is None or volume is None or volume < floor
-                or not (now <= end <= horizon) or lifetime < life):
+        if (not cond or m.get("closed") or row is None or tokens is None
+                or volume is None or volume < floor):
+            continue
+        root, market_type, start = row
+        end = _when(start)
+        if not (now <= end <= horizon):
             continue
         out.append(Market(
             condition_id=cond, sport=root, market_type=market_type, line=None,
             # §7 item 5: `start_utc` IS the resolution deadline, so the existing
             # pregame gate reads "before resolution" and min_secs_to_start reads
             # "not inside the last ten minutes" — no scoring code changes.
-            start_utc=end.isoformat(),
+            start_utc=start,
             event_key=f"pm:{event.get('slug') or cond}",
             tokens=tokens, volume_24h=str(volume)))
     return out
@@ -237,61 +295,3 @@ def nonsports_universe(cfg, con, now, get=get_json) -> dict:
     res["markets"] = len(found)
     log.info("whale non-sports universe: %s", res)
     return res
-
-
-def tape_universe(con, cfg, now) -> list[Market]:
-    """The 60 s cycle's non-sports half: non-sports-rooted `markets` rows whose
-    resolution deadline is still ahead of us and inside
-    `whale.nonsports.max_days` — the same horizon `arb/tracker.py` applies to a
-    WHALE row at booking, so the lane never prices a market it could not book —
-    and whose measured 24h volume clears `min_volume_24h_usd`.
-
-    The volume floor is applied HERE and not only in `markets_of` (amendment
-    2026-09-05): `nonsports_universe` is no longer the only writer of a
-    non-sports `markets` row. `whale_map._event_roots` roots a market from its
-    event's tags so a whale's HISTORICAL politics positions can be scored, and
-    it deliberately applies no volume floor — a resolved market's `volume24hr`
-    is no reason to refuse to score the whale who traded it. Most such rows
-    are in the past and this query's lower bound already excludes them, but
-    not all: measured on the live tape 2026-09-05, the first 100-row sample of
-    the revisit queue held a politics market with a future `endDate` and a
-    NULL `volume24hr`. This read is the one place the LANE's universe is
-    decided, so the registered floor belongs here — a null volume failing it
-    exactly as it does in `markets_of` (design §5 step 1b).
-    """
-    ns = cfg["whale"]["nonsports"]
-    roots = sorted(set(ns["tags"].values()))
-    if not ns["enabled"] or not roots:
-        return []
-    hi = now + timedelta(days=int(ns["max_days"]))
-    floor = Decimal(str(ns["min_volume_24h_usd"]))
-    rows = con.execute(TAPE_SQL.format(roots=",".join("?" * len(roots))),
-                       (*roots, int(now.timestamp()), int(hi.timestamp())))
-    out = []
-    for r in rows:
-        volume = _volume(r["volume_24h"])
-        if volume is None or volume < floor:
-            continue
-        out.append(Market(condition_id=r["condition_id"], sport=r["sport"],
-                          market_type=r["market_type"], line=r["line"],
-                          start_utc=r["start_utc"], event_key=r["event_key"],
-                          tokens=tuple((t[0], t[1])
-                                       for t in json.loads(r["tokens_json"] or "[]")),
-                          volume_24h=r["volume_24h"]))
-    return out
-
-
-def seed_volumes(volumes, markets) -> dict:
-    """Fill V6's denominator for a market the watch lane never quotes.
-
-    The lane builds `volumes` from the ledger's own watch quotes, which cover
-    Polymarket SPORTS only — a non-sports market would then read `None`, which
-    `whale_dominance.point` treats as `dominance.min_volume_usd` ($5,000) and a
-    $20M/day politics market would come out maximally dominant. `setdefault`
-    keeps the ledger authoritative wherever it has an answer; this only fills
-    the gap, from the Gamma figure `markets.volume_24h` already stores."""
-    for m in markets:
-        if m.volume_24h is not None:
-            for token, _ in m.tokens:
-                volumes.setdefault(f"{m.condition_id}:{token}", Decimal(m.volume_24h))
-    return volumes

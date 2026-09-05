@@ -2466,3 +2466,121 @@ def test_the_historical_root_lookup_is_bounded_by_its_own_config_key(tmp_path):
     assert res2["root_calls"] == 0 and res2["unmappable"] == 1
     assert con2.execute("SELECT sport FROM markets WHERE condition_id='0xz'"
                         ).fetchone()["sport"] is None
+
+
+# ---------- mechanical price series + upsert precedence (fix pass 2, 2026-09-05)
+
+def test_the_mapper_permanently_marks_a_mechanical_price_series_no_root(tmp_path):
+    """C1/M5: the up/down cadence series must never be rooted `crypto`, must
+    cost NO `events?id=` call, and must take the PERMANENT `no-root:` marker
+    (the `absent:` idiom) instead of the daily `unmappable:` churn — 3,669 of
+    these rows sit in the live revisit queue and would otherwise spend event
+    calls every day forever."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cond, slug = "0xupdown", "btc-updown-5m-1785140700"
+    _map_row(con, cond, slug=slug)
+    con.commit()
+    market = _hist_market(cond, slug, 750976)
+    market["events"] = [{"id": 750976, "slug": slug}]
+    get = _RootGet([market], [_hist_event(750976, tags=("crypto",))])
+
+    res = whale_backfill.map_markets(_map_cfg(), con, NOW, get=get)
+
+    assert con.execute("SELECT sport FROM markets WHERE condition_id=?",
+                       (cond,)).fetchone()["sport"] is None
+    assert not any("/events?" in u for u in get.urls) and res["root_calls"] == 0
+    assert whale_tape._meta(con, f"no-root:{cond}") == NOW.strftime("%Y-%m-%d")
+    assert whale_tape._meta(con, f"unmappable:{cond}") is None
+    # and REVISIT_SQL never offers it again, on any later day
+    assert [r[0] for r in con.execute(whale_map.REVISIT_SQL, ("2027-01-01", 10))] == []
+
+
+def test_a_nonsports_root_wins_over_a_stale_kickoff_and_market_type(tmp_path):
+    """M4: the upsert is `COALESCE(existing, excluded)` — existing non-NULL
+    wins — which is right for a sports row but wrong for one the rooting
+    helper roots non-sports: the pre-4b3bcc9 mapper wrote `gameStartTime` as
+    `start_utc` for EVERY row, so a politics row can carry a kickoff. For a
+    non-sports root the helper's `endDate` and its LADDER/BINARY are the
+    authority."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cond = "0xstale"
+    _map_row(con, cond, slug="will-x-happen", market_type="WINNER",
+             start_utc="2026-01-02T03:04:05+00:00")
+    con.commit()
+    get = _RootGet([_hist_market(cond, "will-x-happen", 33228)], [_hist_event(33228)])
+
+    whale_backfill.map_markets(_map_cfg(), con, NOW, get=get)
+
+    row = con.execute("SELECT * FROM markets WHERE condition_id=?", (cond,)).fetchone()
+    assert row["sport"] == "politics" and row["market_type"] == "BINARY"
+    assert row["start_utc"] == "2026-11-03T12:00:00+00:00"     # the market's endDate
+
+
+def test_the_mapper_never_stores_colliding_outcome_tokens(tmp_path):
+    """I3: `_gamma_row` zipped clobTokenIds/outcomes with no two-sided guard,
+    while the builder has always applied one. Identical labels collide in the
+    lane's fingerprints, so the tokens are skipped and the row is reported
+    unmappable rather than stored."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cond = "0xdupe"
+    _map_row(con, cond, slug="will-x-happen")
+    con.commit()
+    market = _hist_market(cond, "will-x-happen", 33228)
+    market["outcomes"] = '["Yes", "Yes"]'
+    get = _RootGet([market], [_hist_event(33228)])
+
+    res = whale_backfill.map_markets(_map_cfg(), con, NOW, get=get)
+
+    assert con.execute("SELECT tokens_json FROM markets WHERE condition_id=?",
+                       (cond,)).fetchone()["tokens_json"] == "[]"
+    assert res["unmappable"] == 1 and res["mapped"] == 0
+
+
+def test_map_markets_reports_its_root_call_count(tmp_path):
+    """M5: `root_calls` is part of the result shape `map_markets` returns, not
+    a key only `_map_markets` happens to add — the supervisor's call budget is
+    read off this dict."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    assert whale_backfill.map_markets(_map_cfg(), con, NOW,
+                                      get=_RootGet([], []))["root_calls"] == 0
+
+
+def test_the_mapper_unroots_a_mechanical_series_row_already_in_the_tape(tmp_path):
+    """C1, second half: the exclusion has to reach BACKWARDS. Measured
+    read-only on the live tape 2026-09-05, 11 already-rooted rows match the
+    registered patterns (10 `crypto`, 1 `politics` — `will-solana-reach-150-in-
+    november`, rooted politics off a multi-tagged event), and they would keep
+    being scored and priced forever. Un-rooting them clears sport/market_type/
+    start_utc and writes the permanent `no-root:` marker; the `markets` UPDATE
+    trips the mat triggers, so the affected wallets re-materialize on their
+    own. A tag-builder row carries no slug at all — its event slug is the
+    `pm:<slug>` in `event_key`, and that is what must be read for it."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    for cond, sport, slug, ekey in (
+            ("0xladder", "crypto", "bitcoin-above-65000-on-october-4", None),
+            ("0xnested", "politics", "will-solana-reach-150-in-november", None),
+            ("0xbytag", "crypto", None, "pm:btc-updown-5m-1785140700"),
+            ("0xreal", "politics", "which-party-will-win-the-senate-in-2026", None)):
+        con.execute("INSERT INTO markets (condition_id, sport, market_type, start_utc,"
+                    " event_key, tokens_json, slug, first_seen, last_seen)"
+                    " VALUES (?,?,?,?,?,?,?,?,?)",
+                    (cond, sport, "BINARY", "2026-10-04T12:00:00+00:00", ekey,
+                     '[["t0", "Yes"], ["t1", "No"]]', slug, NOW.isoformat(),
+                     NOW.isoformat()))
+    con.commit()
+
+    res = whale_backfill.map_markets(_map_cfg(), con, NOW, get=_RootGet([], []))
+
+    rooted = dict(con.execute("SELECT condition_id, sport FROM markets"))
+    assert rooted == {"0xladder": None, "0xnested": None, "0xbytag": None,
+                      "0xreal": "politics"}
+    gone = con.execute("SELECT market_type, start_utc FROM markets "
+                       "WHERE condition_id='0xladder'").fetchone()
+    assert gone["market_type"] is None and gone["start_utc"] is None
+    assert res["unrooted"] == 3
+    for cond in ("0xladder", "0xnested", "0xbytag"):
+        assert whale_tape._meta(con, f"no-root:{cond}") == NOW.strftime("%Y-%m-%d")
+    assert whale_tape._meta(con, "no-root:0xreal") is None
+    # and it converges: a second cycle finds nothing left to do
+    assert whale_backfill.map_markets(_map_cfg(), con, NOW,
+                                      get=_RootGet([], []))["unrooted"] == 0

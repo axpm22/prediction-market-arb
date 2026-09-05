@@ -432,3 +432,24 @@ def test_the_whale_lane_ships_its_own_nonsports_horizon(tmp_path):
     cfg = load(SHIPPED)
     assert cfg["whale"]["nonsports"]["max_days"] == 90
     assert cfg["nonsports_max_days"] == 7
+
+
+def test_the_mechanical_crypto_price_series_is_excluded_by_registered_pattern():
+    """Fix pass 2, review C1 (operator 2026-09-05, option 1: keep the crypto
+    root, exclude the mechanical price series). The patterns are anchored
+    regexes in config — no magic numbers and no hard-coded slug list in code —
+    and they are what stands between the crypto base rate and 173 coin flips."""
+    cfg = load(SHIPPED)
+    pats = cfg["whale"]["nonsports"]["exclude_slug_patterns"]
+    assert isinstance(pats, list) and pats
+    assert all(p.startswith("^") and p.endswith("$") for p in pats)
+    for slug in ("btc-updown-5m-1785140700", "eth-updown-15m-1785140700",
+                 "bitcoin-above-on-september-5-2026",
+                 "what-price-will-bitcoin-hit-august-31-september-6-2026",
+                 "bitcoin-price-on-september-5-2026",
+                 "bitcoin-up-or-down-on-september-5-2026"):
+        assert any(re.match(p, slug) for p in pats), slug
+    for slug in ("will-base-launch-a-token-in-2026-341",
+                 "which-party-will-win-the-senate-in-2026",
+                 "balance-of-power-2026-midterms", "putin-out-before-2027"):
+        assert not any(re.match(p, slug) for p in pats), slug

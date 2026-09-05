@@ -185,6 +185,26 @@ slug prefix, so every historical politics or crypto market a whale had traded
 stayed unrooted and was dropped by the scorer, and no non-sports whale could
 qualify however wide the horizon. Such a market is now rooted from the same tag
 map through its own Gamma event, bounded by its own call budget.
+**Amended 2026-09-05 (fix pass 2, operator option 1; PREREGISTRATION row of
+that date):** the crypto root KEEPS its place but its universe and its scored
+population now EXCLUDE Polymarket's mechanical price series — the
+`btc-updown-5m`-style cadence events and the daily strike ladders
+(`bitcoin-above-on-<date>`, `what-price-will-<coin>-hit-…`) — by anchored slug
+pattern in `whale.nonsports.exclude_slug_patterns`, applied in the one shared
+rooting helper. No registered filter had reached them: the 5-minute events
+carry a 23.9 h lifetime on every date Gamma gives, and the horizon never
+excluded them either (the 2026-09-04 claim that it did is corrected). Measured
+2026-09-05: **173 of the 180 crypto markets that cleared every filter were that
+series**, and the live tape holds 3,669 of them carrying 14,853 followed-wallet
+prints — the crypto base rate would have been measured on coin flips at
+five-minute resolution, and would then have gated the genuine crypto event
+markets. Politics and geopolitics lose nothing (0 of 158, 0 of 91). The exclusion reaches backwards too: 11 of the 182 already-rooted non-sports tape rows match and are un-rooted, so nothing mechanical stays scored on a technicality. The stated
+cost: crypto's n now accumulates from a single-digit universe, so that root may
+sit at the default base rate indefinitely — a small honest population over a
+large mechanical one. **Also corrected the same day:** the "89 markets" figure
+above is a ~25% SAMPLE of the tag surface at `pages: 3`, in an order Gamma does
+not document and this project does not rely on; the horizon change adds **40**
+politics markets at that depth (147 was the all-pages delta).
 
 **Three paper sizings (amended 2026-09-05, PREREGISTRATION row of that date):** every fired signal books `V*/flat` ($1, the primary), `V*/conf` (linear in the whales' score from $0.10 at the qualification bar to $1.00 ten points above it) and — new — `V*/kelly`, quarter Kelly on the same edge but PRICED: `clip(0.25 x (S - min_score_lb) / (1 - ask), $0.10, $1.00)`. Conf is blind to the ask, so it stakes the same on a 0.95 contract, where a 0.05-point edge is a full Kelly bet, as on a 0.30 one, where it is 7% of a bankroll; kelly is the only sizing that can say so. The edge fed to it is already the pessimistic `score_lb`, so the quarter fraction is conservative twice. A sizing cannot change which signals fire, so the three are three measurements of one population, compared on ROI per $ at risk at day 14 and the replication month. **The primary metric is untouched: V2/flat.**
 

@@ -25,7 +25,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from arb import whale_backfill, whale_dominance, whale_elite, whale_exit, whale_holdings
-from arb import (whale_mat, whale_nonsports, whale_resolve, whale_score,
+from arb import (whale_mat, whale_ns_lane, whale_resolve, whale_score,
                  whale_signal, whale_sizing, whale_tape, whale_universe)
 from arb.lanes.whale_book import (_bet_ctx, _event_key, _fetch_books,
                                   _persist_signal, _tape_market, _touch,
@@ -113,7 +113,7 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     # gap the 120s overlap can't fully recover — skip it, watermark untouched.
     # discover_wallets reads the tape only (no network), so it runs regardless.
     markets = (whale_universe.universe(ro, cfg, now, res=res)
-               + whale_nonsports.tape_universe(con, cfg, now))
+               + whale_ns_lane.tape_universe(con, cfg, now))
     if markets:
         poll = whale_tape.poll_prints(cfg, con, markets, now, get=get)
         res.update(status=poll["status"], markets=len(markets), prints=poll["rows"],
@@ -212,7 +212,7 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     vol_poll = res["poll_id"]
     volumes = ({r["venue_market_id"]: _d(r["volume_24h"])
                for r in ro.execute(VOLUME_SQL, (vol_poll,))} if vol_poll is not None else {})
-    whale_nonsports.seed_volumes(volumes, markets)   # non-sports: off the tape
+    whale_ns_lane.seed_volumes(volumes, markets)   # non-sports: off the tape
     blocked = _calibration_blocked(con, cfg)
     cands = []
     for cid, m in live.items():

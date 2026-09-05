@@ -114,9 +114,10 @@ def _horizon_days(cfg, cand) -> int:
     """How far ahead of `now` a resolution-settled candidate may settle.
 
     A NON-SPORTS WHALE row reads the L14 lane's own `whale.nonsports.max_days`
-    (shipped at the shared value, so nothing moves until the operator raises
-    it); every other kind keeps the ledger's shared `nonsports_max_days`, and a
-    sports row keeps `max_days_to_settlement`."""
+    — 90 days since the amendment of 2026-09-05, DELIBERATELY no longer equal
+    to the shared value it shipped at; every other kind keeps the ledger's
+    shared `nonsports_max_days` (7), and a sports row keeps
+    `max_days_to_settlement`."""
     if cand["category"] == "sports":
         return int(cfg["max_days_to_settlement"])
     return int(cfg["whale"]["nonsports"]["max_days"] if cand["kind"] == "WHALE"

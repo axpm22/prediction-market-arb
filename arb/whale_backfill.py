@@ -9,6 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from arb.venues.base import get_json
+from arb import whale_ns_map
 from arb.whale_map import MAP_SQL, REVISIT_SQL, _local_remap, _map_markets, _sport_of  # noqa: F401
 from arb.whale_rows import _keep
 from arb.whale_tape import (DATA_API, LEADERBOARD_PAGE, _backoff_active, _bucket,
@@ -208,6 +209,10 @@ def _queue(con, limit, today) -> tuple[list[str], list[str]]:
     revisit gets the rest, then whatever revisit still did not use (it ran
     dry) flows back to new ids, which have already shown there is more
     supply there. No new config key — derived from `map_per_cycle`."""
+    # M3 (fix pass 2, note only): new ids are drawn FIRST, so a large new-id
+    # queue can hold revisit down to its `limit // 2` floor — and the
+    # historical-root lookups only ever run on revisit rows. The floor is what
+    # bounds the starvation; left as is deliberately, no change.
     floor = limit // 2
     new_ids = [r[0] for r in con.execute(MAP_SQL, (floor,))]
     revisit_budget = limit - len(new_ids)
@@ -226,10 +231,19 @@ def map_markets(cfg, con, now, get=get_json) -> dict:
     slug, so `_local_remap` fills `sport` from it directly — no Gamma call —
     before whatever still needs market_type/start_utc goes to Gamma."""
     w = cfg["whale"]
-    res = {"calls": 0, "mapped": 0, "unmappable": 0, "status_counts": {}, "status": "ok"}
+    # `root_calls` belongs in the shape THIS returns (M5, fix pass 2), not
+    # only in whatever dict `_map_markets` happens to have added it to: the
+    # child's call budget against max_child_runtime_secs is read off here.
+    res = {"calls": 0, "mapped": 0, "unmappable": 0, "root_calls": 0,
+           "status_counts": {}, "status": "ok"}
     if _backoff_active(con, now):
         res["status"] = "backoff"
         return res
+    # C1 (fix pass 2): the exclusion reaches backwards first — a row rooted
+    # before the patterns existed is still scored and still priced until its
+    # root is cleared. Self-terminating and free (tape only), so it runs every
+    # cycle without a budget key.
+    res["unrooted"] = whale_ns_map.unroot_mechanical(cfg, con, now)
     limit = int(w["backfill"]["map_per_cycle"])
     today = now.strftime("%Y-%m-%d")
     new_ids, revisit = _queue(con, limit, today)
