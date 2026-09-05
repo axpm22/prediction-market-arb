@@ -106,6 +106,28 @@ def filter_errors(cfg, errors: list[dict]) -> list[dict]:
     return [e for e in errors if _keep_error_line(cfg, e["source"], e["msg"])]
 
 
+def tail_child_errors(cfg) -> list[dict]:
+    """Traceback/Error lines from arb/heartbeat.py's per-child capture files
+    (supervisor.child_log_dir), verbatim — raw subprocess output, no
+    per-line timestamp to parse like dashboard.py's named logger files."""
+    from datetime import datetime, timezone
+
+    from arb.logutil import resolve_log_path
+    d = resolve_log_path(cfg["supervisor"]["child_log_dir"])
+    if not d.is_dir():
+        return []
+    now_iso = datetime.now(timezone.utc).isoformat()
+    out = []
+    for p in sorted(d.glob("*.log")):
+        with p.open("rb") as f:
+            f.seek(max(0, p.stat().st_size - 65536))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+        out += [{"at": now_iso, "level": "ERROR", "source": f"child:{p.stem}",
+                "msg": ln[:300], "file": f"children/{p.name}"}
+               for ln in lines if "Traceback" in ln or "Error" in ln]
+    return out
+
+
 def lane_timing(cfg, store, day_start: str) -> list[dict]:
     """Per-lane cadence: configured interval vs last poll actually persisted.
     `enabled` labels a lane supervisor.processes has switched off — its

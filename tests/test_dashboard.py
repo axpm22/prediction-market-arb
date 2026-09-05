@@ -372,9 +372,9 @@ def test_cmd_bench_appends_its_results(tmp_path, monkeypatch, capsys):
 
 def test_fresh_db_is_at_schema_8_with_bench_results(tmp_path):
     store = Store(tmp_path / "fresh.sqlite")
-    assert schema.SCHEMA_VERSION == 8
+    assert schema.SCHEMA_VERSION >= 8            # HEAD, whatever it is now (v9 added child_exits)
     assert store.conn.execute(
-        "SELECT MAX(version) FROM schema_version").fetchone()[0] == 8
+        "SELECT MAX(version) FROM schema_version").fetchone()[0] == schema.SCHEMA_VERSION
     cols = {r[1] for r in store.conn.execute("PRAGMA table_info(bench_results)")}
     assert {"id", "ran_at", "lane", "primary_value", "ci_lo", "ci_hi", "n",
             "verdict", "payload_json"} == cols
@@ -394,7 +394,37 @@ def test_migration_8_is_idempotent_on_a_v7_db(tmp_path):
     con.commit()
     migrations.apply(con)
     migrations.apply(con)               # re-open re-runs: must not raise
-    assert con.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 8
+    # applying from a v7 db runs every later migration in the same pass, not
+    # just 8 — HEAD, whatever it is now (v9 added child_exits)
+    assert con.execute(
+        "SELECT MAX(version) FROM schema_version").fetchone()[0] == schema.SCHEMA_VERSION
+    con.close()
+
+
+# --------------------------------------------------------------- migration 9
+
+def test_fresh_db_is_at_head_schema_with_child_exits(tmp_path):
+    store = Store(tmp_path / "fresh.sqlite")
+    assert schema.SCHEMA_VERSION == 9
+    cols = {r[1] for r in store.conn.execute("PRAGMA table_info(child_exits)")}
+    assert {"id", "process", "exited_at", "rc", "runtime_secs", "killed"} == cols
+
+
+def test_migration_9_is_idempotent_on_a_v8_db(tmp_path):
+    import sqlite3
+
+    from arb import migrations
+    path = tmp_path / "v8.sqlite"
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE schema_version (version INTEGER, applied_at TEXT)")
+    for ddl in schema.TABLES + schema.INDEXES:
+        con.execute(ddl)
+    for v in range(1, 9):
+        con.execute("INSERT INTO schema_version VALUES (?, datetime('now'))", (v,))
+    con.commit()
+    migrations.apply(con)
+    migrations.apply(con)               # re-open re-runs: must not raise
+    assert con.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 9
     con.close()
 
 
@@ -870,6 +900,29 @@ def test_tail_errors_whale_mode_drops_disabled_venues_and_lanes(tmp_path):
     assert {e["source"] for e in full} == \
         {"arb.watch", "arb.negrisk", "arb.whale", "arb.supervisor", "arb.kalshi",
          "arb.oddsapi", "arb.kalshi_events"}
+
+
+def test_tail_errors_picks_up_tracebacks_from_child_logs(tmp_path, monkeypatch):
+    """2026-09-05 incident: a crashing child's traceback went to the
+    supervisor's own stdout, which the errors panel never looked at — it
+    must also tail supervisor.child_log_dir's raw per-process capture
+    files (arb/heartbeat.py, arb/child_log.py) for Traceback/Error lines."""
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))  # isolate from other tests' child logs
+
+    from arb.dashboard import _tail_errors
+    cfg = _cfg()
+    d = tmp_path / cfg["supervisor"]["child_log_dir"]
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "whale-backfill.log").write_text(
+        "2026-09-05 12:00:00,000 plain child output, nothing wrong\n"
+        "Traceback (most recent call last):\n"
+        "  File \"whale_backfill.py\", line 12, in <module>\n"
+        "ValueError: boom\n")
+    errors = _tail_errors(cfg)
+    msgs = {e["msg"] for e in errors if e["source"] == "child:whale-backfill"}
+    assert "Traceback (most recent call last):" in msgs
+    assert "ValueError: boom" in msgs
+    assert "plain child output, nothing wrong" not in msgs
 
 
 def test_unknown_logger_is_never_hidden_in_whale_mode():

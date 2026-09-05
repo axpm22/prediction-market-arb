@@ -57,7 +57,7 @@ def _tail_errors(cfg, limit: int = 30) -> list[dict]:
                     continue
                 out.append({"at": at, "level": parts[2], "source": parts[3],
                             "msg": parts[4][:300], "file": name})
-    out.sort(key=lambda e: e["at"], reverse=True)
+    out = sorted(out + dashboard_mode.tail_child_errors(cfg), key=lambda e: e["at"], reverse=True)
     return dashboard_mode.filter_errors(cfg, out)[:limit]
 
 

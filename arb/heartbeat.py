@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from arb import child_log
 from arb.logutil import get_logger
 
 log = get_logger("arb.supervisor", "logs/supervisor.log")
@@ -211,14 +212,18 @@ def stale_lanes(cfg, store, now_utc: datetime) -> list[tuple[str, float]]:
     return out
 
 
-def lane_status_lines(cfg, beats) -> list[tuple[str, str]]:
+def lane_status_lines(cfg, store, beats) -> list[tuple[str, str]]:
     """Every configured supervisor process as (name, status) pairs, for
     `arb status`/dashboard heartbeat summaries — whale lanes first (2026-09-04
     operator decision: PM whales only, for now; `sorted` is stable, so ties
     keep `supervisor.processes`' own order). A disabled lane reads as
     'off (not in supervisor.processes)' rather than silently vanishing from
     the printout — true whatever the reason a lane got switched off, not
-    just today's whale-only decision."""
+    just today's whale-only decision.
+
+    Each enabled lane also carries its last child exit (rc, and how many in a
+    row) when arb/child_log.py has any history for it — 2026-09-05 incident:
+    a crashing child had nothing to show for itself in `arb status` either."""
     beat_by = {b["process"]: b for b in beats}
     order = sorted(cfg["supervisor"]["processes"].items(),
                    key=lambda kv: not kv[0].startswith("whale"))
@@ -228,8 +233,15 @@ def lane_status_lines(cfg, beats) -> list[tuple[str, str]]:
             out.append((name, "off (not in supervisor.processes)"))
             continue
         b = beat_by.get(name)
-        out.append((name, f"last beat {b['beat_at']} sha={b['head_sha']}"
-                    if b else "no beat yet"))
+        status = (f"last beat {b['beat_at']} sha={b['head_sha']}"
+                  if b else "no beat yet")
+        exit_info = child_log.last_status(store, name)
+        if exit_info is not None:
+            rc, streak = exit_info
+            status += f" | last exit rc={rc}"
+            if streak:
+                status += f" ({streak} in a row)"
+        out.append((name, status))
     return out
 
 
@@ -270,6 +282,7 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
     flags = (["--db", db] if db else []) + (["--config", config] if config else [])
     children: dict[str, subprocess.Popen] = {}
     started: dict[str, float] = {}
+    child_logs: dict[str, object] = {}  # open capture file per running lane child
     # suppress the boot-time burst: slots long past are pre-marked as fired (H9)
     last_fired: dict[str, str] = initial_last_fired(cfg, datetime.now(NY))
     next_run: dict[str, float] = initial_next_run(cfg, time.monotonic())
@@ -283,7 +296,16 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
     scheduled: list[subprocess.Popen] = []  # one-shot clock children, reaped each tick
 
     def _spawn(*cmd):
-        scheduled.append(subprocess.Popen([sys.executable, "-m", "arb", *flags, *cmd]))
+        # cmd[0] IS the process name (scan/settle/report/backup/archive/
+        # shape-check/canary) — reused as the child_exits process key and the
+        # capture-file name, same as the lane children below.
+        name = cmd[0]
+        logf = child_log.open_child_log(cfg, name)
+        proc = subprocess.Popen([sys.executable, "-m", "arb", *flags, *cmd],
+                                stdout=logf, stderr=subprocess.STDOUT)
+        proc._child_name, proc._child_started, proc._child_logf = (
+            name, time.monotonic(), logf)
+        scheduled.append(proc)
 
     try:
         while True:
@@ -297,7 +319,14 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                 return 0
             now = time.monotonic()
             now_ny = datetime.now(NY)
-            scheduled[:] = _reap_finished(scheduled)  # reap finished one-shots (H9)
+            still_scheduled = _reap_finished(scheduled)
+            for proc in scheduled:  # reap finished one-shots (H9), now logged (2026-09-05)
+                if proc not in still_scheduled:
+                    child_log.record_exit(cfg, silence_store, proc._child_name,
+                                          proc.returncode, now - proc._child_started,
+                                          child_log.log_path(cfg, proc._child_name))
+                    proc._child_logf.close()
+            scheduled[:] = still_scheduled
 
             # one-shot loop children on their cadence
             for name, enabled in cfg["supervisor"]["processes"].items():
@@ -311,13 +340,24 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                                          name)
                             proc.kill()
                             proc.wait()  # reap the killed child, don't leave a zombie (H9)
+                            child_log.record_exit(
+                                cfg, silence_store, name, proc.returncode,
+                                now - started[name], child_log.log_path(cfg, name),
+                                killed=True)
+                            child_logs.pop(name).close()
                             children.pop(name)
                         continue
+                    child_log.record_exit(cfg, silence_store, name, proc.returncode,
+                                          now - started[name],
+                                          child_log.log_path(cfg, name))
+                    child_logs.pop(name).close()
                     children.pop(name)
                 if now >= next_run.get(name, 0):
                     cmd = cfg["supervisor"]["commands"][name].split()
+                    child_logs[name] = child_log.open_child_log(cfg, name)
                     children[name] = subprocess.Popen(
-                        [sys.executable, "-m", "arb", *flags, *cmd])
+                        [sys.executable, "-m", "arb", *flags, *cmd],
+                        stdout=child_logs[name], stderr=subprocess.STDOUT)
                     started[name] = now
                     # absolute grid, never now+interval: the loop's 2s tick
                     # overshoots by 0-2s and that error used to accumulate

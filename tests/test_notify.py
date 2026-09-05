@@ -257,6 +257,8 @@ def test_stale_lane_alarm_posts_lane_silent_once(cfg, tmp_path, monkeypatch):
     from datetime import timedelta, timezone
 
     class FakeProc:
+        returncode = 0
+
         def poll(self):
             return 0
 
@@ -278,7 +280,8 @@ def test_stale_lane_alarm_posts_lane_silent_once(cfg, tmp_path, monkeypatch):
     cfg["supervisor"]["processes"]["negrisk"] = True
     monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
     monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "absent-stop")
-    monkeypatch.setattr(hb.subprocess, "Popen", lambda argv: FakeProc())
+    # spawn calls now pass stdout=/stderr= for child-log capture (2026-09-05)
+    monkeypatch.setattr(hb.subprocess, "Popen", lambda argv, **kw: FakeProc())
     db_path = tmp_path / "t.sqlite"
     store = Store(db_path)
     old = datetime.now(timezone.utc) - timedelta(days=30)
@@ -303,6 +306,8 @@ def test_stale_lane_alarm_posts_lane_silent_for_each_distinct_lane(cfg, tmp_path
     from datetime import timedelta, timezone
 
     class FakeProc:
+        returncode = 0
+
         def poll(self):
             return 0
 
@@ -325,7 +330,8 @@ def test_stale_lane_alarm_posts_lane_silent_for_each_distinct_lane(cfg, tmp_path
     cfg["supervisor"]["processes"]["political"] = True
     monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
     monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "absent-stop")
-    monkeypatch.setattr(hb.subprocess, "Popen", lambda argv: FakeProc())
+    # spawn calls now pass stdout=/stderr= for child-log capture (2026-09-05)
+    monkeypatch.setattr(hb.subprocess, "Popen", lambda argv, **kw: FakeProc())
     db_path = tmp_path / "t.sqlite"
     store = Store(db_path)
     old = datetime.now(timezone.utc) - timedelta(days=30)

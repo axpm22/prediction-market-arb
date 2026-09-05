@@ -1,7 +1,7 @@
 """SQLite DDL (SPEC §9). Money columns are TEXT holding Decimal strings, never REAL.
 Every table is INSERT-only or INSERT+terminal-row; nothing ever UPDATEs ledger rows."""
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 # v2 additions (migrations only ever ADD):
 MIGRATION_2 = [
@@ -59,6 +59,21 @@ BENCH_RESULTS = """CREATE TABLE IF NOT EXISTS bench_results (
         ci_lo TEXT, ci_hi TEXT, n INTEGER, verdict TEXT, payload_json TEXT)"""
 MIGRATION_8 = [BENCH_RESULTS]
 
+# v9: append-only record of every supervisor-observed child exit (2026-09-05
+# incident: a crashing one-shot child died silently every cycle for ~90 min —
+# nothing in logs/ showed it, and `arb status` had no way to say so). The
+# supervisor is the sole writer (only it sees a child's return code);
+# `rc`/`killed` distinguish a clean exit from a crash from a runtime-cap kill.
+# arb/child_log.py derives last-exit + consecutive-failure streak at read
+# time, same pattern as flat_bets/bet_events (rule 9).
+CHILD_EXITS = """CREATE TABLE IF NOT EXISTS child_exits (
+        id INTEGER PRIMARY KEY, process TEXT, exited_at TEXT, rc INTEGER,
+        runtime_secs REAL, killed INTEGER)"""
+MIGRATION_9 = [
+    CHILD_EXITS,
+    "CREATE INDEX IF NOT EXISTS idx_child_exits_process ON child_exits(process, id)",
+]
+
 TABLES = [
     """CREATE TABLE IF NOT EXISTS quotes (
         id INTEGER PRIMARY KEY, poll_id INTEGER, fetched_at TEXT, event_key TEXT,
@@ -115,6 +130,7 @@ TABLES = [
     """CREATE TABLE IF NOT EXISTS pair_demotions (
         id INTEGER PRIMARY KEY, pair TEXT, reason TEXT, created_at TEXT)""",
     BENCH_RESULTS,      # append-only: one row per `arb bench` lane result (v8)
+    CHILD_EXITS,        # append-only: one row per supervisor-observed child exit (v9)
 ]
 
 # Minimal indexes — more slows the 600k-row/day insert path (§9)

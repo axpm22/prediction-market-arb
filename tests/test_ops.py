@@ -234,6 +234,7 @@ def test_supervisor_children_inherit_db_and_config(cfg, tmp_path, monkeypatch):
     class FakeProc:
         def __init__(self, argv):
             argvs.append(argv)
+            self.returncode = 0
 
         def poll(self):
             return 0
@@ -246,12 +247,116 @@ def test_supervisor_children_inherit_db_and_config(cfg, tmp_path, monkeypatch):
 
     monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
     monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "absent-stop")
-    monkeypatch.setattr(hb.subprocess, "Popen", lambda argv: FakeProc(argv))
+    # spawn calls now pass stdout=/stderr= for child-log capture (2026-09-05)
+    monkeypatch.setattr(hb.subprocess, "Popen", lambda argv, **kw: FakeProc(argv))
     hb.run_supervisor(cfg, once=True, db="other.sqlite", config="alt.yaml")
     assert argvs, "no children spawned"
     for argv in argvs:
         assert argv[argv.index("--db") + 1] == "other.sqlite", argv
         assert argv[argv.index("--config") + 1] == "alt.yaml", argv
+
+
+# ---------- 2026-09-05 incident: silent child crashes ----------
+
+def test_supervisor_captures_child_output_and_warns_on_failure(
+        cfg, tmp_path, monkeypatch, caplog):
+    """heartbeat.py spawned every child with no stdout/stderr redirection, so
+    a crashing one-shot child's traceback went to the supervisor's own
+    stdout — nowhere logs/ ever looked — and a non-zero exit was never
+    logged (whale-backfill crashed at the same step every 600s for ~90 min
+    with nothing in logs/). Every real child is `python -m arb <cmd>`, so an
+    unknown subcommand stands in for "a fake child that writes to stderr and
+    exits non-zero" (a real crash's exact rc varies; argparse's is 2).
+
+    Drives two real ticks of run_supervisor (fake `time.sleep` skips the
+    real 2s wait but still gives the child wall-clock time to exit) with a
+    single lane whose command is bogus, and asserts its stderr landed in
+    logs/children/<lane>.log AND the supervisor logged a WARNING naming the
+    lane and its return code."""
+    import time as time_mod
+
+    import arb.heartbeat as hb
+    cfg2 = copy.deepcopy(cfg)
+    cfg2["supervisor"]["processes"] = {k: False for k in cfg2["supervisor"]["processes"]}
+    cfg2["supervisor"]["processes"]["watch"] = True
+    cfg2["supervisor"]["commands"]["watch"] = "not-a-real-command"
+    cfg2["supervisor"]["schedule_catchup_grace_mins"] = 0  # never catch up a stale
+    cfg2["scan_times"] = []                                #   daily slot mid-test
+    cfg2["canary"]["enabled"] = False
+
+    monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
+    monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "stop-all")
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))  # isolate child logs to this test
+    real_sleep = time_mod.sleep  # capture BEFORE patching hb.time.sleep (same module object)
+    ticks = {"n": 0}
+
+    def fake_sleep(secs):
+        ticks["n"] += 1
+        real_sleep(0.1)  # real, short: let the just-spawned child exit
+        if ticks["n"] >= 5:
+            (tmp_path / "stop-all").touch()
+    monkeypatch.setattr(hb.time, "sleep", fake_sleep)
+
+    with caplog.at_level("WARNING", logger="arb.supervisor"):
+        rc = hb.run_supervisor(cfg2, once=False, db=str(tmp_path / "t.sqlite"))
+    assert rc == 0
+
+    log_file = tmp_path / "logs" / "children" / "watch.log"
+    assert "invalid choice" in log_file.read_text()
+    msgs = [r.getMessage() for r in caplog.records if r.name == "arb.supervisor"]
+    assert any("watch" in m and "rc=2" in m for m in msgs)
+
+
+def test_record_exit_escalates_to_critical_after_consecutive_failures(
+        cfg, tmp_path, caplog):
+    """The same process failing supervisor.child_fail_alarm times in a row
+    escalates from WARNING to CRITICAL (2026-09-05 incident: whale-backfill
+    failed at the same step every cycle for ~90 min unremarked)."""
+    from arb import child_log
+    cfg2 = {**cfg, "supervisor": {**cfg["supervisor"], "child_fail_alarm": 3}}
+    store = Store(tmp_path / "t.sqlite")
+    path = child_log.log_path(cfg2, "whale-backfill")
+
+    with caplog.at_level("WARNING", logger="arb.supervisor"):
+        for _ in range(3):
+            child_log.record_exit(cfg2, store, "whale-backfill", 1, 5.0, path)
+
+    levels = [r.levelname for r in caplog.records if r.name == "arb.supervisor"]
+    assert levels == ["WARNING", "WARNING", "CRITICAL"]
+    rows = store.query("SELECT rc FROM child_exits WHERE process='whale-backfill'")
+    assert [r["rc"] for r in rows] == [1, 1, 1]
+
+    # a clean exit resets the streak
+    child_log.record_exit(cfg2, store, "whale-backfill", 0, 4.0, path)
+    caplog.clear()
+    with caplog.at_level("WARNING", logger="arb.supervisor"):
+        child_log.record_exit(cfg2, store, "whale-backfill", 1, 5.0, path)
+    assert [r.levelname for r in caplog.records if r.name == "arb.supervisor"] == ["WARNING"]
+
+
+def test_open_child_log_purges_only_stale_siblings(cfg, tmp_path):
+    """log_retention_days, already enforced per-logfile by get_logger's
+    TimedRotatingFileHandler, extended to supervisor.child_log_dir: a file
+    untouched for longer than retention is purged the next time ANY child
+    log is opened; a fresh/active one survives."""
+    import os
+    import time as time_mod
+
+    from arb import child_log
+    cfg2 = {**cfg, "log_retention_days": 7,
+           "supervisor": {**cfg["supervisor"], "child_log_dir": str(tmp_path / "children")}}
+    d = Path(cfg2["supervisor"]["child_log_dir"])
+    d.mkdir(parents=True)
+    stale = d / "removed-lane.log"
+    stale.write_text("old")
+    old_time = time_mod.time() - 8 * 86400
+    os.utime(stale, (old_time, old_time))
+
+    f = child_log.open_child_log(cfg2, "watch")
+    f.close()
+
+    assert not stale.exists()
+    assert (d / "watch.log").exists()
 
 
 def test_one_rotating_handler_per_logfile():
@@ -527,7 +632,7 @@ def test_stale_lanes_counts_a_heartbeat_as_liveness(cfg, tmp_path):
     assert "live" not in dict(stale_lanes(cfg, store, NOW))
 
 
-def test_lane_status_lines_leads_with_whale_and_labels_off_lanes(cfg):
+def test_lane_status_lines_leads_with_whale_and_labels_off_lanes(cfg, tmp_path):
     """`arb status`/heartbeat summaries (2026-09-04 operator: PM whales only,
     for now): whale lanes sort first, and a lane the supervisor has switched
     off reads as 'off (not in supervisor.processes)' instead of silently
@@ -537,8 +642,9 @@ def test_lane_status_lines_leads_with_whale_and_labels_off_lanes(cfg):
     cfg["supervisor"]["processes"] = {
         "watch": True, "live": False, "negrisk": False,
         "whale": True, "whale-backfill": True}
+    store = Store(tmp_path / "t.sqlite")
 
-    lines = lane_status_lines(cfg, beats=[])
+    lines = lane_status_lines(cfg, store, beats=[])
 
     names = [n for n, _ in lines]
     assert names.index("whale") < names.index("watch")
@@ -549,17 +655,37 @@ def test_lane_status_lines_leads_with_whale_and_labels_off_lanes(cfg):
     assert status["watch"] == "no beat yet"
 
 
-def test_lane_status_lines_shows_the_last_beat_when_present(cfg):
+def test_lane_status_lines_shows_the_last_beat_when_present(cfg, tmp_path):
     from arb.heartbeat import lane_status_lines
     cfg = copy.deepcopy(cfg)
     cfg["supervisor"]["processes"] = {"whale": True}
     beats = [{"process": "whale", "beat_at": "2026-09-04T00:00:00+00:00",
              "head_sha": "abc123"}]
+    store = Store(tmp_path / "t.sqlite")
 
-    (name, status), = lane_status_lines(cfg, beats)
+    (name, status), = lane_status_lines(cfg, store, beats)
 
     assert name == "whale"
     assert status == "last beat 2026-09-04T00:00:00+00:00 sha=abc123"
+
+
+def test_lane_status_lines_shows_last_exit_and_streak(cfg, tmp_path):
+    """`arb status` requirement (2026-09-05 incident): a lane's last child
+    exit code and how many times in a row it has failed, sourced from the
+    append-only child_exits log (arb/child_log.py)."""
+    from arb import child_log
+    from arb.heartbeat import lane_status_lines
+    cfg = copy.deepcopy(cfg)
+    cfg["supervisor"]["processes"] = {"watch": True}
+    store = Store(tmp_path / "t.sqlite")
+    path = child_log.log_path(cfg, "watch")
+    for _ in range(2):
+        child_log.record_exit(cfg, store, "watch", 1, 3.0, path)
+
+    (name, status), = lane_status_lines(cfg, store, beats=[])
+
+    assert name == "watch"
+    assert "last exit rc=1 (2 in a row)" in status
 
 
 def test_cmd_status_leads_with_whale_lanes(cfg, tmp_path, capsys):

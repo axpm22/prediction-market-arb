@@ -576,7 +576,7 @@ def cmd_status(cfg, store, args):
     console.print(f"supervisor: [bold]{state}[/] (lock={'live' if lock_alive else 'none'})")
     # whale lanes first (2026-09-04 operator: PM whales only, for now); a
     # disabled lane is labeled rather than silently omitted
-    for name, status in lane_status_lines(cfg, beats):
+    for name, status in lane_status_lines(cfg, store, beats):
         console.print(f"  {name}: {status}")
 
     newest = store.query("SELECT MAX(fetched_at) t FROM quotes")[0]["t"]

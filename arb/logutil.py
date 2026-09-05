@@ -4,11 +4,48 @@ daily rotation retained log_retention_days (§13.3)."""
 from __future__ import annotations
 
 import logging
+import os
 import re
+import time
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 _QS = re.compile(r"\?\S*")
+
+
+def resolve_log_path(path: str | Path) -> Path:
+    """Reroot a relative log path under ARB_LOG_DIR when set (test plumbing:
+    conftest.py points this at a tmpdir so tests never touch production
+    logs/). Shared by get_logger below and arb/child_log.py's raw per-child
+    capture files, which bypass the logging module entirely."""
+    root = os.environ.get("ARB_LOG_DIR")
+    p = Path(path)
+    if root and not p.is_absolute():
+        p = Path(root) / p
+    return p
+
+
+def purge_stale(directory: str | Path, retention_days: int, now: float | None = None) -> int:
+    """Delete files directly under `directory` last modified more than
+    retention_days ago; returns the count removed. Extends log_retention_days
+    (already enforced per-logfile by get_logger's TimedRotatingFileHandler
+    backupCount) to arb/child_log.py's per-process files, which never go
+    through logging.emit() — a child's stdout/stderr is redirected straight
+    to the fd, so there is no rollover hook to piggyback on. Unlike a rotated
+    logger backup, one process's log is touched on every spawn while that
+    lane is enabled, so this never trims an ACTIVE lane's file — it only
+    reclaims logs left behind by a lane disabled or removed more than
+    retention_days ago."""
+    d = Path(directory)
+    if not d.is_dir():
+        return 0
+    cutoff = (now if now is not None else time.time()) - retention_days * 86400
+    n = 0
+    for p in d.iterdir():
+        if p.is_file() and p.stat().st_mtime < cutoff:
+            p.unlink()
+            n += 1
+    return n
 
 
 def redact(text: str) -> str:
@@ -64,11 +101,7 @@ def get_logger(name: str, logfile: str | Path | None = None,
             # ARB_LOG_DIR reroots relative logfile paths (read at handler-
             # creation time). Test plumbing: tests/conftest.py sets it so
             # pytest never appends into production logs/. Default unchanged.
-            import os
-            root = os.environ.get("ARB_LOG_DIR")
-            path = Path(logfile)
-            if root and not path.is_absolute():
-                path = Path(root) / path
+            path = resolve_log_path(logfile)
             path.parent.mkdir(parents=True, exist_ok=True)
             _file_handlers[key] = _decorate(TimedRotatingFileHandler(
                 path, when="midnight",

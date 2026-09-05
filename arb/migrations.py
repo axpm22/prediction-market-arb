@@ -52,4 +52,8 @@ def apply(conn):
         for ddl in schema.MIGRATION_8:
             conn.execute(ddl)  # CREATE TABLE IF NOT EXISTS — idempotent
         conn.execute("INSERT INTO schema_version VALUES (8, datetime('now'))")
+    if current < 9:
+        for ddl in schema.MIGRATION_9:
+            conn.execute(ddl)  # CREATE TABLE/INDEX IF NOT EXISTS — idempotent
+        conn.execute("INSERT INTO schema_version VALUES (9, datetime('now'))")
     conn.commit()
