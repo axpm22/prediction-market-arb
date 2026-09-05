@@ -218,8 +218,10 @@ def _section(cfg, store, path: str, query: dict) -> dict:
 
         now = datetime.now(timezone.utc)
         b = dashboard_whale_bundle.bundle(cfg, store, now, ttl, max_entries)
+        # b["now"], not this request's fresh `now`: state/profiles can be up
+        # to `ttl` stale (bundle's own docstring).
         if path == "/api/positions":
-            return {"positions": dd.positions(cfg, store, now=now, state=b["state"]),
+            return {"positions": dd.positions(cfg, store, now=b["now"], state=b["state"]),
                     "cached_at": b["cached_at"], "age_secs": b["age_secs"]}
         if path == "/api/whale/traders":
             level = query.get("level", ["bucket"])[0]
@@ -227,7 +229,7 @@ def _section(cfg, store, path: str, query: dict) -> dict:
             min_n = query.get("min_n", [None])[0]
             wallet = query.get("wallet", [None])[0]
             payload = dashboard_whale.traders_shape(
-                cfg, now, level, top, min_n, wallet, b["profiles"])
+                cfg, b["now"], level, top, min_n, wallet, b["profiles"])
             payload["cached_at"], payload["age_secs"] = b["cached_at"], b["age_secs"]
             return payload
         return {"whale": {**b["frame"], "cached_at": b["cached_at"],

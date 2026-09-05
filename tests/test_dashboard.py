@@ -531,6 +531,53 @@ def test_write_daily_never_touches_the_dashboard_cache(whale_cfg, tmp_path):
     assert dashboard_cache._entries == {}
 
 
+def test_positions_evaluate_exits_against_the_bundles_own_now_not_wall_clock(
+        whale_cfg, tmp_path, monkeypatch):
+    """Dashboard review of c83964f: `_section` used to hand `dd.positions` a
+    FRESH `datetime.now()` while `b["state"]` can be up to cache_secs old —
+    and that `now` feeds `whale_exit.exit_reason`'s start gate
+    (arb/whale_exit.py ~54: `if start is None or ts(now) >= start: return
+    None`). A request landing after a bet's start, served from a bundle that
+    is still the pre-start cache entry (nothing on the tape changed, so
+    `_probe_key` still hits), would silently force every WHALE bet's exit
+    status to None for a reason that has nothing to do with the tape — purely
+    because wall-clock time passed between polls. /api/positions must
+    evaluate against the SAME `now` the served bundle was built with."""
+    import arb.dashboard as dashboard_mod
+    import arb.whale_exit as whale_exit_mod
+    from arb.dashboard import _section
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(whale_cfg, store, con)                     # books WHALE bets, start_utc = START
+
+    seen_now = []
+    real_exit_reason = whale_exit_mod.exit_reason
+
+    def spy(bet_ctx, open_positions_now, score_lookup, now, cfg, **kw):
+        seen_now.append(now)
+        return real_exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg, **kw)
+
+    monkeypatch.setattr(whale_exit_mod, "exit_reason", spy)
+
+    class FixedDatetime(datetime):
+        _now = NOW
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls._now
+
+    monkeypatch.setattr(dashboard_mod, "datetime", FixedDatetime)
+
+    _section(whale_cfg, store, "/api/positions", {})       # builds+caches the bundle at NOW
+    assert seen_now and seen_now[0] == NOW
+
+    FixedDatetime._now = NOW + timedelta(hours=4)          # past START (=NOW+3h): the gate
+    _section(whale_cfg, store, "/api/positions", {})       # would close on a fresh clock
+                                                             # cache still hits: nothing on
+                                                             # the tape changed
+    assert seen_now[-1] == NOW                             # the bundle's own now, not the
+                                                             # request's fresh wall clock
+
+
 def test_api_whale_traders_ranks_every_wallet_over_http(whale_cfg, tmp_path):
     """`/api/whale/traders`: the read-time profiles, Decimals as strings. The
     `?wallet=` form is that one wallet's root -> sport -> bucket record plus

@@ -145,6 +145,15 @@ CREATE TABLE IF NOT EXISTS holdings (
     total_bought TEXT, redeemable INTEGER, raw_json TEXT);
 CREATE INDEX IF NOT EXISTS idx_holdings_wallet
     ON holdings(proxy_wallet, observed_at);
+-- dashboard review of c83964f: dashboard_whale_bundle._probe_key's
+-- `SELECT MAX(observed_at) FROM holdings` had only idx_holdings_wallet to
+-- work with, and observed_at is not that index's leading column, so the
+-- probe read the whole covering index every request (~9ms at 300k rows,
+-- growing). Self-migrating like idx_prints_score above (CREATE INDEX IF NOT
+-- EXISTS, no arb/whale_migrate.py entry needed — open_tape runs this whole
+-- script on every open, old tapes included).
+CREATE INDEX IF NOT EXISTS idx_holdings_observed
+    ON holdings(observed_at);
 -- holdings_snapshots columns/INSERT: arb/whale_holdings.py SNAP_COLS. One row
 -- per wallet POLL (retention addendum 2026-09-04): `holdings` above now keeps
 -- only the positions in a market this tape tracks, so this is where the

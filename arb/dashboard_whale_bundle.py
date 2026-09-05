@@ -44,9 +44,15 @@ from arb.whale_state import score_state
 
 
 def _probe_key(cfg, store) -> tuple:
-    """Three cheap SELECT MAX(...)s — nothing here scans a table. `None` for
-    the tape probes when there is no tape (or it can't be opened ro) mirrors
-    every other reader in this file: no tape is a fact, not an error."""
+    """Three cheap SELECT MAX(...)s. `prints.id` and `flat_bets.id` are each
+    table's own INTEGER PRIMARY KEY (rowid) — SQLite answers MAX() on that
+    from the last rowid, no scan. `holdings.observed_at` is not a rowid and
+    used to have no index of its own (only idx_holdings_wallet(proxy_wallet,
+    observed_at), a full covering-index read since observed_at isn't its
+    leading column — dashboard review of c83964f); idx_holdings_observed
+    (arb/whale_tape.py SCHEMA) now answers it directly. `None` for the tape
+    probes when there is no tape (or it can't be opened ro) mirrors every
+    other reader in this file: no tape is a fact, not an error."""
     prints_id = holdings_at = None
     con = report_whale.open_tape_ro(cfg)
     if con is not None:
@@ -61,10 +67,20 @@ def _probe_key(cfg, store) -> tuple:
 
 
 def bundle(cfg, store, now: datetime, ttl_secs: float, max_entries: int) -> dict:
-    """{"state", "frame", "profiles", "cached_at", "age_secs"} — the shared
-    payload every whale-heavy dashboard endpoint reads from. `state`/
+    """{"state", "frame", "profiles", "now", "cached_at", "age_secs"} — the
+    shared payload every whale-heavy dashboard endpoint reads from. `state`/
     `profiles` are None when there is no tape, matching what each endpoint
-    already did solo."""
+    already did solo.
+
+    `now` in the returned payload is the `now` THIS bundle's `state`/`frame`
+    were actually built from — the call's own `now` on a fresh compute, or
+    the original compute's `now` on a cache hit, never the caller's current
+    wall clock. `state` can be up to `ttl_secs` stale; a caller that then fed
+    it a fresh `now` was internally inconsistent — e.g. `whale_exit.exit_reason`'s
+    start gate closing (or opening) purely because wall-clock time passed
+    between polls, not because anything on the tape changed (dashboard review
+    of c83964f). Every endpoint deriving from `state`/`profiles` must use
+    `b["now"]`, not a `now` it computed itself."""
     key = _probe_key(cfg, store)
 
     def compute():
@@ -79,6 +95,6 @@ def bundle(cfg, store, now: datetime, ttl_secs: float, max_entries: int) -> dict
         finally:
             if con is not None:
                 con.close()
-        return {"state": state, "frame": frame, "profiles": profiles}
+        return {"state": state, "frame": frame, "profiles": profiles, "now": now}
 
     return dashboard_cache.get_or_compute(key, ttl_secs, compute, max_entries=max_entries)

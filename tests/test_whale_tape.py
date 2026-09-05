@@ -272,6 +272,43 @@ def test_open_tape_adds_idx_prints_score_to_a_pre_posperf_tape(tmp_path):
     assert con.execute("SELECT COUNT(*) FROM prints").fetchone()[0] == 1
 
 
+def test_open_tape_adds_idx_holdings_observed_to_a_pre_fix_tape(tmp_path):
+    """Dashboard review of c83964f: dashboard_whale_bundle._probe_key runs
+    `SELECT MAX(observed_at) FROM holdings` on every request. Only
+    idx_holdings_wallet(proxy_wallet, observed_at) existed, so the probe had
+    to read that whole covering index to find the max (observed_at is not
+    its leading column) — ~9ms at 300k rows, growing. A tape opened before
+    this fix has `holdings` and idx_holdings_wallet but not
+    idx_holdings_observed; like idx_prints_score, a bare index needs no
+    arb/whale_migrate.py entry — `CREATE INDEX IF NOT EXISTS` in SCHEMA is
+    self-migrating since `open_tape` runs the whole SCHEMA script on every
+    open, old tapes included."""
+    path = tmp_path / "w.sqlite"
+    old = sqlite3.connect(str(path))
+    old.execute("""CREATE TABLE holdings (
+        id INTEGER PRIMARY KEY, observed_at TEXT, proxy_wallet TEXT, condition_id TEXT,
+        asset TEXT, outcome_index INTEGER, size TEXT, avg_price TEXT,
+        total_bought TEXT, redeemable INTEGER, raw_json TEXT)""")
+    old.execute("CREATE INDEX idx_holdings_wallet ON holdings(proxy_wallet, observed_at)")
+    old.execute("INSERT INTO holdings (observed_at, proxy_wallet, condition_id,"
+                " outcome_index, size, avg_price, total_bought, redeemable) VALUES"
+                " ('2026-09-01T00:00:00+00:00', '0xw', '0xc', 0, '10.000000',"
+                " '0.500000', '5.000000', 0)")
+    old.commit()
+    old.close()
+
+    con = whale_tape.open_tape(path)
+
+    names = {r[0] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE tbl_name='holdings' AND type='index'")}
+    assert "idx_holdings_observed" in names
+    plan = [tuple(r) for r in con.execute(
+        "EXPLAIN QUERY PLAN SELECT MAX(observed_at) FROM holdings")]
+    assert any("idx_holdings_observed" in str(row) for row in plan), plan
+    # the pre-existing row survives the index add untouched
+    assert con.execute("SELECT COUNT(*) FROM holdings").fetchone()[0] == 1
+
+
 def test_migrate_treats_a_concurrent_add_column_as_already_done(tmp_path):
     """I2(b): the real table already has `holders_ratio` (this process's own
     earlier `open_tape` added it) by the time the stale PRAGMA read above
