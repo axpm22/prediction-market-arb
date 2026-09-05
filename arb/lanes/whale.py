@@ -185,8 +185,13 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
             priced[cid] = _tape_market(tape_markets[cid])
     # The token/event_slug maps, read for the markets this cycle prices and no
     # others (matpos 2026-09-05 — this used to walk every print on the tape).
-    # Everything below reads them by a cid that is already in `priced`.
-    tokens, slugs = market_tokens(con, priced)
+    # The union with the open bets' own markets is what makes that exact: an
+    # aged-out held market that `priced` skipped (no `markets` row) is still a
+    # cid `_exit` looks a token up for, through market_volume — so every key
+    # any reader below asks for is in the scope of this read, and the maps are
+    # the same maps for those keys.
+    tokens, slugs = market_tokens(
+        con, set(priced) | {c["condition_id"] for c in ctxs.values() if c})
     books, venue_ok, latency_ms = _fetch_books(cfg, fetch, priced)
     keys = {cid: _event_key(cid, slugs, tape_markets) for cid in priced}
     rows = [r for cid, m in priced.items()

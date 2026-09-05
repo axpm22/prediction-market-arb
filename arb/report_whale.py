@@ -36,13 +36,22 @@ from arb.whale_metrics import (SPORTS_ROOT, exit_stats, is_native,
 def open_tape_ro(cfg) -> sqlite3.Connection | None:
     """The tape, read-only. None when the collector has never run here, or when
     the file cannot be opened read-only (a WAL DB under an active writer) — the
-    section then reports what the ledger alone knows and says the tape is out."""
+    section then reports what the ledger alone knows and says the tape is out.
+
+    `positions_mat` is probed alongside `meta` (matpos 2026-09-05) because
+    every reader through here goes on to call `score_state`, which reads that
+    cache. The table is created by `whale_tape.open_tape`, which only a WRITER
+    calls — so between deploying this and the lane's next cycle a tape can be
+    perfectly readable and not yet carry it. Reporting "tape out", the degraded
+    path this function already exists to serve, is the honest answer there; a
+    bare `no such table` out of the daily report is not."""
     path = Path(str(cfg["whale"]["tape_db"]))
     if not path.exists():
         return None
     try:
         con = open_ro(path)
         con.execute("SELECT 1 FROM meta LIMIT 1")
+        con.execute("SELECT 1 FROM positions_mat LIMIT 1")
         return con
     except sqlite3.Error:
         return None

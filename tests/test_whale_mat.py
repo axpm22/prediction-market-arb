@@ -359,6 +359,26 @@ def test_rebuild_requeues_every_wallet(cfg, con):
     _assert_same(cfg, con, wallets=wallets)
 
 
+def test_a_tape_without_the_cache_reads_as_out_not_as_a_crash(cfg, tmp_path):
+    """Every read-only reader — the daily report, the dashboard, `whale-score`,
+    `whale-rank` — goes through `open_tape_ro` and then calls `score_state`,
+    which reads the cache. Only a WRITER (`open_tape`) creates it, so between
+    deploying this and the lane's next cycle a tape is readable and has no
+    cache. That must report "tape out", the degraded path the report already
+    serves, not raise `no such table` out of the daily report."""
+    from arb import report_whale
+    import sqlite3
+    path = tmp_path / "pre_matpos.sqlite"
+    old = sqlite3.connect(str(path))            # a tape as it was before matpos
+    old.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
+    old.execute("CREATE TABLE prints (id INTEGER PRIMARY KEY, proxy_wallet TEXT)")
+    old.commit()
+    old.close()
+    cfg["whale"]["tape_db"] = str(path)
+
+    assert report_whale.open_tape_ro(cfg) is None
+
+
 def test_cmd_whale_mat_rebuild_runs_to_completion(cfg, con, tmp_path, capsys):
     """The CLI: `--rebuild` is unbounded, so it never leaves a backlog behind
     however small `max_wallets_per_cycle` is. Writes to the tape and opens no
