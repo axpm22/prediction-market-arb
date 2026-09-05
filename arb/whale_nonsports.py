@@ -154,10 +154,10 @@ def markets_of(cfg, event, now) -> list[Market]:
     `volume24hr` clears `min_volume_24h_usd`; its lifetime clears
     `min_lifetime_hours`; and its own `endDate` — never the event's, which
     differs from it (verified 2026-09-04) — lies inside
-    `[now, now + whale.nonsports.max_days]` — the LANE's own horizon key,
-    shipped at the ledger's shared `nonsports_max_days` (7) and read by
-    `arb/tracker.py` for WHALE rows, so the lane never prices a market it
-    could not book.
+    `[now, now + whale.nonsports.max_days]` — the LANE's own horizon key (90
+    since the amendment of 2026-09-05, deliberately no longer the ledger's
+    shared `nonsports_max_days`), read by `arb/tracker.py` for WHALE rows, so
+    the lane never prices a market it could not book.
 
     Lifetime is `_lifetime` — shared with `root_row`, which the mapper uses to
     root the same kind of market from its history rather than from a tag page.
