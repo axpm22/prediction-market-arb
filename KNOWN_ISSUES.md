@@ -417,11 +417,13 @@ cap and the gap-recording logic are all untouched.
 
 **Not fixed retroactively:** prints collected between the 2026-09-04
 taker-only flip and this fix carry the ~40% gap rate and up to 5 min of lag
-described above, visible on the tape as `meta.last_gap` rows spanning that
-window. The day-7 whale calibration scheduled for 2026-09-07 covers this
-period and should be read with that caveat — it is measuring a collector
-that was dropping stale-cached duplicates and missing pages, not the fixed
-one.
+described above. `meta.last_gap` is a single keyed row (`_set_meta` upserts
+it), so it holds only the most recent gap, not a history of the window — the
+per-occurrence record is the `whale poll capped … recorded as a gap`
+WARNING lines in `logs/whale.log` spanning 2026-09-04 to 2026-09-05. The
+day-7 whale calibration scheduled for 2026-09-07 covers this period and
+should be read with that caveat — it is measuring a collector that was
+dropping stale-cached duplicates and missing pages, not the fixed one.
 
 ---
 
