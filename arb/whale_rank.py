@@ -12,13 +12,16 @@ hidden, because "which of my whales is actually a market maker" is exactly the
 question this table exists to answer.
 
 Decision (controller, 2026-09-04): every statistic in a profile row —
-win_rate, implied, excess, edge, roi, t_stat, lb80 — is computed over CLEAN
-positions only (`state.open_positions`, exactly what the lane's own score
-uses), so the table's lb80 is the lb80 the lane acts on. Flagged positions
-contribute only to `flagged_n` (`n = clean_n + flagged_n` stays visible as
-`clean_n/n`). A wholly excluded wallet ("full", clean_n = 0) shows its stats
-over its OWN flagged positions instead — never blanked — so a market maker is
-still ranked and visible, never hidden.
+win_rate, implied, excess, edge, band_excess, roi, t_stat, lb80 — is computed
+over CLEAN positions only (`state.open_positions`, exactly what the lane's own
+score uses), so the table's lb80 is the lb80 the lane acts on. Flagged
+positions contribute only to `flagged_n` (`n = clean_n + flagged_n` stays
+visible as `clean_n/n`). A wholly excluded wallet ("full", clean_n = 0) shows
+its stats over its OWN flagged positions instead — never blanked.
+
+`band_excess` (amendment 2026-09-05) is edge above what the same price band
+paid everyone — `arb/whale_bands.py`'s grading, which the lane's score now runs
+on, beside the raw `edge_mean` it corrects.
 
 Rule 4: `whale.rank.min_n` (display floor) and `whale.rank.top` are the only
         numbers here; every model constant comes from `whale.score`.
@@ -31,9 +34,10 @@ from __future__ import annotations
 import math
 import statistics
 from collections import defaultdict
+from dataclasses import replace
 from decimal import Decimal
 
-from arb import whale_score
+from arb import whale_bands, whale_score
 from arb.models import q6
 
 # How far down the root -> sport -> bucket chain a row at each level runs.
@@ -47,14 +51,14 @@ DEPTH = {"root": 1, "sport": 2, "bucket": 3}
 _LAST = Decimal("-1e9")
 
 HEADER = (f"{'wallet':<14}{'level':<7}{'key':<26}{'n':>4} {'win%':>6} "
-          f"{'impl%':>6} {'excess%':>8} {'edge':>9} {'roi@risk':>10} "
+          f"{'impl%':>6} {'excess%':>8} {'edge':>9} {'band':>9} {'roi@risk':>10} "
           f"{'t':>10} {'lb80':>10} {'notional':>12}  flag")
 
 
 def _blank():
     return {"n": 0, "wins": 0, "size": Decimal(0), "cost": Decimal(0),
             "gain": Decimal(0), "notional": Decimal(0), "e": [], "last": None,
-            "clean_n": 0, "flagged_n": 0, "root": None}
+            "ea": Decimal(0), "clean_n": 0, "flagged_n": 0, "root": None}
 
 
 def profiles(state, cfg, as_of) -> list[dict]:
@@ -66,11 +70,11 @@ def profiles(state, cfg, as_of) -> list[dict]:
     score cannot see.
 
     Every descriptive stat and `agg` (which feeds `_chain`'s posterior, hence
-    lb80) come from CLEAN positions only — same population as `state.lookup`
-    — with a per-key fallback to a wallet's own flagged positions wherever it
-    has no clean contribution at that key at all (module docstring, 2026-09-04
-    decision). `n`/`clean_n`/`flagged_n` still count every position, clean or
-    not: that bookkeeping is the whole point of the tri-state `hygiene` flag.
+    lb80) come from CLEAN positions only — same population as `state.lookup` —
+    with a per-key fallback to a wallet's own flagged positions wherever it has
+    none clean at that key at all (module docstring, 2026-09-04 decision).
+    `n`/`clean_n`/`flagged_n` still count every position either way: that
+    bookkeeping is the whole point of the tri-state `hygiene` flag.
     """
     open_ids = {id(p) for p in state.open_positions}
     cells, flag_only = defaultdict(_blank), defaultdict(_blank)
@@ -81,7 +85,11 @@ def profiles(state, cfg, as_of) -> list[dict]:
             continue
         o = got[0]
         clean = id(p) in open_ids
-        (clean_outcomes if clean else flagged_outcomes).append(o)
+        # graded against what this fill's own band paid everyone (2026-09-05):
+        # `agg` is built from the GRADED outcomes, so this table's lb80 stays
+        # the lb80 the lane acts on. `edge_mean` stays raw, `band_excess` graded.
+        e_adj = q6(o.e - whale_bands.rate(state.bands, p.root, p.avg_price, cfg))
+        (clean_outcomes if clean else flagged_outcomes).append(replace(o, e=e_adj))
         # "win" is the payout's own definition: 1 on the side actually held.
         won = (state.resolutions[p.condition_id].get("winner_outcome_index")
                == p.outcome_index)
@@ -93,32 +101,31 @@ def profiles(state, cfg, as_of) -> list[dict]:
                 c["clean_n"] += 1
             else:
                 c["flagged_n"] += 1
-            # the clean population accumulates straight into the cell; a
-            # flagged position accumulates into its own shadow cell instead,
-            # so it can never blend into a partial cell's stats — only stand
-            # in, wholesale, for a wholly-excluded one (below).
+            # a flagged position accumulates into its own shadow cell, so it
+            # never blends into a partial cell's stats — it only stands in,
+            # wholesale, for a wholly-excluded one (below).
             stat = c if clean else flag_only[(p.wallet, level, key)]
             stat["wins"] += int(won)
             stat["size"] += p.size
             stat["cost"] += p.avg_price * p.size
-            # `o.e` is realized edge per share, which IS payout - avg_price for
-            # a position held to resolution and the sell-aware generalisation
-            # when part of it was sold first (whale_score.realized_edge).
+            # `o.e` is realized edge per share: payout - avg_price held to
+            # resolution, sell-aware otherwise (whale_score.realized_edge).
             stat["gain"] += o.e * p.size
             stat["notional"] += p.notional_usd
             stat["e"].append(o.e)
+            stat["ea"] += e_adj
             stat["last"] = max(stat["last"] or o.resolved_at, o.resolved_at)
     # clean-only agg matches the lane's own score; a key with zero clean
     # contribution (a wholly-excluded wallet's own keys) falls back to that
     # wallet's flagged outcomes instead of going dark. dict.update semantics:
-    # applying the clean pass second replaces any flagged entry at the same
-    # key wholesale, never blends the two.
+    # the clean pass, applied second, REPLACES a flagged entry, never blends.
     agg = {**whale_score.aggregate(flagged_outcomes), **whale_score.aggregate(clean_outcomes)}
     for key, c in cells.items():
         if c["clean_n"] == 0:
             fo = flag_only.get(key)
             if fo:
-                for field in ("wins", "size", "cost", "gain", "notional", "e", "last"):
+                for field in ("wins", "size", "cost", "gain", "notional", "e",
+                              "ea", "last"):
                     c[field] = fo[field]
     return [_row(wallet, level, key, cell, agg, state, cfg)
             for (wallet, level, key), cell in cells.items()]
@@ -171,6 +178,7 @@ def _row(wallet, level, key, c, agg, state, cfg) -> dict:
         "n": n, "wins": c["wins"], "win_rate": win_rate, "implied": implied,
         "excess_win_rate": q6(win_rate - implied),
         "edge_mean": edge_mean, "edge_sd": q6(Decimal(sd)),
+        "band_excess": q6(c["ea"] / stat_n),      # edge above the band's own pay
         # dollar-weighted return on the capital actually put at risk; a
         # zero-cost book has no denominator, which is a null, not a zero
         "roi_at_risk": q6(c["gain"] / c["cost"]) if c["cost"] > 0 else None,
@@ -182,8 +190,7 @@ def _row(wallet, level, key, c, agg, state, cfg) -> dict:
         # a bucket row is the wallet's own record in that market type; sport
         # and root rows are aggregates over several
         "native": level == "bucket",
-        # clean_n: positions the lane's own score used (state.open_positions).
-        # flagged_n: hygiene-excluded ones counted into this same cell's `n`.
+        # clean_n: what the lane's own score used; flagged_n: the rest of `n`
         "clean_n": c["clean_n"], "flagged_n": c["flagged_n"], "hygiene": hygiene,
         "hygiene_flag": c["flagged_n"] > 0}   # kept for compatibility
 
@@ -247,6 +254,7 @@ def line(r) -> str:
     return (f"{r['wallet'][:13]:<14}{r['level']:<7}{r['key'][:25]:<26}"
             f"{_n_ratio(r):>4} {_pct(r['win_rate']):>6} {_pct(r['implied']):>6} "
             f"{_pct(r['excess_win_rate']):>8} {r['edge_mean']:>9} "
+            f"{r['band_excess']:>9} "
             f"{_n(r['roi_at_risk']):>10} {_n(r['t_stat']):>10} {r['lb80']:>10} "
             f"{r['notional']:>12}  {r['hygiene']}")
 
@@ -274,17 +282,20 @@ def traders_md(frame: dict) -> list[str]:
           "**Top traders (read-time diagnostics, NOT a lane input).** Ranked by "
           "lb80 at bucket level over the tape's resolved history. `excess%` is the "
           "win rate above the break-even the price itself implied — success above "
-          "average given the risk taken. Hygiene-excluded wallets are ranked and "
+          "average given the risk taken; `band excess` is edge above what the same "
+          "price band paid everyone. Hygiene-excluded wallets are ranked and "
           "flagged, never hidden.",
           "", "| trader | bucket | n | win% | implied% | excess% | edge pts | "
-          "ROI at risk | t | lb80 | flag |", "|---|---|---|---|---|---|---|---|---|---|---|"]
+          "band excess | ROI at risk | t | lb80 | flag |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in frame["top"]:
         md.append(f"| {r['wallet']} | {r['key']} | {_n_ratio(r)} | {_pct(r['win_rate'])} | "
                   f"{_pct(r['implied'])} | {_pct(r['excess_win_rate'])} | "
-                  f"{r['edge_mean']} | {_n(r['roi_at_risk'])} | {_n(r['t_stat'])} | "
+                  f"{r['edge_mean']} | {r['band_excess']} | "
+                  f"{_n(r['roi_at_risk'])} | {_n(r['t_stat'])} | "
                   f"{r['lb80']} | {r['hygiene'] or '—'} |")
     if not frame["top"]:
-        md.append("| — | — | 0 | — | — | — | — | — | — | — | — |")
+        md.append("| — | — | 0 | — | — | — | — | — | — | — | — | — |")
     md.append("")
     for wallet, best in frame["best"].items():
         where = ", ".join(f"{b['key']} (lb80 {b['lb80']}, n {b['n']}, excess "

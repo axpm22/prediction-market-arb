@@ -1077,6 +1077,23 @@ whale:                                # L14 whale-consensus lane (design doc 202
     base_rate_min_n: 500              # minimum sample before trusting an empirical base rate
     base_rate_default: -0.02          # fallback base rate below base_rate_min_n
     eb_min_wallets: 200               # minimum wallets before the EB shrinkage prior is trusted
+    price_bands: [0.2, 0.4, 0.6, 0.8, 0.9]
+                                      # registered fill-price band EDGES (amendment 2026-09-05,
+                                      #   operator: "don't just take people who are taking easy
+                                      #   likely trades"). Six bands, lower edge inclusive and
+                                      #   upper exclusive, the last closed at 1.0. MEASURED on
+                                      #   the live tape (sports, pregame, resolved, entry >=
+                                      #   2026-01-01; n 33,809 positions / 1,052 wallets) the
+                                      #   mean realized edge each band paid EVERYONE:
+                                      #   [0.0,0.2) +0.0114 (n 653), [0.2,0.4) +0.0276 (4,138),
+                                      #   [0.4,0.6) +0.0086 (18,316), [0.6,0.8) +0.0073 (7,126),
+                                      #   [0.8,0.9) -0.0193 (1,941), [0.9,1.0] -0.0257 (1,635).
+                                      #   The edges sit where that table's own steps are.
+    band_min_n: 200                   # a band with fewer resolved outcomes than this in the
+                                      #   lookback falls back to the ROOT base rate m0 — the
+                                      #   honest reading of "we do not know what this band pays"
+    band_adjust: true                 # false restores the pre-2026-09-05 score exactly (the
+                                      #   frozen-clock comparison runs both ways)
   hygiene: { mm_window_secs: 600, mm_market_share: 0.30, mm_max_avg_usd: 50,
              both_sides_tolerance: 0.10, wash_gap_secs: 2 }
                                       # market-maker / wash-trade exclusion filters

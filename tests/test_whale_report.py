@@ -1523,7 +1523,7 @@ def test_score_state_matches_the_select_star_reference_on_a_mixed_tape(cfg, tmp_
     wash-flagged (hygiene-excluded) one, so positions, open_positions,
     hygiene_excluded, agg and a scored lookup all have something to disagree
     on if the trim ever drops a column a reader actually needs."""
-    from arb import whale_mat, whale_score
+    from arb import whale_bands, whale_mat, whale_score
     from arb.whale_hygiene import hygiene_flags
     from arb.whale_state import WhaleState, score_state
 
@@ -1536,6 +1536,11 @@ def test_score_state_matches_the_select_star_reference_on_a_mixed_tape(cfg, tmp_
         hyg = hygiene_flags(prints, positions, cfg)
         open_pos = [p for p in positions if not hyg.excludes(p)]
         outcomes = whale_score.resolved_outcomes(open_pos, resolutions, now)
+        # the band grading score_state runs (amendment 2026-09-05); this
+        # reference exists to pin what the ROW DICTS carry, not to re-litigate
+        # the scoring chain, so it tracks that chain line for line.
+        bands = whale_bands.table(outcomes, now, cfg)
+        outcomes = whale_bands.adjust(outcomes, bands, cfg)
         agg = whale_score.aggregate(outcomes)
         rates, rate_n = {}, {}
         for root in {o.root for o in outcomes} | {"sports"}:
@@ -1547,7 +1552,8 @@ def test_score_state_matches_the_select_star_reference_on_a_mixed_tape(cfg, tmp_
         return WhaleState(markets=markets, resolutions=resolutions,
                           positions=positions, open_positions=open_pos,
                           hygiene_excluded=len(positions) - len(open_pos),
-                          rates=rates, rate_n=rate_n, agg=agg, lookup=lookup)
+                          rates=rates, rate_n=rate_n, agg=agg, lookup=lookup,
+                          bands=bands)
 
     con = _tape(tmp_path)
     resolved_at = NOW - timedelta(hours=1)

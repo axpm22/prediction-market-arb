@@ -60,13 +60,18 @@ class Position:
 
 @dataclass(frozen=True)
 class Outcome:
-    """A resolved, scorable position: its realized edge and when it landed."""
+    """A resolved, scorable position: its realized edge and when it landed.
+
+    `avg_price` rides along for arb/whale_bands.py (amendment 2026-09-05): it
+    is the one field that says which PRICE BAND the edge is graded against.
+    """
     wallet: str
     root: str
     sport: str
     bucket: str
     e: Decimal
     resolved_at: datetime
+    avg_price: Decimal
 
 
 @dataclass(frozen=True)
@@ -231,7 +236,7 @@ def resolved_outcomes(positions, resolutions, as_of) -> list[Outcome]:
         payout = Decimal(1) if r.get("winner_outcome_index") == p.outcome_index else Decimal(0)
         out.append(Outcome(wallet=p.wallet, root=p.root, sport=p.sport,
                            bucket=p.bucket, e=realized_edge(p, payout),
-                           resolved_at=when))
+                           resolved_at=when, avg_price=p.avg_price))
     return out
 
 
@@ -257,7 +262,12 @@ def aggregate(outcomes) -> dict[tuple, tuple[int, Decimal]]:
 
 def base_rate(outcomes, root, as_of, cfg) -> tuple[Decimal, int]:
     """`m0`: mean realized edge of EVERY wallet in `root` over the last
-    `base_rate_lookback_days`. Below `base_rate_min_n` the default stands."""
+    `base_rate_lookback_days`. Below `base_rate_min_n` the default stands.
+
+    Since the 2026-09-05 band amendment the assembly calls this on the
+    BAND-ADJUSTED edges (arb/whale_bands.py) — the same statistic of a
+    re-centred population, so m0 centres near zero and stays the EB prior mean.
+    """
     s = cfg["whale"]["score"]
     floor = as_of - timedelta(days=int(s["base_rate_lookback_days"]))
     es = [o.e for o in outcomes if o.root == root and floor <= o.resolved_at < as_of]
@@ -313,7 +323,9 @@ def score_for(agg, wallet, sport, market_type, cfg, base_rates) -> Score:
 def scores(positions, resolutions, as_of, cfg, base_rates) -> dict[tuple, Score]:
     """(wallet, root, sport, bucket) -> Score, for every bucket a wallet has
     actually traded. An untraded bucket is `score_for`, which Task 6 asks for
-    per market. Hygiene-excluded positions are filtered by the caller."""
+    per market. Hygiene-excluded positions are filtered by the caller, and so
+    is band grading (`whale_bands.table`/`adjust`, applied by the assembly in
+    whale_state.score_state) — this module stays the pure math."""
     agg = aggregate(resolved_outcomes(positions, resolutions, as_of))
     return {key: score_for(agg, key[0], key[2], key[3].split(":", 1)[1], cfg, base_rates)
             for key in agg if len(key) == 4}

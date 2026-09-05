@@ -967,7 +967,7 @@ def test_a_held_position_is_never_re_booked_after_its_lifetime_closed(cfg, tmp_p
 
 # ------------------------------------------- the SHIPPED bar (final review C1)
 
-def _resolved_history(con, wallets, n=400, edge="0.08"):
+def _resolved_history(con, wallets, n=400, edge="0.08", sport="baseball_mlb"):
     """tests/test_whale_score.py's `_positions` seeding, as TAPE rows: one
     resolved market per position, bought pregame at `1 - edge` and paid out, so
     the wallet's realized edge is exactly `edge` at every level of the
@@ -976,18 +976,18 @@ def _resolved_history(con, wallets, n=400, edge="0.08"):
     price = Decimal(1) - Decimal(edge)
     for w in wallets:
         for i in range(n):
-            cid, start = f"0xh{w}{i}", NOW - timedelta(days=2)
+            cid, start = f"0xh{sport}{w}{i}", NOW - timedelta(days=2)
             con.execute(
                 "INSERT INTO markets (condition_id, sport, market_type, start_utc,"
                 " tokens_json, first_seen, last_seen) VALUES (?,?,?,?,?,?,?)",
-                (cid, "baseball_mlb", "WINNER", start.isoformat(), "[]",
+                (cid, sport, "WINNER", start.isoformat(), "[]",
                  start.isoformat(), start.isoformat()))
             con.execute(
                 "INSERT INTO prints (observed_at, ts, tx_hash, proxy_wallet, pseudonym,"
                 " condition_id, asset, outcome, outcome_index, side, price, size,"
                 " notional_usd, event_slug, slug, title, source, raw_json)"
                 " VALUES (?,?,?,?,?,?,?,?,0,'BUY',?,?,?,?,?,?,'tape','{}')",
-                (start.isoformat(), int(start.timestamp()) - 3600, f"0x{w}{i}", w, w,
+                (start.isoformat(), int(start.timestamp()) - 3600, f"0x{sport}{w}{i}", w, w,
                  cid, "tok", "Yes", str(price), "1000", str(price * 1000), "e", "s", "t"))
             con.execute(
                 "INSERT INTO resolutions (condition_id, resolved_at, winner_outcome_index,"
@@ -1006,7 +1006,15 @@ def test_the_lane_books_at_the_shipped_min_score_lb(tmp_path):
     cfg = copy.deepcopy(load(ROOT / "config.yaml"))
     assert cfg["whale"]["min_score_lb"] == Decimal("0.0")        # the shipped bar
     store, con = _ledger(tmp_path), _tape(tmp_path)
-    _resolved_history(con, [f"w{i}" for i in range(3)])
+    wallets = [f"w{i}" for i in range(3)]
+    _resolved_history(con, wallets)                          # +0.08 at 0.92
+    # ... and the same wallets at +0.01 in the SAME price band, a different
+    # sport. Since the 2026-09-05 band amendment a HOMOGENEOUS history scores
+    # exactly zero — three wallets who all bought at 0.92 and all won ARE the
+    # band, and grading against it leaves nothing to demonstrate. What clears
+    # the shipped bar is beating the band, so the fixture has to contain both
+    # halves of the band it is beating.
+    _resolved_history(con, wallets, edge="0.01", sport="basketball_nba")
 
     res = _run(cfg, store, con)
 

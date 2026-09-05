@@ -165,7 +165,8 @@
     <h2>Traders — where each wallet is good</h2>
     <div class="hint">Read-time diagnostics over the tape's resolved history, never a
       lane input. <b>excess%</b> is the win rate above the break-even the price itself
-      implied — success above average <i>given the risk taken</i>. <b>ROI at risk</b> is
+      implied — success above average <i>given the risk taken</i>; <b>band excess</b> is
+      edge above what the same price band paid everyone. <b>ROI at risk</b> is
       dollar-weighted return on the capital actually staked; <b>t</b> is the edge over
       its own standard error. Hygiene-excluded wallets are ranked and flagged, never
       hidden. Click a column to sort, a row to see that wallet's best markets.</div>
@@ -619,7 +620,8 @@ function drawWhale(w){
 const TCOLS = [{k:'wallet',t:'wallet'},{k:'root',t:'root'},{k:'sport',t:'sport'},
   {k:'key',t:'bucket'},{k:'n',t:'n',r:1},{k:'win_rate',t:'win%',r:1},
   {k:'implied',t:'implied%',r:1},{k:'excess_win_rate',t:'excess%',r:1},
-  {k:'edge_mean',t:'edge pts',r:1},{k:'roi_at_risk',t:'ROI at risk',r:1},
+  {k:'edge_mean',t:'edge pts',r:1},{k:'band_excess',t:'band excess',r:1},
+  {k:'roi_at_risk',t:'ROI at risk',r:1},
   {k:'t_stat',t:'t',r:1},{k:'lb80',t:'lb80',r:1},{k:'notional',t:'notional',r:1},
   {k:'hygiene',t:'flag'}];
 let tRows = [], tView = [], tSort = 'lb80', tDesc = true, tOpen = null, tBest = '';

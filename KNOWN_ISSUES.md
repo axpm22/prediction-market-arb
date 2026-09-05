@@ -476,6 +476,14 @@ now confirmed against the live tape too: the backfill child logged `whale
 tape: reset 52 slug-prefix-mismapped market row(s)` at 2026-09-05 17:13:57
 local (15:13:57Z) — 52, exactly matching the census.
 
+### 37. L14 price-band grading switch-on — scores and elite cutoffs move, and the signals fired before it are not re-graded
+Turning on `whale.score.band_adjust` (PREREGISTRATION row 2026-09-05) shifts
+every score at the switch-on cycle — measured read-only over 2,241 scored
+sports wallets, 12 of the top-20% 448 leave and 12 enter, sports m0 moves
+0.016176 -> 0.000000 — so V5's elite cutoffs, V2/V3's excess weights and V6's
+excess x notional all step at that cycle; signals already fired keep the lb
+recorded with them (rule 9, append-only) and are NOT re-graded.
+
 ---
 
 ## The two numbers that matter most

@@ -34,10 +34,10 @@ bump, a `start_utc` arriving late).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
-from arb import whale_mat, whale_score
+from arb import whale_bands, whale_mat, whale_score
 # matpos (2026-09-05): the prints read, the row object over it and the market
 # columns moved to arb/whale_mat.py, which is now the only module that reads
 # `prints` for scoring. Re-exported because they are still the constants of
@@ -67,6 +67,9 @@ class WhaleState:
     rate_n: dict             # root -> the n behind it
     agg: dict                # whale_score.aggregate over resolved outcomes
     lookup: Callable         # (wallet, sport, market_type) -> Score
+    # root -> band -> (what that price band paid everyone, n). Empty when
+    # `whale.score.band_adjust` is false, and empty is the no-op everywhere.
+    bands: dict = field(default_factory=dict)
 
 
 def score_state(cfg, con, now) -> WhaleState:
@@ -90,6 +93,14 @@ def score_state(cfg, con, now) -> WhaleState:
     hyg = whale_mat.load_hygiene(con)
     open_pos = [p for p in positions if not hyg.excludes(p)]
     outcomes = whale_score.resolved_outcomes(open_pos, resolutions, now)
+    # Band grading (amendment 2026-09-05), and the reason it is HERE: one
+    # subtraction before `aggregate` is the whole change, so score_for, V5's
+    # elite cutoffs, V6's excess x notional and the V2/V3 weights all read
+    # band-adjusted skill without a branch. `rates` below is then m0 over the
+    # SAME graded edges — the EB prior mean it always was, now centred near
+    # zero because what the root pays lives in the band table.
+    bands = whale_bands.table(outcomes, now, cfg)
+    outcomes = whale_bands.adjust(outcomes, bands, cfg)
     agg = whale_score.aggregate(outcomes)
     rates, rate_n = {}, {}
     for root in {o.root for o in outcomes} | {"sports"}:
@@ -101,7 +112,8 @@ def score_state(cfg, con, now) -> WhaleState:
     return WhaleState(markets=markets, resolutions=resolutions,
                       positions=positions, open_positions=open_pos,
                       hygiene_excluded=len(positions) - len(open_pos),
-                      rates=rates, rate_n=rate_n, agg=agg, lookup=lookup)
+                      rates=rates, rate_n=rate_n, agg=agg, lookup=lookup,
+                      bands=bands)
 
 
 def qualifying_whales(cfg, state) -> list[dict]:

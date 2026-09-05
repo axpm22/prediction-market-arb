@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from arb import whale_hygiene, whale_score, whale_tape
+from arb import whale_bands, whale_hygiene, whale_score, whale_tape
 from arb.config import load
 from arb.models import q6
 
@@ -796,11 +796,21 @@ def _score_tape(con, cfg, as_of):
            for r in con.execute("SELECT * FROM resolutions")}
     pos = whale_score.positions_from_prints(rows, markets, cfg)
     outs = whale_score.resolved_outcomes(pos, res, as_of)
+    # the assembly's own price-band grading (whale_state.score_state,
+    # amendment 2026-09-05), so the frozen clock is proved on the chain the
+    # lane actually scores with — and, parametrized below, on both settings
+    # of the switch that turns it off.
+    outs = whale_bands.adjust(outs, whale_bands.table(outs, as_of, cfg), cfg)
     m0, _ = whale_score.base_rate(outs, "sports", as_of, cfg)
-    return whale_score.scores(pos, res, as_of, cfg, {"sports": m0})
+    agg = whale_score.aggregate(outs)
+    return {k: whale_score.score_for(agg, k[0], k[2], k[3].split(":", 1)[1],
+                                     cfg, {"sports": m0})
+            for k in agg if len(k) == 4}
 
 
-def test_frozen_clock_equals_a_physically_truncated_tape(tmp_path, cfg):
+@pytest.mark.parametrize("band_adjust", [False, True])
+def test_frozen_clock_equals_a_physically_truncated_tape(tmp_path, cfg, band_adjust):
+    cfg["whale"]["score"]["band_adjust"] = band_adjust
     con, spec = _build_tape(tmp_path / "tape.sqlite")
     as_of = datetime.fromisoformat(spec["as_of"])
     full = _score_tape(con, cfg, as_of)
