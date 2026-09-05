@@ -889,3 +889,10 @@ def test_the_page_draws_its_own_charts_and_loads_nothing_remote():
     assert "<svg" in html and "polyline" in html
     assert "http://" not in html and "https://" not in html
     assert "src=" not in html
+
+
+def test_whale_panel_js_shows_the_stale_cache_note_when_present():
+    # review of 783301f (I2): the frame carries collector.mat_stale ("stale (N behind,
+    # M dirty)") but the page did not render it (matfix concern 2)
+    html = Path("arb/dashboard.html").read_text()
+    assert "c.mat_stale" in html and "cache: " in html

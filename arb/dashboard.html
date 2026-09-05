@@ -529,7 +529,8 @@ function drawWhale(w){
     `bad ${esc(String(c.bad_rows))}, ${c.prints_per_min}/min · tape ` +
     `${mb(c.tape_bytes)} MB, ~${mb(c.bytes_per_day)} MB/day, ${c.prints_24h} prints/day, ` +
     `${c.holdings_24h} holdings rows/day · calibration ` +
-    `${f.calibration.signal_days}/${f.calibration.calibration_days} signal days</div>` +
+    `${f.calibration.signal_days}/${f.calibration.calibration_days} signal days` +
+    `${c.mat_stale ? ' · cache: ' + esc(String(c.mat_stale)) : ''}</div>` +
     table([{t:'root'},{t:'variant'},{t:'bets',r:1},{t:'settled',r:1},{t:'events',r:1},
            {t:'ROI/$',r:1},{t:'lb80',r:1},{t:'ub90',r:1},{t:'win rate',r:1}],
       roiRows.map(x=>[{t:x.root},{t:x.v+(x.primary?' (primary)':'')},
