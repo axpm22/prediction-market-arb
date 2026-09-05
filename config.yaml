@@ -414,9 +414,13 @@ supervisor:
                                     #   this should be used, but the numbers are a
                                     #   pre-registered policy decision, not a code default.
   child_log_dir: logs/children      # every spawned child's stdout+stderr, appended to
-                                    #   <dir>/<process-name>.log (2026-09-05 incident: a
-                                    #   crashing one-shot child's traceback went to the
-                                    #   supervisor's own stdout, nowhere logs/ ever looked)
+                                    #   <dir>/<process-name>.<YYYY-MM-DD>.log, UTC day at
+                                    #   spawn (2026-09-05 incident: a crashing one-shot
+                                    #   child's traceback went to the supervisor's own
+                                    #   stdout, nowhere logs/ ever looked; date-stamped
+                                    #   since M8, review fix pass same day, so each day's
+                                    #   file goes inactive and log_retention_days' purge
+                                    #   can actually reclaim it)
   child_fail_alarm: 3               # the SAME process failing this many times in a row
                                     #   escalates the exit WARNING to CRITICAL
 data_stale_alarm_secs: 900

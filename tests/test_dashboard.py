@@ -956,6 +956,38 @@ def test_disabled_lane_child_traceback_is_hidden_in_whale_mode():
     assert _keep_error_line(cfg, "child:settle", "Traceback...") is True
 
 
+def test_whale_core_lanes_constant_matches_keep_error_line_exemptions():
+    """M6 (review of 798aae6): _keep_error_line's inline
+    ("watch","whale","whale-backfill") tuple is a named _WHALE_CORE constant
+    beside _LANE_LOGGERS, so the "core to whale mode" set has one home."""
+    from arb.dashboard_mode import _WHALE_CORE
+    assert set(_WHALE_CORE) == {"watch", "whale", "whale-backfill"}
+
+
+def test_tail_child_errors_reads_newest_dated_file_per_name(tmp_path, monkeypatch):
+    """M8: an undated logs/children/<name>.log grew forever with nothing to
+    rotate it (log_retention_days' purge only reclaims a file whose mtime
+    stopped moving, which an ACTIVE file's never does). Filenames are now
+    date-stamped (<name>.<YYYY-MM-DD>.log); tail_child_errors must read only
+    the NEWEST file per child name, not every dated file still inside
+    retention."""
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))
+    from arb.dashboard_mode import tail_child_errors
+    cfg = _cfg()
+    d = tmp_path / cfg["supervisor"]["child_log_dir"]
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "whale-backfill.2026-09-03.log").write_text(
+        "Traceback (most recent call last):\nValueError: old day\n")
+    (d / "whale-backfill.2026-09-05.log").write_text(
+        "Traceback (most recent call last):\nValueError: new day\n")
+
+    errors = tail_child_errors(cfg)
+
+    msgs = {e["msg"] for e in errors if e["source"] == "child:whale-backfill"}
+    assert "ValueError: new day" in msgs
+    assert "ValueError: old day" not in msgs
+
+
 def test_lanes_and_venues_stay_visible_in_whale_mode_but_scoped(tmp_path):
     """dashboard.mode: whale keeps #lanes (all lanes, disabled ones labeled)
     and #venues (watch_venues only) rather than hiding either."""
@@ -1041,7 +1073,9 @@ def test_whale_mode_helpers_moved_to_dashboard_mode_and_dashboard_py_stays_lean(
     assert dashboard_lines <= 300            # CLAUDE.md: modules stay ~300 lines
     # 150 -> 160 in the 2026-09-05 child-log fix pass (I2): _keep_error_line
     # learned to map child:<name> onto its supervisor.processes lane
-    assert len(Path("arb/dashboard_mode.py").read_text().splitlines()) <= 160
+    # 160 -> 170 in the review fix pass on THAT commit (798aae6): _WHALE_CORE
+    # (M6) and tail_child_errors' newest-dated-file-per-name grouping (M8)
+    assert len(Path("arb/dashboard_mode.py").read_text().splitlines()) <= 170
     for name in ("_TITLES", "_WHALE_FRONT", "_whale_first", "_extract_marked"):
         assert not hasattr(dashboard, name)
     assert hasattr(dashboard_mode, "TITLES")

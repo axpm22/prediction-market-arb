@@ -261,6 +261,20 @@ def _terminate(proc, timeout: float) -> None:
         proc.wait()
 
 
+def _shutdown(cfg, store, children: dict, scheduled: list) -> None:
+    """Terminate + reap every still-running child (loop lanes and scheduled
+    one-shots). I3 (review of 798aae6): both shutdown paths used to
+    _terminate without reaping — no child_exits row, drain thread unjoined,
+    log fd left open; reap is safe to call unconditionally right after
+    _terminate (M5), so one helper covers both callers."""
+    for name, cap in children.items():
+        _terminate(cap.proc, _cap(cfg, name))
+        child_log.reap(cfg, store, cap, killed=True)
+    for cap in scheduled:
+        _terminate(cap.proc, _cap(cfg, "default"))
+        child_log.reap(cfg, store, cap, killed=True)
+
+
 def run_supervisor(cfg, once: bool = False, db: str | None = None,
                    config: str | None = None) -> int:
     if not acquire_lock():
@@ -306,10 +320,7 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
         while True:
             if STOP_FLAG.exists():
                 log.info("stop-all flag present — halting cleanly")
-                for name, cap in children.items():
-                    _terminate(cap.proc, _cap(cfg, name))
-                for cap in scheduled:
-                    _terminate(cap.proc, _cap(cfg, "default"))
+                _shutdown(cfg, silence_store, children, scheduled)
                 _notify("supervisor_stopped", {"reason": "stop-all"})
                 return 0
             now = time.monotonic()
@@ -380,10 +391,7 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
                     log.warning("stale-lane check failed: %s", e)
 
             if once:
-                for name, cap in children.items():
-                    _terminate(cap.proc, _cap(cfg, name))
-                for cap in scheduled:
-                    _terminate(cap.proc, _cap(cfg, "default"))
+                _shutdown(cfg, silence_store, children, scheduled)
                 _notify("supervisor_stopped", {"reason": "once"})
                 return 0
             time.sleep(2)

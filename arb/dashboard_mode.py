@@ -38,6 +38,10 @@ _LANE_PREFIXES = (("arb.political", "political"), ("arb.mapped", "mapped"),
                    ("arb.verify", "verify"), ("arb.live", "live"),
                    ("arb.scan", "scan"))
 
+# lanes core to whale mode: always visible in the errors panel regardless of
+# supervisor.processes (M6, review of 798aae6: was inline in _keep_error_line).
+_WHALE_CORE = ("watch", "whale", "whale-backfill")
+
 
 def _lane_of(source: str) -> str | None:
     """The supervisor.processes lane `source` belongs to, or None when it
@@ -94,7 +98,7 @@ def _keep_error_line(cfg, source: str, msg: str) -> bool:
         return True
     if source.startswith("child:"):
         name = source[len("child:"):]
-        return name in ("watch", "whale", "whale-backfill") or name not in _disabled_lanes(cfg)
+        return name in _WHALE_CORE or name not in _disabled_lanes(cfg)
     if source == "arb.watch":
         m = _WATCH_VENUE.search(msg)
         return m is None or m.group(1) in cfg["watch_venues"]
@@ -115,20 +119,30 @@ def filter_errors(cfg, errors: list[dict]) -> list[dict]:
 def tail_child_errors(cfg) -> list[dict]:
     """Traceback/Error lines from arb/heartbeat.py's per-child capture files
     (supervisor.child_log_dir) — `redact` again here too, defence in depth on
-    top of arb/child_log.py's drain thread already redacting on the way to disk."""
+    top of arb/child_log.py's drain thread already redacting on the way to
+    disk. Filenames are date-stamped (M8: <name>.<YYYY-MM-DD>.log, so an
+    active lane's file goes inactive daily and log_retention_days' purge can
+    reclaim it) — several dated files can exist for one child name within
+    retention, so read only the NEWEST per name (a plain legacy <name>.log
+    with no date component is its own single-file group)."""
     from datetime import datetime, timezone
 
     from arb.logutil import redact, resolve_log_path
     d = resolve_log_path(cfg["supervisor"]["child_log_dir"])
     if not d.is_dir():
         return []
+    newest: dict[str, Path] = {}
+    for p in d.glob("*.log"):
+        name = p.name.rsplit(".", 2)[0]  # "<name>.<date>.log" -> "<name>"
+        if name not in newest or p.name > newest[name].name:  # ISO dates sort lexically
+            newest[name] = p
     now_iso = datetime.now(timezone.utc).isoformat()
     out = []
-    for p in sorted(d.glob("*.log")):
+    for name, p in sorted(newest.items()):
         with p.open("rb") as f:
             f.seek(max(0, p.stat().st_size - 65536))
             lines = f.read().decode("utf-8", "replace").splitlines()
-        out += [{"at": now_iso, "level": "ERROR", "source": f"child:{p.stem}",
+        out += [{"at": now_iso, "level": "ERROR", "source": f"child:{name}",
                 "msg": redact(ln)[:300], "file": f"children/{p.name}"}
                for ln in lines if "Traceback" in ln or "Error" in ln]
     return out

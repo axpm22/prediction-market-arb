@@ -16,6 +16,18 @@ exception embeds the Odds API key in the URL (rule 2 / SPEC §6.4). `spawn`
 below pipes the child's stdout+stderr instead and drains it through a
 daemon thread that line-redacts before writing, so the on-disk file is never
 allowed to carry a raw query string in the first place.
+
+Fix pass 2 2026-09-05 (review of 798aae6): I1 the log file was block-
+buffered, so tailing a hung child mid-run — the reason this file exists —
+showed nothing until it exited; opened unbuffered now. I2 a DB error out of
+record_exit used to skip closing the logfile; reap's close is now a
+`finally`. I3 both supervisor shutdown paths terminated children without
+reaping them (no child_exits row, drain thread unjoined, fd never closed);
+reap is now also safe to call speculatively on a still-running proc (M5),
+so heartbeat.py's shutdown helper can call it unconditionally. M8 the log
+filename is now date-stamped so an active lane's file goes inactive daily
+and the existing retention purge can reclaim it (previously it never did,
+since an ACTIVE file's mtime never stops moving).
 """
 from __future__ import annotations
 
@@ -30,21 +42,34 @@ from arb.logutil import get_logger, purge_stale, redact, resolve_log_path
 
 log = get_logger("arb.supervisor", "logs/supervisor.log")
 
+# reap()'s bound on joining a child's drain thread (M4: was a bare inline
+# 5.0) — never let a wedged reader hang the 2s supervisor tick. A timeout
+# here means the join gave up before the thread finished writing, so
+# record_exit's tail-lines read right after can be truncated.
+_DRAIN_JOIN_SECS = 5.0
+
 
 def log_path(cfg, name: str) -> Path:
-    """Where `name`'s captured stdout+stderr lives."""
-    return resolve_log_path(cfg["supervisor"]["child_log_dir"]) / f"{name}.log"
+    """Where `name`'s captured stdout+stderr lives — date-stamped
+    (<name>.<YYYY-MM-DD>.log, UTC day) so each day's file goes inactive on
+    its own and log_retention_days' purge (mtime-based, and an ACTIVE
+    file's mtime never stops moving) can actually reclaim it (M8:
+    logs/children/watch.log grew ~0.5-2 MB/h forever)."""
+    day = datetime.now(timezone.utc).date().isoformat()
+    return resolve_log_path(cfg["supervisor"]["child_log_dir"]) / f"{name}.{day}.log"
 
 
-def open_child_log(cfg, name: str) -> IO:
-    """Append-mode file for `name`'s stdout+stderr. Creates the directory and
-    purges sibling files a disabled/removed lane left behind (log_retention_
-    days) — cheap (one directory listing), so doing it on every spawn rather
-    than on its own schedule is simplest."""
-    p = log_path(cfg, name)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    purge_stale(p.parent, int(cfg["log_retention_days"]))
-    return open(p, "ab")
+def open_child_log(cfg, path: Path) -> IO:
+    """Unbuffered (I1: block buffering meant the on-disk file stayed empty
+    until the child exited, since _drain only flushes at EOF — defeating
+    the reason this file exists, tailing a HUNG child mid-run) append-mode
+    file at `path`. Creates the directory and purges sibling files a
+    disabled/removed lane or a previous day (M8) left behind
+    (log_retention_days) — cheap (one directory listing), so doing it on
+    every spawn rather than on its own schedule is simplest."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    purge_stale(path.parent, int(cfg["log_retention_days"]))
+    return open(path, "ab", buffering=0)
 
 
 def _drain(pipe, logfile) -> None:
@@ -53,11 +78,11 @@ def _drain(pipe, logfile) -> None:
     EOF (the child closing its end on exit) — a daemon thread, so a wedged
     read can never keep the supervisor process alive on its own; `reap`
     below still joins with a timeout so a wedged read can't silently leak a
-    thread/fd on every spawn either."""
+    thread/fd on every spawn either. No explicit flush: logfile is opened
+    unbuffered (I1), so every write already lands on disk immediately."""
     try:
         for raw in pipe:
             logfile.write(redact(raw.decode("utf-8", "replace")).encode("utf-8"))
-        logfile.flush()
     except (ValueError, OSError):
         pass  # logfile/pipe closed out from under us at shutdown — fine, best-effort
     finally:
@@ -66,25 +91,30 @@ def _drain(pipe, logfile) -> None:
 
 class Capture:
     """One spawned child: its Popen, the drain thread piping its (redacted)
-    stdout+stderr into name's log file, and the bookkeeping `reap` needs —
-    one object instead of the three parallel dicts/monkey-patched Popen
-    attrs heartbeat.py used to carry per child."""
-    __slots__ = ("proc", "thread", "logfile", "name", "started")
+    stdout+stderr into logpath, and the bookkeeping `reap` needs — one
+    object instead of the three parallel dicts/monkey-patched Popen attrs
+    heartbeat.py used to carry per child. logpath is resolved ONCE at spawn
+    (M8: log_path is date-stamped), so a reap landing after UTC midnight
+    still targets the SAME file the child actually wrote to, not a fresh
+    empty one for the new day."""
+    __slots__ = ("proc", "thread", "logfile", "name", "started", "logpath")
 
-    def __init__(self, proc, thread, logfile, name, started):
+    def __init__(self, proc, thread, logfile, name, started, logpath):
         self.proc, self.thread, self.logfile = proc, thread, logfile
-        self.name, self.started = name, started
+        self.name, self.started, self.logpath = name, started, logpath
 
 
 def spawn(cfg, name: str, argv: list) -> Capture:
-    """Spawn argv as `name`'s child (the child_exits/log-file key), capturing
-    stdout+stderr through a pipe drained by `_drain` into name's log file —
-    never hand the child the log file's fd directly (see module docstring)."""
-    logfile = open_child_log(cfg, name)
+    """Spawn argv as `name`'s child (the child_exits key and the log
+    filename's stem), capturing stdout+stderr through a pipe drained by
+    `_drain` into name's log file — never hand the child the log file's fd
+    directly (see module docstring)."""
+    path = log_path(cfg, name)
+    logfile = open_child_log(cfg, path)
     proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     thread = threading.Thread(target=_drain, args=(proc.stdout, logfile), daemon=True)
     thread.start()
-    return Capture(proc, thread, logfile, name, time.monotonic())
+    return Capture(proc, thread, logfile, name, time.monotonic(), path)
 
 
 def tail_lines(path: Path, n: int) -> str:
@@ -138,14 +168,30 @@ def record_exit(cfg, store, name: str, rc: int, runtime: float,
 
 def reap(cfg, store, cap: Capture, killed: bool = False) -> None:
     """Everything heartbeat.py's three near-identical reap sites used to do
-    inline: join cap's drain thread (bounded, so a wedged reader can never
-    hang the 2s supervisor tick or leak across thousands of spawns), THEN
-    record_exit (which tails the file for its WARNING/CRITICAL — the join
-    must land first, or it can read a still-draining file), then close it."""
-    cap.thread.join(timeout=5.0)
-    record_exit(cfg, store, cap.name, cap.proc.returncode,
-               time.monotonic() - cap.started, log_path(cfg, cap.name), killed=killed)
-    cap.logfile.close()
+    inline: join cap's drain thread (bounded by _DRAIN_JOIN_SECS, so a
+    wedged reader can never hang the 2s supervisor tick or leak across
+    thousands of spawns — though a timed-out join means the file isn't
+    fully drained yet, so record_exit's tail read right after can be
+    truncated), THEN record_exit (which tails the file for its WARNING/
+    CRITICAL — the join must land first, or it can read a still-draining
+    file), then close the logfile — even if record_exit itself raises (I2:
+    a DB error used to skip the close and propagate straight out of the
+    supervisor tick, leaking the fd on every crash it couldn't even
+    record).
+
+    A no-op on a still-running proc (M5): its pipe won't hit EOF until it
+    exits, so joining the drain thread here would block the caller forever.
+    Callers (both supervisor shutdown paths, I3) can therefore call this
+    unconditionally right after terminating a child, without first having
+    to prove it actually exited."""
+    if cap.proc.poll() is None:
+        return
+    cap.thread.join(timeout=_DRAIN_JOIN_SECS)
+    try:
+        record_exit(cfg, store, cap.name, cap.proc.returncode,
+                   time.monotonic() - cap.started, cap.logpath, killed=killed)
+    finally:
+        cap.logfile.close()
 
 
 def last_status(store, process: str) -> tuple[int, int] | None:

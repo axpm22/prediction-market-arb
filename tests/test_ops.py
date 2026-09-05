@@ -308,7 +308,8 @@ def test_supervisor_captures_child_output_and_warns_on_failure(
         rc = hb.run_supervisor(cfg2, once=False, db=str(tmp_path / "t.sqlite"))
     assert rc == 0
 
-    log_file = tmp_path / "logs" / "children" / "watch.log"
+    from arb import child_log
+    log_file = child_log.log_path(cfg2, "watch")  # M8: date-stamped filename
     assert "invalid choice" in log_file.read_text()
     msgs = [r.getMessage() for r in caplog.records if r.name == "arb.supervisor"]
     assert any("watch" in m and "rc=2" in m for m in msgs)
@@ -381,15 +382,209 @@ def test_record_exit_escalates_to_critical_after_consecutive_failures(
     assert [r.levelname for r in caplog.records if r.name == "arb.supervisor"] == ["WARNING"]
 
 
+def test_child_log_file_is_unbuffered_mid_run(cfg, tmp_path, monkeypatch):
+    """I1 (review of 798aae6): open_child_log used block buffering and
+    _drain only flushes at EOF, so tailing a hung child's log mid-run — the
+    reason the file exists at all — showed nothing until the child exited.
+    A line the child already wrote must be on disk WHILE it is still
+    running."""
+    import sys
+    import time as time_mod
+
+    from arb import child_log
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))
+    script = ("import sys, time\n"
+              "sys.stdout.write('hello mid-run\\n')\n"
+              "sys.stdout.flush()\n"
+              "time.sleep(5)\n")
+    cap = child_log.spawn(cfg, "midrun", [sys.executable, "-c", script])
+    try:
+        deadline = time_mod.monotonic() + 4
+        seen = ""
+        while time_mod.monotonic() < deadline and "hello mid-run" not in seen:
+            seen = cap.logpath.read_text()
+            time_mod.sleep(0.05)
+        assert cap.proc.poll() is None, "child exited before we could check mid-run"
+        assert "hello mid-run" in seen
+    finally:
+        cap.proc.kill()
+        cap.proc.wait()
+        cap.thread.join(timeout=2)
+        cap.logfile.close()
+
+
+def test_reap_closes_logfile_even_if_record_exit_raises(cfg, tmp_path, monkeypatch):
+    """I2 (review of 798aae6): record_exit is a store insert; a DB error
+    used to skip cap.logfile.close() and propagate straight out of the
+    supervisor tick, leaking the fd on every crash it couldn't even record.
+    reap must still close the logfile — and still surface the error, since
+    swallowing a DB failure would be its own bug."""
+    import sys
+
+    from arb import child_log
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))
+
+    class BoomStore:
+        def insert(self, *a, **k):
+            raise RuntimeError("db boom")
+
+    cap = child_log.spawn(cfg, "boomtest", [sys.executable, "-c", "pass"])
+    cap.proc.wait(timeout=5)
+
+    with pytest.raises(RuntimeError, match="db boom"):
+        child_log.reap(cfg, BoomStore(), cap)
+
+    assert cap.logfile.closed
+
+
+def test_reap_returns_without_hanging_on_a_live_proc(cfg, tmp_path, monkeypatch):
+    """M5: reap must be safe to call on a still-running proc — its pipe
+    never hits EOF until the child exits, so joining the drain thread
+    unconditionally would block forever. A no-op return instead, bounded
+    here by a background thread + join(timeout=) so a wrong implementation
+    fails this test rather than hanging the suite."""
+    import sys
+    import threading
+
+    from arb import child_log
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))
+    cap = child_log.spawn(
+        cfg, "livetest", [sys.executable, "-c", "import time; time.sleep(5)"])
+    try:
+        assert cap.proc.poll() is None
+        done = threading.Event()
+
+        def call():
+            child_log.reap(cfg, None, cap)  # None: record_exit must never be reached
+            done.set()
+        t = threading.Thread(target=call, daemon=True)
+        t.start()
+        t.join(timeout=2)
+        assert done.is_set(), "reap did not return promptly on a live proc"
+        assert not cap.logfile.closed
+    finally:
+        cap.proc.kill()
+        cap.proc.wait()
+        cap.thread.join(timeout=2)
+        cap.logfile.close()
+
+
+def test_drain_join_timeout_is_a_named_constant(cfg):
+    """M4 (review of 798aae6): reap's join timeout was a bare inline 5.0;
+    pull it into a named module constant (rule 4 spirit) and fix the
+    docstring, which claimed only "a wedged reader can never hang the tick"
+    without saying that a timed-out join means the tail record_exit reads
+    can be truncated."""
+    from arb import child_log
+    assert child_log._DRAIN_JOIN_SECS == 5.0
+    assert "truncat" in child_log.reap.__doc__.lower()
+
+
+def _tracking_fake_popen():
+    """Stand-in for subprocess.Popen whose FakeProc stays "running"
+    (poll() -> None) until .wait()/.kill() sets a returncode — for the I3
+    shutdown-reap tests below, which need a child still alive at the moment
+    shutdown fires (a child already reaped by the normal per-tick path
+    never exercises the shutdown code at all)."""
+    caps_seen = []
+
+    class FakeProc:
+        def __init__(self, argv):
+            self.returncode = None
+            self.stdout = io.BytesIO(b"")  # child_log.spawn's drain thread reads this
+            caps_seen.append(self)
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.returncode = 0
+            return 0
+
+        def kill(self):
+            self.returncode = -9
+
+    return caps_seen, lambda argv, **kw: FakeProc(argv)
+
+
+def test_once_shutdown_reaps_still_running_children(cfg, tmp_path, monkeypatch):
+    """I3 (review of 798aae6): the --once shutdown path terminated children
+    but never reaped them — no child_exits row, the drain thread never
+    joined, the log fd never closed. A child still "running" when --once
+    tears down (the normal case — that's WHY shutdown calls _terminate at
+    all) must come out reaped: a child_exits row and a closed logfile."""
+    import arb.heartbeat as hb
+    caps_seen, popen = _tracking_fake_popen()
+    cfg2 = copy.deepcopy(cfg)
+    cfg2["supervisor"]["processes"] = {k: False for k in cfg2["supervisor"]["processes"]}
+    cfg2["supervisor"]["processes"]["watch"] = True
+    cfg2["supervisor"]["schedule_catchup_grace_mins"] = 0
+    cfg2["scan_times"] = []
+    cfg2["canary"]["enabled"] = False
+
+    monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
+    monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "absent-stop")
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))
+    monkeypatch.setattr(hb.subprocess, "Popen", popen)
+
+    rc = hb.run_supervisor(cfg2, once=True, db=str(tmp_path / "t.sqlite"))
+    assert rc == 0
+    assert caps_seen, "no child spawned"
+    assert caps_seen[0].returncode == 0  # _terminate's wait() ran, not kill()
+
+    store = Store(tmp_path / "t.sqlite")
+    rows = store.query("SELECT rc, killed FROM child_exits WHERE process='watch'")
+    assert rows and rows[0]["rc"] == 0 and rows[0]["killed"] == 1
+
+
+def test_stop_flag_shutdown_reaps_still_running_children(cfg, tmp_path, monkeypatch):
+    """I3 (review of 798aae6): sibling to the --once test above for the
+    data/stop-all shutdown path — same missing reap, different trigger."""
+    import time as time_mod
+
+    import arb.heartbeat as hb
+    caps_seen, popen = _tracking_fake_popen()
+    cfg2 = copy.deepcopy(cfg)
+    cfg2["supervisor"]["processes"] = {k: False for k in cfg2["supervisor"]["processes"]}
+    cfg2["supervisor"]["processes"]["watch"] = True
+    cfg2["supervisor"]["schedule_catchup_grace_mins"] = 0
+    cfg2["scan_times"] = []
+    cfg2["canary"]["enabled"] = False
+
+    monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
+    stop_flag = tmp_path / "stop-all"
+    monkeypatch.setattr(hb, "STOP_FLAG", stop_flag)
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))
+    monkeypatch.setattr(hb.subprocess, "Popen", popen)
+    real_sleep = time_mod.sleep
+
+    def fake_sleep(secs):
+        real_sleep(0.01)
+        stop_flag.touch()  # after the FIRST tick's spawn, before the second's check
+    monkeypatch.setattr(hb.time, "sleep", fake_sleep)
+
+    rc = hb.run_supervisor(cfg2, once=False, db=str(tmp_path / "t.sqlite"))
+    assert rc == 0
+    assert caps_seen, "no child spawned"
+    assert caps_seen[0].returncode == 0
+
+    store = Store(tmp_path / "t.sqlite")
+    rows = store.query("SELECT rc, killed FROM child_exits WHERE process='watch'")
+    assert rows and rows[0]["rc"] == 0 and rows[0]["killed"] == 1
+
+
 def test_heartbeat_module_size_is_pinned():
     """I3 (review of 9cb356b): heartbeat.py had grown to 409 lines carrying
     three near-identical record_exit+close/join reap blocks. They now all go
     through child_log.reap (Capture/spawn/reap in arb/child_log.py), which
     got it back down — still over CLAUDE.md's ~300-line guideline (a
     stateful supervisor loop with its own scheduling, silence alarm and
-    shutdown paths), so pin the count rather than let it silently regrow."""
+    shutdown paths), so pin the count rather than let it silently regrow.
+    Bumped 395 -> 400 (review of 798aae6, I3): the two shutdown paths' near-
+    identical terminate loops now go through one _shutdown helper too, which
+    nets a couple of lines even after removing the duplication."""
     lines = Path("arb/heartbeat.py").read_text().splitlines()
-    assert len(lines) <= 395
+    assert len(lines) <= 400
 
 
 def test_open_child_log_purges_only_stale_siblings(cfg, tmp_path):
@@ -410,11 +605,67 @@ def test_open_child_log_purges_only_stale_siblings(cfg, tmp_path):
     old_time = time_mod.time() - 8 * 86400
     os.utime(stale, (old_time, old_time))
 
-    f = child_log.open_child_log(cfg2, "watch")
+    path = child_log.log_path(cfg2, "watch")
+    f = child_log.open_child_log(cfg2, path)
     f.close()
 
     assert not stale.exists()
-    assert (d / "watch.log").exists()
+    assert path.exists()
+
+
+def test_child_log_filename_is_date_stamped(cfg, tmp_path, monkeypatch):
+    """M8: an undated logs/children/<name>.log grows forever (~0.5-2 MB/h
+    measured on watch.log) — its mtime never stops moving while the lane
+    stays enabled, so log_retention_days' purge (mtime-based) can never
+    reclaim it. Date-stamp the filename (<name>.<YYYY-MM-DD>.log, UTC day)
+    so each day's file goes inactive on its own and the existing purge
+    covers it."""
+    import sys
+    from datetime import datetime, timezone
+
+    from arb import child_log
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))
+    today = datetime.now(timezone.utc).date().isoformat()
+    assert child_log.log_path(cfg, "watch").name == f"watch.{today}.log"
+
+    cap = child_log.spawn(cfg, "datestamp", [sys.executable, "-c", "pass"])
+    cap.proc.wait(timeout=5)
+    store = Store(tmp_path / "t.sqlite")
+    child_log.reap(cfg, store, cap)
+    assert cap.logpath.name == f"datestamp.{today}.log"
+    assert cap.logpath.exists()
+
+
+def test_child_log_day_is_pinned_at_spawn_not_recomputed_at_reap(cfg, tmp_path, monkeypatch):
+    """The UTC day is chosen ONCE at spawn (M8) — a reap landing after
+    midnight rolls over must still tail/record against the SAME file the
+    child actually wrote to, not whatever log_path(cfg, name) resolves to
+    "now" (which would be a fresh, empty file for the new day)."""
+    import sys
+    from datetime import datetime, timezone
+
+    from arb import child_log
+
+    class FakeDT(datetime):
+        _now = datetime(2026, 9, 5, 23, 59, 59, tzinfo=timezone.utc)
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls._now
+
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))
+    monkeypatch.setattr(child_log, "datetime", FakeDT)
+    cap = child_log.spawn(cfg, "midnight", [sys.executable, "-c", "pass"])
+    assert cap.logpath.name == "midnight.2026-09-05.log"
+
+    FakeDT._now = datetime(2026, 9, 6, 0, 0, 1, tzinfo=timezone.utc)  # rolled over
+    cap.proc.wait(timeout=5)
+    store = Store(tmp_path / "t.sqlite")
+    child_log.reap(cfg, store, cap)
+
+    assert cap.logpath.name == "midnight.2026-09-05.log"
+    assert cap.logpath.exists()
+    assert not (cap.logpath.parent / "midnight.2026-09-06.log").exists()
 
 
 def test_one_rotating_handler_per_logfile():
