@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from arb import whale_exit, whale_score, whale_signal
+from arb import whale_exit, whale_score, whale_signal, whale_sizing
 from arb.config import load
 from arb.models import q6
 
@@ -954,9 +954,41 @@ def test_conf_stake_spans_min_to_max_and_clips(cfg):
     assert whale_signal.conf_stake(lo + Decimal("1"), cfg) == Decimal("1.000000")
 
 
+# -------------------------------------------------------------- kelly stake
+
+def test_kelly_stake_worked_examples(cfg):
+    """§8 amendment 2026-09-05, the registered vectors: f = kelly_fraction x
+    (S - min_score_lb) / (1 - p), clipped to [min_stake_usd, max_stake_usd]."""
+    k = whale_sizing.kelly_stake
+    assert k(Decimal("0.05"), Decimal("0.90"), cfg) == Decimal("0.125000")
+    assert k(Decimal("0.05"), Decimal("0.30"), cfg) == Decimal("0.100000")
+    assert k(Decimal("0.30"), Decimal("0.80"), cfg) == Decimal("0.375000")
+    assert k(Decimal("0"), Decimal("0.90"), cfg) == Decimal("0.100000")
+    assert k(Decimal("0.50"), Decimal("0.95"), cfg) == Decimal("1.000000")
+
+
+def test_kelly_stake_floors_on_no_edge_and_on_an_unusable_price(cfg):
+    """e <= 0 books the floor (every fired signal books a kelly row, like
+    conf); an ask of 1 or more cannot happen and is guarded anyway."""
+    k = whale_sizing.kelly_stake
+    assert k(Decimal("-0.20"), Decimal("0.50"), cfg) == Decimal("0.100000")
+    assert k(Decimal("0.50"), Decimal("1"), cfg) == Decimal("0.100000")
+    assert k(Decimal("0.50"), Decimal("1.20"), cfg) == Decimal("0.100000")
+    assert k(Decimal("0.50"), None, cfg) == Decimal("0.100000")
+
+
+def test_stake_for_dispatches_the_three_registered_sizings(cfg):
+    S, p = Decimal("0.05"), Decimal("0.90")
+    assert whale_sizing.SIZINGS == ("flat", "conf", "kelly")
+    assert whale_sizing.stake_for("flat", S, p, cfg) == Decimal(1)
+    assert whale_sizing.stake_for("conf", S, p, cfg) == whale_sizing.conf_stake(S, cfg)
+    assert whale_sizing.stake_for("kelly", S, p, cfg) == Decimal("0.125000")
+
+
 # --------------------------------------------------------------------- purity
 
-@pytest.mark.parametrize("module", ["whale_signal", "whale_exit", "whale_dominance"])
+@pytest.mark.parametrize("module", ["whale_signal", "whale_exit", "whale_dominance",
+                                    "whale_sizing"])
 def test_module_is_pure(module):
     src = (ROOT / "arb" / f"{module}.py").read_text()
     for banned in ("sqlite3", "requests", "utcnow", "now()", "time.time", "open("):

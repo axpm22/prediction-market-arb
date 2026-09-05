@@ -21,6 +21,9 @@ from statistics import median
 from arb import whale_dominance, whale_elite
 from arb.models import q6
 from arb.whale_merge import d, merge_windows, qualifying, ts
+# §8's stakes moved to arb/whale_sizing.py (2026-09-05) when the third
+# sizing joined them; re-exported so every existing caller keeps working.
+from arb.whale_sizing import conf_stake  # noqa: F401
 
 VARIANTS = ("V1", "V2", "V3", "V4", "V5", "V6")
 YES, NO = 0, 1
@@ -287,14 +290,3 @@ def calibrate_min_points(signal_rows, cfg) -> dict | None:
     weight = d(math.log10(1 + float(notional / unit)))
     return {"q10": q6(q10), "V2": v2, "V3": q6(3 * q10 * weight),
             "n_whales": len(per_wallet), "median_open_notional": q6(notional)}
-
-
-# ---------------------------------------------------------------- conf stake
-
-def conf_stake(S, cfg) -> Decimal:
-    """Spec §8, pinned: min_stake at the qualification bar, max_stake at
-    `cap_points` above it. Bounded, monotone, no Kelly."""
-    size = cfg["whale"]["size"]
-    lo, hi = d(size["min_stake_usd"]), d(size["max_stake_usd"])
-    x = (d(S) - d(cfg["whale"]["min_score_lb"])) / d(size["cap_points"])
-    return q6(lo + min(max(x, Decimal(0)), Decimal(1)) * (hi - lo))

@@ -427,8 +427,8 @@ def test_api_whale_and_positions_and_lanes_are_json_over_http(whale_cfg, tmp_pat
         assert whale["tape_ok"] is True and whale["collector"]["rows"] == 3
         assert len(whale["kill"]["rules"]) == 4
         rows = _get(base, "/api/positions")["positions"]
-        assert {r["variant"] for r in rows} == {"V1/flat", "V1/conf",
-                                                "V6/flat", "V6/conf"}
+        assert {r["variant"] for r in rows} == {"V1/flat", "V1/conf", "V1/kelly",
+                                                "V6/flat", "V6/conf", "V6/kelly"}
         assert _get(base, "/api/lanes")["lanes"] == []
     finally:
         httpd.shutdown()

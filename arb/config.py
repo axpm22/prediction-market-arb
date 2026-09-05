@@ -206,7 +206,7 @@ SCHEMA = {
                        "min_secs_to_start": NUM},
               "dominance": {"half_life_secs": NUM, "min_volume_usd": NUM},
               "size": {"unit_usd": NUM, "cap_points": NUM, "max_stake_usd": NUM,
-                       "min_stake_usd": NUM},
+                       "min_stake_usd": NUM, "kelly_fraction": NUM},
               "exit": {"flip_ratio": NUM, "sold_fraction": NUM, "min_score_lb": NUM,
                        "holdings_poll_secs": NUM, "holdings_calls_per_cycle": NUM,
                        "holdings_page_size": NUM, "holdings_max_age_polls": NUM,
@@ -303,6 +303,12 @@ def _check_invariants(cfg):
         raise ConfigError(
             f"whale.size.min_stake_usd ({whale['size']['min_stake_usd']}) must be <= "
             f"whale.size.max_stake_usd ({whale['size']['max_stake_usd']})")
+    if not Decimal(0) < Decimal(whale["size"]["kelly_fraction"]) <= Decimal(1):
+        raise ConfigError(
+            f"whale.size.kelly_fraction ({whale['size']['kelly_fraction']}) must be in "
+            "(0, 1] — zero or negative stakes nothing (or the wrong way round) on every "
+            "edge, and over 1 is more than full Kelly on an edge that is already a "
+            "pessimistic lower bound (§8 amendment 2026-09-05)")
     # Retention amendment 2026-09-04. These three decide what reaches disk and
     # what is dropped; a typo would silently pick a branch (the permissive one
     # for `scope`/`raw_json`, the destructive one for `holdings_keep`) with

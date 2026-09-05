@@ -185,9 +185,10 @@ def _events(store, kind="settled"):
 
 # ------------------------------------------------------------------ booking
 
-def test_one_cycle_books_two_rows_per_fired_variant(cfg, tmp_path):
-    """Spec §8: per fired (market, side, variant), two flat_bets rows — flat $1
-    and the confidence stake — with distinct fingerprints and one signal_id.
+def test_one_cycle_books_three_rows_per_fired_variant(cfg, tmp_path):
+    """Spec §8 (third sizing registered 2026-09-05): per fired (market, side,
+    variant), THREE flat_bets rows — flat $1, the confidence stake and the
+    fractional-Kelly stake — with distinct fingerprints and one signal_id.
     V1 and V6 both fire on these three whales (V6 added 2026-09-04: $1,500 of
     open notional against a market volume under the `dominance.min_volume_usd`
     floor), so the cycle books two rows for each."""
@@ -197,19 +198,54 @@ def test_one_cycle_books_two_rows_per_fired_variant(cfg, tmp_path):
     assert res["status"] == "ok"
     assert res["prints"] == 3
     bets = _bets(store)
-    assert [b["variant"] for b in bets] == ["V1/flat", "V1/conf",
-                                            "V6/flat", "V6/conf"]
-    assert len({b["fingerprint"] for b in bets}) == 4
+    assert [b["variant"] for b in bets] == ["V1/flat", "V1/conf", "V1/kelly",
+                                            "V6/flat", "V6/conf", "V6/kelly"]
+    assert len({b["fingerprint"] for b in bets}) == 6
     assert len({b["signal_id"] for b in bets}) == 2
     assert bets[0]["signal_id"] is not None
-    assert [b["stake_usd"] for b in bets[:2]] == ["1.000000", "0.353080"]
+    assert [b["stake_usd"] for b in bets[:3]] == ["1.000000", "0.353080",
+                                                  "0.100000"]
     assert all(b["lane"] == "review" and b["poll_kind"] == "whale"
                and b["kind"] == "WHALE" and b["category"] == "sports"
                and b["venue_pair"] == "polymarket:self"
                and b["event_key"] == EVENT_KEY for b in bets)
-    assert res["booked"] == 4 and res["fired"] == 2
+    assert res["booked"] == 6 and res["fired"] == 2
     (venue,) = store.query("SELECT * FROM poll_venues")
     assert venue["latency_ms"] is not None and venue["latency_ms"] >= 0
+
+
+def test_the_kelly_row_sizes_off_the_touch_price(cfg, tmp_path):
+    """§8 amendment 2026-09-05: the third sizing is the only one that reads the
+    PRICE — f = kelly_fraction x (S - min_score_lb) / (1 - ask), clipped to
+    [min_stake_usd, max_stake_usd]. The same S that stakes conf at $0.353080
+    stakes kelly at $0.140600 into a 0.95 ask (0.25 x 0.02812 / 0.05) and at the
+    $0.10 floor into the default 0.51 ask (0.25 x 0.02812 / 0.49 = 0.014...)."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con, rows=_three(price="0.93"),
+         fetch=_fetch(**{YES_TOK: _book(ask="0.95", bid="0.93"),
+                         NO_TOK: _book(ask="0.95", bid="0.93")}))
+
+    v1 = [b for b in _bets(store) if b["variant"].startswith("V1/")]
+    assert [b["variant"] for b in v1] == ["V1/flat", "V1/conf", "V1/kelly"]
+    assert [b["stake_usd"] for b in v1] == ["1.000000", "0.353080", "0.140600"]
+    assert len({b["fingerprint"] for b in v1}) == 3
+    assert len({b["position_key"] for b in v1}) == 3
+    assert len({b["signal_id"] for b in v1}) == 1
+    assert all(b["position_key"].endswith("|" + b["variant"]) for b in v1)
+
+
+def test_the_flat_row_is_untouched_bit_for_bit_by_the_third_sizing(cfg, tmp_path):
+    """The primary metric is V2/flat: adding a sizing may not move one byte of
+    a flat row. `fingerprint` hashes `base|variant|sizing`, so these literals
+    are the ones the two-sizing lane wrote."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+
+    flat = [b for b in _bets(store) if b["variant"] == "V1/flat"][0]
+    assert flat["fingerprint"] == "a7fb76d2e990c1485c58fde50de18fee6ee7a87a"
+    assert flat["stake_usd"] == "1.000000"
+    assert flat["position_key"].endswith("|V1/flat")
+    assert flat["notes"].startswith("whale-signal; whale V1/flat; 3 whale(s);")
 
 
 def test_the_booked_leg_is_the_touch_the_fire_rule_saw(cfg, tmp_path):
@@ -277,8 +313,8 @@ def test_a_second_cycle_on_the_same_prints_books_nothing(cfg, tmp_path):
     res = _run(cfg, store, con, now=NOW + timedelta(seconds=60))
 
     assert res["booked"] == 0 and res["exited"] == 0
-    assert len(_bets(store)) == 4                   # V1 and V6, flat and conf
-    assert len(_events(store, "confirmed")) == 4
+    assert len(_bets(store)) == 6                   # V1 and V6, three sizings each
+    assert len(_events(store, "confirmed")) == 6
 
 
 def test_a_zombie_book_suppresses_a_signal_that_would_otherwise_fire(cfg, tmp_path):
@@ -406,8 +442,8 @@ def test_calibration_guard_logs_critical_and_books_nothing(cfg, tmp_path, caplog
         _run(cfg, store, con)
 
     assert [r for r in caplog.records if "min_points.V2" in r.getMessage()]
-    assert [b["variant"] for b in _bets(store)] == ["V1/flat", "V1/conf",
-                                                    "V6/flat", "V6/conf"]
+    assert [b["variant"] for b in _bets(store)] == [
+        "V1/flat", "V1/conf", "V1/kelly", "V6/flat", "V6/conf", "V6/kelly"]
 
 
 def test_disabled_books_nothing_and_records_nothing(cfg, tmp_path):
@@ -472,18 +508,19 @@ def test_a_variant_that_first_fires_on_a_later_cycle_is_still_booked(cfg, tmp_pa
     store, con = _ledger(tmp_path), _tape(tmp_path)
     _run(cfg, store, con)                      # V1 and V6: V2/V3 min_points null
     first = _bets(store)
-    assert [b["variant"] for b in first] == ["V1/flat", "V1/conf",
-                                             "V6/flat", "V6/conf"]
+    assert [b["variant"] for b in first] == ["V1/flat", "V1/conf", "V1/kelly",
+                                             "V6/flat", "V6/conf", "V6/kelly"]
 
     cfg["whale"]["fire"]["min_points"]["V2"] = Decimal("0.01")
     res = _run(cfg, store, con, now=NOW + timedelta(seconds=60))
 
     bets = _bets(store)
-    assert res["booked"] == 2
-    assert [b["variant"] for b in bets] == ["V1/flat", "V1/conf", "V6/flat",
-                                            "V6/conf", "V2/flat", "V2/conf"]
-    assert len({b["position_key"] for b in bets}) == 6
-    assert bets[:4] == first                   # rule 9: the first rows untouched
+    assert res["booked"] == 3
+    assert [b["variant"] for b in bets] == [
+        "V1/flat", "V1/conf", "V1/kelly", "V6/flat", "V6/conf", "V6/kelly",
+        "V2/flat", "V2/conf", "V2/kelly"]
+    assert len({b["position_key"] for b in bets}) == 9
+    assert bets[:6] == first                   # rule 9: the first rows untouched
 
 
 def test_every_variant_of_one_cycle_gets_its_own_position_key(cfg, tmp_path):
@@ -495,17 +532,17 @@ def test_every_variant_of_one_cycle_gets_its_own_position_key(cfg, tmp_path):
     res = _run(cfg, store, con)
 
     bets = _bets(store)
-    assert res["booked"] == 8 and len(bets) == 8
-    assert len({b["position_key"] for b in bets}) == 8
+    assert res["booked"] == 12 and len(bets) == 12
+    assert len({b["position_key"] for b in bets}) == 12
     assert {b["variant"] for b in bets} == {f"{v}/{s}"
                                             for v in ("V1", "V2", "V3", "V6")
-                                            for s in ("flat", "conf")}
+                                            for s in ("flat", "conf", "kelly")}
     assert all(b["position_key"].endswith("|" + b["variant"]) for b in bets)
 
 
-def test_the_lane_books_v4_flat_and_conf_for_a_ranked_consensus(cfg, tmp_path):
+def test_the_lane_books_v4_all_three_sizings_for_a_ranked_consensus(cfg, tmp_path):
     """§7/§8 amended 2026-09-04: three ranked qualifying whales fire V4, which
-    books its own two rows — distinct fingerprints and position keys, one
+    books its own three rows — distinct fingerprints and position keys, one
     shared signal_id, exactly like every other variant."""
     store, con = _ledger(tmp_path), _tape(tmp_path)
     _ranked(con, ["w0", "w1", "w2"])
@@ -513,20 +550,21 @@ def test_the_lane_books_v4_flat_and_conf_for_a_ranked_consensus(cfg, tmp_path):
     res = _run(cfg, store, con)
 
     bets = _bets(store)
-    assert [b["variant"] for b in bets] == ["V1/flat", "V1/conf", "V4/flat",
-                                            "V4/conf", "V6/flat", "V6/conf"]
+    assert [b["variant"] for b in bets] == [
+        "V1/flat", "V1/conf", "V1/kelly", "V4/flat", "V4/conf", "V4/kelly",
+        "V6/flat", "V6/conf", "V6/kelly"]
     v4 = [b for b in bets if b["variant"].startswith("V4")]
-    assert len({b["fingerprint"] for b in v4}) == 2
-    assert len({b["position_key"] for b in v4}) == 2
+    assert len({b["fingerprint"] for b in v4}) == 3
+    assert len({b["position_key"] for b in v4}) == 3
     assert len({b["signal_id"] for b in v4}) == 1
     assert all(b["position_key"].endswith("|" + b["variant"]) for b in v4)
-    assert res["fired"] == 3 and res["booked"] == 6
+    assert res["fired"] == 3 and res["booked"] == 9
     row = con.execute("SELECT * FROM signals WHERE variant='V4'").fetchone()
     assert row["fired"] == 1 and Decimal(row["points_yes"]) == 3
     assert v4[0]["signal_id"] == row["id"]
 
 
-def test_the_lane_books_v6_flat_and_conf_from_the_markets_own_volume(cfg, tmp_path):
+def test_the_lane_books_v6_all_three_sizings_from_the_markets_own_volume(cfg, tmp_path):
     """§7/§8 amended 2026-09-04: V6 books its own two rows like every other
     variant, and its denominator is the market's OWN 24h volume — the number
     the zombie guard already reads off the watch poll, floored at
@@ -537,8 +575,8 @@ def test_the_lane_books_v6_flat_and_conf_from_the_markets_own_volume(cfg, tmp_pa
     res = _run(cfg, store, con)
 
     v6 = [b for b in _bets(store) if b["variant"].startswith("V6")]
-    assert [b["variant"] for b in v6] == ["V6/flat", "V6/conf"]
-    assert len({b["fingerprint"] for b in v6}) == 2
+    assert [b["variant"] for b in v6] == ["V6/flat", "V6/conf", "V6/kelly"]
+    assert len({b["fingerprint"] for b in v6}) == 3
     assert all(b["position_key"].endswith("|" + b["variant"]) for b in v6)
     row = con.execute("SELECT * FROM signals WHERE variant='V6'").fetchone()
     assert row["fired"] == 1 and v6[0]["signal_id"] == row["id"]
@@ -546,12 +584,13 @@ def test_the_lane_books_v6_flat_and_conf_from_the_markets_own_volume(cfg, tmp_pa
 
     deep, deep_con = _ledger(tmp_path / "deep", volume="5000000"), _tape(tmp_path / "deep")
     res = _run(cfg, deep, deep_con)
-    assert [b["variant"] for b in _bets(deep)] == ["V1/flat", "V1/conf"]
+    assert [b["variant"] for b in _bets(deep)] == ["V1/flat", "V1/conf",
+                                                   "V1/kelly"]
     row = deep_con.execute("SELECT * FROM signals WHERE variant='V6'").fetchone()
     assert (row["fired"], row["suppressed_reason"]) == (0, "min-points")
 
 
-def test_the_lane_books_v5_flat_and_conf_for_an_elite_consensus(cfg, tmp_path):
+def test_the_lane_books_v5_all_three_sizings_for_an_elite_consensus(cfg, tmp_path):
     """§7/§8 V5 (registered 2026-09-04): the cutoff is the top `elite_pct` (20)
     of every scored wallet in the root — here ten, of which the two signal
     whales with a real record are the top two — so V5 reaches its literal
@@ -564,9 +603,9 @@ def test_the_lane_books_v5_flat_and_conf_for_an_elite_consensus(cfg, tmp_path):
     res = _run(cfg, store, con)
 
     v5 = [b for b in _bets(store) if b["variant"].startswith("V5")]
-    assert [b["variant"] for b in v5] == ["V5/flat", "V5/conf"]
-    assert len({b["fingerprint"] for b in v5}) == 2
-    assert len({b["position_key"] for b in v5}) == 2
+    assert [b["variant"] for b in v5] == ["V5/flat", "V5/conf", "V5/kelly"]
+    assert len({b["fingerprint"] for b in v5}) == 3
+    assert len({b["position_key"] for b in v5}) == 3
     assert len({b["signal_id"] for b in v5}) == 1
     rows = {r["variant"]: dict(r) for r in con.execute("SELECT * FROM signals")}
     assert (rows["V5"]["fired"], Decimal(rows["V5"]["points_yes"])) == (1, Decimal(2))
@@ -614,8 +653,8 @@ def test_only_the_latest_leaderboard_snapshot_ranks_a_wallet(cfg, tmp_path):
     row = con.execute("SELECT * FROM signals WHERE variant='V4'").fetchone()
     assert Decimal(row["points_yes"]) == 0 and row["fired"] == 0
     assert row["suppressed_reason"] == "ratio"
-    assert [b["variant"] for b in _bets(store)] == ["V1/flat", "V1/conf",
-                                                    "V6/flat", "V6/conf"]
+    assert [b["variant"] for b in _bets(store)] == [
+        "V1/flat", "V1/conf", "V1/kelly", "V6/flat", "V6/conf", "V6/kelly"]
 
 
 def test_a_v4_exit_reads_the_same_ranked_set_the_cycle_loaded(cfg, tmp_path):
@@ -632,8 +671,9 @@ def test_a_v4_exit_reads_the_same_ranked_set_the_cycle_loaded(cfg, tmp_path):
     exited = {b["variant"] for b in _bets(store)
               if any(e["bet_id"] == b["id"] for e in evs)}
     # V6 flips on the same 3-to-4 book (same money each side), V4 holds
-    assert res["exited"] == 4
-    assert exited == {"V1/flat", "V1/conf", "V6/flat", "V6/conf"}
+    assert res["exited"] == 6
+    assert exited == {"V1/flat", "V1/conf", "V1/kelly",
+                      "V6/flat", "V6/conf", "V6/kelly"}
 
 
 def test_one_bad_market_never_costs_the_cycle_its_poll_row(cfg, tmp_path, monkeypatch):
@@ -653,7 +693,7 @@ def test_one_bad_market_never_costs_the_cycle_its_poll_row(cfg, tmp_path, monkey
     res = _run(cfg, store, con, rows=_three() + _second_trades())
 
     assert res["market_errors"] == 1
-    assert res["booked"] == 4                      # the good market still books
+    assert res["booked"] == 6                      # the good market still books
     assert {b["event_key"] for b in _bets(store)} == {EVENT_KEY}
     assert res["quotes_rows"] == 4                 # both markets still priced
     assert len(store.query("SELECT * FROM polls WHERE kind='whale'")) == 1
@@ -678,9 +718,9 @@ def test_a_flipped_consensus_exits_the_bet_at_the_bid(cfg, tmp_path):
     _flip(con)
     res = _run(cfg, store, con, now=NOW + timedelta(seconds=60))
 
-    assert res["exited"] == 4                      # V1 and V6, flat and conf
+    assert res["exited"] == 6                      # V1 and V6, three sizings each
     evs = _events(store)
-    assert len(evs) == 4
+    assert len(evs) == 6
     payload = json.loads(evs[0]["payload_json"])
     assert payload["result"] == "EXITED" and payload["source"] == "exit:flip"
     assert Decimal(payload["exit_price"]) == Decimal("0.49")
@@ -701,16 +741,16 @@ def test_a_lifetime_closed_bet_is_still_exited(cfg, tmp_path):
     cycles = int(cfg["tracker"]["dead_checks"]) + 5
     for i in range(1, cycles + 1):                     # no new prints: they hold
         _run(cfg, store, con, now=NOW + timedelta(seconds=60 * i), rows=[])
-    assert len(_events(store, "lifetime_closed")) == 4       # every bet, once each
+    assert len(_events(store, "lifetime_closed")) == 6       # every bet, once each
     assert _events(store) == []                              # nothing settled yet
 
     _flip(con)
     res = _run(cfg, store, con, now=NOW + timedelta(seconds=60 * (cycles + 1)),
                rows=[])
 
-    assert res["exited"] == 4
+    assert res["exited"] == 6
     evs = _events(store)
-    assert len(evs) == 4
+    assert len(evs) == 6
     assert json.loads(evs[0]["payload_json"])["source"] == "exit:flip"
 
 
@@ -734,7 +774,7 @@ def test_the_whales_holdings_falling_exits_the_bet_via_positions(cfg, tmp_path):
     res = _run(cfg, store, con, now=NOW + timedelta(seconds=60), rows=[],
                positions=holdings)
 
-    assert res["exited"] == 4                        # V1 and V6, flat and conf
+    assert res["exited"] == 6                        # V1 and V6, three sizings each
     assert res["holdings"]["wallets"] == 3 and res["holdings"]["rows"] == 3
     payload = json.loads(_events(store)[0]["payload_json"])
     assert payload["source"] == "exit:left"
@@ -761,11 +801,11 @@ def test_an_exit_with_no_bid_annotates_and_appends_no_event(cfg, tmp_path):
     res = _run(cfg, store, con, now=NOW + timedelta(seconds=60),
                fetch=_fetch(**{YES_TOK: _book(bid=None), NO_TOK: _book(bid=None)}))
 
-    assert res["exited"] == 0 and res["exit_no_bid"] == 4
+    assert res["exited"] == 0 and res["exit_no_bid"] == 6
     assert _events(store) == []
     kinds = [r["kind"] for r in store.query(
         "SELECT kind FROM annotations WHERE target_kind='bet'")]
-    assert kinds.count("exit-no-bid") == 4
+    assert kinds.count("exit-no-bid") == 6
     assert all("venue_ok=True" in r["detail"] for r in store.query(
         "SELECT detail FROM annotations WHERE kind='exit-no-bid'"))
 
@@ -781,7 +821,7 @@ def test_a_venue_outage_is_annotated_as_an_outage_not_a_thin_book(cfg, tmp_path)
         raise RuntimeError("polymarket 503")
     res = _run(cfg, store, con, now=NOW + timedelta(seconds=60), fetch=dead)
 
-    assert res["exited"] == 0 and res["exit_no_bid"] == 4
+    assert res["exited"] == 0 and res["exit_no_bid"] == 6
     assert _events(store) == []
     assert all("venue_ok=False" in r["detail"] for r in store.query(
         "SELECT detail FROM annotations WHERE kind='exit-no-bid'"))
@@ -795,7 +835,7 @@ def test_a_bid_thinner_than_the_depth_floor_is_no_bid(cfg, tmp_path):
     res = _run(cfg, store, con, now=NOW + timedelta(seconds=60),
                fetch=_fetch(**{YES_TOK: thin, NO_TOK: thin}))
 
-    assert res["exited"] == 0 and res["exit_no_bid"] == 4
+    assert res["exited"] == 0 and res["exit_no_bid"] == 6
     assert _events(store) == []
 
 
@@ -819,7 +859,7 @@ def test_an_exited_bet_is_not_exited_twice(cfg, tmp_path):
     res = _run(cfg, store, con, now=NOW + timedelta(seconds=120))
 
     assert res["exited"] == 0
-    assert len(_events(store)) == 4
+    assert len(_events(store)) == 6
 
 
 # ------------------------------------------------------- supervisor wiring
@@ -861,7 +901,7 @@ def test_the_cycle_records_its_result_in_the_tape_meta(cfg, tmp_path):
 
     last = json.loads(whale_tape._meta(con, "last_cycle"))
     assert last["status"] == "ok" and last["prints"] == 3
-    assert last["bad_rows"] == 0 and last["booked"] == 4
+    assert last["bad_rows"] == 0 and last["booked"] == 6
     assert last["at"] == NOW.isoformat()
 
 
@@ -880,7 +920,7 @@ def test_last_cycle_meta_survives_a_markout_failure(cfg, tmp_path, monkeypatch):
         _run(cfg, store, con)
 
     last = json.loads(whale_tape._meta(con, "last_cycle"))
-    assert last["status"] == "ok" and last["booked"] == 4
+    assert last["status"] == "ok" and last["booked"] == 6
 
 
 # --------------------------------------------- the position-held guard (C2)
@@ -903,11 +943,11 @@ def test_a_held_position_is_never_re_booked_after_its_lifetime_closed(cfg, tmp_p
     variant/sizing on top of the open one."""
     store, con = _ledger(tmp_path), _tape(tmp_path)
     _run(cfg, store, con)
-    assert len(_bets(store)) == 4
+    assert len(_bets(store)) == 6
     cycles = int(cfg["tracker"]["dead_checks"]) + 5
     for i in range(1, cycles + 1):
         _run(cfg, store, con, now=NOW + timedelta(seconds=60 * i), rows=[])
-    assert len(_events(store, "lifetime_closed")) == 4
+    assert len(_events(store, "lifetime_closed")) == 6
     assert _events(store) == []                       # still held: nothing settled
 
     later = NOW + timedelta(seconds=60 * (cycles + 1))
@@ -915,10 +955,10 @@ def test_a_held_position_is_never_re_booked_after_its_lifetime_closed(cfg, tmp_p
 
     assert res["fired"] == 2                          # V1 and V6 still fire ...
     assert res["booked"] == 0                         # ... but we already hold them
-    assert len(_bets(store)) == 4
+    assert len(_bets(store)) == 6
     lots = [dict(r) for r in store.query("SELECT * FROM left_on_table ORDER BY id")]
-    assert [r["reason"] for r in lots] == ["position-held"] * 4
-    assert len({r["fingerprint"] for r in lots}) == 4   # flat and conf, one each
+    assert [r["reason"] for r in lots] == ["position-held"] * 6
+    assert len({r["fingerprint"] for r in lots}) == 6   # three sizings, one each
 
 
 # ------------------------------------------- the SHIPPED bar (final review C1)
@@ -966,9 +1006,9 @@ def test_the_lane_books_at_the_shipped_min_score_lb(tmp_path):
 
     res = _run(cfg, store, con)
 
-    assert res["fired"] == 2 and res["booked"] == 4
-    assert [b["variant"] for b in _bets(store)] == ["V1/flat", "V1/conf",
-                                                    "V6/flat", "V6/conf"]
+    assert res["fired"] == 2 and res["booked"] == 6
+    assert [b["variant"] for b in _bets(store)] == [
+        "V1/flat", "V1/conf", "V1/kelly", "V6/flat", "V6/conf", "V6/kelly"]
 
 
 def test_the_cycle_records_its_own_wall_duration(cfg, tmp_path):
@@ -993,8 +1033,8 @@ def test_an_outage_annotates_exit_no_bid_once_per_bet_not_once_per_cycle(cfg, tm
     for i in (1, 2, 3):
         res = _run(cfg, store, con, now=NOW + timedelta(seconds=60 * i), fetch=dead)
 
-    assert res["exit_no_bid"] == 4                 # still counted every cycle
-    assert len(store.query("SELECT 1 FROM annotations WHERE kind='exit-no-bid'")) == 4
+    assert res["exit_no_bid"] == 6                 # still counted every cycle
+    assert len(store.query("SELECT 1 FROM annotations WHERE kind='exit-no-bid'")) == 6
 
 
 def test_a_market_whose_tokens_collide_is_counted_in_the_cycle(cfg, tmp_path):

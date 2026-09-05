@@ -506,9 +506,10 @@ assumption is wrong, that split shows it instead of diluting the aggregate.
 
 ## 8. Booking
 
-Per fired (market, side, variant), two `flat_bets` rows, distinct
+Per fired (market, side, variant), three `flat_bets` rows (**amended
+2026-09-05**, PREREGISTRATION row of that date — two before it), distinct
 `fingerprint` (`sha1(base_fp|variant|sizing)`) and `variant` column values
-`V2/flat`, `V2/conf` etc., sharing one `signal_id`:
+`V2/flat`, `V2/conf`, `V2/kelly` etc., sharing one `signal_id`:
 
 - **flat**: `stake_usd = 1`.
 - **conf**: `stake_usd = min_stake_usd + clip((S − min_score_lb) /
@@ -517,6 +518,21 @@ Per fired (market, side, variant), two `flat_bets` rows, distinct
   `max_stake_usd` = 1.00, `min_stake_usd` = 0.10. So $0.10 at the
   qualification bar, $1.00 at ten points above it. Bounded, monotone, no
   Kelly.
+- **kelly** (**amendment 2026-09-05**): `stake_usd = clip(kelly_fraction ×
+  (S − min_score_lb) / (1 − p), min_stake_usd, max_stake_usd)`, `p` = the
+  entry price (the touch ask the row books at), `whale.size.kelly_fraction`
+  = 0.25. The Kelly fraction of a binary contract bought at `p` whose true
+  probability is `p + e` is `e / (1 − p)`, so the same edge stakes more into
+  a rich ask than a cheap one — the difference conf, which never sees the
+  price, cannot express. Quarter Kelly on an edge that is already the
+  pessimistic lower bound `score_lb − min_score_lb` is conservative twice.
+  `e ≤ 0` books the floor (every fired signal books all three rows, so the
+  three are always compared over the same signals); an absent ask, or one at
+  or above 1, reads as no reading and books the floor too. The same
+  `[min_stake_usd, max_stake_usd]` clip as conf, so no sizing can stake more
+  than $1 of paper. **The primary metric is unchanged: V2/flat.** The three
+  sizings live in `arb/whale_sizing.py` (`SIZINGS`, `stake_for`), which is
+  also where `conf_stake` moved to.
 
 Each row has one leg: venue `polymarket`, the outcome token on side s,
 `cost` = best ask at booking, `fee_cost` via `leg_fee_cost(cfg, "polymarket",
@@ -951,7 +967,8 @@ whale:
           calibration_days: 3, calibration_min_whales: 10,   # calibration_days 14 -> 3 amended 2026-09-04 (provisional calibration)
           sybil_gap_secs: 5, max_drift_points: 0.03, min_secs_to_start: 600 }
   dominance: { half_life_secs: 1800, min_volume_usd: 5000 }   # V6, added 2026-09-04: R_w's half-life on print age, and the floor on the normalising 24h volume (unknown volume reads as this floor, never as zero)
-  size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10 }
+  size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10,
+          kelly_fraction: 0.25 }   # kelly_fraction added 2026-09-05 with the third sizing; invariant 0 < kelly_fraction <= 1
   exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01,
           holdings_poll_secs: 300, holdings_calls_per_cycle: 10,          # L14 amendment 2026-09-04, item 3 of §9's amendment: the authoritative holdings check. Per-wallet cadence and the per-cycle GET budget (10 of whale.max_calls_per_min 30, on the same shared bucket) — a roster of <=50 wallets is fully refreshed inside one cadence, a bigger one rotates stalest-first rather than starving
           holdings_page_size: 500, holdings_max_age_polls: 3, holdings_keep: markets }   # holdings_keep (retention addendum 2026-09-04): `markets` stores only the positions in a market this tape tracks plus one holdings_snapshots summary row per poll (~374k rows/day -> ~5,760 summaries + the tracked rows); `all` stores the whole page.            # `limit` on positions?user= (100 -> 500 amended 2026-09-04, M12/fixer-D: limit=500 verified live in one call; three signal whales held >100 positions and page 1 missed them — see the holdings-paging fix below, which added offset-paging past one page rather than leaving it unprobed), and how many cadences old a snapshot may be (300 x 3 = 900 s) before that wallet falls back to its prints-based size

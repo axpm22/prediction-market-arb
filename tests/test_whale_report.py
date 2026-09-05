@@ -140,12 +140,14 @@ def test_daily_frame_groups_by_kind_lane_and_variant(cfg, tmp_path):
     store = Store(tmp_path / "t.sqlite")
     _whale_row(store, "V2/flat", 1, "pm:a")
     _whale_row(store, "V2/conf", 1, "pm:a", stake="0.5")
+    _whale_row(store, "V2/kelly", 1, "pm:a", stake="0.25")
     _legacy(store)
 
     frame = daily_frame(cfg, store, DAY)
 
     assert set(frame["by_class"]) == {("WHALE", "review", "V2/flat"),
                                       ("WHALE", "review", "V2/conf"),
+                                      ("WHALE", "review", "V2/kelly"),
                                       ("EV", "clean", "")}
     assert all(a["bets"] == 1 for a in frame["by_class"].values())
 
@@ -281,12 +283,12 @@ def test_an_exited_bet_whose_market_resolved_gets_a_hold_counterfactual(cfg, tmp
     exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
                                      con=con)["exits"]["sports"]
 
-    # four bets: V1 and V6 (added 2026-09-04) each book flat and conf
-    assert exits["flip"]["n"] == 4 and exits["flip"]["n_hold"] == 4
-    # exit: four bets at the 0.49 bid; hold: the YES side won, so each bet's
+    # six bets: V1 and V6 (added 2026-09-04) each book all three sizings
+    assert exits["flip"]["n"] == 6 and exits["flip"]["n_hold"] == 6
+    # exit: six bets at the 0.49 bid; hold: the YES side won, so each bet's
     # contracts pay $1 (contracts = stake / (0.51 + 0.007497))
-    assert abs(exits["flip"]["exit_pnl"] - Decimal("-0.183000")) < Decimal("0.001")
-    assert abs(exits["flip"]["hold_pnl"] - Decimal("2.523162")) < Decimal("0.001")
+    assert abs(exits["flip"]["exit_pnl"] - Decimal("-0.196520")) < Decimal("0.001")
+    assert abs(exits["flip"]["hold_pnl"] - Decimal("2.709640")) < Decimal("0.001")
 
 
 def test_left_exits_are_broken_down_by_the_reading_that_fired_them(cfg, tmp_path):
@@ -304,7 +306,7 @@ def test_left_exits_are_broken_down_by_the_reading_that_fired_them(cfg, tmp_path
                                      con=con)["exits"]["sports"]
 
     assert set(exits) == {"left (positions)"}
-    assert exits["left (positions)"]["n"] == 4
+    assert exits["left (positions)"]["n"] == 6
 
 
 def test_an_exited_bet_whose_market_later_voided_gets_a_zero_hold(cfg, tmp_path):
@@ -323,7 +325,7 @@ def test_an_exited_bet_whose_market_later_voided_gets_a_zero_hold(cfg, tmp_path)
     exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
                                      con=con)["exits"]["sports"]
 
-    assert exits["flip"]["n_hold"] == 4
+    assert exits["flip"]["n_hold"] == 6
     assert exits["flip"]["hold_pnl"] == Decimal("0.000000")
 
 
@@ -341,7 +343,7 @@ def test_a_losing_hold_counterfactual_is_negative(cfg, tmp_path):
     exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
                                      con=con)["exits"]["sports"]
 
-    assert exits["flip"]["hold_pnl"] == Decimal("-2.706160")     # all four stakes lost
+    assert exits["flip"]["hold_pnl"] == Decimal("-2.906160")     # all six stakes lost
 
 
 # ------------------------------------------------------------- the bootstrap

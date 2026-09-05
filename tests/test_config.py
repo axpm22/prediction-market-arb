@@ -325,6 +325,21 @@ def test_whale_size_stake_invariant(tmp_path):
         load(bad)
 
 
+def test_whale_size_kelly_fraction_is_the_registered_quarter():
+    """§8 amendment 2026-09-05: quarter Kelly on a lower-bound edge."""
+    assert load(SHIPPED)["whale"]["size"]["kelly_fraction"] == Decimal("0.25")
+
+
+@pytest.mark.parametrize("value", ["0", "-0.25", "1.50"])
+def test_whale_size_kelly_fraction_invariant(tmp_path, value):
+    text = SHIPPED.read_text().replace("kelly_fraction: 0.25 }",
+                                       f"kelly_fraction: {value} }}")
+    bad = tmp_path / "config.yaml"
+    bad.write_text(text)
+    with pytest.raises(ConfigError, match="kelly_fraction"):
+        load(bad)
+
+
 def test_whale_poll_secs_invariant(tmp_path):
     text = SHIPPED.read_text().replace("  poll_secs: 60", "  poll_secs: 10")
     bad = tmp_path / "config.yaml"

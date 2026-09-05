@@ -42,8 +42,9 @@ MIGRATION_6 = [
 ]
 
 # v7: L14 whale lane booking facts, both ENTRY-TIME (rule 9). `variant`
-# distinguishes the two flat_bets rows one signal fires (V2/flat, V2/conf,
-# §8); `signal_id` ties them back to the whale signal that fired them.
+# distinguishes the flat_bets rows one signal fires (V2/flat, V2/conf and,
+# since 2026-09-05, V2/kelly — §8); `signal_id` ties them back to the whale
+# signal that fired them.
 # Nullable; every existing row (and every non-WHALE lane) is unaffected.
 MIGRATION_7 = [
     "ALTER TABLE flat_bets ADD COLUMN variant TEXT",

@@ -912,8 +912,16 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   An UNKNOWN volume (no watch row for the market) reads
                                       #   as this floor too, never as zero — a zero denominator
                                       #   would make every signal maximally dominant.
-  size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10 }
-                                      # paper stake sizing for whale-lane fills
+  size: { unit_usd: 100, cap_points: 0.10, max_stake_usd: 1.00, min_stake_usd: 0.10,
+          kelly_fraction: 0.25 }
+                                      # paper stake sizing for whale-lane fills: `flat` ($1,
+                                      #   the primary), `conf` (linear in S over cap_points) and
+                                      #   `kelly` (registered 2026-09-05, PREREGISTRATION row).
+                                      #   kelly_fraction 0.25 is QUARTER Kelly on
+                                      #   f = (S - min_score_lb) / (1 - ask): the edge is already
+                                      #   the pessimistic lower bound score_lb, so the fraction
+                                      #   makes it conservative twice. Same min/max stake clip as
+                                      #   `conf`, so no sizing can stake over $1 of paper.
   exit: { flip_ratio: 0.50, sold_fraction: 0.50, min_score_lb: -0.01,
           holdings_poll_secs: 300, holdings_calls_per_cycle: 10,
           holdings_page_size: 500, holdings_max_age_polls: 3, holdings_max_pages: 4,

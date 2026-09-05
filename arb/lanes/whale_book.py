@@ -26,8 +26,8 @@ from arb.lanes.political import _best
 from arb.logutil import get_logger
 from arb.models import position_key, q6
 from arb.venues.fees import leg_fee_cost
-from arb.whale_signal import Signal, Touch, conf_stake
-from arb import whale_universe
+from arb.whale_signal import Signal, Touch
+from arb import whale_sizing, whale_universe
 
 log = get_logger("arb.whale", "logs/whale.log")
 VENUE = "polymarket"
@@ -120,8 +120,9 @@ def quote_rows(cfg, market, books, event_key, now) -> list[dict]:
 
 
 def fingerprint(event_key, market, label, variant, sizing) -> str:
-    """§8: `sha1(base|variant|sizing)`, so the four variants and the two
-    sizings of one fired signal can never collide into one bet."""
+    """§8: `sha1(base|variant|sizing)`, so the six variants and the three
+    sizings (`whale_sizing.SIZINGS`) of one fired signal can never collide
+    into one bet."""
     base = "|".join([event_key, "WHALE", VENUE, market.market_type or "",
                      market.line or "", label, "YES", variant, sizing])
     return hashlib.sha1(base.encode()).hexdigest()
@@ -134,7 +135,7 @@ def candidate(cfg, market, sig, sizing, signal_id, event_key, token, label,
     booked cost can never drift from the signal that justified it."""
     ask, bid, depth = sig.touch_ask, sig.touch_bid, sig.depth_usd
     fee = leg_fee_cost(cfg, VENUE, market.root, ask)
-    stake = Decimal(1) if sizing == "flat" else conf_stake(sig.S, cfg)
+    stake = whale_sizing.stake_for(sizing, sig.S, ask, cfg)
     cost_sum = q6(ask + fee)
     leg = {"venue": VENUE, "book": VENUE, "market_type": market.market_type,
            "line": market.line, "outcome": label, "side": "YES",

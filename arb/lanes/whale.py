@@ -26,7 +26,7 @@ from decimal import Decimal
 
 from arb import whale_backfill, whale_dominance, whale_elite, whale_exit, whale_holdings
 from arb import (whale_nonsports, whale_resolve, whale_score, whale_signal,
-                 whale_tape, whale_universe)
+                 whale_sizing, whale_tape, whale_universe)
 from arb.lanes.whale_book import (_bet_ctx, _event_key, _fetch_books,
                                   _from_prints, _persist_signal, _tape_market,
                                   _touch, _zombied, best_bid, candidate,
@@ -225,7 +225,8 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
                 label = dict(m.tokens).get(token) or ""
                 start = datetime.fromisoformat(m.start_utc) if m.start_utc else None
                 cands += [candidate(cfg, m, sig, sizing, signal_id, keys[cid], token,
-                                    label, start, now) for sizing in ("flat", "conf")]
+                                    label, start, now)
+                          for sizing in whale_sizing.SIZINGS]
         except Exception as e:  # noqa: BLE001 — one market, not the whole cycle
             res["market_errors"] += 1
             log.warning("whale market %s skipped: %s", cid, e, exc_info=True)
