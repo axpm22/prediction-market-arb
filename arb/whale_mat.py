@@ -66,6 +66,8 @@ from arb.whale_tape import _meta
 log = get_logger("arb.whale", "logs/whale.log")
 
 # Bump on ANY change to positions_from_prints / hygiene_flags semantics.
+MARKETS_CHUNK = 500   # SQLite's default parameter limit is 999; PK IN(...) seeks per wallet
+
 MAT_VERSION = 1
 
 # The cache's own DDL, appended to whale_tape.SCHEMA by `open_tape`. It lives
@@ -239,8 +241,8 @@ def _markets_for(con, cids) -> dict:
     a primary-key seek each, instead of the whole table. Chunked because a
     heavy wallet can print in more markets than SQLite binds parameters."""
     cids, out = list(cids), {}
-    for i in range(0, len(cids), 500):
-        chunk = cids[i:i + 500]
+    for i in range(0, len(cids), MARKETS_CHUNK):
+        chunk = cids[i:i + MARKETS_CHUNK]
         for r in con.execute(f"SELECT {MARKET_COLS} FROM markets WHERE condition_id"
                              f" IN ({','.join('?' * len(chunk))})", chunk):
             out[r["condition_id"]] = dict(r)
