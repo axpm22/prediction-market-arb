@@ -632,6 +632,63 @@ def test_markout_dedup_ignores_legacy_signal_id_less_rows(cfg, tmp_path):
     assert cell["mean_drift"] == Decimal("0.030000")
 
 
+# ------------------------------------------- coverage denominator (this fix)
+
+def test_coverage_denominator_counts_the_signal_once_not_its_three_rows(cfg, tmp_path):
+    """The numerator (`n`) was already deduped to one marked signal (e618139);
+    the denominator was not — it still counted every `V*/flat`+`V*/conf`+
+    `V*/kelly` row, so one fired signal marked on all three sizings read
+    coverage 1-in-3 instead of 1.0. Both sides of the ratio must count the
+    same population: signals, not booking rows."""
+    from arb.whale_metrics import H_2M, markout_stats
+    store = Store(tmp_path / "t.sqlite")
+    flat = _whale_row(store, "V2/flat", 1, "pm:a")
+    conf = _whale_row(store, "V2/conf", 1, "pm:a", stake="0.5")
+    kelly = _whale_row(store, "V2/kelly", 1, "pm:a", stake="0.25")
+    for bet_id in (flat, conf, kelly):
+        _mark_bet(store, bet_id, "0.52")
+
+    cell = markout_stats(store)["sports"][H_2M]
+
+    assert cell["coverage"] == Decimal("1.000000")             # was 0.333333
+
+
+def test_coverage_denominator_counts_two_fired_signals_one_marked(cfg, tmp_path):
+    """Two real signals booked (one at all three sizings, one at one) — only
+    one marks. Coverage is marked signals over FIRED signals: 1/2, not
+    1-in-4 booking rows."""
+    from arb.whale_metrics import H_2M, markout_stats
+    store = Store(tmp_path / "t.sqlite")
+    a_flat = _whale_row(store, "V2/flat", 1, "pm:a")
+    _whale_row(store, "V2/conf", 1, "pm:a", stake="0.5")        # never marked
+    _whale_row(store, "V2/kelly", 1, "pm:a", stake="0.25")      # never marked
+    _whale_row(store, "V2/flat", 2, "pm:b")                     # never marked
+    _mark_bet(store, a_flat, "0.52")
+
+    cell = markout_stats(store)["sports"][H_2M]
+
+    assert cell["coverage"] == Decimal("0.500000")              # was 0.250000
+
+
+def test_coverage_denominator_counts_a_legacy_signal_less_bet_once(cfg, tmp_path):
+    """A legacy row (signal_id NULL, pre-`variant`-column data) has no sibling
+    sizing rows to collapse into — it must count once in the denominator too,
+    same as it always did, even mixed with a signal that dedupes three rows
+    to one."""
+    from arb.whale_metrics import H_2M, markout_stats
+    store = Store(tmp_path / "t.sqlite")
+    legacy = _whale_row(store, "V2/flat", None, "pm:a")
+    flat = _whale_row(store, "V2/flat", 1, "pm:b")
+    conf = _whale_row(store, "V2/conf", 1, "pm:b", stake="0.5")
+    kelly = _whale_row(store, "V2/kelly", 1, "pm:b", stake="0.25")
+    for bet_id in (legacy, flat, conf, kelly):
+        _mark_bet(store, bet_id, "0.52")
+
+    cell = markout_stats(store)["sports"][H_2M]
+
+    assert cell["coverage"] == Decimal("1.000000")              # was 0.500000
+
+
 def test_roi_rows_stays_one_row_per_sizing_never_deduped(cfg, tmp_path):
     """The sizing comparison (design §8, "three measurements of one
     population") needs ROI per BOOKING, not per signal — unlike the markout

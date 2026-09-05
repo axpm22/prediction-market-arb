@@ -170,26 +170,38 @@ def pregame_drifts(store, horizons, since=None, until=None, root=None) -> list[d
     return [row for _, row in best.values()]
 
 
+def fired_signal_counts(store) -> dict:
+    """{root: n} distinct FIRED signals booked, kind='WHALE' — one count per
+    `signal_id` (its `V*/flat`+`V*/conf`+`V*/kelly` sizing rows collapse to
+    one, same population `pregame_drifts` dedupes on the marked side), a
+    legacy NULL-`signal_id` row counted once by its own `id` since it has no
+    sibling sizing rows. This is `markout_stats`' coverage DENOMINATOR — both
+    sides of that ratio must count signals, never booking rows."""
+    seen: dict[str, set] = {}
+    for r in store.query(
+            "SELECT id, category, signal_id FROM flat_bets WHERE kind='WHALE'"):
+        key = r["signal_id"] if r["signal_id"] is not None else ("bet", r["id"])
+        seen.setdefault(r["category"] or "-", set()).add(key)
+    return {root: len(keys) for root, keys in seen.items()}
+
+
 def markout_stats(store) -> dict:
     """{root: {+2m, +10m}} PREGAME coverage and mean drift, plus the clusters
     the bench needs for the one-sided bound. Per root (§7 item 5): a root's
-    coverage is its OWN marks over its OWN bets, so one root's thin marking
-    never dilutes another's number.
+    coverage is its OWN marks over its OWN fired signals, so one root's thin
+    marking never dilutes another's number.
 
     `cell["n"]` is `pregame_drifts`' deduped count — one per marked SIGNAL,
-    not per booked row — so `coverage` (that count over `n_bets`, which still
-    counts every `V*/flat`+`V*/conf`+`V*/kelly` row) is now "marked signals
-    over booked rows", not "marked rows over booked rows": a signal that books
-    three sizings but marks on only one of them reads as 1-in-3 coverage — the
-    denominator is unchanged from before this fix and stays a row count,
-    on purpose: fixing the count that gates rule 2 is this fix's whole scope,
-    not redefining what "coverage" means."""
-    n_bets = {r["category"] or "-": r["c"] for r in store.query(
-        "SELECT category, COUNT(*) c FROM flat_bets WHERE kind='WHALE' "
-        "GROUP BY category")}
+    not per booked row. `coverage` divides that by `fired_signal_counts`
+    (fix: was `n_bets`, a raw row count across all three sizings — a signal
+    that books three sizings but marks on only one of them used to read
+    1-in-3 coverage instead of 1.0, because the numerator was deduped and the
+    denominator was not). Both sides now count the same population: marked
+    signals over FIRED signals, per horizon."""
+    n_signals = fired_signal_counts(store)
     out = {root: {h: {"n": 0, "coverage": Decimal(0), "mean_drift": None,
                       "by_event": {}} for h in (H_2M, H_10M)}
-           for root in roots_first(n_bets)}
+           for root in roots_first(n_signals)}
     for r in pregame_drifts(store, (H_2M, H_10M)):
         cell = out[r["root"]][r["h"]]
         cell["n"] += 1
@@ -197,8 +209,8 @@ def markout_stats(store) -> dict:
     for root, cells in out.items():
         for cell in cells.values():
             drifts = [v for vs in cell["by_event"].values() for v in vs]
-            cell["coverage"] = (q6(Decimal(cell["n"]) / n_bets[root])
-                                if n_bets.get(root) else Decimal(0))
+            cell["coverage"] = (q6(Decimal(cell["n"]) / n_signals[root])
+                                if n_signals.get(root) else Decimal(0))
             if drifts:
                 cell["mean_drift"] = q6(Decimal(sum(drifts) / len(drifts)))
     return out
