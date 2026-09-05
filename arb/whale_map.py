@@ -162,7 +162,17 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
         roots = whale_ns_map.event_roots(cfg, bucket, get, found,
                                          unrooted - no_root, res)
         rows = [_gamma_row(c, found.get(c), prefixes, now) for c in chunk]
-        res["inexact_prefix"] += sum(_is_inexact(r[7] or "", prefixes) for r in rows if r[1])
+        # Fix pass 6 (review of ed390cf, minor): count only conds whose
+        # PRE-upsert stored `sport` was NULL — COALESCE keeps a stored
+        # non-NULL sport, so a fresh Gamma-derived inexact match on a row
+        # that already has a sport never actually roots anything; counting
+        # it overstated KNOWN_ISSUES #36's "rows the cycle actually roots".
+        pre_sport = {r["condition_id"]: r["sport"] for r in con.execute(
+            f"SELECT condition_id, sport FROM markets WHERE condition_id IN "
+            f"({','.join('?' * len(chunk))})", chunk)}
+        res["inexact_prefix"] += sum(
+            _is_inexact(r[7] or "", prefixes) for c, r in zip(chunk, rows)
+            if r[1] and not pre_sport.get(c))
         con.executemany(
             f"INSERT INTO markets ({MARKET_COLS}) VALUES ({','.join('?' * 11)}) "
             "ON CONFLICT(condition_id) DO UPDATE SET last_seen=excluded.last_seen, "
@@ -217,8 +227,12 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
                          "— never scored", cond, row["sport"], row["market_type"],
                          row["start_utc"])
                 _set_meta(con, f"unmappable:{cond}", today)
-    if res["inexact_prefix"]:  # KNOWN_ISSUES #36 census counter
-        log.info("whale mapping: %d row(s) via inexact prefix", res["inexact_prefix"])
+    # The KNOWN_ISSUES #36 census log line is NOT here (fix pass 6, review of
+    # ed390cf): `whale_backfill.map_markets` skips this function entirely
+    # whenever `_local_remap` resolves every row locally, and that path can
+    # still set `res["inexact_prefix"]` — logging it here would silently
+    # never fire on exactly that path. The caller logs it once, after both
+    # paths, unconditional on whether this function ran at all.
 
 
 def _gamma_row(cond, m, prefixes, now) -> tuple:

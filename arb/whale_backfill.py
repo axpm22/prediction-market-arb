@@ -258,13 +258,19 @@ def map_markets(cfg, con, now, get=get_json) -> dict:
     today = now.strftime("%Y-%m-%d")
     new_ids, revisit = _queue(con, limit, today)
     todo = new_ids + _local_remap(con, revisit, w["slug_sport_prefixes"], now, res)
-    if not todo:
-        return res
-    bucket = _bucket(cfg)
-    try:
-        _map_markets(cfg, con, todo, now, bucket, get, res)
-    except Exception as e:
-        log.warning("whale mapping aborted after %d call(s): %s", res["calls"], e)
-        _set_backoff(con, cfg, now)
-        res["status"] = "error"
+    if todo:
+        bucket = _bucket(cfg)
+        try:
+            _map_markets(cfg, con, todo, now, bucket, get, res)
+        except Exception as e:
+            log.warning("whale mapping aborted after %d call(s): %s", res["calls"], e)
+            _set_backoff(con, cfg, now)
+            res["status"] = "error"
+    # KNOWN_ISSUES #36 census counter — logged here, after BOTH paths above,
+    # regardless of whether `_map_markets` ran (fix pass 6, review of
+    # ed390cf): `_local_remap` alone can set `res["inexact_prefix"]` (the
+    # Gamma-free path, every revisit row resolved from its own stored slug),
+    # and the old call site inside `_map_markets` never fired on it.
+    if res.get("inexact_prefix"):
+        log.info("whale mapping: %d row(s) via inexact prefix", res["inexact_prefix"])
     return res

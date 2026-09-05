@@ -1598,7 +1598,7 @@ def test_map_markets_prefix_only_remap_needs_no_gamma_call(tmp_path):
     assert res["mapped"] == 1 and res["calls"] == 0 and get.urls == []
 
 
-def test_map_markets_counts_inexact_prefix_matches_for_the_census(tmp_path):
+def test_map_markets_counts_inexact_prefix_matches_for_the_census(tmp_path, caplog):
     """Fix pass 5 (review of 333e264, part b): KNOWN_ISSUES #36 names a
     ceiling `_sport_of`'s date requirement narrows but does not close (a
     DATED non-sports slug can still false-positive), so the mapper counts
@@ -1606,7 +1606,13 @@ def test_map_markets_counts_inexact_prefix_matches_for_the_census(tmp_path):
     a future census has a number to watch. `chi1-lax-sea-2026-09-05`
     (inexact, dated, a genuine soccer slug per the census) counts; an EXACT
     `nba-...` match does not, because it was never the inexact case the
-    ceiling is about."""
+    ceiling is about.
+
+    Fix pass 6 (review of ed390cf): the census log line lived in
+    `_map_markets`, which this path never calls — both rows resolve via
+    `_local_remap` alone (no Gamma call needed), so the counter was set but
+    never logged. The line now lives in `whale_backfill.map_markets`, after
+    both paths, so it fires here too."""
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     _map_row(con, "0xchi1", sport=None, market_type="BINARY",
              start_utc="2026-09-05T18:00:00+00:00", slug="chi1-lax-sea-2026-09-05")
@@ -1618,10 +1624,47 @@ def test_map_markets_counts_inexact_prefix_matches_for_the_census(tmp_path):
                          "page_size": 50, "map_per_cycle": 40})
     get = FakeGet()                                  # raises if ever called: no Gamma needed
 
-    res = whale_backfill.map_markets(cfg, con, NOW, get=get)
+    with caplog.at_level(logging.INFO, logger="arb.whale"):
+        res = whale_backfill.map_markets(cfg, con, NOW, get=get)
 
     assert res["mapped"] == 2 and res["calls"] == 0
     assert res["inexact_prefix"] == 1
+    assert any("1 row(s) via inexact prefix" in r.getMessage() for r in caplog.records)
+
+
+def test_map_markets_only_counts_a_row_the_cycle_actually_roots(tmp_path):
+    """Fix pass 6 (review of ed390cf, minor): `_map_markets` summed
+    `_is_inexact` over the FRESH Gamma-derived sport for every chunk row,
+    even when the row already had a stored sport — COALESCE keeps the
+    stored value in that case, so the row's root never actually changed and
+    counting it overstates KNOWN_ISSUES #36's "rows the cycle actually
+    roots" census. `0xseeded` already carries sport=baseball_mlb; Gamma's
+    slug for it is an inexact-dated soccer match, but COALESCE must keep
+    baseball_mlb, so it must NOT be counted. `0xbare` has no stored sport at
+    all, so Gamma's inexact-dated match genuinely wins the COALESCE and MUST
+    be counted."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    gamma_fix = _fixture("whale_gamma_condition_ids_repeated")
+    seeded = dict(gamma_fix[0])
+    seeded["slug"] = "chi1-lax-sea-2026-09-05"
+    bare = dict(gamma_fix[1])
+    bare["slug"] = "chi1-lax-sea-2026-09-06"
+    cond_seeded, cond_bare = seeded["conditionId"], bare["conditionId"]
+    _map_row(con, cond_seeded, sport="baseball_mlb", market_type=None, start_utc=None)
+    _map_row(con, cond_bare, sport=None, market_type=None, start_utc=None)
+    con.commit()
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 40})
+
+    res = whale_backfill.map_markets(cfg, con, NOW, get=FakeGet([seeded, bare]))
+
+    row_seeded = con.execute(
+        "SELECT sport FROM markets WHERE condition_id=?", (cond_seeded,)).fetchone()
+    row_bare = con.execute(
+        "SELECT sport FROM markets WHERE condition_id=?", (cond_bare,)).fetchone()
+    assert row_seeded["sport"] == "baseball_mlb"        # COALESCE kept the seeded value
+    assert row_bare["sport"] == "soccer"                # nothing to protect, Gamma's guess wins
+    assert res["inexact_prefix"] == 1                   # only 0xbare was actually rooted inexactly
 
 
 def test_map_markets_marks_an_unmappable_revisit_row_for_the_day(tmp_path):
