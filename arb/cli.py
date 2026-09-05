@@ -104,6 +104,13 @@ def main(argv=None):
                                                  "trade-history backfill for the L14 whale "
                                                  "lane (its own process: ~11 min a cycle)")
     p_wb.add_argument("--once", action="store_true")
+    p_wm = sub.add_parser("whale-mat", help="bring the L14 positions/hygiene cache up to "
+                                            "date, or force a full rebuild of it from the "
+                                            "tape's prints (keyless, 0 credits)")
+    p_wm.add_argument("--rebuild", action="store_true",
+                      help="queue EVERY wallet and recompute to completion, unbounded — "
+                           "the escape hatch after a change to the FIFO or hygiene logic "
+                           "that did not bump whale_mat.MAT_VERSION")
     p_wsc = sub.add_parser("whale-score", help="L14 scoring utilities over the whale tape "
                                                "(read-only, keyless, 0 credits)")
     p_wsc.add_argument("--calibrate", action="store_true",

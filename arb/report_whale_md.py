@@ -163,8 +163,15 @@ def whale_line(frame: dict) -> str:
     roi = (f"{primary['mean']} [lb80 {primary['lb80']}, ub90 {primary['ub90']}] "
            f"n={primary['n']}/{primary['n_events']} events" if primary else "no sample")
     c = frame["collector"]
+    mat = c.get("mat") or {}
     return (f"L14 whale: {frame['signals']['evaluated_24h']} signals/24h, "
             f"{frame['signals']['fired_24h']} fired; {frame['primary_variant']} "
             f"ROI/$ {roi}; collector {_n(c['status'])}; tape {_mb(c['tape_bytes'])} MB, "
             f"~{_mb(c['bytes_per_day'])} MB/day"
+            # matpos (2026-09-05): the three numbers that say whether the
+            # scoring cache is keeping up — how big it is, how many wallets
+            # are still queued for recompute, and what the last pass cost.
+            # A backlog that does not fall cycle to cycle is the alarm.
+            + (f"; positions {mat['rows']}, {mat['dirty']} dirty, "
+               f"{mat['secs']}s" if mat else "")
             + ("" if frame["tape_ok"] else "; TAPE UNAVAILABLE"))

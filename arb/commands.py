@@ -1007,6 +1007,39 @@ def cmd_whale(cfg, store, args):
           f"suppressed={res['suppressed']}")
     print(f"  booked={res['booked']} exited={res['exited']} "
           f"exit_no_bid={res['exit_no_bid']} quotes_rows={res['quotes_rows']}")
+    mat = res.get("mat") or {}
+    if mat:
+        print(f"  positions: {mat['rows']} cached, {mat['wallets']} recomputed, "
+              f"{mat['dirty']} still dirty, {mat['secs']}s")
+    return 0
+
+
+def cmd_whale_mat(cfg, store, args):
+    """The derived positions/hygiene cache the 60 s scoring pass reads
+    (arb/whale_mat.py). Bare: one bounded pass, exactly as a lane cycle runs
+    it, then the status. `--rebuild`: queue every wallet on the tape and
+    recompute to completion, unbounded — the operator's escape hatch after a
+    change to the FIFO or hygiene logic that did not come with a MAT_VERSION
+    bump, or after a cache anyone has reason to doubt.
+
+    Writes to whale.tape_db and nothing else: the ledger is not opened at all,
+    and `prints` — the record — is only ever read (rule 7)."""
+    from datetime import datetime, timezone
+    from arb import whale_mat
+    from arb.whale_tape import open_tape
+    now = datetime.now(timezone.utc)
+    con = open_tape(cfg["whale"]["tape_db"])
+    if args.rebuild:
+        print(f"rebuild: {whale_mat.mark_all_dirty(con)} wallet(s) queued")
+        res = whale_mat.materialize(con, cfg, now, cap=0)
+    else:
+        res = whale_mat.materialize(con, cfg, now)
+    print(f"whale-mat: {res['rows']} cached position(s), {res['wallets']} wallet(s) "
+          f"recomputed, {res['dirty']} still dirty, {res['secs']}s")
+    if res["dirty"]:
+        print(f"  the next {int(cfg['whale']['mat']['max_wallets_per_cycle'])} land "
+              "on the next lane cycle (whale.mat.max_wallets_per_cycle); until "
+              "then the lane scores off a partial cache")
     return 0
 
 

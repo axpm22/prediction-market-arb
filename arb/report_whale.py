@@ -221,7 +221,7 @@ def _collector(cfg, con, now) -> dict:
     out = {"status": None, "rows": None, "bad_rows": None, "at": None,
            "last_seen_age_secs": None, "last_gap": None, "backoff_until": None,
            "prints_per_min": Decimal(0), "prints_24h": 0, "holdings_24h": 0,
-           "tape_bytes": None, "bytes_per_day": None}
+           "tape_bytes": None, "bytes_per_day": None, "mat": {}}
     path = Path(str(cfg["whale"]["tape_db"]))
     if path.exists():
         out["tape_bytes"] = os.path.getsize(path)
@@ -231,7 +231,12 @@ def _collector(cfg, con, now) -> dict:
     last = json.loads(meta.get("last_cycle") or "{}")
     out.update(status=last.get("status"), rows=last.get("prints"),
                bad_rows=last.get("bad_rows"), at=last.get("at"),
-               backoff_until=meta.get("backoff_until"))
+               backoff_until=meta.get("backoff_until"),
+               # matpos (2026-09-05): cached positions, wallets still queued
+               # for recompute, and what the last pass cost. LIVE like every
+               # other field above — off the lane's own last cycle, so the
+               # console line and the dashboard, never the hashed md.
+               mat=last.get("mat") or {})
     if meta.get("last_seen_ts"):
         out["last_seen_age_secs"] = int(now.timestamp()) - int(meta["last_seen_ts"])
     gap = json.loads(meta["last_gap"]) if meta.get("last_gap") else None

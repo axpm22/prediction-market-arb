@@ -359,6 +359,42 @@ def test_rebuild_requeues_every_wallet(cfg, con):
     _assert_same(cfg, con, wallets=wallets)
 
 
+def test_cmd_whale_mat_rebuild_runs_to_completion(cfg, con, tmp_path, capsys):
+    """The CLI: `--rebuild` is unbounded, so it never leaves a backlog behind
+    however small `max_wallets_per_cycle` is. Writes to the tape and opens no
+    ledger at all (`store` is None here, and nothing dereferences it)."""
+    from arb.commands import cmd_whale_mat
+    wallets = _seeded_tape(con, random.Random(8), n_prints=300, n_wallets=6)
+    con.execute("DELETE FROM positions_mat")
+    con.commit()
+    cfg["whale"]["mat"]["max_wallets_per_cycle"] = 1
+    cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
+
+    rc = cmd_whale_mat(cfg, None, type("A", (), {"rebuild": True})())
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert f"rebuild: {len(wallets)} wallet(s) queued" in out
+    assert "0 still dirty" in out
+    _assert_same(cfg, con, wallets=wallets)
+
+
+def test_cmd_whale_mat_without_rebuild_is_one_bounded_pass(cfg, con, tmp_path, capsys):
+    """Bare, it does exactly what a lane cycle does — one bounded slice — and
+    says how much is still queued, because the lane scores off a partial cache
+    until that reaches zero (KNOWN_ISSUES.md)."""
+    from arb.commands import cmd_whale_mat
+    _seeded_tape(con, random.Random(9), n_prints=300, n_wallets=6)
+    cfg["whale"]["mat"]["max_wallets_per_cycle"] = 2
+    cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
+
+    cmd_whale_mat(cfg, None, type("A", (), {"rebuild": False})())
+
+    out = capsys.readouterr().out
+    assert "2 wallet(s) recomputed, 4 still dirty" in out
+    assert "partial cache" in out
+
+
 def test_materialize_reports_rows_backlog_and_seconds(cfg, con):
     """The ops line (§12): how big the cache is, how far behind it is, and
     what the pass cost — the three numbers that say whether the lane is

@@ -326,6 +326,35 @@ booked stand as recorded — `flat_bets`/`bet_events` are append-only (rule 9)
 — and their hold-to-resolution counterfactual is reported as before, so the
 cost of the churn is measured rather than erased.
 
+### 34. L14 materialized-positions rebuild window — the lane scores off a partial cache while it fills
+Opened 2026-09-05 with the per-wallet materialization (design §5 step 6
+amendment of that date, `arb/whale_mat.py`). The 60 s scoring pass no longer
+rebuilds every wallet's positions from every print; it reads a derived
+`positions_mat`/`hygiene_mat` cache that the cycle brings up to date
+`whale.mat.max_wallets_per_cycle` (400) wallets at a time.
+
+**The cost, stated rather than hidden:** on the FIRST cycle after this ships —
+and after any `whale_mat.MAT_VERSION` bump or `arb whale-mat --rebuild` — every
+wallet on the tape is dirty, and the cache fills over several cycles. Until it
+is full the lane scores, ranks and fires off a PARTIAL population: a wallet not
+yet materialized has no positions, so it casts no vote and enters no elite
+percentile. Signals are therefore *under*-counted, never over-counted, and no
+number is wrong — it is computed over fewer wallets than the tape supports.
+
+*Measured 2026-09-05* on a synthetic 800,000-print / 3,000-wallet tape
+(scratchpad, never the production tape): a full first materialization is **8
+cycles / 70 s of work at the shipped cap**, worst cycle 14.9 s, i.e. about 8
+minutes at `whale.poll_secs` 60. The production tape held 763,786 prints and
+~2,700 wallets on that date, so it is the same order.
+
+*Mitigation:* the backlog is on the ops line every cycle (`positions <rows>,
+<n> dirty, <secs>s`, `arb report --daily` console line and the dashboard) and
+in the `whale --once` output. A backlog that does not fall cycle to cycle is
+the alarm; `arb whale-mat --rebuild` drains it in one unbounded run without
+waiting for cycles. *Not fixed, by choice:* a bounded per-cycle rebuild is what
+keeps the lane from stalling on its 300 s child cap, and blocking the lane for
+a whole rebuild would be the worse failure.
+
 ---
 
 ## The two numbers that matter most

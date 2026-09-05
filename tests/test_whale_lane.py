@@ -877,7 +877,11 @@ def test_heartbeat_knows_both_whale_processes(cfg):
     assert cfg["supervisor"]["processes"]["whale-backfill"] is True
     assert cfg["supervisor"]["commands"]["whale"] == "whale --once"
     assert cfg["supervisor"]["commands"]["whale-backfill"] == "whale-backfill --once"
-    assert cfg["supervisor"]["max_child_runtime_secs"]["whale"] == 300   # 120 -> 300 insurance 2026-09-05 (see config comment)
+    # 120 -> 300 as insurance on 2026-09-05 while score_state ran 29 s on 764k
+    # prints, restored to 120 the same day by matpos — which is what that
+    # comment pre-registered. Worst measured cycle of a full cold rebuild is
+    # 14.9 s (config comment): the cap is 5x the worst case, not a guess.
+    assert cfg["supervisor"]["max_child_runtime_secs"]["whale"] == 120
 
 
 def test_stale_lanes_recognises_a_silent_whale_lane(cfg, tmp_path):

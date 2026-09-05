@@ -344,11 +344,20 @@ supervisor:
                mapped: "mapped --once", verify: "verify --once",
                whale: "whale --once", whale-backfill: "whale-backfill --once" }
   max_child_runtime_secs: { default: 600, settle: 1800, live: 120, verify: 30,
-                            whale: 300, whale-backfill: 900 }
+                            whale: 120, whale-backfill: 900 }
                                     # whale 120 -> 300 on 2026-09-05: score_state hit 29 s on 764k
                                     #   prints (cycle 36 s) while 2,700 wallet histories backfill;
                                     #   insurance until the per-wallet materialization lands, then
-                                    #   back to 120.
+                                    #   back to 120. RESTORED to 120 the same day (matpos), as that
+                                    #   comment pre-registered — this is not a fresh cap decision.
+                                    #   The 60 s pass no longer reads the tape's prints at all
+                                    #   (arb/whale_mat.py); MEASURED on a synthetic 800k-print /
+                                    #   3,000-wallet tape: steady state ~2 s materialize + ~2 s
+                                    #   score_state warm, and the WORST cycle of a full cold
+                                    #   rebuild — every wallet dirty at once, the only case that
+                                    #   can approach a cap — 14.9 s. Against ~7 s of network work
+                                    #   in the rest of the cycle that is ~22 s worst case, a 5x
+                                    #   margin under 120.
                                     #   verify polls at 10s — a 30s child is already hung
                                     # per-process; settle+reconcile runs long;
                                     #   a live cycle past 120s is force-restarted;

@@ -231,6 +231,33 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    `resolve_giveup_days` (final review 2026-09-04: without this sweep no
    wallet could ever qualify).
 6. **Score.** `whale_score.scores(positions, resolutions, as_of=now, cfg)`.
+   **Amendment 2026-09-05 (positions are materialized per wallet; the raw
+   prints remain the record).** Step 6 read every print on the tape, rebuilt
+   every wallet's positions and hygiene flags from them, and did so on every
+   60 s cycle — O(prints), measured live 2026-09-05 08:50Z at 29.4 s on
+   763,786 prints and growing ~700k rows/day while wallet histories backfill.
+   The cycle now begins by bringing a derived cache up to date
+   (`whale_mat.materialize`, bounded by `whale.mat.max_wallets_per_cycle`) and
+   step 6 reads that cache. **No scoring semantics change**: the FIFO window,
+   the SELL matching and the hygiene predicates are the same
+   `positions_from_prints` and `hygiene_flags`, called per wallet instead of
+   per tape, and the equivalence is asserted directly against the previous
+   implementation (tests/test_whale_mat.py) rather than assumed — which is why
+   PREREGISTRATION.md is untouched.
+   - A wallet is recomputed WHOLE, never incrementally: FIFO SELL matching
+     needs its full history in ts order, and the backfill inserts OLD prints.
+   - Dirty = any wallet with a `prints` row above the last watermark (the
+     table is append-only with a monotonic id, so this is a range scan of the
+     new rows) — plus, by two `markets` triggers, every wallet holding prints
+     in a market whose `sport`, `market_type` or `start_utc` actually moved,
+     since both the root filter and `pregame` are functions of that row.
+   - `prints` remains the record (rule 7). `positions_mat`/`hygiene_mat` are a
+     cache: they can be dropped and rebuilt (`arb whale-mat --rebuild`), which
+     is what makes DELETE+INSERT on them not a rule-9 question.
+   - Cost of the change: the FIRST pass over an existing tape is spread over
+     cycles, and until it completes the lane scores off a PARTIAL cache —
+     registered in KNOWN_ISSUES.md ("L14 materialized-positions rebuild
+     window"), not hidden.
 7. **Signal.** For each market with prints since the last cycle, evaluate
    V1/V2/V3. Persist every evaluation to `signals`, fired or suppressed with
    a reason.

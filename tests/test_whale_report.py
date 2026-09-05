@@ -861,6 +861,41 @@ def test_the_ops_line_watches_the_tape_size_and_the_rows_per_day(cfg, tmp_path):
     assert f"tape {mb} MB, ~{mb_day} MB/day" in report_whale.whale_line(frame)
 
 
+def test_the_ops_line_watches_the_position_cache(cfg, tmp_path):
+    """matpos (2026-09-05): the scoring pass reads a per-wallet cache the lane
+    keeps current, so the ops line has to say whether it IS current — how many
+    positions it holds, how many wallets are still queued, what the last pass
+    cost. A backlog that does not fall cycle to cycle is the alarm. LIVE, off
+    the lane's own last cycle, so never in the hashed md."""
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    con.execute("INSERT INTO meta (key, value) VALUES ('last_cycle', ?)",
+                (json.dumps({"status": "ok", "prints": 12, "at": NOW.isoformat(),
+                             "mat": {"wallets": 400, "dirty": 2600, "rows": 57290,
+                                     "secs": 8.78}}),))
+    con.commit()
+
+    frame = report_whale.whale_frame(cfg, store, now=NOW, con=con)
+
+    assert frame["collector"]["mat"]["dirty"] == 2600
+    line = report_whale.whale_line(frame)
+    assert "positions 57290, 2600 dirty, 8.78s" in line
+    assert "57290" not in "\n".join(report_whale.whale_md(frame))
+
+
+def test_the_ops_line_survives_a_cycle_that_predates_the_position_cache(cfg, tmp_path):
+    """The first report after this ships reads a `last_cycle` written by the
+    old lane, which has no `mat` key at all — the line drops the figure rather
+    than raising."""
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    con.execute("INSERT INTO meta (key, value) VALUES ('last_cycle', ?)",
+                (json.dumps({"status": "ok", "prints": 12, "at": NOW.isoformat()}),))
+    con.commit()
+
+    line = report_whale.whale_line(report_whale.whale_frame(cfg, store, now=NOW, con=con))
+
+    assert "dirty" not in line and "collector ok" in line
+
+
 def test_the_ops_line_reads_the_tape_size_without_a_readable_tape(cfg, tmp_path):
     """A WAL tape under its writer can refuse a read-only open (open_tape_ro ->
     None) and is still on disk, growing — the one case the size matters most."""
