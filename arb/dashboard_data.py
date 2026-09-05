@@ -138,16 +138,21 @@ def _leg_bid(store, bet: dict, leg: dict) -> Decimal | None:
     return Decimal(rows[0]["bid"]) if rows else None
 
 
-def positions(cfg, store, now=None, con=None) -> list[dict]:
+def positions(cfg, store, now=None, con=None, state=None) -> list[dict]:
     """Every open bet, marked at the latest bid minus the taker fee that selling
     into it would cost — the same basis the L14 exit prices at (§9). WHALE rows
-    also carry their signal's whales and their LIVE exit-rule status."""
+    also carry their signal's whales and their LIVE exit-rule status.
+
+    `state` is a pre-built WhaleState (the dashboard's shared bundle,
+    arb/dashboard_whale_bundle.py) — passed straight through to
+    `dashboard_whale.whale_positions`, which scores its own if this is None."""
     now = now or datetime.now(timezone.utc)
     bets = [dict(r) for r in store.query(OPEN_SQL)]
     whale = {}
     if any(b["kind"] == "WHALE" for b in bets):
         from arb import dashboard_whale
-        whale = dashboard_whale.whale_positions(cfg, store, bets, now, con=con)
+        whale = dashboard_whale.whale_positions(cfg, store, bets, now, con=con,
+                                                state=state)
     out = []
     for bet in bets:
         legs = json.loads(bet["legs_json"])

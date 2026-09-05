@@ -67,7 +67,15 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
     (default: the configured `report_dir`; `write_daily` passes its own outdir,
     so a report written elsewhere counts the days written there). `producing_day`
     is the day this call is FOR — not yet in the chain — so rule 2 counts it too
-    (see `whale_kill.fast_kill_streak`)."""
+    (see `whale_kill.fast_kill_streak`).
+
+    The daily report's ONLY entry point — always builds its own `state` and
+    never consults arb/dashboard_cache.py or arb/dashboard_whale_bundle.py, so
+    a report re-run over a past day stays a pure function of the tape and the
+    ledger (rule 9). The body that turns a `state` into this frame is
+    `_frame_from_state` below, split out so the dashboard's shared bundle can
+    build the SAME frame from the ONE score_state pass it already ran for
+    /api/whale/traders and /api/positions, instead of a second tape scan."""
     from arb.whale_state import score_state
     now = now or datetime.now(timezone.utc)
     opened = con is None and (con := open_tape_ro(cfg)) is not None
@@ -76,83 +84,92 @@ def whale_frame(cfg, store, now: datetime | None = None, con=None,
         # roster and the trader profiles are the same positions, differently
         # summarised, and score_state rebuilds every position from every print
         state = score_state(cfg, con, now) if con is not None else None
-        fire = cfg["whale"]["fire"]
-        day_ago, week_ago = now - timedelta(days=1), now - timedelta(days=7)
-        booked = {r["signal_id"] for r in store.query(
-            "SELECT DISTINCT signal_id FROM flat_bets WHERE kind='WHALE' "
-            "AND signal_id IS NOT NULL")}
-        # only the booked ones: every lookup below is by a bet's own signal_id
-        signals = signals_by_id(con, booked)
-        rows = roi_rows(store)
-        qualifying = _qualifying(cfg, state)
-        native_of = {sid: is_native(sig) for sid, sig in signals.items()}
-        classed = {"native": [], "transfer": []}
-        for r in rows:
-            cls = native_of.get(r["signal_id"])
-            # SPORTS only: this diagnostic split is a property of the primary
-            # root's figure, and pooling roots into it is exactly what the
-            # 2026-09-04 registration forbids.
-            if cls is not None and r["root"] == SPORTS_ROOT:
-                classed["native" if cls else "transfer"].append(r)
-        counts = _signal_counts(store, con, day_ago, week_ago)
-        return {
-            "as_of": now.isoformat(timespec="seconds"),
-            "tape_ok": con is not None,
-            "primary_variant": f"{cfg['whale']['primary_variant']}/flat",
-            "wallets": {**_wallets(con),
-                        "hygiene_excluded": qualifying.pop("hygiene_excluded", 0)},
-            "qualifying": qualifying,
-            # read-time diagnostics (design §12 "Trader profiles"): who is
-            # good, and where. Never an input to points, sizing or firing.
-            "traders": whale_rank.traders_frame(cfg, state, now),
-            "signals": counts,
-            # every table below is keyed by ROOT first (registration
-            # 2026-09-04): the primary metric stays the sports figure and rows
-            # from different roots are never pooled.
-            "primary_root": SPORTS_ROOT,
-            "bets": _bets_by_root(store),
-            "roi": roi_by_root(cfg, rows),
-            "markouts": markout_stats(store),
-            "exits": exit_stats(store, con, signals),
-            # §7 V5: the percentile bar this lane is currently firing on, and
-            # the population behind it. Printed because the elite set moves
-            # week to week (§3) — a step change must be attributable.
-            "elite": {"pct": int(fire["elite_pct"]),
-                      "min_score_lb": cfg["whale"]["min_score_lb"],
-                      "cutoffs": whale_elite.latest(con, now) if con else []},
-            # both MAX(as_of) reads below are bound to `now` (coordinator
-            # review of a42fb14, rule 9 determinism): unbounded, a report
-            # re-run over a past day printed today's row instead of the one
-            # actually in force on the day being reported.
-            "base_rates": [dict(r) for r in con.execute(
-                "SELECT root, as_of, value, n FROM base_rates b WHERE as_of = "
-                "(SELECT MAX(as_of) FROM base_rates x WHERE x.root=b.root "
-                "AND x.as_of <= ?) ORDER BY root", (now.isoformat(),))] if con else [],
-            "native": {
-                "signals": {k: sum(1 for sid, cls in native_of.items()
-                                   if sid in booked and cls is (k == "native"))
-                            for k in ("native", "transfer")},
-                "roi": {k: roi_cell(cfg, v) for k, v in classed.items() if v}},
-            "collector": _collector(cfg, con, now),
-            "calibration": {
-                "min_points": dict(fire["min_points"]),
-                "signal_days": con.execute(
-                    "SELECT COUNT(DISTINCT substr(evaluated_at, 1, 10)) d FROM signals"
-                ).fetchone()["d"] if con else 0,
-                "calibration_days": int(fire["calibration_days"])},
-            # rule 4's count is the SPORTS root's own (whale_kill), while the
-            # signals line above prints the lane-wide one — two different
-            # questions, so they are two different reads.
-            "kill": {"decision_n": int(cfg["whale"]["kill"]["decision_n"]),
-                     "null_n": int(cfg["whale"]["kill"]["null_n"]),
-                     "min_signals_per_week_alarm":
-                         int(cfg["whale"]["kill"]["min_signals_per_week_alarm"]),
-                     **kill_status(cfg, store, con, now, hashes_log_path,
-                                   producing_day)},
-        }
+        return _frame_from_state(cfg, store, con, now, state,
+                                 hashes_log_path, producing_day)
     finally:
         if opened:
             con.close()
+
+
+def _frame_from_state(cfg, store, con, now, state, hashes_log_path,
+                      producing_day: str | None) -> dict:
+    """`whale_frame`'s body, given an already-built `state` (or None — no
+    tape). Pure with respect to scoring: every further read here is a cheap
+    ledger/tape query, never a second score_state pass."""
+    fire = cfg["whale"]["fire"]
+    day_ago, week_ago = now - timedelta(days=1), now - timedelta(days=7)
+    booked = {r["signal_id"] for r in store.query(
+        "SELECT DISTINCT signal_id FROM flat_bets WHERE kind='WHALE' "
+        "AND signal_id IS NOT NULL")}
+    # only the booked ones: every lookup below is by a bet's own signal_id
+    signals = signals_by_id(con, booked)
+    rows = roi_rows(store)
+    qualifying = _qualifying(cfg, state)
+    native_of = {sid: is_native(sig) for sid, sig in signals.items()}
+    classed = {"native": [], "transfer": []}
+    for r in rows:
+        cls = native_of.get(r["signal_id"])
+        # SPORTS only: this diagnostic split is a property of the primary
+        # root's figure, and pooling roots into it is exactly what the
+        # 2026-09-04 registration forbids.
+        if cls is not None and r["root"] == SPORTS_ROOT:
+            classed["native" if cls else "transfer"].append(r)
+    counts = _signal_counts(store, con, day_ago, week_ago)
+    return {
+        "as_of": now.isoformat(timespec="seconds"),
+        "tape_ok": con is not None,
+        "primary_variant": f"{cfg['whale']['primary_variant']}/flat",
+        "wallets": {**_wallets(con),
+                    "hygiene_excluded": qualifying.pop("hygiene_excluded", 0)},
+        "qualifying": qualifying,
+        # read-time diagnostics (design §12 "Trader profiles"): who is
+        # good, and where. Never an input to points, sizing or firing.
+        "traders": whale_rank.traders_frame(cfg, state, now),
+        "signals": counts,
+        # every table below is keyed by ROOT first (registration
+        # 2026-09-04): the primary metric stays the sports figure and rows
+        # from different roots are never pooled.
+        "primary_root": SPORTS_ROOT,
+        "bets": _bets_by_root(store),
+        "roi": roi_by_root(cfg, rows),
+        "markouts": markout_stats(store),
+        "exits": exit_stats(store, con, signals),
+        # §7 V5: the percentile bar this lane is currently firing on, and
+        # the population behind it. Printed because the elite set moves
+        # week to week (§3) — a step change must be attributable.
+        "elite": {"pct": int(fire["elite_pct"]),
+                  "min_score_lb": cfg["whale"]["min_score_lb"],
+                  "cutoffs": whale_elite.latest(con, now) if con else []},
+        # both MAX(as_of) reads below are bound to `now` (coordinator
+        # review of a42fb14, rule 9 determinism): unbounded, a report
+        # re-run over a past day printed today's row instead of the one
+        # actually in force on the day being reported.
+        "base_rates": [dict(r) for r in con.execute(
+            "SELECT root, as_of, value, n FROM base_rates b WHERE as_of = "
+            "(SELECT MAX(as_of) FROM base_rates x WHERE x.root=b.root "
+            "AND x.as_of <= ?) ORDER BY root", (now.isoformat(),))] if con else [],
+        "native": {
+            "signals": {k: sum(1 for sid, cls in native_of.items()
+                               if sid in booked and cls is (k == "native"))
+                        for k in ("native", "transfer")},
+            "roi": {k: roi_cell(cfg, v) for k, v in classed.items() if v}},
+        "collector": _collector(cfg, con, now),
+        "calibration": {
+            "min_points": dict(fire["min_points"]),
+            "signal_days": con.execute(
+                "SELECT COUNT(DISTINCT substr(evaluated_at, 1, 10)) d FROM signals"
+            ).fetchone()["d"] if con else 0,
+            "calibration_days": int(fire["calibration_days"])},
+        # rule 4's count is the SPORTS root's own (whale_kill), while the
+        # signals line above prints the lane-wide one — two different
+        # questions, so they are two different reads.
+        "kill": {"decision_n": int(cfg["whale"]["kill"]["decision_n"]),
+                 "null_n": int(cfg["whale"]["kill"]["null_n"]),
+                 "min_signals_per_week_alarm":
+                     int(cfg["whale"]["kill"]["min_signals_per_week_alarm"]),
+                 **kill_status(cfg, store, con, now, hashes_log_path,
+                               producing_day)},
+    }
 
 
 def _bets_by_root(store) -> dict:

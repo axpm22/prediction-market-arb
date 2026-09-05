@@ -29,6 +29,32 @@ def whale_panel(cfg, store, now=None, con=None) -> dict:
     return report_whale.whale_frame(cfg, store, now=now, con=con, producing_day=today)
 
 
+def traders_shape(cfg, now, level, top, min_n, wallet, profiles) -> dict:
+    """The `/api/whale/traders` response, given an already-built `profiles`
+    list (`whale_rank.profiles` over a state) — or `None` for no tape.
+
+    Split out of `whale_traders` so the dashboard's shared bundle
+    (arb/dashboard_whale_bundle.py) can build `profiles` ONCE per bundle and
+    hand it here for every request, instead of `whale_traders` re-running
+    `score_state` per request (the 2026-09-05 CPU-pileup fix)."""
+    from arb import whale_rank
+    rank_cfg = cfg["whale"]["rank"]
+    level = level if level in whale_rank.DEPTH else "bucket"
+    floor = int(rank_cfg["min_n"] if min_n is None else min_n)
+    limit = int(rank_cfg["top"] if top is None else top)
+    out = {"as_of": now.isoformat(timespec="seconds"), "tape_ok": profiles is not None,
+           "level": level, "min_n": floor, "top": limit, "wallet": wallet,
+           "rows": [], "best": []}
+    if profiles is None:
+        return out
+    if wallet:
+        out["rows"] = whale_rank.wallet_profile(profiles, wallet)
+        out["best"] = whale_rank.best_markets(profiles, wallet, limit, floor)
+    else:
+        out["rows"] = whale_rank.rank(profiles, cfg, level=level, min_n=floor)[:limit]
+    return out
+
+
 def whale_traders(cfg, level="bucket", top=None, min_n=None, wallet=None,
                   now=None, con=None) -> dict:
     """`/api/whale/traders`: every scored wallet ranked (arb/whale_rank.py).
@@ -36,40 +62,35 @@ def whale_traders(cfg, level="bucket", top=None, min_n=None, wallet=None,
     Read-time diagnostics — nothing here gates a fire, and the lb80 a bucket
     row shows IS the one the fire rule reads. `wallet` swaps the table for that
     wallet's whole root -> sport -> bucket record plus its best buckets.
+
+    Standalone entry point (tests, `arb whale traders`) — always builds its
+    own `state`. The live dashboard instead reads `traders_shape` off the
+    shared bundle; see that function's docstring.
     """
     from arb import whale_rank
     now = now or datetime.now(timezone.utc)
-    rank_cfg = cfg["whale"]["rank"]
-    level = level if level in whale_rank.DEPTH else "bucket"
-    floor = int(rank_cfg["min_n"] if min_n is None else min_n)
-    limit = int(rank_cfg["top"] if top is None else top)
-    out = {"as_of": now.isoformat(timespec="seconds"), "tape_ok": False,
-           "level": level, "min_n": floor, "top": limit, "wallet": wallet,
-           "rows": [], "best": []}
     opened = con is None and (con := report_whale.open_tape_ro(cfg)) is not None
-    if con is None:
-        return out
     try:
-        rows = whale_rank.profiles(score_state(cfg, con, now), cfg, now)
-        out["tape_ok"] = True
-        if wallet:
-            out["rows"] = whale_rank.wallet_profile(rows, wallet)
-            out["best"] = whale_rank.best_markets(rows, wallet, limit, floor)
-        else:
-            out["rows"] = whale_rank.rank(rows, cfg, level=level, min_n=floor)[:limit]
-        return out
+        profiles = (whale_rank.profiles(score_state(cfg, con, now), cfg, now)
+                   if con is not None else None)
+        return traders_shape(cfg, now, level, top, min_n, wallet, profiles)
     finally:
         if opened:
             con.close()
 
 
-def whale_positions(cfg, store, bets, now, con=None) -> dict[int, dict]:
+def whale_positions(cfg, store, bets, now, con=None, state=None) -> dict[int, dict]:
     """{bet_id: whale block} for the open WHALE bets among `bets`.
 
     One scoring pass over the tape for all of them (`score_state`, the shared
     assembly), then the lane's own `exit_reason` per bet against the state the
     NEXT cycle would see. `exit_reason` returning None means the bet still
     passes all three rules — the position is held, and that is the status.
+
+    `state` lets a caller that already ran `score_state` this refresh (the
+    dashboard's shared bundle, arb/dashboard_whale_bundle.py) hand it in
+    instead of a second tape scan; the default (None) preserves the old
+    standalone behavior — build it here, from `con`.
     """
     whale_bets = [b for b in bets if b["kind"] == "WHALE"]
     if not whale_bets:
@@ -78,7 +99,7 @@ def whale_positions(cfg, store, bets, now, con=None) -> dict[int, dict]:
     if con is None:
         return {}                     # no tape: the panel says so, per bet
     try:
-        state = score_state(cfg, con, now)
+        state = state if state is not None else score_state(cfg, con, now)
         elite = whale_elite.index(cfg, state)
         pseudonym = {r["proxy_wallet"]: r["pseudonym"]
                      for r in con.execute("SELECT proxy_wallet, pseudonym FROM wallets")}

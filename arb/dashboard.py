@@ -196,14 +196,14 @@ def _section(cfg, store, path: str, query: dict) -> dict:
     instead of 500-ing the page: a broken whale tape must not take the P&L
     curves down with it.
 
-    The two whale sections are the expensive ones (a frame over ~200k tape
-    prints); they go through dashboard_cache's TTL memo (dashboard.cache_secs)
-    so concurrent pollers share one computation instead of each starting
-    their own (live 2026-09-04: that pileup outran the page's own refresh).
-    `/api/whale/traders?wallet=` folds the wallet into the cache key, so the
-    memo is LRU-capped at dashboard.cache_max_entries (review of 9e5951a) —
-    otherwise every distinct wallet ever queried adds a permanent entry."""
-    from arb import dashboard_cache, dashboard_whale
+    /api/whale, /api/whale/traders and /api/positions each need a full
+    `score_state` pass over the tape; piling up 3-4 of those concurrently
+    every refresh was the 2026-09-05 231%-CPU / /api/whale-timeout incident.
+    They now share ONE build per refresh via dashboard_whale_bundle.py (built
+    on dashboard_cache's single-flight TTL memo) — a new print/holdings-poll/
+    booked-bet still forces an immediate rebuild, so nothing here trades
+    correctness for the shared build."""
+    from arb import dashboard_whale, dashboard_whale_bundle
     from arb import dashboard_data as dd
     ttl = float(cfg["dashboard"]["cache_secs"])
     max_entries = int(cfg["dashboard"]["cache_max_entries"])
@@ -213,23 +213,25 @@ def _section(cfg, store, path: str, query: dict) -> dict:
         if path == "/api/pnl":
             days = int(query.get("days", [cfg["dashboard"]["pnl_days"]])[0])
             return dd.pnl_series(cfg, store, max(1, min(days, 365)))
-        if path == "/api/positions":
-            return {"positions": dd.positions(cfg, store)}
         if path == "/api/lanes":
             return {"lanes": dd.lane_verdicts(cfg, store)}
+
+        now = datetime.now(timezone.utc)
+        b = dashboard_whale_bundle.bundle(cfg, store, now, ttl, max_entries)
+        if path == "/api/positions":
+            return {"positions": dd.positions(cfg, store, now=now, state=b["state"]),
+                    "cached_at": b["cached_at"], "age_secs": b["age_secs"]}
         if path == "/api/whale/traders":
             level = query.get("level", ["bucket"])[0]
             top = query.get("top", [None])[0]
             min_n = query.get("min_n", [None])[0]
             wallet = query.get("wallet", [None])[0]
-            key = ("whale_traders", level, top, min_n, wallet)
-            return dashboard_cache.get_or_compute(
-                key, ttl, lambda: dashboard_whale.whale_traders(
-                    cfg, level=level, top=top, min_n=min_n, wallet=wallet),
-                max_entries=max_entries)
-        return {"whale": dashboard_cache.get_or_compute(
-            ("whale_panel",), ttl, lambda: dashboard_whale.whale_panel(cfg, store),
-            max_entries=max_entries)}
+            payload = dashboard_whale.traders_shape(
+                cfg, now, level, top, min_n, wallet, b["profiles"])
+            payload["cached_at"], payload["age_secs"] = b["cached_at"], b["age_secs"]
+            return payload
+        return {"whale": {**b["frame"], "cached_at": b["cached_at"],
+                          "age_secs": b["age_secs"]}}
     except Exception as e:  # noqa: BLE001 — see docstring
         log.warning("dashboard section %s failed: %s", path, e, exc_info=True)
         return {"error": f"{type(e).__name__}: {e}"}

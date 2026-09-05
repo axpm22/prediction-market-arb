@@ -135,6 +135,18 @@ def whale_cfg(tmp_path):
     return c
 
 
+@pytest.fixture(autouse=True)
+def _clear_whale_bundle_cache():
+    """arb/dashboard_cache.py's memo is a process-global dict; the shared
+    whale bundle (arb/dashboard_whale_bundle.py) keys it off cheap MAX() id
+    probes, which two different tests' tmp fixtures can coincidentally share
+    (e.g. two fresh, empty tapes both probe to (None, None, None)) — without
+    this, a later test could read an earlier test's stale cached bundle."""
+    from arb import dashboard_cache
+    dashboard_cache._entries.clear()
+    yield
+
+
 # ---------------------------------------------------------------- /api/pnl
 
 def test_pnl_series_end_where_daily_frame_says_they_end(tmp_path):
@@ -432,6 +444,91 @@ def test_api_whale_and_positions_and_lanes_are_json_over_http(whale_cfg, tmp_pat
         assert _get(base, "/api/lanes")["lanes"] == []
     finally:
         httpd.shutdown()
+
+
+# ------------------------------------------------- shared whale-state bundle
+# Live incident 2026-09-05 ~11:00Z: /api/whale, /api/whale/traders and
+# /api/positions each ran their own score_state pass (~30s on the live
+# 764k-print tape); polled every refresh, that was 3-4 simultaneous 30s CPU
+# burns — 231% CPU, 12 open connections, /api/whale not answering inside
+# 180s. arb/dashboard_whale_bundle.py fixes it: one build, shared.
+
+def test_two_whale_endpoints_back_to_back_run_score_state_once(whale_cfg, tmp_path,
+                                                                monkeypatch):
+    import arb.dashboard_whale_bundle as bundle_mod
+    from arb.dashboard import _section
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(whale_cfg, store, con)
+
+    calls = []
+    real = bundle_mod.score_state
+
+    def counting(cfg, con, now):
+        calls.append(1)
+        return real(cfg, con, now)
+
+    monkeypatch.setattr(bundle_mod, "score_state", counting)
+
+    whale = _section(whale_cfg, store, "/api/whale", {})
+    traders = _section(whale_cfg, store, "/api/whale/traders", {})
+    positions = _section(whale_cfg, store, "/api/positions", {})
+
+    assert len(calls) == 1                          # ONE pass shared by all three
+    assert whale["whale"]["tape_ok"] is True
+    assert traders["tape_ok"] is True
+    assert {r["variant"] for r in positions["positions"]} == \
+        {"V1/flat", "V1/conf", "V1/kelly", "V6/flat", "V6/conf", "V6/kelly"}
+
+
+def test_a_new_print_invalidates_the_bundle(whale_cfg, tmp_path, monkeypatch):
+    """The bundle is keyed off MAX(prints.id) among other cheap probes: a
+    genuinely new print forces a fresh score_state pass instead of serving
+    the stale one for the rest of cache_secs, but nothing new is still one
+    cache hit — never a recompute per request."""
+    import arb.dashboard_whale_bundle as bundle_mod
+    from arb.dashboard import _section
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(whale_cfg, store, con)
+
+    calls = []
+    real = bundle_mod.score_state
+
+    def counting(cfg, con, now):
+        calls.append(1)
+        return real(cfg, con, now)
+
+    monkeypatch.setattr(bundle_mod, "score_state", counting)
+
+    _section(whale_cfg, store, "/api/whale", {})
+    assert len(calls) == 1
+    _section(whale_cfg, store, "/api/whale", {})
+    assert len(calls) == 1                          # unchanged probes: still a hit
+
+    con.execute(
+        "INSERT INTO prints (observed_at, ts, tx_hash, proxy_wallet, condition_id,"
+        " asset, outcome_index, side, price, size, notional_usd, event_slug, source)"
+        " VALUES (?,?,?,?,?,?,0,'BUY',?,?,?,?,'tape')",
+        (NOW.isoformat(), int(NOW.timestamp()), "0xnewprint", "0xw9", CID, "tok",
+         "0.500000", "1000.000000", "500.000000", "e"))
+    con.commit()
+
+    _section(whale_cfg, store, "/api/whale", {})
+
+    assert len(calls) == 2                          # a new print forced a rebuild
+
+
+def test_write_daily_never_touches_the_dashboard_cache(whale_cfg, tmp_path):
+    """report.write_daily's whale section (report_whale.whale_frame) must stay
+    a pure function of the tape/ledger, reproducible for a past day (rule 9)
+    — it must never read or write arb/dashboard_cache.py's memo."""
+    from arb import dashboard_cache, report
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(whale_cfg, store, con)
+
+    report.write_daily(whale_cfg, store, _today(whale_cfg, NOW),
+                       outdir=tmp_path / "reports")
+
+    assert dashboard_cache._entries == {}
 
 
 def test_api_whale_traders_ranks_every_wallet_over_http(whale_cfg, tmp_path):
