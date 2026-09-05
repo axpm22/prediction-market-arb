@@ -121,9 +121,11 @@ def test_whale_config_loads_with_spec_values():
                          "holdings_max_age_polls": 3, "holdings_max_pages": 4,
                          "holdings_keep": "universe"}
     # retention amendment 2026-09-04: prints are kept platform-wide, in full
-    # inside the universes and at or above the global floor outside them
+    # inside the universes and at or above the global floor outside them.
+    # backfill_compact (2026-09-05): the cold-start /activity backfill NULLs
+    # raw_json on its own rows too (title stays — an observed field, rule 7).
     assert w["retention"] == {"scope": "global", "global_min_print_usd": 1000,
-                              "raw_json": "universe"}
+                              "raw_json": "universe", "backfill_compact": True}
     # the same value as the discovery door on purpose: a print that can never
     # contribute to discovery has nothing to contribute at all
     assert w["retention"]["global_min_print_usd"] == w["discovery_min_notional_usd"]

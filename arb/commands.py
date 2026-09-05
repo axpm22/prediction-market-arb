@@ -1169,3 +1169,36 @@ def cmd_whale_backfill(cfg, store, args):
     mres = whale_backfill.map_markets(cfg, con, now)
     print(f"  mapping: {mres['status']} calls={mres['calls']} "
           f"mapped={mres['mapped']} unmappable={mres['unmappable']}")
+
+
+def cmd_whale_compact(cfg, store, args):
+    """One-shot backlog cleanup (2026-09-05): NULL raw_json on `source=
+    'activity'` prints stored before `whale.retention.backfill_compact`
+    started keeping raw_json off NEW backfill rows — the wallet-history
+    cold-start pages `whale-backfill --once` already fetched at full
+    fidelity. `arb whale-compact --backfill` is the only mode today.
+
+    Read-write on the TAPE ONLY, never the ledger: `store` is accepted for
+    dispatch symmetry with every other command (`main()` always builds one)
+    and is never touched here. Bounded batches (`whale_rows.
+    compact_backfill_rows`); does NOT VACUUM — SQLite returns a nulled
+    column's freed space to its own internal freelist for reuse, not to the
+    OS, so the file does not shrink until a VACUUM (or `VACUUM INTO`, as
+    `arb backup` already runs) reclaims it. That takes an exclusive lock this
+    one-shot deliberately does not: run it offline, separately, when it's
+    worth taking."""
+    from pathlib import Path
+    from arb.whale_rows import compact_backfill_rows
+    from arb.whale_tape import open_tape
+    if not getattr(args, "backfill", False):
+        print("usage: whale-compact --backfill  (no other compaction mode implemented yet)")
+        return 0
+    path = Path(str(cfg["whale"]["tape_db"]))
+    if not path.exists():
+        print(f"whale tape not found: {path} — nothing to compact.")
+        return 1
+    con = open_tape(path)
+    touched, freed = compact_backfill_rows(con)
+    print(f"whale-compact: {touched} row(s) compacted, {freed} byte(s) of raw_json freed "
+          "(not reclaimed on disk — VACUUM offline, separately, to shrink the file)")
+    return 0

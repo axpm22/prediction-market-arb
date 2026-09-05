@@ -638,6 +638,31 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   universe market (hygiene's `mm` test needs the sub-floor
                                       #   rows there, so they are kept whole); `all` = keep
                                       #   everywhere (+864 B/row, measured mean); `none` = never.
+    backfill_compact: true            # cold-start /activity backfill (arb/whale_backfill.py
+                                      #   backfill(), 3 wallets/10 min over ~2,700 wallets still
+                                      #   queued) was storing every historical print at FULL
+                                      #   fidelity — the door above does not apply to it
+                                      #   (`_keep(..., ids=None)` keeps everything, on purpose:
+                                      #   hygiene's sub-floor prints). MEASURED (operator,
+                                      #   2026-09-04/05): raw_json ~700 B of ~1 KB/row on disk,
+                                      #   ~1.3 GB/day inflation, tape at 2.7 GB; independently
+                                      #   measured here on tests/fixtures/whale_activity.json (72
+                                      #   rows, the same /activity shape): raw_json averages 825 B.
+                                      #   Nothing downstream reads a backfilled print's raw_json
+                                      #   (scoring: ts/price/size/side/outcome_index/condition_id/
+                                      #   asset; hygiene: price/size/side/ts) — true is the same
+                                      #   ~70-85% row-size cut as `raw_json: none` above, applied
+                                      #   only to backfill rows and only to raw_json (title stays:
+                                      #   an observed field, not a convenience copy — rule 7).
+                                      #   Projected: at ~80% of row bytes removed, the backlog's
+                                      #   ~1.3 GB/day drops to ~0.3 GB/day; draining the remaining
+                                      #   ~2,700 wallets at backfill.wallets_per_cycle=3 /
+                                      #   cadence_secs=600 takes ~900 cycles (~6.25 days), so this
+                                      #   saves roughly 6-7 GB off the backlog alone, before the
+                                      #   rate falls toward zero as new-wallet discovery is what's
+                                      #   left. `false` restores full fidelity for NEW backfill
+                                      #   rows; it does not touch rows already on disk either way —
+                                      #   run `arb whale-compact --backfill` for those.
   nonsports:                          # L14 non-sports ROOTS (amendment 2026-09-04, proposal §1;
                                       #   PREREGISTRATION row of the same date). The lane stops
                                       #   being sports-only: a market's root IS its Polymarket fee

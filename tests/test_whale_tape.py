@@ -1126,6 +1126,132 @@ def test_backfill_writes_prints_only_and_map_markets_maps_them_through_gamma(tmp
     assert other not in rows
 
 
+def test_backfill_stores_rows_compact_by_default_raw_json_null_title_kept(tmp_path):
+    """2026-09-05 retention: the cold-start /activity backfill was storing
+    every historical print at full fidelity — ~1.3 GB/day over ~2,700
+    remaining wallets, most of it `raw_json`, which nothing reads (scoring:
+    ts/price/size/side/outcome_index/condition_id/asset; hygiene: price/size/
+    side/ts). `whale.retention.backfill_compact` defaults true: raw_json NULL,
+    every other column — title included, an observed field rather than a
+    convenience copy (rule 7) — kept exactly as fetched."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00", source="leaderboard")
+    con.commit()
+    acts = _fixture("whale_activity")
+    cfg = _cfg(backfill={"wallets_per_cycle": 1, "pages_per_wallet": 1, "page_size": len(acts)})
+
+    res = whale_backfill.backfill(cfg, con, NOW, get=FakeGet(acts))
+
+    rows = con.execute("SELECT title, raw_json, price, size, side, ts, outcome_index, "
+                       "condition_id, asset FROM prints").fetchall()
+    assert res["rows"] == len(acts) == len(rows) > 0
+    assert all(r["raw_json"] is None for r in rows)
+    assert all(r["title"] is not None for r in rows)
+    assert all(r["price"] is not None and r["side"] is not None
+              and r["outcome_index"] is not None for r in rows)
+
+
+def test_backfill_compact_false_restores_full_fidelity_rows(tmp_path):
+    """The escape hatch: an operator who wants the pre-2026-09-05 behaviour
+    back sets `backfill_compact: false` — no code change needed."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00", source="leaderboard")
+    con.commit()
+    acts = _fixture("whale_activity")
+    cfg = _cfg(backfill={"wallets_per_cycle": 1, "pages_per_wallet": 1, "page_size": len(acts)})
+    cfg["whale"]["retention"] = {**cfg["whale"]["retention"], "backfill_compact": False}
+
+    whale_backfill.backfill(cfg, con, NOW, get=FakeGet(acts))
+
+    rows = con.execute("SELECT raw_json FROM prints").fetchall()
+    assert len(rows) > 0 and all(r["raw_json"] is not None for r in rows)
+
+
+def test_backfill_compact_rows_score_and_hygiene_identically_to_full_rows(tmp_path):
+    """Equivalence: compacting must not change what the lane computes off a
+    backfilled print. Run the same fixture through backfill twice, once
+    compact and once full, and assert positions_from_prints/hygiene_flags
+    agree exactly on the two tapes."""
+    acts = _fixture("whale_activity")
+    wallet = acts[0]["proxyWallet"]
+
+    def _tape(path, compact):
+        con = whale_tape.open_tape(path)
+        _wallet(con, wallet, "2026-09-01T00:00:00+00:00", source="leaderboard")
+        con.commit()
+        cfg = _cfg(backfill={"wallets_per_cycle": 1, "pages_per_wallet": 1,
+                             "page_size": len(acts)})
+        cfg["whale"]["retention"] = {**cfg["whale"]["retention"], "backfill_compact": compact}
+        whale_backfill.backfill(cfg, con, NOW, get=FakeGet(acts))
+        cfg["whale"]["min_print_usd"] = 0   # the fixture's own notionals run $0.01-$50
+        return con, cfg
+
+    con_c, cfg_c = _tape(tmp_path / "compact.sqlite", True)
+    con_f, cfg_f = _tape(tmp_path / "full.sqlite", False)
+    rc = [dict(r) for r in con_c.execute("SELECT * FROM prints ORDER BY id")]
+    rf = [dict(r) for r in con_f.execute("SELECT * FROM prints ORDER BY id")]
+    assert len(rc) == len(rf) == len(acts) > 0
+    assert all(r["raw_json"] is None for r in rc)
+    assert all(r["raw_json"] is not None for r in rf)
+
+    markets = {cid: {"sport": "baseball_mlb", "market_type": "WINNER", "start_utc": None}
+              for cid in {r["condition_id"] for r in rc}}
+    pos_c = whale_score.positions_from_prints(rc, markets, cfg_c)
+    pos_f = whale_score.positions_from_prints(rf, markets, cfg_f)
+    assert len(pos_c) > 0
+    assert pos_c == pos_f
+
+    hyg_c = whale_hygiene.hygiene_flags(rc, pos_c, cfg_c)
+    hyg_f = whale_hygiene.hygiene_flags(rf, pos_f, cfg_f)
+    assert hyg_c == hyg_f
+
+
+def test_whale_compact_cli_nulls_backfill_raw_json_on_a_fixture_tape(tmp_path, capsys):
+    """The one-shot `arb whale-compact --backfill`: NULLs raw_json on existing
+    `source='activity'` rows in bounded batches, touches nothing else — a
+    `source='tape'` (live collector) row keeps its raw_json even when it is a
+    universe row that already carries one — and reports rows touched and
+    bytes freed. Never VACUUMs (that's the operator's own, offline, separate
+    call)."""
+    import re
+    from types import SimpleNamespace
+    from arb.commands import cmd_whale_compact
+    from arb.store import Store
+    path = tmp_path / "w.sqlite"
+    con = whale_tape.open_tape(path)
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00", source="leaderboard")
+    con.commit()
+    acts = _fixture("whale_activity")
+    cfg = _cfg(backfill={"wallets_per_cycle": 1, "pages_per_wallet": 1, "page_size": len(acts)})
+    cfg["whale"]["retention"] = {**cfg["whale"]["retention"], "backfill_compact": False}
+    whale_backfill.backfill(cfg, con, NOW, get=FakeGet(acts))       # full-fidelity backfill rows
+    whale_tape.poll_prints(cfg, con, _universe(), NOW,
+                           get=FakeGet(_two_door_page(int(NOW.timestamp()) - 30)))
+    before = {r["tx_hash"]: dict(r) for r in con.execute("SELECT * FROM prints")}
+    activity = {h for h, r in before.items() if r["source"] == "activity"}
+    tape = {h for h, r in before.items() if r["source"] == "tape"}
+    assert len(activity) == len(acts) and "0x1" in tape
+    assert all(before[h]["raw_json"] is not None for h in activity)   # pre-compact: full
+    assert before["0x1"]["raw_json"] is not None                      # universe row: full
+    con.close()
+
+    cfg["whale"]["tape_db"] = str(path)
+    rc = cmd_whale_compact(cfg, Store(tmp_path / "arb.sqlite"), SimpleNamespace(backfill=True))
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    m = re.search(r"(\d+) row\(s\) compacted, (\d+) byte\(s\)", out)
+    assert m and int(m.group(1)) == len(activity) and int(m.group(2)) > 0   # count reported
+    con = whale_tape.open_tape(path)
+    after = {r["tx_hash"]: dict(r) for r in con.execute("SELECT * FROM prints")}
+    assert all(after[h]["raw_json"] is None for h in activity)
+    assert all(after[h]["raw_json"] == before[h]["raw_json"] for h in tape)  # untouched
+    for h in activity:                          # every other column is byte-identical
+        b, a = before[h], after[h]
+        assert {k: v for k, v in a.items() if k != "raw_json"} == \
+               {k: v for k, v in b.items() if k != "raw_json"}
+
+
 def test_map_markets_revisits_an_existing_row_missing_a_field(tmp_path):
     """Mapper fix pass (2026-09-04): the ORIGINAL bug — `_map_markets` did
     INSERT OR IGNORE, so a `markets` row already on hand (here: a prefix

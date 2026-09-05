@@ -104,6 +104,11 @@ def main(argv=None):
                                                  "trade-history backfill for the L14 whale "
                                                  "lane (its own process: ~11 min a cycle)")
     p_wb.add_argument("--once", action="store_true")
+    p_wc = sub.add_parser("whale-compact", help="one-shot retention cleanup: NULL raw_json on "
+                                                "existing backfill prints (tape only, never "
+                                                "the ledger; does not VACUUM)")
+    p_wc.add_argument("--backfill", action="store_true",
+                      help="compact existing source='activity' rows (the only mode today)")
     p_wm = sub.add_parser("whale-mat", help="bring the L14 positions/hygiene cache up to "
                                             "date, or force a full rebuild of it from the "
                                             "tape's prints (keyless, 0 credits)")

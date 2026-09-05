@@ -159,9 +159,18 @@ def backfill(cfg, con, now, get=get_json) -> dict:
     (`_keep(..., ids=None)`), so `prints` is itself the durable queue mapping
     reads from; folding mapping in here used to mean walking every
     condition_id this cycle's wallets had EVER touched (thousands, 2 ids a
-    Gamma call), which is what blew the child's 900s cap."""
+    Gamma call), which is what blew the child's 900s cap.
+
+    Retention (2026-09-05, `whale.retention.backfill_compact`, default true):
+    the historical wallet pages this fetches were being stored at full
+    fidelity — ~1.3 GB/day over the ~2,700 wallets still queued, most of it
+    raw_json, which nothing downstream reads (scoring: ts/price/size/side/
+    outcome_index/condition_id/asset; hygiene: price/size/side/ts). `_keep`'s
+    `compact=` NULLs raw_json alone; title and every other column are kept
+    exactly as fetched, same as before. `false` restores the old behaviour."""
     w = cfg["whale"]
     bf = w["backfill"]
+    compact = bool(w["retention"]["backfill_compact"])
     res = {"wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0,
            "status_counts": {}, "status": "ok"}
     if _backoff_active(con, now):
@@ -176,7 +185,7 @@ def backfill(cfg, con, now, get=get_json) -> dict:
             for page in range(int(bf["pages_per_wallet"])):
                 body = _call(bucket, get, f"{DATA_API}/activity?user={wallet}&type=TRADE"
                              f"&limit={size}&offset={page * size}", cfg, res)
-                _keep(con, body, None, now, res, source="activity")
+                _keep(con, body, None, now, res, source="activity", compact=compact)
                 if len(body) < size:
                     break
             con.execute("UPDATE wallets SET backfilled_at=? WHERE proxy_wallet=?",
