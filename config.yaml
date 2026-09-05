@@ -1090,8 +1090,10 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   [0.8,0.9) -0.0193 (1,941), [0.9,1.0] -0.0257 (1,635).
                                       #   The edges sit where that table's own steps are.
     band_min_n: 200                   # a band with fewer resolved outcomes than this in the
-                                      #   lookback falls back to the ROOT base rate m0 — the
-                                      #   honest reading of "we do not know what this band pays"
+                                      #   lookback falls back to ZERO (no adjustment) — the
+                                      #   honest reading of "we do not know what this band
+                                      #   pays" is to leave the edge alone, not to guess at m0
+                                      #   twice (fix 2026-09-06, KNOWN_ISSUES #37)
     band_adjust: true                 # false restores the pre-2026-09-05 score exactly (the
                                       #   frozen-clock comparison runs both ways)
   hygiene: { mm_window_secs: 600, mm_market_share: 0.30, mm_max_avg_usd: 50,

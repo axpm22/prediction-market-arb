@@ -1015,12 +1015,25 @@ def test_the_lane_books_at_the_shipped_min_score_lb(tmp_path):
     # the shipped bar is beating the band, so the fixture has to contain both
     # halves of the band it is beating.
     _resolved_history(con, wallets, edge="0.01", sport="basketball_nba")
+    # ... and a filler cohort in that SAME band (as test_whale_bands.py's
+    # `_two_bands` does): without it w0-2 are 100% of band 5, so "beating the
+    # band" is really just w0-2 beating their own other sport. edge 0.045 is
+    # exactly the two halves' own blended mean, so adding it at any volume
+    # cannot move the band rate — it only makes the band an independent
+    # population these three wallets are actually graded against.
+    _resolved_history(con, [f"wf{i}" for i in range(3)], edge="0.045",
+                       sport="icehockey_nhl")
 
     res = _run(cfg, store, con)
 
-    assert res["fired"] == 2 and res["booked"] == 6
+    # V5 (elite-percentile cutoff) now also fires, on top of V1 and V6: with
+    # only w0-2 in the population an elite cutoff had nothing to separate them
+    # from, and the filler cohort — genuinely at the band's own rate, e_adj =
+    # 0 — is what gives the percentile a population to be elite AGAINST.
+    assert res["fired"] == 3 and res["booked"] == 9
     assert [b["variant"] for b in _bets(store)] == [
-        "V1/flat", "V1/conf", "V1/kelly", "V6/flat", "V6/conf", "V6/kelly"]
+        "V1/flat", "V1/conf", "V1/kelly", "V5/flat", "V5/conf", "V5/kelly",
+        "V6/flat", "V6/conf", "V6/kelly"]
 
 
 def test_the_cycle_records_its_own_wall_duration(cfg, tmp_path):

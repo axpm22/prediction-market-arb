@@ -81,9 +81,31 @@ def _positions(wallet, sport, mtype, edges, resolutions, tag="",
     return out
 
 
+def _scores_all(cfg, positions, resolutions, rates):
+    """`whale_score.scores` had no production caller and was the only chain
+    scoring WITHOUT band grading (deleted 2026-09-06); this is that same
+    dict-of-Score assembly, routed through the real `whale_bands.adjust` +
+    `table`, so this file can no longer structurally disagree with production
+    about how grading is wired in. `band_adjust` is forced off on a private
+    copy of `cfg` (this file's own tests are the PURE root/sport/bucket math,
+    spec §6's worked table and 400-identical-edge fixtures included — bands
+    grading those against THEMSELVES would erase the very signal the test
+    pins; `whale_bands`/`whale_state` cover the graded case). Off is proved a
+    bit-for-bit no-op through `table`/`adjust` in
+    tests/test_whale_bands.py."""
+    off = copy.deepcopy(cfg)
+    off["whale"]["score"]["band_adjust"] = False
+    outcomes = whale_score.resolved_outcomes(positions, resolutions, AS_OF)
+    outcomes = whale_bands.adjust(outcomes, whale_bands.table(outcomes, AS_OF, off), off)
+    agg = whale_score.aggregate(outcomes)
+    return {key: whale_score.score_for(agg, key[0], key[2], key[3].split(":", 1)[1],
+                                       cfg, rates)
+            for key in agg if len(key) == 4}
+
+
 def _score(cfg, positions, resolutions, bucket_key=None, m0="-0.02"):
     rates = {"sports": Decimal(m0), "nonsports": Decimal(m0)}
-    got = whale_score.scores(positions, resolutions, AS_OF, cfg, rates)
+    got = _scores_all(cfg, positions, resolutions, rates)
     return got if bucket_key is None else got[bucket_key]
 
 
@@ -559,9 +581,9 @@ def test_a_politics_edge_never_moves_the_same_wallets_sports_lower_bound(cfg):
     resolutions = {}
     sports = _positions("0xw", "baseball_mlb", "WINNER", [0.2, 0.2, 0.2], resolutions)
     key = ("0xw", "sports", "baseball_mlb", "baseball_mlb:WINNER")
-    alone = whale_score.scores(sports, resolutions, AS_OF, cfg, rates)[key]
+    alone = _scores_all(cfg, sports, resolutions, rates)[key]
     politics = _positions("0xw", "politics", "BINARY", [0.9] * 50, resolutions)
-    both = whale_score.scores(sports + politics, resolutions, AS_OF, cfg, rates)[key]
+    both = _scores_all(cfg, sports + politics, resolutions, rates)[key]
     assert both.lb == alone.lb
     assert both.n_root == alone.n_root == 3
 

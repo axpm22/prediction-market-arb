@@ -27,8 +27,13 @@ mean — is then taken off the SAME graded edges, exactly as before, which
 centres it near zero: the band table already carries what the root pays.
 
 Thin bands: below `band_min_n` there is no honest band estimate, so the band
-falls back to the root's own m0, which leaves such a position exactly where the
-pre-amendment score put it. `band_adjust: false` restores that everywhere.
+falls back to ZERO — no adjustment — which leaves such a position exactly
+where the pre-amendment score put it (fix 2026-09-06: the fallback used to be
+the root's own m0, computed on the RAW edges here and then taken off the
+ADJUSTED edges again as the EB prior in `whale_state.score_state` — for a root
+whose n never clears `base_rate_min_n`, both reads return the same
+`base_rate_default` and it was subtracted twice). `band_adjust: false`
+restores the same bit-for-bit result everywhere.
 
 Population: whatever outcomes the caller hands in — the lane and the report
 both pass their hygiene-filtered, point-in-time set, so the band rate is drawn
@@ -46,7 +51,6 @@ from datetime import timedelta
 from decimal import Decimal
 
 from arb.models import q6
-from arb.whale_score import base_rate
 
 
 def edges(cfg) -> list:
@@ -72,10 +76,12 @@ def band_base_rates(outcomes, root, as_of, cfg) -> dict[int, tuple[Decimal, int]
     `base_rate_lookback_days` — `base_rate`'s own lookback and `as_of`
     discipline, so a band can no more see the future than m0 can.
 
-    Below `band_min_n` the band reports the root's m0 instead: unknown is not
-    zero, and m0 is the reading that leaves the score where it was. Every
-    registered band is present, empty ones included, so a caller indexes by
-    band without a KeyError.
+    Below `band_min_n` the band reports ZERO instead: unknown is not a rate to
+    grade against, and zero is the one value that leaves the edge untouched —
+    the root's own m0 prior (computed downstream on these same edges) does the
+    grading instead, exactly as it did before this amendment. Every registered
+    band is present, empty ones included, so a caller indexes by band without
+    a KeyError.
     """
     s = cfg["whale"]["score"]
     floor = as_of - timedelta(days=int(s["base_rate_lookback_days"]))
@@ -85,12 +91,11 @@ def band_base_rates(outcomes, root, as_of, cfg) -> dict[int, tuple[Decimal, int]
             cell = cells[band_of(o.avg_price, cfg)]
             cell[0] += 1
             cell[1] += o.e
-    m0 = base_rate(outcomes, root, as_of, cfg)[0]
     min_n = int(s["band_min_n"])
     out = {}
     for b in range(len(edges(cfg)) + 1):
         n, total = cells[b] if b in cells else (0, Decimal(0))
-        out[b] = ((q6(total / n) if n >= min_n else m0), n)
+        out[b] = ((q6(total / n) if n >= min_n else Decimal(0)), n)
     return out
 
 

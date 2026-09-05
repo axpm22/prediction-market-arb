@@ -484,6 +484,31 @@ sports wallets, 12 of the top-20% 448 leave and 12 enter, sports m0 moves
 excess x notional all step at that cycle; signals already fired keep the lb
 recorded with them (rule 9, append-only) and are NOT re-graded.
 
+**CRITICAL, found by review, *Fixed 2026-09-06*:** the switch-on itself shipped
+with a double-subtraction. A band below `band_min_n` (200) fell back to the
+ROOT base rate m0 computed on the RAW edges (`whale_bands.band_base_rates`);
+`whale_state.score_state` then took m0 off the ADJUSTED edges again as the EB
+prior. For sports (large n, mostly fat bands) this mostly self-cancelled, but
+for politics/geopolitics/crypto (n 73/0/0, all below `base_rate_min_n` 500)
+`base_rate` returns `base_rate_default` (−0.02) both times, so −0.02 was
+subtracted per outcome AND used as the prior — every one of the 29 non-sports
+scores moved UP (+0.0007..+0.0158), loosening the bar for the roots this
+amendment exists to tighten. Fixed by making a thin band fall back to
+`Decimal(0)` (no adjustment) instead of m0, so an all-thin root's own m0 prior
+does the grading exactly as it did before the amendment.
+**Measured absolute effect of the (buggy) switch-on on the qualifying
+roster** (the `min_score_lb` 0.0 gate every variant reads) — off vs on,
+reviewer's read-only measurements *at HEAD before the thin-band fix* (commit
+569bb59; labeled below "measured 2026-09-05 at 569bb59, before the thin-band
+fix"): **601 -> 360 qualifying rows, 226 -> 145 distinct wallets (−36%; 242
+lost, 1 gained)**. The elite-cutoff paragraph above is also corrected by the
+same read-only pass: "2,241 scored sports wallets" should read
+`whale_elite.population` **= 1,070**; churn at the top-20% cutoff is **9 of
+214 leave / 9 enter** (not "12 of the top-20% 448"), and the cutoff score
+itself moves **−0.025401 -> −0.041878**. These figures describe the bug's
+size, not the fix — signals fired under the buggy switch-on are, as above,
+still not re-graded.
+
 ---
 
 ## The two numbers that matter most

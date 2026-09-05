@@ -4,12 +4,10 @@ PURE. No sqlite, no network, no clock: callers hand in plain rows and a
 required `as_of`, which is what makes the frozen-clock proof possible (spec
 §6 "Point-in-time"). Hygiene lives in arb/whale_hygiene.py, on size alone.
 
-Rule 4: every threshold comes from `cfg["whale"]`.
-Rule 5: prices, sizes and edges are Decimal; the normal-normal chain runs in
-        float (a statistical internal) and every Score field is re-quantized
-        to 6 places with arb.models.q6.
-Root isolation (spec §6 "Hierarchy"): `_agg_keys` is the ONLY place an
-outcome becomes an aggregation key, and every key it builds carries `root`.
+Rule 4: every threshold comes from `cfg["whale"]`. Rule 5: prices, sizes and
+edges are Decimal; the normal-normal chain runs in float (a statistical
+internal) and every Score field is re-quantized to 6 places with
+arb.models.q6. Root isolation is `_agg_keys`' job — see there.
 """
 from __future__ import annotations
 
@@ -31,12 +29,10 @@ BUY, SELL = "BUY", "SELL"
 
 @dataclass(frozen=True)
 class Position:
-    """One wallet's BUY window in one (condition_id, outcome_index).
-
-    `entry_ts` is the first BUY, `last_ts` the last (spec §6 calls that one
-    "the position's print": it is what pregame and the §7 signal window test).
-    `sold_size`/`sell_value` are the FIFO-matched SELLs against this position.
-    """
+    """One wallet's BUY window in one (condition_id, outcome_index). `entry_ts`
+    is the first BUY, `last_ts` the last (spec §6's "position's print", what
+    pregame and the §7 signal window test). `sold_size`/`sell_value` are the
+    FIFO-matched SELLs against it."""
     wallet: str
     condition_id: str
     outcome_index: int
@@ -61,10 +57,8 @@ class Position:
 @dataclass(frozen=True)
 class Outcome:
     """A resolved, scorable position: its realized edge and when it landed.
-
-    `avg_price` rides along for arb/whale_bands.py (amendment 2026-09-05): it
-    is the one field that says which PRICE BAND the edge is graded against.
-    """
+    `avg_price` rides along for arb/whale_bands.py — the one field that says
+    which PRICE BAND the edge is graded against."""
     wallet: str
     root: str
     sport: str
@@ -88,13 +82,10 @@ class Score:
 
 def root_of(sport, market_type) -> str | None:
     """None means unmappable — such a market never forms a scored position.
-
-    Non-sports amendment 2026-09-04: the root IS the Polymarket fee category,
-    so `politics` and `crypto` are DISJOINT roots rather than one pooled
-    `nonsports` one. One field then prices the leg (`leg_fee_cost`), segregates
-    the report and isolates the score — and because `_agg_keys` already carries
-    `root` in position 1 of every key, that isolation is structural.
-    """
+    The root IS the Polymarket fee category (2026-09-04), so `politics` and
+    `crypto` are DISJOINT roots rather than one pooled `nonsports` one; because
+    `_agg_keys` already carries `root` in position 1 of every key, isolating
+    the score, the fee and the report by root is structural, not a filter."""
     if not sport:
         return None
     if sport in NONSPORTS:
@@ -123,19 +114,11 @@ def positions_from_prints(prints, markets, cfg, res=None) -> list[Position]:
     wallet's open positions FIFO and never form one (Polymarket has no native
     short). `res` is an optional diagnostics dict — dust, unmapped, orphan_sell.
 
-    posperf (2026-09-04): each group's own rows must land here in ascending
-    ts, but the whole tape does not — the old `sorted(prints, key=ts)` up
-    front sorted 400k rows to guarantee an order only ~2-3 rows/group need.
-    `arb/whale_state.py` now asks SQLite for `ORDER BY proxy_wallet,
-    condition_id, outcome_index, ts` (idx_prints_score, arb/whale_tape.py),
-    so this groups in whatever order it receives prints and only re-sorts a
-    group whose own ts sequence goes backwards — free (a single per-row
-    comparison) when the caller already delivers order, still correct for a
-    caller (tests included) that hands in prints in any order. `notional_usd`
-    is also parsed to Decimal exactly once per row now (was: once for the
-    dust check, again into `cur["notional"]`) and checked BEFORE price/size
-    are parsed at all, so a dust row costs one Decimal() call, not three.
-    """
+    posperf (2026-09-04): a group's rows must land in ascending ts, but the
+    whole tape need not — the caller already asks SQLite for that order
+    (idx_prints_score, arb/whale_tape.py), so this only re-sorts a group whose
+    own ts sequence goes backwards. `notional_usd` is parsed to Decimal once
+    per row, before price/size, so a dust row costs one Decimal() call."""
     w = cfg["whale"]
     window, min_usd = int(w["position_window_secs"]), Decimal(str(w["min_print_usd"]))
     res = {} if res is None else res
@@ -213,9 +196,8 @@ def positions_from_prints(prints, markets, cfg, res=None) -> list[Position]:
 
 
 def realized_edge(pos: Position, payout: Decimal) -> Decimal:
-    """Spec §6, pinned 2026-09-03: shares sold before resolution realize their
-    sell price, the rest the payout. Per share, so it is comparable to a price.
-    """
+    """Spec §6: shares sold before resolution realize their sell price, the
+    rest the payout — per share, so it is comparable to a price."""
     got = pos.sell_value + (pos.size - pos.sold_size) * Decimal(payout)
     return q6(got / pos.size - pos.avg_price)
 
@@ -262,12 +244,10 @@ def aggregate(outcomes) -> dict[tuple, tuple[int, Decimal]]:
 
 def base_rate(outcomes, root, as_of, cfg) -> tuple[Decimal, int]:
     """`m0`: mean realized edge of EVERY wallet in `root` over the last
-    `base_rate_lookback_days`. Below `base_rate_min_n` the default stands.
-
-    Since the 2026-09-05 band amendment the assembly calls this on the
-    BAND-ADJUSTED edges (arb/whale_bands.py) — the same statistic of a
-    re-centred population, so m0 centres near zero and stays the EB prior mean.
-    """
+    `base_rate_lookback_days`. Below `base_rate_min_n` the default stands. The
+    assembly (`whale_state.score_state`) calls this on BAND-ADJUSTED edges
+    (arb/whale_bands.py) — the same statistic of a re-centred population, so
+    m0 stays the EB prior mean, now centred near zero."""
     s = cfg["whale"]["score"]
     floor = as_of - timedelta(days=int(s["base_rate_lookback_days"]))
     es = [o.e for o in outcomes if o.root == root and floor <= o.resolved_at < as_of]
@@ -318,14 +298,3 @@ def score_for(agg, wallet, sport, market_type, cfg, base_rates) -> Score:
                  lb=q6(Decimal(mu - float(w["score"]["z"]) * sd)),
                  lb_report=q6(Decimal(mu - float(w["score"]["z_report"]) * sd)),
                  native=own_lb >= Decimal(w["min_score_lb"]))
-
-
-def scores(positions, resolutions, as_of, cfg, base_rates) -> dict[tuple, Score]:
-    """(wallet, root, sport, bucket) -> Score, for every bucket a wallet has
-    actually traded. An untraded bucket is `score_for`, which Task 6 asks for
-    per market. Hygiene-excluded positions are filtered by the caller, and so
-    is band grading (`whale_bands.table`/`adjust`, applied by the assembly in
-    whale_state.score_state) — this module stays the pure math."""
-    agg = aggregate(resolved_outcomes(positions, resolutions, as_of))
-    return {key: score_for(agg, key[0], key[2], key[3].split(":", 1)[1], cfg, base_rates)
-            for key in agg if len(key) == 4}

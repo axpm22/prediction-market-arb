@@ -90,21 +90,25 @@ def _one_band(res, price="0.50", wins=11, losses=9, fillers=29):
     return pos
 
 
-def test_a_thin_band_falls_back_to_the_root_base_rate(cfg):
+def test_a_thin_band_falls_back_to_zero_no_adjustment(cfg):
     """Below `band_min_n` there is no honest band estimate, so the band is
-    graded at m0 — which leaves such a position exactly where the pre-amendment
-    score put it."""
+    graded at ZERO — which leaves such a position exactly where the
+    pre-amendment score put it. (Fix 2026-09-06: the fallback used to be the
+    root's own m0 computed on these RAW edges, and `whale_state.score_state`
+    then took m0 off the ADJUSTED edges again as the EB prior — for a root
+    below `base_rate_min_n` both reads are the same `base_rate_default` and it
+    was subtracted twice. Pinned literal, not `m0`, so the test cannot pass by
+    coincidentally matching whatever `base_rate` happens to return today.)"""
     res = {}
     pos = _one_band(res)                                   # 600 at 0.50, band 2
     pos += _bucket("wThin", "0.95", 2, 8, res)             # 10 at 0.95, band 5
     outs = _outcomes(pos, res)
-    m0, _ = whale_score.base_rate(outs, "sports", AS_OF, cfg)
     bands = whale_bands.band_base_rates(outs, "sports", AS_OF, cfg)
 
-    assert bands[5] == (m0, 10)                # thin: the root rate, not -0.75
+    assert bands[5] == (Decimal("0"), 10)      # thin: no adjustment, not -0.75
     assert bands[2] == (q6(Decimal("0.05")), 610 - 10)     # fat: its own mean
-    assert bands[2][0] != m0                   # ... and the fallback is not a no-op
-    assert bands[0] == (m0, 0)                 # an empty band still reports
+    assert bands[2][0] != Decimal("0")         # ... and a fat band still adjusts
+    assert bands[0] == (Decimal("0"), 0)       # an empty band still reports
 
 
 # ---------------------------------------------------------------- grading
@@ -186,27 +190,34 @@ def test_score_state_grades_against_the_band_and_the_switch_reaches_it(cfg,
                                                                        tmp_path):
     """The wiring: one assembly, so V5's cutoffs, V6's excess and the V2/V3
     weights read graded skill without a branch of their own. The fixture's six
-    positions are far below `band_min_n`, so the band grades at m0."""
+    positions are far below `band_min_n`, so every band grades at zero — an
+    all-thin root is a no-op, on or off, and `on.lb == off.lb` pins that
+    (fix 2026-09-06: before it, the fallback was m0 computed on raw edges,
+    subtracted again as the EB prior, and this fixture's `on.lb` came out
+    ABOVE `off.lb` even though nothing here was actually graded)."""
     on = _state(cfg, tmp_path / "on", True)
     off = _state(copy.deepcopy(cfg), tmp_path / "off", False)
     m0 = q6(Decimal(str(cfg["whale"]["score"]["base_rate_default"])))
 
-    assert on.bands["sports"][3] == (m0, 6)      # 0.60 is band 3
+    assert on.bands["sports"][3] == (Decimal("0"), 6)    # 0.60 is band 3, thin
     assert off.bands == {}
     key = ("0xwhale", "basketball_nba", "WINNER")
-    assert on.lookup(*key).lb > off.lookup(*key).lb    # m0 was negative
+    assert on.lookup(*key).lb == off.lookup(*key).lb   # thin: no adjustment
     assert on.rates["sports"] == m0                    # n 6 < base_rate_min_n
 
 
 def test_the_rank_table_reports_the_edge_above_what_the_band_paid(cfg, tmp_path):
     """`band_excess` beside `edge_mean`: same six positions, the band's own pay
-    taken off. Diagnostics — the column is read, never fed back."""
+    taken off. Diagnostics — the column is read, never fed back. The six-
+    position tape is far below `band_min_n`, so every band is thin and grades
+    at zero (fix 2026-09-06) — `band_excess` collapses to `edge_mean` exactly,
+    which is the honest reading when there is no band evidence yet."""
     state = _state(cfg, tmp_path / "t", True)
     rows = whale_rank.profiles(state, cfg, AS_OF)
     row = [r for r in rows if r["level"] == "bucket"][0]
 
     assert row["edge_mean"] == q6(Decimal("1.4") / 6)      # 5 x +0.4, 1 x -0.6
-    assert row["band_excess"] == q6(Decimal("1.52") / 6)   # ... each +0.02
+    assert row["band_excess"] == row["edge_mean"]          # thin: no adjustment
     assert "band excess" in "\n".join(whale_rank.traders_md(
         {"top": [row], "best": {}}))
     assert "band_excess" in Path("arb/dashboard.html").read_text()

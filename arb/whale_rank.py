@@ -3,12 +3,12 @@ is good (design §12 "Trader profiles (read-time)").
 
 DIAGNOSTICS ONLY. Nothing in this module feeds qualification, points, sizing,
 exits or firing — V1..V4 and `whale.min_score_lb` are untouched. It reads the
-`WhaleState` the lane and the daily report already built and re-derives nothing
-from the tape: same positions, same resolutions, same base rates, same
-`whale_score` predicate for "is this position scorable yet".
+`WhaleState` the lane and the daily report already built and re-derives
+nothing from the tape: same positions, resolutions, base rates and
+`whale_score` scorability predicate.
 
-Every wallet is profiled, hygiene-excluded ones included: they are FLAGGED, not
-hidden, because "which of my whales is actually a market maker" is exactly the
+Every wallet is profiled, hygiene-excluded ones included: they are FLAGGED,
+not hidden — "which of my whales is actually a market maker" is exactly the
 question this table exists to answer.
 
 Decision (controller, 2026-09-04): every statistic in a profile row —
@@ -19,15 +19,16 @@ positions contribute only to `flagged_n` (`n = clean_n + flagged_n` stays
 visible as `clean_n/n`). A wholly excluded wallet ("full", clean_n = 0) shows
 its stats over its OWN flagged positions instead — never blanked.
 
-`band_excess` (amendment 2026-09-05) is edge above what the same price band
-paid everyone — `arb/whale_bands.py`'s grading, which the lane's score now runs
-on, beside the raw `edge_mean` it corrects.
+`band_excess` (2026-09-05) is edge above what the same price band paid
+everyone — `arb/whale_bands.py`'s grading, which the lane's score runs on,
+beside the raw `edge_mean` it corrects; `edge_sd`/`t_stat` grade too (fix
+2026-09-06 — one population per row, matching `lb80`).
 
-Rule 4: `whale.rank.min_n` (display floor) and `whale.rank.top` are the only
-        numbers here; every model constant comes from `whale.score`.
+Rule 4: `whale.rank.min_n`/`whale.rank.top` are the only numbers here; every
+        model constant comes from `whale.score`.
 Rule 5: prices, edges and money are Decimal, quantized q6. The posterior and
-        the t-statistic run in float — statistical internals, per rule 5's
-        second sentence — and are re-quantized immediately.
+        the t-statistic run in float — statistical internals — and are
+        re-quantized immediately.
 """
 from __future__ import annotations
 
@@ -58,7 +59,7 @@ HEADER = (f"{'wallet':<14}{'level':<7}{'key':<26}{'n':>4} {'win%':>6} "
 def _blank():
     return {"n": 0, "wins": 0, "size": Decimal(0), "cost": Decimal(0),
             "gain": Decimal(0), "notional": Decimal(0), "e": [], "last": None,
-            "ea": Decimal(0), "clean_n": 0, "flagged_n": 0, "root": None}
+            "ea": Decimal(0), "e_adj": [], "clean_n": 0, "flagged_n": 0, "root": None}
 
 
 def profiles(state, cfg, as_of) -> list[dict]:
@@ -66,15 +67,11 @@ def profiles(state, cfg, as_of) -> list[dict]:
 
     Point-in-time: a position counts only once `whale_score.resolved_outcomes`
     says it is scorable as of `as_of` — the ONE scorability predicate, called
-    here rather than restated, so a profile can never count a position the
-    score cannot see.
-
-    Every descriptive stat and `agg` (which feeds `_chain`'s posterior, hence
-    lb80) come from CLEAN positions only — same population as `state.lookup` —
-    with a per-key fallback to a wallet's own flagged positions wherever it has
-    none clean at that key at all (module docstring, 2026-09-04 decision).
-    `n`/`clean_n`/`flagged_n` still count every position either way: that
-    bookkeeping is the whole point of the tri-state `hygiene` flag.
+    here rather than restated. Every descriptive stat and `agg` (feeds
+    `_chain`'s posterior, hence lb80) come from CLEAN positions only, with a
+    per-key fallback to a wallet's own flagged positions where it has none
+    clean at that key (module docstring). `n`/`clean_n`/`flagged_n` still
+    count every position either way.
     """
     open_ids = {id(p) for p in state.open_positions}
     cells, flag_only = defaultdict(_blank), defaultdict(_blank)
@@ -88,6 +85,8 @@ def profiles(state, cfg, as_of) -> list[dict]:
         # graded against what this fill's own band paid everyone (2026-09-05):
         # `agg` is built from the GRADED outcomes, so this table's lb80 stays
         # the lb80 the lane acts on. `edge_mean` stays raw, `band_excess` graded.
+        # `state.bands` is clean-only, so a root seen ONLY among flagged
+        # positions grades at 0 here — acceptable, no longer silent.
         e_adj = q6(o.e - whale_bands.rate(state.bands, p.root, p.avg_price, cfg))
         (clean_outcomes if clean else flagged_outcomes).append(replace(o, e=e_adj))
         # "win" is the payout's own definition: 1 on the side actually held.
@@ -114,6 +113,7 @@ def profiles(state, cfg, as_of) -> list[dict]:
             stat["notional"] += p.notional_usd
             stat["e"].append(o.e)
             stat["ea"] += e_adj
+            stat["e_adj"].append(e_adj)
             stat["last"] = max(stat["last"] or o.resolved_at, o.resolved_at)
     # clean-only agg matches the lane's own score; a key with zero clean
     # contribution (a wholly-excluded wallet's own keys) falls back to that
@@ -125,7 +125,7 @@ def profiles(state, cfg, as_of) -> list[dict]:
             fo = flag_only.get(key)
             if fo:
                 for field in ("wins", "size", "cost", "gain", "notional", "e",
-                              "ea", "last"):
+                              "ea", "e_adj", "last"):
                     c[field] = fo[field]
     return [_row(wallet, level, key, cell, agg, state, cfg)
             for (wallet, level, key), cell in cells.items()]
@@ -161,16 +161,15 @@ def _row(wallet, level, key, c, agg, state, cfg) -> dict:
     s = cfg["whale"]["score"]
     m0 = state.rates.get(root, Decimal(str(s["base_rate_default"])))
     mu, var = whale_score.posterior(cfg, m0, _chain(agg, wallet, root, level, key))
+    # `lb80` (via `agg`), `edge_sd` and `t_stat` all read the GRADED edges —
+    # one population per row (fix 2026-09-06); `edge_mean` alone stays raw.
     # sample sd is undefined at n = 1; 0 keeps the column typed and t_stat null
-    sd = statistics.stdev([float(e) for e in c["e"]]) if stat_n >= 2 else 0.0
-    raw_mean = sum(c["e"], Decimal(0)) / stat_n
-    edge_mean = q6(raw_mean)
+    sd = statistics.stdev([float(e) for e in c["e_adj"]]) if stat_n >= 2 else 0.0
+    edge_mean = q6(sum(c["e"], Decimal(0)) / stat_n)
     win_rate, implied = q6(Decimal(c["wins"]) / stat_n), q6(c["cost"] / c["size"])
-    # Three-valued, not one bool (review of ecb7e8a): "" no exclusion in this
-    # cell, "partial" some positions excluded and some not (a single wallet
-    # market maker looks identical to a mostly-clean wallet with one bad
-    # market unless the two counts are kept apart), "full" every position in
-    # the cell is hygiene-excluded.
+    # Three-valued, not one bool (review of ecb7e8a): "" no exclusion, "partial"
+    # some positions excluded and some not, "full" every position excluded —
+    # collapsing to a bool would hide a single-bad-market wallet as a full MM.
     hygiene = "" if c["flagged_n"] == 0 else ("full" if c["clean_n"] == 0 else "partial")
     return {
         "wallet": wallet, "level": level, "key": key, "root": root,
@@ -179,17 +178,14 @@ def _row(wallet, level, key, c, agg, state, cfg) -> dict:
         "excess_win_rate": q6(win_rate - implied),
         "edge_mean": edge_mean, "edge_sd": q6(Decimal(sd)),
         "band_excess": q6(c["ea"] / stat_n),      # edge above the band's own pay
-        # dollar-weighted return on the capital actually put at risk; a
-        # zero-cost book has no denominator, which is a null, not a zero
+        # dollar-weighted ROI on capital at risk; zero cost is a null, not a 0
         "roi_at_risk": q6(c["gain"] / c["cost"]) if c["cost"] > 0 else None,
-        "t_stat": q6(Decimal(float(raw_mean) / (sd / math.sqrt(stat_n)))) if sd > 0 else None,
+        "t_stat": q6(Decimal(float(c["ea"] / stat_n) / (sd / math.sqrt(stat_n)))) if sd > 0 else None,
         "lb80": q6(Decimal(mu - float(s["z"]) * math.sqrt(var))),
         "excess_vs_base": q6(edge_mean - m0),
         "notional": q6(c["notional"]),
         "last_resolved_at": c["last"].isoformat(),
-        # a bucket row is the wallet's own record in that market type; sport
-        # and root rows are aggregates over several
-        "native": level == "bucket",
+        "native": level == "bucket",   # bucket = the wallet's own record there
         # clean_n: what the lane's own score used; flagged_n: the rest of `n`
         "clean_n": c["clean_n"], "flagged_n": c["flagged_n"], "hygiene": hygiene,
         "hygiene_flag": c["flagged_n"] > 0}   # kept for compatibility
