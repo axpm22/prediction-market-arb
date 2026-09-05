@@ -14,11 +14,14 @@ DEVIATION from the plan, stated here and in the report: the plan says the P&L
 is "minus the venue fee exactly as `arb/whale_score.realized_edge` charges
 it", but `realized_edge` charges NO fee — it is a gross per-share edge. The
 closest faithful reading is used: `realized_edge`'s own payout/sell accounting
-(per share, divided by the entry price to become per dollar) minus ONE
-Polymarket taker fee at entry from the lane's single fee site,
+(per share, divided by the entry price to become per dollar) minus a
+Polymarket taker fee from the lane's single fee site,
 `arb.venues.fees.leg_fee_cost`, priced with the position's root as the fee
 category — which is what `arb/lanes/live.py` charges the whale lane's own
-paper bets.
+paper bets. Revision 2: the SELL leg pays its own taker fee too
+(`bid − leg_fee_cost(bid)`), as SPEC.md's exit-engine sell basis and
+`arb/lanes/whale_book.exit_payload` both charge it. Resolution is not a
+trade, so hold-to-resolution still pays exactly one fee, at entry.
 """
 from __future__ import annotations
 
@@ -28,7 +31,7 @@ import random
 import sqlite3
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -201,6 +204,7 @@ def build_rows(positions, res, mk, ee, wf, cfg, log=lambda *a: None) -> list[dic
             "split": ("train" if entry_dt < TEST_START else
                       "test" if entry_dt < LIVE_START else "live"),
             "cluster": mk.get(p.condition_id) or p.condition_id,
+            "clustered_by": "event_key" if mk.get(p.condition_id) else "condition_id",
             "price": first, "exit": exit_at, "root": p.root, "sport": p.sport,
             "market_type": p.market_type, "pregame": bool(p.pregame),
             "notional": p.notional_usd, "source": p.source, "lb": lb,
@@ -216,21 +220,31 @@ def build_rows(positions, res, mk, ee, wf, cfg, log=lambda *a: None) -> list[dic
 
 
 def consensus(rows) -> None:
-    """Sets row["k2"][q]: a DISTINCT wallet already qualified at level `q` on
-    this (market, outcome) within the preceding 24 h — the plan's "enter at
-    the 2nd". A 3rd or 4th such entry is itself a followed position (the unit
-    of analysis is one position, so each carries its own $1 stake)."""
+    """K, exactly as the plan words it: ONE stake per (market, outcome), taken
+    at the time and entry price of the SECOND distinct qualified wallet within
+    24 h — `row["k2first"][q]`.
+
+    `row["k2"][q]` (a distinct wallet already qualified within the preceding
+    24 h, whether or not the pair has been staked before) is kept ONLY as the
+    labelled "every qualified entry" diagnostic: Revision 1 staked it as the
+    config, which put up to 73 stakes on one (market, outcome) in the test
+    window and so measured crowdedness, not consensus."""
     seen = defaultdict(list)                       # (cid, idx, q) -> [(ts, wallet)]
+    staked = set()                                 # (cid, idx, q) already entered
     for row in sorted(rows, key=lambda x: x["entry_ts"]):
-        row["k2"] = {}
+        row["k2"], row["k2first"] = {}, {}
         for q in QS:
             if not row["q"][q]:
-                row["k2"][q] = False
+                row["k2"][q] = row["k2first"][q] = False
                 continue
-            prior = seen[(row["cid"], row["idx"], q)]
-            row["k2"][q] = any(
-                w != row["wallet"] and row["entry_ts"] - ts <= CONSENSUS_SECS
-                for ts, w in prior)
+            key = (row["cid"], row["idx"], q)
+            prior = seen[key]
+            hit = any(w != row["wallet"] and row["entry_ts"] - ts <= CONSENSUS_SECS
+                      for ts, w in prior)
+            row["k2"][q] = hit
+            row["k2first"][q] = hit and key not in staked
+            if hit:
+                staked.add(key)
             prior.append((row["entry_ts"], row["wallet"]))
 
 
@@ -252,7 +266,10 @@ def roi(row, cfg, slippage: Decimal, exit_rule: bool, fade: bool = False) -> flo
         return pnl(Decimal(1) - row["price"], Decimal(0 if row["win"] else 1),
                    row["root"], cfg, slippage)
     if exit_rule and row["exit"] is not None:
-        proceeds = max(row["exit"][0] - slippage, Decimal(0))
+        # SPEC.md's exit-engine sell basis and whale_book.exit_payload: the
+        # SELL crosses the spread AND pays the venue taker fee on the exit.
+        bid = max(row["exit"][0] - slippage, Decimal(0))
+        proceeds = bid - leg_fee_cost(cfg, "polymarket", row["root"], bid)
         return pnl(row["price"], proceeds, row["root"], cfg, slippage)
     return pnl(row["price"], Decimal(1 if row["win"] else 0), row["root"], cfg, slippage)
 
@@ -267,9 +284,11 @@ def label(cfg_tuple) -> str:
     return f"Q={q} K={k} E={'exit' if e else 'hold'}"
 
 
-def select(rows, cfg_tuple):
+def select(rows, cfg_tuple, k2_key="k2first"):
+    """The config's followed positions. `k2_key="k2"` is the Revision 1
+    "every qualified entry" diagnostic, never a configuration."""
     q, k, _ = cfg_tuple
-    return [r for r in rows if (r["k2"][q] if k == 2 else r["q"][q])]
+    return [r for r in rows if (r[k2_key][q] if k == 2 else r["q"][q])]
 
 
 # ------------------------------------------------------------ statistics
@@ -327,6 +346,240 @@ def deciles(rows) -> dict:
     return {id(r): min(9, (i * 10) // n) for i, r in enumerate(order)} if n else {}
 
 
+# ------------------------------------------- sample construction (Rev 2 #3)
+
+SPLITS = ("train", "test", "live")
+PREJUNE = datetime(2026, 6, 1, tzinfo=timezone.utc).timestamp()
+RECENT_BOARDS = {"DAY", "WEEK", "MONTH"}
+
+
+def _split_of(ts) -> str:
+    t = datetime.fromtimestamp(ts, timezone.utc)
+    return "train" if t < TEST_START else "test" if t < LIVE_START else "live"
+
+
+def sample_section(con, positions, res, ee, rows, cfg, slip) -> list[str]:
+    """Everything that fell out between `positions_mat` and the candidate set,
+    per era, plus the source mix and the honest name of the bootstrap cluster.
+    Revision 1 reported only the survivors."""
+    total, drop_res, drop_print = defaultdict(int), defaultdict(int), defaultdict(int)
+    pre_grid = []                                    # (roi, split) before 2026-02
+    for p in positions:
+        s = _split_of(p.entry_ts)
+        total[s] += 1
+        r = res.get(p.condition_id)
+        if not r or r.get("status") != "resolved" or r.get("winner_outcome_index") is None:
+            drop_res[s] += 1
+            continue
+        found = ee.get((p.wallet, p.condition_id, p.outcome_index, p.entry_ts))
+        if _month(p.entry_ts) not in MONTHS:
+            if found is not None:
+                pre_grid.append(pnl(found[0],
+                                    Decimal(1 if r["winner_outcome_index"] == p.outcome_index
+                                            else 0), p.root, cfg, slip))
+            continue
+        if found is None:
+            drop_print[s] += 1
+
+    by_split = {s: [r for r in rows if r["split"] == s] for s in SPLITS}
+    seen, extra = set(), defaultdict(int)
+    for r in rows:                                   # rows are entry_ts-sorted
+        key = (r["wallet"], r["cid"], r["idx"])
+        if key in seen:
+            extra[r["split"]] += 1
+        seen.add(key)
+    ev = con.execute("SELECT COUNT(*), SUM(CASE WHEN event_key IS NULL OR event_key=''"
+                     " THEN 1 ELSE 0 END) FROM markets").fetchone()
+
+    out = ["## Sample construction (new in Revision 2)", "",
+           "What fell out between `positions_mat` and the candidate set. Revision 1 printed",
+           "only the survivors, so the reader could not see the censoring.", ""]
+    lines = []
+    for s in SPLITS:
+        n = len(by_split[s])
+        lines.append([s, f"{total[s]:,}", f"{drop_res[s]:,}",
+                      f"{drop_res[s] / total[s]:.1%}" if total[s] else "—",
+                      f"{drop_print[s]:,}", f"{n:,}",
+                      f"{extra[s]:,}", f"{extra[s] / n:.1%}" if n else "—"])
+    out += [table(["era", "positions_mat rows", "dropped: no resolved row", "= share",
+                   "dropped: no entry print", "candidates", "extra stakes: split BUY windows",
+                   "= share"], lines), ""]
+    out += [
+        "- **Right-censoring is the live era's story.** A position whose market has not "
+        f"resolved yet has no `resolutions` row; {drop_res['live']:,} of the {total['live']:,} "
+        f"live-era positions ({drop_res['live'] / max(total['live'], 1):.1%}) are in that state,",
+        "  against " f"{drop_res['train'] / max(total['train'], 1):.1%} on train and "
+        f"{drop_res['test'] / max(total['test'], 1):.1%} on test. The live era's mean is",
+        "  therefore computed on the subset that resolved FASTEST, which is not a random",
+        "  subset of it.",
+        "- **Extra stakes.** One wallet + market + outcome can produce several positions when",
+        "  its buying splits across the position window, and each split window is its own $1",
+        "  stake. The share of candidate rows that are a 2nd-or-later window for the same",
+        f"  (wallet, market, outcome) is {extra['train'] / max(len(by_split['train']), 1):.1%} "
+        f"train / {extra['test'] / max(len(by_split['test']), 1):.1%} test / "
+        f"{extra['live'] / max(len(by_split['live']), 1):.1%} live — so the eras are not equally",
+        "  weighted per wallet-market either.",
+        ""]
+    if pre_grid:
+        train_now = [roi(r, cfg, slip, False) for r in by_split["train"]]
+        both = train_now + pre_grid
+        out += [
+            f"- **The 2026-02 grid start drops {len(pre_grid):,} positions**, all train-era, whose",
+            f"  mean ROI/$ is {mean_of(pre_grid):+.4f} — they are the profitable tail the "
+            "walk-forward",
+            "  `as_of` grid cannot score. Folding them into train anyway (an illustration, not a",
+            f"  configuration) moves the baseline train mean from {mean_of(train_now):+.4f} to"
+            f" {mean_of(both):+.4f}:",
+            "  a large move, and the sign does not change.", ""]
+    lines = []
+    for s in SPLITS:
+        for src in sorted({r["source"] for r in by_split[s]}):
+            sel = [r for r in by_split[s] if r["source"] == src]
+            lines.append([s, src, f"{len(sel):,}",
+                          f"{len(sel) / len(by_split[s]):.1%}",
+                          f'{len({r["wallet"] for r in sel}):,}'])
+    out += ["### Source mix and wallet count per era", "",
+            table(["era", "source", "n", "share", "distinct wallets"], lines), "",
+            "`activity` = the cold-start backfill of DISCOVERED wallets (see limitation 1);",
+            "`tape` = the global real-time collector, live only from 2026-09-04. Train and test",
+            "are one source; the live era is mostly the other, over a different and much wider",
+            "wallet population — the three eras are not three samples of one process.", ""]
+
+    lines = [[s, f"{sum(1 for r in by_split[s] if r['clustered_by'] == 'event_key'):,}",
+              f"{sum(1 for r in by_split[s] if r['clustered_by'] == 'condition_id'):,}"]
+             for s in SPLITS]
+    out += ["### What the bootstrap actually clusters on", "",
+            f"`markets.event_key` is empty for {ev[1]:,} of {ev[0]:,} rows, so the plan's",
+            "\"event cluster\" is a **condition_id cluster** almost everywhere: the two sides of",
+            "one game, and correlated markets on one event, are resampled as if independent.",
+            "Every lb80 / ub90 / Bonferroni bound in this report is therefore a",
+            "**condition_id-clustered** bound on train and test and a MIXED one in the live era,",
+            "and is anti-conservative to the extent that markets within an event move together.", "",
+            table(["era", "rows clustered by event_key", "rows clustered by condition_id"],
+                  lines), ""]
+    return out
+
+
+def wallet_facts(con) -> dict:
+    """How the wallet set came to exist — the mechanism behind limitation 1."""
+    q = lambda s: con.execute(s).fetchall()               # noqa: E731
+    counts = con.execute(
+        "SELECT COUNT(*), SUM(source='leaderboard') FROM wallets"
+        " WHERE backfilled_at IS NOT NULL").fetchone()
+    boards = q("SELECT time_period, order_by, MIN(snapshot_at), MAX(snapshot_at),"
+               " COUNT(DISTINCT proxy_wallet), COUNT(DISTINCT category)"
+               " FROM leaderboard_snapshots GROUP BY 1, 2 ORDER BY 1")
+    cats = [r[0] for r in q("SELECT DISTINCT category FROM leaderboard_snapshots")]
+    per = sorted(r[0] for r in q("SELECT COUNT(*) FROM prints WHERE source='activity'"
+                                 " GROUP BY proxy_wallet"))
+    periods = defaultdict(set)
+    for w, tp in q("SELECT DISTINCT proxy_wallet, time_period FROM leaderboard_snapshots"):
+        periods[w].add(tp)
+    return {"backfilled": counts[0], "from_board": counts[1] or 0, "boards": boards,
+            "cats": cats, "capped": sum(1 for n in per if n >= 2000),
+            "median_prints": per[len(per) // 2] if per else 0, "n_activity": len(per),
+            "periods": periods,
+            "first_print": {w: t for w, t in q("SELECT proxy_wallet, MIN(ts) FROM prints"
+                                               " GROUP BY proxy_wallet")}}
+
+
+# ------------------------------------- post-hoc cut + weekly series (Rev 2 #5)
+
+def cohort_table(rows_by_split, cfg, slip, seed, cfgs=None) -> str:
+    """mean (lb80, n) per split for each configuration in a cohort."""
+    lines = []
+    for i, c in enumerate(cfgs or configs()):
+        line = [label(c)]
+        for j, s in enumerate(SPLITS):
+            sel = select(rows_by_split[s], c)
+            st = stats(sel, [roi(r, cfg, slip, c[2]) for r in sel], seed + i * 10 + j)
+            line.append("—" if st["mean"] is None else
+                        f'{st["mean"]:+.4f} ({fmt(st["lb80"])}, n {st["n"]})')
+        lines.append(line)
+    return table(["config", "train mean (lb80, n)", "test mean (lb80, n)",
+                  "live mean (lb80, n)"], lines)
+
+
+def posthoc_section(rows, facts, cfg, slip, seed) -> list[str]:
+    """NOT in the plan. Suggested by the 2026-09-05 review, diagnostic only:
+    if the test-window edge is an artifact of discovering wallets by their
+    recent profit, it should vanish among wallets that were already visible
+    long before the test window, and among wallets that only ever made the
+    ALL-time board."""
+    first, periods = facts["first_print"], facts["periods"]
+    pre = [r for r in rows if first.get(r["wallet"], 1 << 62) < PREJUNE]
+    strata = [
+        ("pre-June cohort (all)", pre),
+        ("pre-June, ALL-time board ONLY", [r for r in pre
+                                           if periods.get(r["wallet"]) == {"ALL"}]),
+        ("pre-June, on any DAY/WEEK/MONTH board",
+         [r for r in pre if periods.get(r["wallet"], set()) & RECENT_BOARDS]),
+    ]
+    out = ["## Post-hoc cut (not in the plan; diagnostic only)", "",
+           "Suggested by the review of Revision 1, computed AFTER the plan's verdict was known,",
+           "and therefore not a test of anything: it cannot promote a configuration and its",
+           "bounds carry no multiplicity correction. It asks one question — does the test-window",
+           "edge survive among wallets whose selection could not have been driven by profit",
+           "earned inside the test window?", "",
+           f"Cohort: wallets whose EARLIEST visible print predates 2026-06-01 — {len(pre):,} of",
+           f"{len(rows):,} candidate rows, "
+           f'{len({r["wallet"] for r in pre}):,} of {len({r["wallet"] for r in rows}):,} wallets.',
+           "Strata by `leaderboard_snapshots` membership: a wallet seen ONLY on the ALL-time",
+           "board was not selected for recent profit; a wallet on a DAY/WEEK/MONTH board was.", ""]
+    for name, sel in strata:
+        by = {s: [r for r in sel if r["split"] == s] for s in SPLITS}
+        out += [f"### {name} — n {len(sel):,}, wallets "
+                f'{len({r["wallet"] for r in sel}):,}'
+                f' (train {len(by["train"]):,} / test {len(by["test"]):,}'
+                f' / live {len(by["live"]):,})', "",
+                cohort_table(by, cfg, slip, seed + 7000 + len(name)), ""]
+
+    tw = {r["wallet"] for r in rows if r["split"] == "train"}
+    te = {r["wallet"] for r in rows if r["split"] == "test"}
+    ov = [r for r in rows if r["wallet"] in tw & te]
+    by = {s: [r for r in ov if r["split"] == s] for s in SPLITS}
+    out += ["### Overlap cohort — wallets that traded in BOTH the train and the test era", "",
+            f"{len(ov):,} rows over {len(tw & te):,} wallets. The same wallets, measured twice:",
+            "whatever changed between the two windows is not a change of population.", "",
+            cohort_table(by, cfg, slip, seed + 8000,
+                         [c for c in configs() if c[1] == 1]), ""]
+
+    base = ("all", 1, False)
+    m = lambda sel, s: mean_of([roi(r, cfg, slip, False)                    # noqa: E731
+                                for r in select([x for x in sel if x["split"] == s], base)]) or 0
+    n_at = lambda sel, s: len(select([x for x in sel if x["split"] == s], base))  # noqa: E731
+    out += ["### What the cut says", "",
+            f"On the whole sample the baseline's test mean is"
+            f" {m(rows, 'test'):+.4f}. In the pre-June cohort it is",
+            f"{m(pre, 'test'):+.4f} (n {n_at(pre, 'test'):,}); among the wallets that reached a"
+            " DAY/WEEK/MONTH board it is",
+            f"{m(strata[2][1], 'test'):+.4f} (n {n_at(strata[2][1], 'test'):,}); among the ones"
+            " seen ONLY on the ALL-time board it is",
+            f"{m(strata[1][1], 'test'):+.4f} — on n {n_at(strata[1][1], 'test'):,}, which is far"
+            " too thin to carry a conclusion in either",
+            "direction. And the overlap cohort, the same wallets measured in both windows, runs",
+            f"{m(ov, 'train'):+.4f} on train against {m(ov, 'test'):+.4f} on test.", "",
+            "Read together: the test-window edge does NOT survive restriction to wallets that",
+            "were already visible before June, and the ALL-time-only stratum cannot arbitrate",
+            "because it barely trades in the test window. Nothing here is a test and nothing",
+            "here promotes a configuration.", ""]
+    return out
+
+
+def weekly_section(rows, cfg, slip) -> list[str]:
+    weeks = defaultdict(list)
+    for r in select(rows, ("all", 1, False)):
+        wk = datetime.fromtimestamp(r["entry_ts"], timezone.utc).strftime("%G-W%V")
+        weeks[(wk, r["split"])].append(roi(r, cfg, slip, False))
+    lines = [[wk, era, f"{len(v):,}", f"{mean_of(v):+.4f}"]
+             for (wk, era), v in sorted(weeks.items())]
+    return ["### Weekly series of the baseline (`Q=all K=1 E=hold`), by ISO week of entry", "",
+            "Where the sign flips, week by week, so the reader can see that the train/test split",
+            "date is not a boundary between two regimes but a line drawn through a drifting",
+            "series. A week straddling a boundary appears once per era.", "",
+            table(["ISO week", "era", "n", "mean ROI/$"], lines), ""]
+
+
 # ---------------------------------------------------------------- report
 
 def fmt(x, nd=4) -> str:
@@ -367,20 +620,24 @@ def main(argv=None) -> int:
     rows = build_rows(positions, res, mk, ee, wf, cfg, log)
     log("computing tables...")
     skipped = sum(1 for p in positions if _month(p.entry_ts) not in wf)
-    text = render(rows, wf, cfg, args, con, skipped)
+    text = render(rows, wf, cfg, args, con, skipped, positions, res, ee)
     Path(args.out).write_text(text)
     log(f"wrote {args.out}")
     print(text)
     return 0
 
 
-def render(rows, wf, cfg, args, con, skipped=0) -> str:  # noqa: C901 - a report is one long string
+def render(rows, wf, cfg, args, con, skipped=0, positions=(), res=None,
+           ee=None) -> str:  # noqa: C901 - a report is one long string
     slip = Decimal(str(args.slippage))
-    splits = ("train", "test", "live")
+    splits = SPLITS
     by_split = {s: [r for r in rows if r["split"] == s] for s in splits}
     dec = deciles(rows)
+    facts = wallet_facts(con)
+    conf = cfg["polymarket"]["confirmed_on"]
+    fee_age = (datetime.now(timezone.utc).date() - conf).days
     out = [
-        "# Whale-follow backtest — results (2026-09-05)",
+        "# Whale-follow backtest — results (2026-09-05), **Revision 2**",
         "",
         "Pre-specified plan: `reports/backtest-whale-follow-plan-2026-09-05.md`, frozen before",
         "any result below was computed. Nothing here changes the lane; anything it suggests goes",
@@ -390,6 +647,8 @@ def render(rows, wf, cfg, args, con, skipped=0) -> str:  # noqa: C901 - a report
         f" (split {args.split}, {RESAMPLES} bootstrap resamples, Bonferroni-12 quantile"
         f" {BONF_Q:.6f}).",
         "",
+        "<<CHANGELOG>>",
+        "",
         "<<SUMMARY>>",
         "",
         "## Deviations from the plan",
@@ -397,10 +656,19 @@ def render(rows, wf, cfg, args, con, skipped=0) -> str:  # noqa: C901 - a report
         "1. **The fee.** The plan asks for the venue fee \"exactly as `arb/whale_score."
         "realized_edge` charges it\". `realized_edge` charges NO fee — it is a gross per-share",
         "   edge. Implemented instead: `realized_edge`'s own accounting (proceeds − cost, per",
-        "   share, divided by the entry price to become per dollar) minus ONE Polymarket taker",
-        "   fee at entry from the lane's single fee site, `venues.fees.leg_fee_cost`, priced with",
+        "   share, divided by the entry price to become per dollar) minus the Polymarket taker",
+        "   fee from the lane's single fee site, `venues.fees.leg_fee_cost`, priced with",
         "   the position's root as the fee category — the same charge `arb/lanes/live.py` puts on",
-        "   the whale lane's own paper bets. The exit leg pays no second fee.",
+        "   the whale lane's own paper bets. **Revision 2:** the SELL leg pays its own taker fee,",
+        "   `bid − leg_fee_cost(bid)`, exactly as SPEC.md's exit-engine sell basis and",
+        "   `arb/lanes/whale_book.exit_payload` charge it. A hold to resolution still pays exactly",
+        "   one fee (resolution is not a trade); only `E=exit` pays two.",
+        f"   The fee schedule's `confirmed_on` is {conf} — **{fee_age} days old against"
+        f" `fee_stale_days` {cfg['fee_stale_days']}: STALE-BADGED**, not halting, per §6.5.",
+        "   And the denominator: this report divides by the entry price, while the lane divides a",
+        "   $1 stake by entry + fee. Every ROI/$ here is therefore about 1.8% larger in magnitude",
+        "   than the lane's own accounting of the same trade (at 0.40 and the 3% sports rate,",
+        "   fee/entry = 0.018); it moves no sign and no ranking.",
         "2. **Top-50%/top-20% is the lane's own bar**, `arb/whale_elite.cutoff` with `elite_pct`",
         "   50 and 20: the reference population is every wallet with >= 1 resolved outcome in the",
         "   root as of that month, each scored into the candidate's bucket by the transfer chain,",
@@ -408,9 +676,12 @@ def render(rows, wf, cfg, args, con, skipped=0) -> str:  # noqa: C901 - a report
         "   resolved history) is still compared to the cutoff, exactly as `whale_elite.point`",
         "   does, so it can pass on the prior alone. Where a population is too small to have one",
         "   elite member the cutoff is None and NOTHING qualifies in that bucket that month.",
-        "3. **Consensus counts every later entry**, not only the literal 2nd: the unit of analysis",
-        "   is one position, so the 3rd and 4th qualified wallet within 24 h each carry their own",
-        "   $1 stake.",
+        "3. ~~**Consensus counts every later entry**~~ — **withdrawn in Revision 2.** K=2 is now",
+        "   the plan's own wording: ONE stake per (market, outcome), taken at the time and entry",
+        "   price of the 2nd distinct qualified wallet within 24 h. Revision 1 staked the 3rd,",
+        "   4th … entry as well, which made K=2 a measure of CROWDEDNESS, not of consensus, and",
+        "   weighted the busiest markets by up to 73 stakes each. The old behaviour survives",
+        "   below as the labelled \"every qualified entry\" diagnostic only.",
         "4. **Win rate is ROI > 0**, so the hold and exit rules are measured the same way.",
         f"5. Only entry months 2026-02..2026-09 are in scope (the plan's `as_of` grid);"
         f" {skipped:,} older",
@@ -471,11 +742,16 @@ def render(rows, wf, cfg, args, con, skipped=0) -> str:  # noqa: C901 - a report
                           fmt(mean_of([roi(r, cfg, slip, False) for r in sel]))])
     out += [table(["source", "split", "n", "mean ROI/$ (follow, hold)"], lines), ""]
 
+    out += sample_section(con, positions, res or {}, ee or {}, rows, cfg, slip)
+
     # ---- main tables
     out += ["## The 12 configurations", "",
-            f"Main slippage {slip}. lb80 / ub90 / Bonferroni-12 LB are event-clustered bootstrap",
-            f"quantiles (0.20 / 0.90 / {BONF_Q:.4f}) over {RESAMPLES} resamples, seed"
-            f" {args.seed}.", ""]
+            f"Main slippage {slip}. lb80 / ub90 / Bonferroni-12 LB are **condition_id-clustered**",
+            "bootstrap quantiles (the plan said \"event cluster\"; `markets.event_key` is empty",
+            "almost everywhere — see Sample construction) of"
+            f" (0.20 / 0.90 / {BONF_Q:.4f}) over {RESAMPLES} resamples, seed"
+            f" {args.seed}. `K=2` is one stake per (market, outcome) at the 2nd distinct",
+            "qualified wallet within 24 h — the plan's rule, corrected in Revision 2.", ""]
     favorable, cells = [], {}
     for split in splits:
         out += [f"### {split}", ""]
@@ -511,6 +787,30 @@ def render(rows, wf, cfg, args, con, skipped=0) -> str:  # noqa: C901 - a report
             f"disagrees — {', '.join(near) if near else 'none'}. Test lb80 > 0 (the un-corrected",
             f"80% bound, which the plan does not accept as a verdict) — "
             f"{', '.join(lb80_pos) if lb80_pos else 'none'}.", ""]
+
+    # ---- the withdrawn K=2 rule, as a labelled diagnostic
+    k2rows, k2max = [], defaultdict(int)
+    for r in rows:
+        if r["k2"]["all"]:
+            k2max[(r["cid"], r["idx"], r["split"])] += 1
+    for c in [x for x in configs() if x[1] == 2]:
+        line = [label(c)]
+        for s in splits:
+            old = select(by_split[s], c, k2_key="k2")
+            new = select(by_split[s], c)
+            line += [f'{fmt(mean_of([roi(r, cfg, slip, c[2]) for r in old]))} ({len(old):,})',
+                     f'{fmt(mean_of([roi(r, cfg, slip, c[2]) for r in new]))} ({len(new):,})']
+        k2rows.append(line)
+    worst = {s: max([v for (_, _, sp), v in k2max.items() if sp == s] or [0]) for s in splits}
+    out += ["### Diagnostic: the withdrawn K=2 rule (\"every qualified entry\")", "",
+            "Revision 1's K=2 staked the 3rd, 4th … qualified wallet as well. Its worst single",
+            f'(market, outcome) carried {worst["train"]} stakes on train, {worst["test"]} on test'
+            f' and {worst["live"]} in the live era,',
+            "so its mean was a crowdedness-weighted average of a few busy markets. Reported here",
+            "for continuity with Revision 1; it is NOT one of the 12 configurations and it enters",
+            "no verdict.", "",
+            table(["config", "train old (n)", "train plan (n)", "test old (n)", "test plan (n)",
+                   "live old (n)", "live plan (n)"], k2rows), ""]
 
     # ---- sensitivity
     out += ["## Sensitivity to slippage (mean ROI/$, never used to pick)", ""]
@@ -566,6 +866,9 @@ def render(rows, wf, cfg, args, con, skipped=0) -> str:  # noqa: C901 - a report
                     lines.append([name, split, k, f"{mu:+.4f} ({n})"])
         out += [table(["diagnostic", "split", "level", "mean ROI/$ (n)"], lines), ""]
 
+    out += posthoc_section(rows, facts, cfg, slip, args.seed)
+    out += weekly_section(rows, cfg, slip)
+
     base, tight = ("all", 1, False), ("top20", 2, False)
     verdict = ("FAVORABLE: " + ", ".join(favorable)) if favorable \
         else "No configuration is FAVORABLE"
@@ -573,6 +876,8 @@ def render(rows, wf, cfg, args, con, skipped=0) -> str:  # noqa: C901 - a report
             for sp in splits for q in QS for k in (1, 2)
             if cells[(sp, (q, k, True))]["mean"] is not None]
     cell = lambda sp, c: f'{fmt(cells[(sp, c)]["mean"])} (n {cells[(sp, c)]["n"]})'  # noqa: E731
+    pos = {sp: sum(1 for c in configs()
+                   if (cells[(sp, c)]["mean"] or 0) > 0) for sp in splits}
     summary = [
         "## What the run says (numbers only; the verdict rule is the plan's)",
         "",
@@ -584,21 +889,84 @@ def render(rows, wf, cfg, args, con, skipped=0) -> str:  # noqa: C901 - a report
         f" {cell('test', tight)}, live era {cell('live', tight)}. The skill filter's SIGN is"
         " not stable across the three eras.",
         f"- The exit rule costs money nearly everywhere: mean of (exit − hold) over the 18"
-        f" (split, Q, K) cells = {fmt(mean_of(gaps))} per $.",
-        "- Every one of the 12 configurations is negative on train AND on the live era; only",
-        "  the test window (2026-07-16 → 2026-09-04, which is entirely backfilled /activity",
-        "  prints) is positive, and the Bonferroni-12 correction removes even that.",
+        f" (split, Q, K) cells = {fmt(mean_of(gaps))} per $ — and it now pays the taker fee on",
+        "  the sell, which is part of why.",
+        f"- Positive cells, out of 12: train {pos['train']}, test {pos['test']}, live era"
+        f" {pos['live']}. The test window (2026-07-16 →",
+        "  2026-09-04, entirely backfilled /activity prints) holds nearly all of them, and the",
+        "  Bonferroni-12 correction removes even those.",
+        "- The test window is also the window the wallet set was SELECTED in (limitation 1) and",
+        "  the one whose markets have all resolved (Sample construction). Both point the same",
+        "  way, and the post-hoc cut below is the attempt to separate them.",
         "",
     ]
-    out = [ln if ln != "<<SUMMARY>>" else "\n".join(summary) for ln in out]
+    changelog = [
+        "## Changelog — Revision 2 (2026-09-05)",
+        "",
+        "Revision 1 (commit `aebfa6c`) was reviewed; the verdict survived, the test-window",
+        "numbers did not. Each correction below and what it did to the numbers:",
+        "",
+        "1. **K=2 is now the plan's rule** — one stake per (market, outcome) at the 2nd distinct",
+        "   qualified wallet, not one per qualified wallet. *Effect:* every K=2 cell changes; the",
+        f"   headline `Q=all K=2 E=hold` test mean goes from"
+        f" {fmt(mean_of([roi(r, cfg, slip, False) for r in select(by_split['test'], ('all', 2, False), k2_key='k2')]))}"
+        f" (Revision 1) to {cell('test', ('all', 2, False))},",
+        "   and its n falls with it. The withdrawn rule is kept as a labelled diagnostic.",
+        "2. **The exit leg pays the venue taker fee** (SPEC.md's sell basis;",
+        "   `whale_book.exit_payload`). *Effect:* every `E=exit` cell falls by roughly the",
+        "   Polymarket fee on the exit price; the exit rule was already the worse of the two and",
+        "   is now worse by more. No hold cell moves.",
+        "3. **New \"Sample construction\" section** — per-era censoring, the pre-2026-02 drop and",
+        "   what it would do to train, split-window extra stakes, source mix, and the fact that",
+        "   the bootstrap clusters on condition_id, not event. *Effect:* no number changes; the",
+        "   bounds are relabelled honestly and the live era's right-censoring is now visible.",
+        "4. **Limitation 1 rewritten to the actual mechanism** — the wallet set is a leaderboard",
+        "   sample, and two of the four boards look back INTO the test window. *Effect:* no",
+        "   number changes; the reading of the test window does.",
+        "5. **New post-hoc cut** (labelled, not in the plan): the 12-config grid on wallets first",
+        "   seen before 2026-06-01, split by leaderboard membership, the train/test overlap",
+        "   cohort, and a weekly series of the baseline. *Effect:* adds evidence, promotes",
+        "   nothing.",
+        "6. **The fee schedule is stale-badged** and the ROI denominator is stated against the",
+        f"   lane's (entry, not entry + fee: ≈1.8% of magnitude). *Effect:* no number changes.",
+        "",
+    ]
+    subst = {"<<SUMMARY>>": "\n".join(summary), "<<CHANGELOG>>": "\n".join(changelog)}
+    out = [subst.get(ln, ln) for ln in out]
 
-    out += ["## Known limitations (verbatim from the plan)", "",
-            "1. Selection bias: the 575 backfilled wallets were discovered by large recent"
-            " prints; wallets",
-            "   that blew up and stopped trading are absent. The baseline (Q = all) carries the"
-            " same bias, so",
-            "   the DIFFERENCE between Q levels is the honest read of skill ranking, not the"
-            " absolute ROI.",
+    look = {"DAY": 1, "WEEK": 7, "MONTH": 30}       # the board's own P&L window
+    boards = []
+    for tp, ob, lo, hi, c, _ in facts["boards"]:
+        span = ""
+        if tp in look:
+            end = datetime.fromisoformat(hi).date()
+            span = (f", so its P&L window covers"
+                    f" {end - timedelta(days=look[tp])}→{end}")
+        boards.append(f"**{tp}** (order_by {ob}, {c:,} wallets, snapshotted"
+                      f" {lo[:10]}→{hi[:10]}{span})")
+    boards = "; ".join(boards)
+    out += ["## Known limitations", "",
+            "Limitation 1 is REWRITTEN in Revision 2 — the plan's wording (\"discovered by large",
+            "recent prints\") named the wrong mechanism. 2–4 are verbatim from the plan.", "",
+            f"1. **Selection on profit earned inside the test window.** {facts['from_board']:,} of"
+            f" the {facts['backfilled']:,}",
+            f"   backfilled wallets have `wallets.source = 'leaderboard'`: they came from"
+            f" `leaderboard_snapshots`,",
+            f"   category {'/'.join(facts['cats'])}, ordered by PNL — {boards}.",
+            "   The MONTH board looks back ~30 days and the WEEK board ~7 from a snapshot taken",
+            "   2026-09-03..05, so both windows lie INSIDE the test window (2026-07-16 →",
+            "   2026-09-04). The sample is therefore conditioned on RECENT PROFIT, measured in",
+            "   the period the test window measures. That is the mechanism, and it points the",
+            "   same way as the result: the test window is the era that comes out positive.",
+            f"   Compounding it, the /activity backfill caps at 2,000 prints per wallet —"
+            f" {facts['capped']} of",
+            f"   {facts['n_activity']} wallets sit at the cap and the median wallet has"
+            f" {facts['median_prints']:,} prints — so for a",
+            "   high-frequency wallet the \"first visible print\" is recent by construction, and",
+            "   its early, possibly worse, history is simply not in the tape.",
+            "   Wallets that blew up and stopped trading are absent either way. The baseline",
+            "   (Q = all) carries the same bias, so the DIFFERENCE between Q levels is the",
+            "   honest read of skill ranking, not the absolute ROI.",
             "2. Slippage is an assumption; there are no historical quotes. The lane's own 120 s"
             " markouts",
             "   (mean drift ≈ 0) are the only calibration.",

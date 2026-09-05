@@ -118,16 +118,21 @@ def test_consensus_needs_a_second_distinct_wallet_within_24h(cfg, con):
     _resolution(con, "0xc1", 0, T0 + timedelta(days=4))
     _print(con, "0xA", "0xc1", T0)                                    # first
     _print(con, "0xB", "0xc1", T0 + timedelta(hours=1))               # 2nd, < 24 h
+    _print(con, "0xE", "0xc1", T0 + timedelta(hours=2))               # 3rd, < 24 h
     _print(con, "0xC", "0xc1", T0 + timedelta(hours=40))              # too late
     _print(con, "0xD", "0xc1", T0 + timedelta(minutes=30), idx=1)     # other outcome
 
     rows, _ = _rows(con, cfg)
     k2 = {(r["wallet"], r["idx"]): r["k2"]["all"] for r in rows}
-    assert k2 == {("0xA", 0): False, ("0xB", 0): True,
+    assert k2 == {("0xA", 0): False, ("0xB", 0): True, ("0xE", 0): True,
                   ("0xC", 0): False, ("0xD", 1): False}
-    # K=1 follows all four, K=2 only the second wallet
-    assert len(bt.select(rows, ("all", 1, False))) == 4
+    # K=1 follows all five; K=2 is ONE stake per (market, outcome), at the 2nd
+    # distinct qualified wallet — the 3rd does NOT carry a stake of its own.
+    assert len(bt.select(rows, ("all", 1, False))) == 5
     assert [r["wallet"] for r in bt.select(rows, ("all", 2, False))] == ["0xB"]
+    # the withdrawn Revision 1 rule survives only as a labelled diagnostic
+    assert [r["wallet"] for r in
+            bt.select(rows, ("all", 2, False), k2_key="k2")] == ["0xB", "0xE"]
 
 
 def test_consensus_ignores_the_same_wallet_buying_twice(cfg, con):
@@ -155,8 +160,17 @@ def test_exit_fires_at_the_sell_that_crosses_50_percent(cfg, con):
     row = rows[0]
     assert row["exit"][0] == Decimal("0.80")                           # the CROSSING sell
     slip = Decimal("0.01")
+    # SPEC.md's sell basis / whale_book.exit_payload: the SELL crosses the
+    # spread AND pays the venue taker fee on the exit leg.
+    bid = Decimal("0.80") - slip
+    exit_fee = leg_fee_cost(cfg, "polymarket", "sports", bid)
+    assert exit_fee > 0
     assert bt.roi(row, cfg, slip, True) == pytest.approx(
-        bt.pnl(Decimal("0.40"), Decimal("0.80") - slip, "sports", cfg, slip))
+        bt.pnl(Decimal("0.40"), bid - exit_fee, "sports", cfg, slip))
+    # and that second fee is a real cost: it is strictly worse than the
+    # fee-free exit Revision 1 booked
+    assert bt.roi(row, cfg, slip, True) < float(
+        bt.pnl(Decimal("0.40"), bid, "sports", cfg, slip))
     # holding the same position loses everything
     assert bt.roi(row, cfg, slip, False) == pytest.approx(
         bt.pnl(Decimal("0.40"), Decimal(0), "sports", cfg, slip))
