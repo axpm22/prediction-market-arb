@@ -69,10 +69,11 @@ MARKET = {"condition_id": CID, "start_utc": START.isoformat(),
 
 
 def _ev(cfg, positions, scores, touch=None, now=NOW, market=None, m0=M0,
-        ranked=frozenset(), volume=None, elite=None):
+        ranked=frozenset(), volume=None, elite=None, cache_partial=False):
     sigs = whale_signal.evaluate(market or MARKET, positions, _lookup(scores),
                                  _touch() if touch is None else touch,
-                                 now, cfg, m0, ranked, volume, elite)
+                                 now, cfg, m0, ranked, volume, elite,
+                                 cache_partial=cache_partial)
     return {s.variant: s for s in sigs}
 
 
@@ -156,6 +157,22 @@ def test_without_a_cutoff_v5_evaluates_but_never_fires(cfg):
     pos, scores = _three()
     s = _ev(cfg, pos, scores)["V5"]
     assert (s.points_yes, s.fired, s.suppressed_reason) == (Decimal(0), False, "ratio")
+
+
+def test_v5_does_not_fire_off_a_partial_cache(cfg):
+    """I1 (review of 783301f). V5's cutoff is a PERCENTILE of the materialized
+    population, so a partial population does not merely under-count: it can
+    ADMIT a whale the full population denies (the review measured a cutoff of
+    -0.0637 at n=8 against -0.0589 at n=20). While a full rebuild of the
+    positions cache is draining, V5 is pinned suppressed with its own reason
+    rather than fired off a population that is not the registered one — and no
+    other variant is touched, because none of them is relative."""
+    pos, scores = _three(lbs=("0.05", "0.04", "0.03"))
+    sigs = _ev(cfg, pos, scores, elite=Decimal("0.04"), cache_partial=True)
+
+    assert (sigs["V5"].fired, sigs["V5"].suppressed_reason) == (False, "cache-partial")
+    assert sigs["V5"].points_yes == Decimal(2)          # still evaluated and recorded
+    assert (sigs["V1"].fired, sigs["V1"].suppressed_reason) == (True, None)
 
 
 def test_v4_fires_at_three_ranked_qualifying_whales(cfg):

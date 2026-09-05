@@ -189,14 +189,19 @@ def holders_share(variant, condition_id, open_positions, score_lookup, side,
 # ------------------------------------------------------------------ evaluate
 
 def evaluate(market, open_positions, score_lookup, touch, now, cfg, m0,
-             ranked=frozenset(), volume=None, elite=None) -> list[Signal]:
+             ranked=frozenset(), volume=None, elite=None,
+             cache_partial=False) -> list[Signal]:
     """The pre-registered variants per market (§7; V4, V5 and V6 all added
     2026-09-04). Empty when no whale qualifies on either side — nothing to
     persist, nothing left on the table. `ranked` is V4's leaderboard filter,
     `volume` the market's own 24h venue volume for V6's denominator (None =
     unknown, read as `dominance.min_volume_usd`), `elite` V5's percentile
     cutoff for this market's bucket (None = no population, so nobody is
-    elite); each is ignored by every other variant."""
+    elite); each is ignored by every other variant.
+
+    `cache_partial` (fix pass 2026-09-05, I1) is the lane's own reading of
+    whether the positions cache is mid-rebuild — the ONE variant it stops is
+    V5, whose bar is a percentile of that cache's population."""
     whales = qualifying(market["condition_id"], open_positions, score_lookup, now, cfg)
     if not whales:
         return []
@@ -207,6 +212,7 @@ def evaluate(market, open_positions, score_lookup, touch, now, cfg, m0,
     holding = qualifying(market["condition_id"], open_positions, score_lookup,
                          now, cfg, fresh_only=False)
     ctx = {"volume": volume, "now_ts": ts(now), "elite": elite,
+           "cache_partial": cache_partial,
            "ask": {s: t.ask for s, t in touch.items()}}
     return [_signal(v, market, whales, open_positions, score_lookup, touch,
                     now, cfg, m0, ranked, ctx, holding) for v in VARIANTS]
@@ -237,7 +243,15 @@ def _signal(variant, market, whales, open_positions, score_lookup, touch, now,
     held, _, _ = holders_share(variant, market["condition_id"], open_positions,
                                score_lookup, side, now, cfg, ranked, ctx, holding)
 
-    if ratio < d(f["ratio"]):
+    # Before every other gate, because it is not about this market at all:
+    # V5's cutoff is a percentile of the MATERIALIZED population, so while a
+    # full rebuild is draining a smaller population can ADMIT a whale the full
+    # one denies (-0.0637 at n=8 vs -0.0589 at n=20, review of 783301f). The
+    # row is still evaluated and persisted, with the reason pinned, so the
+    # window is visible in `signals` rather than silently absent.
+    if variant == "V5" and (ctx or {}).get("cache_partial"):
+        reason = "cache-partial"
+    elif ratio < d(f["ratio"]):
         reason = "ratio"
     elif threshold is not None and total[side] < d(threshold):
         reason = "min-points"

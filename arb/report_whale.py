@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from arb import whale_elite, whale_rank
+from arb import whale_elite, whale_mat, whale_rank
 from arb.models import q6
 from arb.replay import open_ro
 # the RENDER half, split out on size (every §12 table gained a per-root block):
@@ -44,7 +44,13 @@ def open_tape_ro(cfg) -> sqlite3.Connection | None:
     calls — so between deploying this and the lane's next cycle a tape can be
     perfectly readable and not yet carry it. Reporting "tape out", the degraded
     path this function already exists to serve, is the honest answer there; a
-    bare `no such table` out of the daily report is not."""
+    bare `no such table` out of the daily report is not.
+
+    Existing is not the same as CURRENT, though, and no reader here can make
+    it current — so this is also where the cache's freshness is checked and
+    warned about (I2, review of 783301f). One site, because every read-only
+    reader passes through it and a per-reader check is a check a new reader
+    forgets."""
     path = Path(str(cfg["whale"]["tape_db"]))
     if not path.exists():
         return None
@@ -52,6 +58,7 @@ def open_tape_ro(cfg) -> sqlite3.Connection | None:
         con = open_ro(path)
         con.execute("SELECT 1 FROM meta LIMIT 1")
         con.execute("SELECT 1 FROM positions_mat LIMIT 1")
+        whale_mat.warn_if_stale(con, cfg)
         return con
     except sqlite3.Error:
         return None
@@ -247,7 +254,7 @@ def _collector(cfg, con, now) -> dict:
     out = {"status": None, "rows": None, "bad_rows": None, "at": None,
            "last_seen_age_secs": None, "last_gap": None, "backoff_until": None,
            "prints_per_min": Decimal(0), "prints_24h": 0, "holdings_24h": 0,
-           "tape_bytes": None, "bytes_per_day": None, "mat": {}}
+           "tape_bytes": None, "bytes_per_day": None, "mat": {}, "mat_stale": None}
     path = Path(str(cfg["whale"]["tape_db"]))
     if path.exists():
         out["tape_bytes"] = os.path.getsize(path)
@@ -262,7 +269,12 @@ def _collector(cfg, con, now) -> dict:
                # for recompute, and what the last pass cost. LIVE like every
                # other field above — off the lane's own last cycle, so the
                # console line and the dashboard, never the hashed md.
-               mat=last.get("mat") or {})
+               mat=last.get("mat") or {},
+               # ... and, LIVE like the rest of this block, whether the cache
+               # those figures describe is current at all (I2). Kept beside
+               # `mat` rather than inside it so a cycle that predates the
+               # cache still reads as no mat figures at all.
+               mat_stale=whale_mat.freshness(con, cfg, now)["note"])
     if meta.get("last_seen_ts"):
         out["last_seen_age_secs"] = int(now.timestamp()) - int(meta["last_seen_ts"])
     gap = json.loads(meta["last_gap"]) if meta.get("last_gap") else None

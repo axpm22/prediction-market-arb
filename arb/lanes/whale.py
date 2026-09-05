@@ -171,6 +171,11 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     # computed on first use and persisted below.
     ranked = ranked_wallets(con)
     elite = whale_elite.index(cfg, state)
+    # ... and whether that cutoff's population is the tape's yet. Read ONCE
+    # per cycle, off the queue this cycle's `materialize` just drained (fix
+    # pass 2026-09-05, I1: a partial population can admit a whale the full one
+    # denies, so V5 does not fire while a full rebuild is still draining).
+    partial = whale_mat.cache_partial(con)
 
     # 8-9 share one fetch: the same books price a new signal and an exit, and
     # §8 wants a quotes row every cycle for a market with an open WHALE bet so
@@ -225,7 +230,7 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
             for sig in whale_signal.evaluate(
                     market, open_pos, lookup, touch, now, cfg, m0, ranked,
                     whale_dominance.market_volume(volumes, tokens, cid),
-                    elite(m.sport, m.market_type)):
+                    elite(m.sport, m.market_type), cache_partial=partial):
                 token = tokens.get((cid, sig.side))
                 sig = _zombied(cfg, sig, volumes.get(f"{cid}:{token}"))
                 signal_id = _persist_signal(con, sig, cid, now)

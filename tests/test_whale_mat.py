@@ -305,7 +305,7 @@ def _vm_steps(con, fn):
 
     def tick():
         steps[0] += 1
-    con.set_progress_handler(tick, 1000)
+    con.set_progress_handler(tick, 100)
     try:
         fn()
     finally:
@@ -428,3 +428,218 @@ def test_materialize_reports_rows_backlog_and_seconds(cfg, con):
     assert res["rows"] == con.execute("SELECT COUNT(*) c FROM positions_mat"
                                       ).fetchone()["c"]
     assert isinstance(res["secs"], float) and res["secs"] >= 0
+
+
+# ------------------------------------------- the fix pass (review of 783301f)
+
+def test_a_markets_change_committed_mid_pass_is_not_read_from_a_stale_snapshot(
+        cfg, tmp_path, monkeypatch):
+    """C1. `materialize` snapshotted `markets` ONCE per pass and recomputed
+    every wallet from that snapshot, while the `markets` triggers only
+    `INSERT OR IGNORE` into a queue the wallet was ALREADY on. So a
+    `start_utc`/`sport`/`market_type` change another process commits between
+    the snapshot and that wallet's recompute (the backfill child's mapper,
+    `_local_remap`, `whale_resolve` — four writers) was applied from the STALE
+    snapshot AND dequeued: for a wallet with no further prints the cache
+    diverged from the tape permanently.
+
+    Two real connections, and the change lands in the window that used to be
+    unrecoverable. After the pass the cache must equal the from-scratch truth.
+    """
+    path = tmp_path / "c1.sqlite"
+    con, other = open_tape(path), open_tape(path)
+    _market(con, "0xcM", start=NOW - timedelta(days=2))
+    ts = int((NOW - timedelta(days=3)).timestamp())       # BEFORE start: pregame
+    _print(con, "0xw", "0xcM", ts, size="2000")
+    whale_mat.materialize(con, cfg, NOW)
+    assert score_state(cfg, con, NOW).positions[0].pregame is True
+
+    _print(con, "0xw", "0xcM", ts + 60, size="3000")      # the wallet is dirty
+    real, fired = whale_mat._wallet, []
+
+    def hook(*a, **kw):
+        if not fired:                                     # once, before 0xw's recompute
+            fired.append(1)
+            other.execute("UPDATE markets SET start_utc = ? WHERE condition_id = ?",
+                          ((NOW - timedelta(days=4)).isoformat(), "0xcM"))
+            other.commit()                                # trigger: INSERT OR IGNORE = no-op
+        return real(*a, **kw)
+
+    monkeypatch.setattr(whale_mat, "_wallet", hook)
+    res = whale_mat.materialize(con, cfg, NOW)
+
+    assert fired, "the hook never ran — the test asserts nothing"
+    assert res["dirty"] == 0, "the wallet was dequeued, so the pass had to be correct"
+    state = _assert_same(cfg, con, wallets=["0xw"])
+    assert state.positions[0].pregame is False            # the market now starts EARLIER
+
+
+def test_a_markets_change_committed_after_the_write_requeues_the_wallet(cfg, tmp_path,
+                                                                        monkeypatch):
+    """The other half of C1's window: a change that commits AFTER the wallet's
+    own transaction is picked up by the trigger, because the dequeue has
+    already happened. Together the two tests cover every ordering — there is
+    no third one, since the recompute holds the write lock."""
+    path = tmp_path / "c1b.sqlite"
+    con, other = open_tape(path), open_tape(path)
+    _market(con, "0xcM", start=NOW - timedelta(days=2))
+    _print(con, "0xw", "0xcM", int((NOW - timedelta(days=3)).timestamp()), size="2000")
+    whale_mat.materialize(con, cfg, NOW)
+
+    other.execute("UPDATE markets SET start_utc = ? WHERE condition_id = ?",
+                  ((NOW - timedelta(days=4)).isoformat(), "0xcM"))
+    other.commit()
+
+    assert whale_mat.materialize(con, cfg, NOW)["wallets"] == 1
+    _assert_same(cfg, con, wallets=["0xw"])
+
+
+def test_the_cache_is_partial_only_while_a_full_rebuild_drains(cfg, con):
+    """I1. A handful of dirty wallets in steady state is NOT a partial cache —
+    every other wallet is present and correct. A full rebuild is different:
+    until the queue drains the population itself is incomplete, and V5's
+    cutoff is a percentile OF that population."""
+    wallets = _seeded_tape(con, random.Random(31), n_prints=300, n_wallets=6)
+    cfg["whale"]["mat"]["max_wallets_per_cycle"] = 2
+    while whale_mat.materialize(con, cfg, NOW)["dirty"]:
+        pass
+    assert whale_mat.cache_partial(con) is False
+
+    _print(con, wallets[0], "0xc0", int((NOW - timedelta(hours=1)).timestamp()))
+    assert whale_mat.cache_partial(con) is False          # steady state: not partial
+
+    whale_mat.mark_all_dirty(con)
+
+    assert whale_mat.cache_partial(con) is True
+    while whale_mat.materialize(con, cfg, NOW)["dirty"]:
+        assert whale_mat.cache_partial(con) is True
+    assert whale_mat.cache_partial(con) is False
+
+
+def test_freshness_reports_how_far_behind_the_cache_is(cfg, con):
+    """I2. `open_tape_ro` probed that `positions_mat` EXISTS, never that it is
+    CURRENT — and no read-only reader (report, dashboard, whale-score,
+    whale-rank) can make it current. Two numbers say it: prints above the
+    watermark, and how long the queue has been non-empty."""
+    _seeded_tape(con, random.Random(32), n_prints=300, n_wallets=6)
+    while whale_mat.materialize(con, cfg, NOW)["dirty"]:
+        pass
+
+    fresh = whale_mat.freshness(con, cfg, NOW)
+    assert (fresh["behind"], fresh["dirty"], fresh["stale"]) == (0, 0, False)
+    assert fresh["at"] == NOW.isoformat()
+
+    cfg["whale"]["mat"]["stale_prints"] = 5
+    for i in range(6):
+        _print(con, "0xnew", "0xc0", int(NOW.timestamp()) - i, tx=f"0xbehind{i}")
+
+    stale = whale_mat.freshness(con, cfg, NOW)
+    assert stale["behind"] == 6 and stale["stale"] is True
+    assert stale["note"] == "cache: stale (6 behind, 0 dirty)"
+
+
+def test_a_queue_that_never_drains_reads_as_stale(cfg, con):
+    """The other trip-wire: the watermark can be current while the queue never
+    empties (a lane that materializes but cannot keep up). `stale_secs` is how
+    long a non-empty queue is allowed to persist."""
+    _seeded_tape(con, random.Random(33), n_prints=300, n_wallets=6)
+    cfg["whale"]["mat"]["max_wallets_per_cycle"] = 1
+    whale_mat.materialize(con, cfg, NOW)
+
+    assert whale_mat.freshness(con, cfg, NOW)["stale"] is True      # never been clean
+    while whale_mat.materialize(con, cfg, NOW)["dirty"]:
+        pass
+    whale_mat.mark_all_dirty(con)
+    whale_mat.materialize(con, cfg, NOW)
+
+    assert whale_mat.freshness(con, cfg, NOW)["stale"] is False     # clean 0s ago
+    late = NOW + timedelta(seconds=int(cfg["whale"]["mat"]["stale_secs"]) + 1)
+    assert whale_mat.freshness(con, cfg, late)["stale"] is True
+
+
+def test_every_read_only_reader_warns_when_the_cache_is_stale(cfg, con, tmp_path, caplog):
+    """The warning goes in the ONE place `whale-score`, `whale-rank`, the
+    dashboard bundle and the daily report all go through, so no reader can
+    forget it (rule 12's spirit: one predicate, one site)."""
+    from arb import report_whale
+    _seeded_tape(con, random.Random(34), n_prints=300, n_wallets=6)
+    while whale_mat.materialize(con, cfg, NOW)["dirty"]:
+        pass
+    cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
+    cfg["whale"]["mat"]["stale_prints"] = 5
+    for i in range(6):
+        _print(con, "0xnew", "0xc0", int(NOW.timestamp()) - i, tx=f"0xbehind{i}")
+
+    with caplog.at_level("WARNING"):
+        assert report_whale.open_tape_ro(cfg) is not None
+
+    assert [r for r in caplog.records if "STALE" in r.getMessage()], caplog.text
+
+
+def test_the_ops_line_shows_a_stale_cache(cfg, con, tmp_path):
+    """...and the daily report's console line says it in the same words the
+    ops line already uses for the backlog."""
+    from arb import report_whale
+    from arb.report_whale_md import whale_line
+    _seeded_tape(con, random.Random(35), n_prints=300, n_wallets=6)
+    while whale_mat.materialize(con, cfg, NOW)["dirty"]:
+        pass
+    cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
+    cfg["whale"]["mat"]["stale_prints"] = 5
+    for i in range(6):
+        _print(con, "0xnew", "0xc0", int(NOW.timestamp()) - i, tx=f"0xbehind{i}")
+
+    collector = report_whale._collector(cfg, con, NOW)
+
+    assert collector["mat_stale"] == "cache: stale (6 behind, 0 dirty)"
+    line = whale_line({"roi": {}, "primary_root": "sports", "primary_variant": "V1",
+                       "signals": {"evaluated_24h": 0, "fired_24h": 0},
+                       "collector": collector, "tape_ok": True})
+    assert "cache: stale (6 behind, 0 dirty)" in line
+
+
+def test_the_loader_rejects_an_unbounded_max_wallets_per_cycle(cfg):
+    """M4. `materialize` reads `cap=0` as NO BOUND — that is the
+    `whale whale-mat --rebuild` path. A 0 in config would hand the 60 s lane
+    cycle an unbounded rebuild instead of stopping it, so it fails at boot."""
+    from arb.config import ConfigError, _check_invariants
+    cfg["whale"]["mat"]["max_wallets_per_cycle"] = 0
+
+    with pytest.raises(ConfigError, match="max_wallets_per_cycle"):
+        _check_invariants(cfg)
+
+
+def test_cmd_whale_mat_refuses_a_tape_that_does_not_exist(cfg, tmp_path, capsys):
+    """M5. It opened the tape with `whale_tape.open_tape`, which CREATES the
+    file — so a typo'd `whale.tape_db` reported a healthy empty cache and left
+    a new tape behind. `whale-score`/`whale-rank` already fail loudly here."""
+    from arb.commands import cmd_whale_mat
+    missing = tmp_path / "typo.sqlite"
+    cfg["whale"]["tape_db"] = str(missing)
+
+    rc = cmd_whale_mat(cfg, None, type("A", (), {"rebuild": False})())
+
+    assert rc == 1
+    assert not missing.exists(), "a read of a missing tape must not create one"
+    assert "not found" in capsys.readouterr().out
+
+
+def test_the_lane_suppresses_v5_while_a_rebuild_drains(cfg, tmp_path):
+    """The wiring for I1: the lane computes the flag from its own queue and
+    hands it to `evaluate`. A rebuild leaves the cache STALE-BUT-COMPLETE (
+    `mark_all_dirty` does not clear `positions_mat`), so the whales are all
+    still there and every other variant evaluates normally — only V5, whose
+    bar is relative to the population, is pinned."""
+    from tests.test_whale_lane import _ledger, _run, _tape
+    cfg["whale"]["min_score_lb"] = Decimal("-0.10")     # tests/test_whale_lane.py's
+    cfg["whale"]["exit"]["min_score_lb"] = Decimal("-0.20")   # own cfg fixture
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    first = _run(cfg, store, con)
+    assert "cache-partial" not in first["suppressed"], first["suppressed"]
+
+    whale_mat.mark_all_dirty(con)
+    cfg["whale"]["mat"]["max_wallets_per_cycle"] = 1
+    res = _run(cfg, store, con)
+
+    assert res["mat"]["dirty"], "the rebuild must still be draining"
+    assert res["suppressed"].get("cache-partial") == 1, res["suppressed"]

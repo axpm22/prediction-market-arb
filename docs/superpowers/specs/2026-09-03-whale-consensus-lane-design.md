@@ -258,6 +258,26 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
      cycles, and until it completes the lane scores off a PARTIAL cache —
      registered in KNOWN_ISSUES.md ("L14 materialized-positions rebuild
      window"), not hidden.
+   - **Amendment 2026-09-05b (review of `783301f`).** Three corrections to the
+     above, all with tests:
+     (a) A wallet's `markets` rows are read inside that wallet's own write
+     transaction, not from a per-pass snapshot: a `sport`/`market_type`/
+     `start_utc` change another process committed mid-pass was otherwise
+     applied from the stale snapshot AND dequeued (the triggers'
+     `INSERT OR IGNORE` is a no-op for a wallet already queued), so the cache
+     diverged permanently for a quiet wallet.
+     (b) The first bullet's claim that a partial cache "under-counts, never
+     over-counts" is **false for V5**, whose cutoff is a percentile OF the
+     materialized population — a partial population can admit a whale the full
+     one denies. V5 is therefore pinned suppressed (`cache-partial`) while a
+     full-rebuild queue drains, and only V5, because only V5's bar is
+     relative. A `--rebuild`/`MAT_VERSION` bump leaves the cache stale-but-
+     COMPLETE (`mark_all_dirty` does not clear `positions_mat`); the partial
+     state is the first fill.
+     (c) Read-only readers get a freshness signal (`whale_mat.freshness`:
+     prints above the watermark, and how long the queue has been non-empty)
+     rather than only an existence probe — warned once in the funnel they all
+     pass through, and printed on the report's console line.
 7. **Signal.** For each market with prints since the last cycle, evaluate
    V1/V2/V3. Persist every evaluation to `signals`, fired or suppressed with
    a reason.

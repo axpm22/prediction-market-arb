@@ -10,6 +10,12 @@ FORBIDDEN = [
     re.compile(r"DELETE\s+FROM\s+flat_bets", re.I),
     re.compile(r"UPDATE\s+bet_events", re.I),
     re.compile(r"DELETE\s+FROM\s+bet_events", re.I),
+    # matpos fix pass (review of 783301f, M1): `prints` is the tape's RECORD
+    # (rule 7) and its monotonic INTEGER PRIMARY KEY is load-bearing for the
+    # positions cache — `whale_mat._enqueue` derives the dirty set from the
+    # rowid range above `meta.mat_watermark`, and `freshness` measures how far
+    # behind a reader is from MAX(id). A delete would silently make both lie.
+    re.compile(r"DELETE\s+FROM\s+prints", re.I),
 ]
 
 

@@ -757,6 +757,16 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   into the derived `positions_mat`/`hygiene_mat`
                                       #   cache; `prints` is still the record (rule 7) and
                                       #   `arb whale-mat --rebuild` rebuilds the cache from it.
+    stale_prints: 10000               # a READER (daily report, dashboard, whale-score,
+                                      #   whale-rank) cannot materialize anything, so it
+                                      #   warns instead: this many prints above the
+                                      #   materialization watermark means the lane is down
+                                      #   or not keeping up (fix pass 2026-09-05, review of
+                                      #   783301f). A 60 s cycle lands ~33 prints at the
+                                      #   measured 47k stored rows/day, so 10,000 is hours
+                                      #   behind, never a cycle boundary.
+    stale_secs: 900                   # ... and this long with a NON-EMPTY queue (15 cycles
+                                      #   at poll_secs 60). A full rebuild drains in ~8.
     max_wallets_per_cycle: 400        # wallets recomputed per call, oldest-dirty first;
                                       #   leftovers go to the next cycle, so the lane never
                                       #   stalls on the first pass over an existing tape.

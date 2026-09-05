@@ -1023,12 +1023,22 @@ def cmd_whale_mat(cfg, store, args):
     bump, or after a cache anyone has reason to doubt.
 
     Writes to whale.tape_db and nothing else: the ledger is not opened at all,
-    and `prints` — the record — is only ever read (rule 7)."""
+    and `prints` — the record — is only ever read (rule 7). It needs a WRITE
+    handle, so it cannot use `open_tape_ro` like `whale-score`/`whale-rank` —
+    but `open_tape` CREATES the file, so a typo'd `whale.tape_db` reported a
+    healthy empty cache and left a new tape behind. Existence is checked first
+    (M5, review of 783301f)."""
     from datetime import datetime, timezone
+    from pathlib import Path
     from arb import whale_mat
     from arb.whale_tape import open_tape
     now = datetime.now(timezone.utc)
-    con = open_tape(cfg["whale"]["tape_db"])
+    path = Path(str(cfg["whale"]["tape_db"]))
+    if not path.exists():
+        print(f"whale tape not found: {path} — the collector has never run here. "
+              "whale-mat maintains the derived cache; it does not create a tape.")
+        return 1
+    con = open_tape(path)
     if args.rebuild:
         print(f"rebuild: {whale_mat.mark_all_dirty(con)} wallet(s) queued")
         res = whale_mat.materialize(con, cfg, now, cap=0)

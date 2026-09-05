@@ -54,12 +54,16 @@ from __future__ import annotations
 
 import time
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from arb import whale_score
+from arb.logutil import get_logger
 from arb.whale_hygiene import Hygiene, hygiene_flags
 from arb.whale_score import Position
 from arb.whale_tape import _meta
+
+log = get_logger("arb.whale", "logs/whale.log")
 
 # Bump on ANY change to positions_from_prints / hygiene_flags semantics.
 MAT_VERSION = 1
@@ -206,6 +210,9 @@ def mark_all_dirty(con) -> int:
                 "SELECT DISTINCT proxy_wallet FROM prints")
     _put(con, "mat_watermark", con.execute("SELECT MAX(id) FROM prints").fetchone()[0] or 0)
     _put(con, "mat_version", MAT_VERSION)
+    # ... and that until the queue drains the POPULATION is not the tape's
+    # (`cache_partial` below, and I1 in the review of 783301f).
+    _put(con, "mat_rebuilding", 1)
     con.commit()
     return con.execute("SELECT COUNT(*) c FROM mat_dirty").fetchone()[0]
 
@@ -227,14 +234,43 @@ def _enqueue(con) -> None:
     con.commit()
 
 
-def _wallet(con, cfg, wallet, markets) -> None:
+def _markets_for(con, cids) -> dict:
+    """The `markets` rows for exactly the markets this wallet printed in —
+    a primary-key seek each, instead of the whole table. Chunked because a
+    heavy wallet can print in more markets than SQLite binds parameters."""
+    cids, out = list(cids), {}
+    for i in range(0, len(cids), 500):
+        chunk = cids[i:i + 500]
+        for r in con.execute(f"SELECT {MARKET_COLS} FROM markets WHERE condition_id"
+                             f" IN ({','.join('?' * len(chunk))})", chunk):
+            out[r["condition_id"]] = dict(r)
+    return out
+
+
+def _wallet(con, cfg, wallet) -> None:
     """One wallet, recomputed WHOLE from its own prints and written in one
-    transaction: the cache is never half a wallet."""
+    IMMEDIATE transaction: the cache is never half a wallet.
+
+    The `markets` read is INSIDE that transaction, and that is load-bearing
+    (C1, review of 783301f; design §5 amendment 2026-09-05b). Off a per-PASS
+    snapshot, a sport/market_type/start_utc change another writer committed
+    mid-pass was applied STALE and then dequeued — the triggers' `INSERT OR
+    IGNORE` is a no-op for a wallet already queued — so the cache diverged for
+    good on any wallet quiet enough not to be dirtied again. Taking the write
+    lock first leaves only two orderings, since SQLite serializes writers: the
+    change committed before this read (we see it), or after our COMMIT (its
+    trigger re-queues this wallet).
+    """
     cur = con.cursor()
     cur.row_factory = None                      # bare tuples for _PrintRow
     prints = [_PrintRow(r) for r in cur.execute(
         f"SELECT {PRINT_COLS} FROM prints WHERE proxy_wallet = ? {PRINT_ORDER}",
         (wallet,))]
+    # A print written after this read is above `mat_watermark`, so the next
+    # `_enqueue` re-queues the wallet — it needs no lock. The markets read does.
+    if not con.in_transaction:                  # ponytail: no caller nests one
+        con.execute("BEGIN IMMEDIATE")
+    markets = _markets_for(con, {p["condition_id"] for p in prints})
     positions = whale_score.positions_from_prints(prints, markets, cfg)
     hyg = hygiene_flags(prints, positions, cfg)
     con.execute("DELETE FROM positions_mat WHERE proxy_wallet = ?", (wallet,))
@@ -258,8 +294,10 @@ def _wallet(con, cfg, wallet, markets) -> None:
 
 def materialize(con, cfg, now, cap=None) -> dict:
     """Bring the cache up to date, bounded. Called at the start of every whale
-    cycle; `cap=0` means no bound (the forced rebuild), otherwise
-    `whale.mat.max_wallets_per_cycle` wallets a call, oldest-dirty first.
+    cycle; `cap=0` means NO BOUND — the forced rebuild's own path, never a
+    lane cycle's, which is why `whale.mat.max_wallets_per_cycle >= 1` is a
+    loader invariant (M4). Otherwise that many wallets a call, oldest-dirty
+    first.
 
     Returns the ops numbers the cycle dict and the daily ops line print: how
     big the cache is, how far behind it still is, and what this pass cost.
@@ -272,16 +310,80 @@ def materialize(con, cfg, now, cap=None) -> dict:
     todo = [r[0] for r in con.execute(
         "SELECT proxy_wallet FROM mat_dirty ORDER BY rowid" + (" LIMIT ?" if cap else ""),
         (cap,) if cap else ())]
-    if todo:
-        markets = {r["condition_id"]: dict(r)
-                   for r in con.execute(f"SELECT {MARKET_COLS} FROM markets")}
-        for wallet in todo:
-            _wallet(con, cfg, wallet, markets)
-            res["wallets"] += 1
+    for wallet in todo:
+        _wallet(con, cfg, wallet)
+        res["wallets"] += 1
     res["dirty"] = con.execute("SELECT COUNT(*) c FROM mat_dirty").fetchone()[0]
     res["rows"] = con.execute("SELECT COUNT(*) c FROM positions_mat").fetchone()[0]
+    # What a read-only reader needs to judge this cache without a write handle
+    # (I2): when a pass last ran, and when the queue was last actually EMPTY.
+    _put(con, "mat_at", now.isoformat())
+    if not res["dirty"]:
+        _put(con, "mat_clean_at", now.isoformat())
+        _put(con, "mat_rebuilding", 0)
+    con.commit()
     res["secs"] = round(time.monotonic() - t0, 3)
     return res
+
+
+def cache_partial(con) -> bool:
+    """True while a FULL rebuild is still draining — `--rebuild`, a
+    `MAT_VERSION` bump, or the first fill of an empty cache. NOT "some wallets
+    are dirty": in steady state a few always are and every other wallet is
+    present, so the population is the tape's.
+
+    It matters because V5's bar is a PERCENTILE of the materialized population
+    (arb/whale_elite.py): a partial population does not merely under-count, it
+    can ADMIT a whale the full one denies. The lane hands this to
+    `whale_signal.evaluate`, which pins V5 `cache-partial`. Measurement and
+    registration: KNOWN_ISSUES.md #34, "Correction 2026-09-05".
+    """
+    if str(_meta(con, "mat_rebuilding") or "0") != "1":
+        return False
+    return bool(con.execute("SELECT EXISTS(SELECT 1 FROM mat_dirty)").fetchone()[0])
+
+
+def freshness(con, cfg, now=None) -> dict:
+    """How CURRENT the cache is, for a reader that cannot make it current.
+
+    `open_tape_ro` probed that `positions_mat` EXISTS; the report, the
+    dashboard, `whale-score` and `whale-rank` then scored off it with no way
+    to tell a one-cycle-old cache from a day-old one (I2, review of 783301f).
+    Two numbers say it: prints above the materialization watermark, and how
+    long the queue has been non-empty (`mat_clean_at` is the last pass that
+    emptied it; never having emptied reads as stale — that is the first fill).
+    """
+    mat = cfg["whale"]["mat"]
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:                      # every stamp on the tape is UTC
+        now = now.replace(tzinfo=timezone.utc)
+    behind = (con.execute("SELECT MAX(id) FROM prints").fetchone()[0] or 0) \
+        - int(_meta(con, "mat_watermark") or 0)
+    dirty = con.execute("SELECT COUNT(*) c FROM mat_dirty").fetchone()[0]
+    clean_at = _meta(con, "mat_clean_at")
+    secs = None if not clean_at else int(
+        (now - datetime.fromisoformat(clean_at)).total_seconds())
+    stale = bool(behind > int(mat["stale_prints"])
+                 or (dirty and (secs is None or secs > int(mat["stale_secs"]))))
+    return {"behind": behind, "dirty": dirty, "at": _meta(con, "mat_at"),
+            "dirty_secs": secs if dirty else 0, "stale": stale,
+            "note": f"cache: stale ({behind} behind, {dirty} dirty)" if stale else None}
+
+
+def warn_if_stale(con, cfg, now=None) -> dict:
+    """`freshness`, logged. Called from the ONE place every read-only reader
+    goes through (`report_whale.open_tape_ro`), so no reader can forget it.
+    ponytail: no throttle — a stale cache is an alarm state, not a steady one;
+    add one here if a dashboard poll ever floods the log."""
+    fresh = freshness(con, cfg, now)
+    if fresh["stale"]:
+        log.warning("whale positions cache is STALE: %s print(s) above the "
+                    "materialization watermark, %s wallet(s) queued, last pass "
+                    "%s. Scores read off it are computed over what the last "
+                    "cycle materialized — check the whale lane, or run "
+                    "`arb whale-mat --rebuild`.",
+                    fresh["behind"], fresh["dirty"], fresh["at"] or "never")
+    return fresh
 
 
 def load_positions(con) -> list[Position]:

@@ -185,7 +185,8 @@ SCHEMA = {
               "backfill": {"wallets_per_cycle": NUM, "pages_per_wallet": NUM,
                            "page_size": NUM, "cadence_secs": NUM,
                            "resolve_per_cycle": NUM, "map_per_cycle": NUM},
-              "mat": {"max_wallets_per_cycle": NUM},
+              "mat": {"max_wallets_per_cycle": NUM, "stale_prints": NUM,
+                      "stale_secs": NUM},
               "page_size": NUM, "max_offset": NUM, "taker_only": BOOL,
               "slug_sport_prefixes": MAP(STR),
               "leaderboard": {"enabled": BOOL, "category": STR, "time_periods": LIST,
@@ -295,6 +296,13 @@ def _check_invariants(cfg):
             "cannot see the tape, so the other half of this check — a cutoff that "
             "falls below whale.min_score_lb makes V5 a copy of V1 — is a WARNING "
             "from the lane cycle (arb/whale_elite.py) and a line in the daily report")
+    if int(whale["mat"]["max_wallets_per_cycle"]) < 1:
+        raise ConfigError(
+            f"whale.mat.max_wallets_per_cycle "
+            f"({whale['mat']['max_wallets_per_cycle']}) must be >= 1 — "
+            "`whale_mat.materialize` reads a cap of 0 as NO BOUND (the `arb whale-mat "
+            "--rebuild` path), so a 0 here would hand the 60 s lane cycle an unbounded "
+            "rebuild instead of stopping it at a slice (fix pass 2026-09-05)")
     if not Decimal(whale["dominance"]["min_volume_usd"]) > 0:
         raise ConfigError(
             f"whale.dominance.min_volume_usd ({whale['dominance']['min_volume_usd']}) must be "

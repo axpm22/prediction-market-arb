@@ -174,4 +174,7 @@ def whale_line(frame: dict) -> str:
             # A backlog that does not fall cycle to cycle is the alarm.
             + (f"; positions {mat['rows']}, {mat['dirty']} dirty, "
                f"{mat['secs']}s" if mat else "")
+            # ... and, when the lane is not keeping that cache current at all,
+            # what every number above was computed off (I2, 2026-09-05).
+            + (f"; {c['mat_stale']}" if c.get("mat_stale") else "")
             + ("" if frame["tape_ok"] else "; TAPE UNAVAILABLE"))

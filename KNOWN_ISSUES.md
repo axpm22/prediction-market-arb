@@ -338,8 +338,30 @@ and after any `whale_mat.MAT_VERSION` bump or `arb whale-mat --rebuild` — ever
 wallet on the tape is dirty, and the cache fills over several cycles. Until it
 is full the lane scores, ranks and fires off a PARTIAL population: a wallet not
 yet materialized has no positions, so it casts no vote and enters no elite
-percentile. Signals are therefore *under*-counted, never over-counted, and no
-number is wrong — it is computed over fewer wallets than the tape supports.
+percentile.
+
+**Correction 2026-09-05 (review of `783301f`, I1).** The original wording here
+claimed signals are "*under*-counted, never over-counted, and no number is
+wrong". That is false for V5, and it was two errors:
+
+- **V5's bar is RELATIVE.** `whale_elite.cutoff` is the top-`elite_pct`
+  percentile *of the materialized population*, so a smaller population moves
+  the bar rather than only shrinking the roster: measured in the review, the
+  cutoff was **-0.0637 at n=8 against -0.0589 at n=20**, i.e. the partial
+  population ADMITS a whale the full one denies. Under-counting is the honest
+  claim for V1-V4 and V6, whose bars are absolute; for V5 the partial cache
+  can produce a fire the complete cache would not.
+- **A rebuild is not the partial case.** `mark_all_dirty` queues every wallet
+  but does NOT clear `positions_mat`, so after `--rebuild` or a `MAT_VERSION`
+  bump the cache is stale-but-COMPLETE. The genuinely partial state is the
+  first fill on a tape that has no cache at all.
+
+*Fixed in the same pass, both halves:* `whale_mat.cache_partial(con)` is true
+only while a full-rebuild trigger's queue is still draining, and
+`whale_signal.evaluate` then pins V5 with the suppression reason
+**`cache-partial`** — evaluated and persisted like any other suppressed row,
+so the window is visible in `signals`, but never fired against a population
+that is not the registered one. Every other variant is untouched.
 
 *Measured 2026-09-05* on a synthetic 800,000-print / 3,000-wallet tape
 (scratchpad, never the production tape): a full first materialization is **8
@@ -359,7 +381,13 @@ Same consequence, same mitigation.
 
 *Mitigation:* the backlog is on the ops line every cycle (`positions <rows>,
 <n> dirty, <secs>s`, `arb report --daily` console line and the dashboard) and
-in the `whale --once` output. A backlog that does not fall cycle to cycle is
+in the `whale --once` output. Added 2026-09-05 (same review, I2): a read-only
+reader cannot materialize anything and had no way to tell a current cache from
+a day-old one, so `whale_mat.freshness` measures both (prints above the
+watermark; how long the queue has been non-empty, against `whale.mat.
+stale_prints`/`stale_secs`) — `report_whale.open_tape_ro`, the one funnel every
+read-only reader passes through, logs a WARNING, and the report's console line
+carries `cache: stale (N behind, M dirty)`. A backlog that does not fall cycle to cycle is
 the alarm; `arb whale-mat --rebuild` drains it in one unbounded run without
 waiting for cycles. *Not fixed, by choice:* a bounded per-cycle rebuild is what
 keeps the lane from stalling on its 300 s child cap, and blocking the lane for
