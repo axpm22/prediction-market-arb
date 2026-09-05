@@ -74,7 +74,12 @@ def cluster_ci(cfg, by_event: dict) -> dict:
 
 def roi_rows(store) -> list[dict]:
     """One row per settled WHALE bet: its variant, cluster, signal and ROI per
-    dollar staked. An EXITED bet counts — the exit P&L is realized (§9)."""
+    dollar staked. An EXITED bet counts — the exit P&L is realized (§9).
+
+    NOT deduped by signal_id, unlike `pregame_drifts` below: the sizing
+    comparison (§8) is the point of this table, so `V*/flat`, `V*/conf` and
+    `V*/kelly` must stay three separate rows of one fired signal, each with
+    its own stake and its own ROI."""
     out = []
     for r in store.query(SETTLED_SQL):
         bet = dict(r)
@@ -111,15 +116,27 @@ def roi_cell(cfg, rows: list[dict]) -> dict:
 
 DRIFT_SQL = """
     SELECT m.horizon_secs h, m.mark_cost, b.id bet_id, b.legs_json, b.event_key,
-           b.edge_points, b.category
+           b.edge_points, b.category, b.signal_id, b.variant
       FROM markouts m JOIN flat_bets b ON b.id = m.bet_id
      WHERE b.kind='WHALE' AND m.in_play=0 AND m.leg_index=0"""
 
 
 def pregame_drifts(store, horizons, since=None, until=None, root=None) -> list[dict]:
-    """D_h = mark mid - mid0 on leg 0, one row per (bet, horizon) that carries a
-    mid0. THE definition of the pregame drift — `markout_stats` and the §12
-    fast-kill window read it from here rather than each writing the JOIN.
+    """D_h = mark mid - mid0 on leg 0, one row per (SIGNAL, horizon) that
+    carries a mid0. THE definition of the pregame drift — `markout_stats` and
+    the §12 fast-kill window read it from here rather than each writing the
+    JOIN.
+
+    DEDUPED on `signal_id` (fix, review of 9e4158d): a fired signal books
+    three sizing rows (`V*/flat`, `V*/conf`, `V*/kelly`, §8) that share one
+    signal_id and the identical leg/price, so without this a marked signal was
+    counted three times in every reader below — the evidence `fast_kill_min_marked`
+    gates on was a third of what it looked like. The `/flat` row is kept as the
+    representative (the registered "$1 per flag" convention), falling back to
+    whichever sizing marked when flat did not. A row with no signal_id (legacy,
+    pre-`variant`-column data) has no sibling sizing rows to collapse into and
+    keeps its own bet_id as the dedup key — one row per bet, exactly as before.
+
     `until` bounds the BOOKING and the MARK: a day's window may only see what
     that day could see. `root` bounds it to one root — §7 item 5 reports the
     markout per root and runs kill rule 2 per root, because a non-sports close
@@ -133,23 +150,40 @@ def pregame_drifts(store, horizons, since=None, until=None, root=None) -> list[d
     if until is not None:
         sql += " AND b.created_at < ? AND m.marked_at < ?"
         params += [until, until]
-    out = []
+    sql += " ORDER BY b.id"           # deterministic dedup pick (rule 9)
+    best: dict[tuple, tuple[bool, dict]] = {}
     for r in store.query(sql, tuple(params)):
         mid0 = (json.loads(r["legs_json"])[0] or {}).get("mid0")
-        if mid0 is not None:
-            out.append({"bet_id": r["bet_id"], "h": r["h"],
-                        "drift": _d(r["mark_cost"]) - _d(mid0),
-                        "event_key": r["event_key"],
-                        "root": r["category"] or "-",
-                        "edge_points": _d(r["edge_points"])})
-    return out
+        if mid0 is None:
+            continue
+        sid = r["signal_id"]
+        key = (sid, r["h"]) if sid is not None else ("bet", r["bet_id"], r["h"])
+        is_flat = str(r["variant"] or "").endswith("/flat")
+        cur = best.get(key)
+        if cur is not None and not (is_flat and not cur[0]):
+            continue                    # already have this signal's representative
+        best[key] = (is_flat, {"bet_id": r["bet_id"], "h": r["h"],
+                               "drift": _d(r["mark_cost"]) - _d(mid0),
+                               "event_key": r["event_key"],
+                               "root": r["category"] or "-",
+                               "edge_points": _d(r["edge_points"])})
+    return [row for _, row in best.values()]
 
 
 def markout_stats(store) -> dict:
     """{root: {+2m, +10m}} PREGAME coverage and mean drift, plus the clusters
     the bench needs for the one-sided bound. Per root (§7 item 5): a root's
     coverage is its OWN marks over its OWN bets, so one root's thin marking
-    never dilutes another's number."""
+    never dilutes another's number.
+
+    `cell["n"]` is `pregame_drifts`' deduped count — one per marked SIGNAL,
+    not per booked row — so `coverage` (that count over `n_bets`, which still
+    counts every `V*/flat`+`V*/conf`+`V*/kelly` row) is now "marked signals
+    over booked rows", not "marked rows over booked rows": a signal that books
+    three sizings but marks on only one of them reads as 1-in-3 coverage — the
+    denominator is unchanged from before this fix and stays a row count,
+    on purpose: fixing the count that gates rule 2 is this fix's whole scope,
+    not redefining what "coverage" means."""
     n_bets = {r["category"] or "-": r["c"] for r in store.query(
         "SELECT category, COUNT(*) c FROM flat_bets WHERE kind='WHALE' "
         "GROUP BY category")}

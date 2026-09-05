@@ -38,10 +38,13 @@ def _or(v, dash="—"):
 
 def _fast_kill_window(store, since: str, until: str, root=SPORTS_ROOT) -> dict:
     """§12 rule 2's inputs over the 30 days ending at `until`: mean pregame
-    D_2m, mean `flagged_edge` of the same marked bets, and how many bets those
-    are. Keyed by bet, so a bet marked twice at +2m still counts once. Bounded
-    to ONE root — rule 2 runs per root (§7 item 5) and the primary decision is
-    the sports one."""
+    D_2m, mean `flagged_edge` of the same marked SIGNALS, and how many signals
+    those are. `pregame_drifts` already dedupes one row per (signal_id,
+    horizon) — the three sizing rows one fired signal books (§8) collapse to
+    their `/flat` representative before this ever sees them — so keying this
+    dict by `bet_id` still counts each signal once, exactly as keying it by
+    signal_id would. Bounded to ONE root — rule 2 runs per root (§7 item 5)
+    and the primary decision is the sports one."""
     per_bet = {r["bet_id"]: (r["drift"], r["edge_points"])
                for r in pregame_drifts(store, (H_2M,), since, until, root)}
     n = len(per_bet)
@@ -61,8 +64,8 @@ def _window_at(store, until: str, root=SPORTS_ROOT) -> dict:
 
 
 def _held(fk: dict, min_marked: int) -> bool:
-    """Rule 2's condition on ONE window: enough marked bets, and mean pregame
-    D_2m below -0.5 x mean flagged_edge."""
+    """Rule 2's condition on ONE window: enough marked signals, and mean
+    pregame D_2m below -0.5 x mean flagged_edge."""
     return bool(fk["n_marked"] >= min_marked and fk["mean_d2m"] is not None
                 and fk["mean_d2m"] < fk["threshold"])
 
@@ -199,7 +202,7 @@ def kill_status(cfg, store, con=None, now=None, hashes_log_path=None,
          "mean_d2m": fk["mean_d2m"], "threshold": fk["threshold"],
          "state": _state(streak >= FAST_KILL_STREAK, fk["n_marked"] >= min_marked),
          "says": f"mean D_2m {_or(fk['mean_d2m'])} vs {_or(fk['threshold'])} over "
-                 f"{fk['n_marked']}/{min_marked} marked bets ({FAST_KILL_DAYS}d); "
+                 f"{fk['n_marked']}/{min_marked} marked signals ({FAST_KILL_DAYS}d); "
                  f"streak {streak}/{FAST_KILL_STREAK} produced reports"},
         {"rule": 3, "name": "null", "n": n, "target_n": null_n, "lb80": lb80,
          "state": _state(n >= null_n and not (lb80 is not None and lb80 > 0),

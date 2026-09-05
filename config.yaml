@@ -1023,6 +1023,6 @@ whale:                                # L14 whale-consensus lane (design doc 202
   kill: { decision_n: 100, null_n: 1200, fast_kill_min_marked: 50,
           min_signals_per_week_alarm: 10 }
                                       # pre-registered kill-gate sample sizes; fast_kill_min_marked
-                                      #   is the rolling 30-day marked-bet floor for kill rule 2
+                                      #   is the rolling 30-day marked-signal floor for kill rule 2
                                       #   (spec §12); min_signals_per_week_alarm is the starvation
                                       #   floor for kill rule 4 (spec §12)

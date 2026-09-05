@@ -788,7 +788,10 @@ and can only confirm a modest one at the EV lane's `target_n` scale.
    mean ROI < 0.
 2. Fast kill: mean `D_2m` (pregame marks) < −0.5 × mean `flagged_edge` over
    a rolling 30-day window with ≥ `kill.fast_kill_min_marked` (50) marked
-   bets, on two consecutive *produced* daily reports. A day with no report
+   signals (amended 2026-09-05, markout dedup fix: the count is distinct
+   `signal_id`s, not `flat_bets` rows — a fired signal books three sizing
+   rows, §8, sharing one signal_id), on two consecutive *produced* daily
+   reports. A day with no report
    (outage) pauses the streak; it does not reset it. "Produced" means the
    day has a line in the append-only `reports/daily/HASHES.log` chain that
    `write_daily` appends; the streak is derived read-time by re-evaluating

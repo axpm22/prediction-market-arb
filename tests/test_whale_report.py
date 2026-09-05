@@ -490,6 +490,166 @@ def test_markout_coverage_and_mean_drift_are_reported_pregame_only(cfg, tmp_path
     assert marks[600]["coverage"] == Decimal("0")
 
 
+# ------------------------------------------- markout dedup (9e4158d review)
+
+def _mark_bet(store, bet_id, cost, horizon=120):
+    """One pregame markout row for `bet_id`, mid0=0.50 as `_whale_row` bakes
+    it — `cost` alone decides the drift."""
+    store.insert("markouts", {"bet_id": bet_id, "leg_index": 0,
+                              "horizon_secs": horizon, "actual_offset_secs": 120.0,
+                              "mark_cost": cost, "marked_at": NOW.isoformat(),
+                              "in_play": 0})
+
+
+def test_three_sizing_rows_of_one_signal_mark_as_one_not_three(cfg, tmp_path):
+    """A fired signal books V*/flat, V*/conf and V*/kelly (§8) sharing one
+    signal_id and the same leg/price. Marking all three must not triple-count
+    the signal in the pregame drift table."""
+    from arb.whale_metrics import H_2M, markout_stats, pregame_drifts
+    store = Store(tmp_path / "t.sqlite")
+    flat = _whale_row(store, "V2/flat", 1, "pm:a")
+    conf = _whale_row(store, "V2/conf", 1, "pm:a", stake="0.5")
+    kelly = _whale_row(store, "V2/kelly", 1, "pm:a", stake="0.25")
+    for bet_id in (flat, conf, kelly):
+        _mark_bet(store, bet_id, "0.52")                     # drift 0.02 on all three
+
+    drifts = pregame_drifts(store, (H_2M,))
+    cell = markout_stats(store)["sports"][H_2M]
+
+    assert len(drifts) == 1                                  # was 3
+    assert cell["n"] == 1                                     # was 3
+    assert cell["mean_drift"] == Decimal("0.020000")          # unchanged by dedup
+
+
+def test_markout_dedup_prefers_the_flat_sizing_row(cfg, tmp_path):
+    """The flat row is the registered "$1 per flag" convention — it wins as
+    the representative even when the other sizings mark differently (never
+    happens on the real leg, since all three share one price, but proves the
+    selection rule rather than an accident of row order)."""
+    from arb.whale_metrics import H_2M, markout_stats
+    store = Store(tmp_path / "t.sqlite")
+    conf = _whale_row(store, "V2/conf", 1, "pm:a", stake="0.5")
+    kelly = _whale_row(store, "V2/kelly", 1, "pm:a", stake="0.25")
+    flat = _whale_row(store, "V2/flat", 1, "pm:a")
+    _mark_bet(store, conf, "0.60")                            # drift 0.10
+    _mark_bet(store, kelly, "0.65")                           # drift 0.15
+    _mark_bet(store, flat, "0.55")                            # drift 0.05 <- wins
+
+    cell = markout_stats(store)["sports"][H_2M]
+
+    assert cell["n"] == 1
+    assert cell["mean_drift"] == Decimal("0.050000")
+
+
+def test_markout_dedup_falls_back_to_any_sizing_without_a_flat_row(cfg, tmp_path):
+    """A signal_id whose flat row never marked (e.g. still open) still counts
+    once off whichever sizing did mark, not zero and not twice."""
+    from arb.whale_metrics import H_2M, markout_stats
+    store = Store(tmp_path / "t.sqlite")
+    conf = _whale_row(store, "V2/conf", 1, "pm:a", stake="0.5")
+    kelly = _whale_row(store, "V2/kelly", 1, "pm:a", stake="0.25")
+    _whale_row(store, "V2/flat", 1, "pm:a")                   # never marked
+    _mark_bet(store, conf, "0.58")
+    _mark_bet(store, kelly, "0.62")
+
+    cell = markout_stats(store)["sports"][H_2M]
+
+    assert cell["n"] == 1
+    assert cell["mean_drift"] in (Decimal("0.080000"), Decimal("0.120000"))
+
+
+def test_markout_dedup_counts_distinct_signals_not_rows(cfg, tmp_path):
+    """The bug's real-world shape: one over-sized signal (3 sizing rows) must
+    not outweigh a plain one (1 row) in the pooled mean — each signal is one
+    vote, whatever it was staked at."""
+    from arb.whale_metrics import H_2M, markout_stats
+    store = Store(tmp_path / "t.sqlite")
+    a_flat = _whale_row(store, "V2/flat", 1, "pm:a")
+    a_conf = _whale_row(store, "V2/conf", 1, "pm:a", stake="0.5")
+    a_kelly = _whale_row(store, "V2/kelly", 1, "pm:a", stake="0.25")
+    b_flat = _whale_row(store, "V2/flat", 2, "pm:b")
+    for bet_id in (a_flat, a_conf, a_kelly):
+        _mark_bet(store, bet_id, "0.52")                      # drift 0.02
+    _mark_bet(store, b_flat, "0.60")                          # drift 0.10
+
+    cell = markout_stats(store)["sports"][H_2M]
+
+    assert cell["n"] == 2                                     # was 4
+    assert cell["mean_drift"] == Decimal("0.060000")          # (0.02+0.10)/2, was 0.04
+
+
+def test_kill_rule_2_n_marked_counts_signals_not_sizing_rows(cfg, tmp_path):
+    """§12 rule 2 gates on `fast_kill_min_marked` marked SIGNALS. Two real
+    signals booked at three sizings each must read n_marked=2, not 6 — the
+    finding: the bug let the gate fire on a third of the intended evidence."""
+    cfg["whale"]["kill"]["fast_kill_min_marked"] = 2
+    store = Store(tmp_path / "t.sqlite")
+    for sid, event in ((1, "pm:a"), (2, "pm:b")):
+        flat = _whale_row(store, "V2/flat", sid, event)
+        conf = _whale_row(store, "V2/conf", sid, event, stake="0.5")
+        kelly = _whale_row(store, "V2/kelly", sid, event, stake="0.25")
+        for bet_id in (flat, conf, kelly):
+            _mark_bet(store, bet_id, "0.45")                  # drift -0.05
+
+    rule = _rules(cfg, store)[2]
+
+    assert rule["n_marked"] == 2                              # was 6
+    assert rule["held_today"] is True                         # 2 >= min_marked=2
+
+
+def test_kill_rule_2_does_not_meet_the_floor_on_row_count_alone(cfg, tmp_path):
+    """The inverse of the above: one real signal (three sizing rows) must NOT
+    clear a min_marked=2 floor — the pre-fix bug would have read n_marked=3
+    and wrongly held the rule on a single signal's evidence."""
+    cfg["whale"]["kill"]["fast_kill_min_marked"] = 2
+    store = Store(tmp_path / "t.sqlite")
+    flat = _whale_row(store, "V2/flat", 1, "pm:a")
+    conf = _whale_row(store, "V2/conf", 1, "pm:a", stake="0.5")
+    kelly = _whale_row(store, "V2/kelly", 1, "pm:a", stake="0.25")
+    for bet_id in (flat, conf, kelly):
+        _mark_bet(store, bet_id, "0.45")
+
+    rule = _rules(cfg, store)[2]
+
+    assert rule["n_marked"] == 1                              # was 3
+    assert rule["held_today"] is False
+
+
+def test_markout_dedup_ignores_legacy_signal_id_less_rows(cfg, tmp_path):
+    """A pre-L14-sizing row (signal_id NULL) has no sibling sizing rows to
+    collapse into — it must still count once, keyed by its own bet_id, exactly
+    as before this fix."""
+    from arb.whale_metrics import H_2M, markout_stats
+    store = Store(tmp_path / "t.sqlite")
+    a = _whale_row(store, "V2/flat", None, "pm:a")
+    b = _whale_row(store, "V2/flat", None, "pm:b")
+    _mark_bet(store, a, "0.52")
+    _mark_bet(store, b, "0.54")
+
+    cell = markout_stats(store)["sports"][H_2M]
+
+    assert cell["n"] == 2
+    assert cell["mean_drift"] == Decimal("0.030000")
+
+
+def test_roi_rows_stays_one_row_per_sizing_never_deduped(cfg, tmp_path):
+    """The sizing comparison (design §8, "three measurements of one
+    population") needs ROI per BOOKING, not per signal — unlike the markout
+    dedup above, `roi_rows`/`roi_cell` must keep all three sizing rows of one
+    fired signal as three separate observations."""
+    from arb.whale_metrics import roi_rows
+    store = Store(tmp_path / "t.sqlite")
+    _whale_row(store, "V2/flat", 1, "pm:a", pnl=Decimal("0.10"))
+    _whale_row(store, "V2/conf", 1, "pm:a", pnl=Decimal("0.20"), stake="0.5")
+    _whale_row(store, "V2/kelly", 1, "pm:a", pnl=Decimal("0.05"), stake="0.25")
+
+    rows = roi_rows(store)
+
+    assert len(rows) == 3
+    assert {r["variant"] for r in rows} == {"V2/flat", "V2/conf", "V2/kelly"}
+    assert all(r["signal_id"] == 1 for r in rows)
+
+
 # ------------------------------------------------------------ roots (C1)
 
 def test_settled_rows_from_two_roots_are_never_pooled(cfg, tmp_path):
