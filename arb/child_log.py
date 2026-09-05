@@ -183,8 +183,12 @@ def reap(cfg, store, cap: Capture, killed: bool = False) -> None:
     exits, so joining the drain thread here would block the caller forever.
     Callers (both supervisor shutdown paths, I3) can therefore call this
     unconditionally right after terminating a child, without first having
-    to prove it actually exited."""
+    to prove it actually exited. That path logs a WARNING rather than
+    staying silent (minor, review of 70058b9) — every known caller already
+    terminates the child first, so reaching it means a future caller is
+    misusing reap()."""
     if cap.proc.poll() is None:
+        log.warning("child_log.reap(%s): process still alive — not reaped", cap.name)
         return
     cap.thread.join(timeout=_DRAIN_JOIN_SECS)
     try:

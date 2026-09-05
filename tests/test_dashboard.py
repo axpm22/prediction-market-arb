@@ -988,6 +988,39 @@ def test_tail_child_errors_reads_newest_dated_file_per_name(tmp_path, monkeypatc
     assert "ValueError: old day" not in msgs
 
 
+def test_tail_child_errors_ignores_a_stale_legacy_undated_file(tmp_path, monkeypatch):
+    """CRITICAL, review of 70058b9: grouping-by-filename-stem put the legacy
+    undated <name>.log (pre-M8) in the SAME group as <name>.<date>.log and
+    picked the newest by comparing p.name lexically — "watch.log" >
+    "watch.2026-09-05.log" as strings (the digit '2' sorts before the letter
+    'l'), so the legacy file always won regardless of which is actually
+    newer. On the live box logs/children/{watch,whale,whale-backfill}.log
+    predate this change, so after a supervisor restart the errors panel
+    would freeze on stale pre-migration content for up to
+    log_retention_days. Must pick the newest per name by mtime instead."""
+    import os
+    import time as time_mod
+
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))
+    from arb.dashboard_mode import tail_child_errors
+    cfg = _cfg()
+    d = tmp_path / cfg["supervisor"]["child_log_dir"]
+    d.mkdir(parents=True, exist_ok=True)
+    legacy = d / "watch.log"
+    legacy.write_text("Traceback (most recent call last):\nValueError: stale legacy\n")
+    dated = d / "watch.2026-09-05.log"
+    dated.write_text("Traceback (most recent call last):\nValueError: fresh dated\n")
+    old_time = time_mod.time() - 3600
+    os.utime(legacy, (old_time, old_time))  # legacy is OLDER by mtime ...
+
+    errors = tail_child_errors(cfg)
+
+    # ... but "watch.log" > "watch.2026-09-05.log" lexically, the bug this guards
+    msgs = {e["msg"] for e in errors if e["source"] == "child:watch"}
+    assert "ValueError: fresh dated" in msgs
+    assert "ValueError: stale legacy" not in msgs
+
+
 def test_lanes_and_venues_stay_visible_in_whale_mode_but_scoped(tmp_path):
     """dashboard.mode: whale keeps #lanes (all lanes, disabled ones labeled)
     and #venues (watch_venues only) rather than hiding either."""

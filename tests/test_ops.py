@@ -162,6 +162,62 @@ def test_terminate_kills_and_reaps_on_timeout():
     assert state["killed"] is True and state["waits"] >= 2  # timed out -> kill -> reap
 
 
+def test_shutdown_terminate_uses_shutdown_grace_not_runtime_cap(cfg):
+    """IMPORTANT, review of 70058b9: _shutdown's terminate loop reused
+    _cap(cfg, name) == max_child_runtime_secs (up to 900s for
+    whale-backfill), run sequentially per child, so a hung set of children
+    could hold stop-all/--once shutdown for ~27 minutes before the kill.
+    Grace at shutdown must be the dedicated supervisor.shutdown_grace_secs,
+    not the per-tick runtime cap — proven here by a fake proc that ignores
+    SIGTERM (ports never returns from the timed wait()) and recording the
+    timeout _terminate actually waited on."""
+    import subprocess
+    import time as time_mod
+    from types import SimpleNamespace
+
+    from arb.heartbeat import _shutdown
+
+    class HangingProc:
+        """A child that never reaps within a timed wait() — like one wedged
+        past SIGTERM — until kill() lands."""
+        def __init__(self):
+            self.returncode = None
+            self.timeouts_seen = []
+
+        def wait(self, timeout=None):
+            if timeout is not None:
+                self.timeouts_seen.append(timeout)
+                raise subprocess.TimeoutExpired("cmd", timeout)
+            self.returncode = -9
+            return -9
+
+        def kill(self):
+            self.returncode = -9
+
+        def poll(self):
+            return self.returncode
+
+    class FakeStore:
+        def insert(self, *a, **k):
+            pass
+
+        def query(self, *a, **k):
+            return []
+
+    cfg2 = copy.deepcopy(cfg)
+    cfg2["supervisor"]["shutdown_grace_secs"] = 0.01  # tiny: no real sleeping
+    assert cfg2["supervisor"]["max_child_runtime_secs"]["default"] > 1  # sanity: cap is NOT tiny
+
+    proc = HangingProc()
+    cap = SimpleNamespace(proc=proc, thread=SimpleNamespace(join=lambda timeout=None: None),
+                          logfile=SimpleNamespace(close=lambda: None),
+                          name="watch", started=time_mod.monotonic(), logpath=Path("/nonexistent.log"))
+
+    _shutdown(cfg2, FakeStore(), {"watch": cap}, [])
+
+    assert proc.timeouts_seen == [0.01]  # grace, never the runtime cap (600+)
+
+
 def test_sntp_offset_parses_real_macos_output():
     # the OLD parse read split()[-2] — the server hostname — so float() raised,
     # the blanket except swallowed it, and the clock-skew alarm could NEVER fire
@@ -437,12 +493,15 @@ def test_reap_closes_logfile_even_if_record_exit_raises(cfg, tmp_path, monkeypat
     assert cap.logfile.closed
 
 
-def test_reap_returns_without_hanging_on_a_live_proc(cfg, tmp_path, monkeypatch):
+def test_reap_returns_without_hanging_on_a_live_proc(cfg, tmp_path, monkeypatch, caplog):
     """M5: reap must be safe to call on a still-running proc — its pipe
     never hits EOF until the child exits, so joining the drain thread
     unconditionally would block forever. A no-op return instead, bounded
     here by a background thread + join(timeout=) so a wrong implementation
-    fails this test rather than hanging the suite."""
+    fails this test rather than hanging the suite. Minor (review of
+    70058b9): that no-op path also warns rather than staying silent, since
+    every known caller terminates the child before calling reap()."""
+    import logging
     import sys
     import threading
 
@@ -455,13 +514,15 @@ def test_reap_returns_without_hanging_on_a_live_proc(cfg, tmp_path, monkeypatch)
         done = threading.Event()
 
         def call():
-            child_log.reap(cfg, None, cap)  # None: record_exit must never be reached
+            with caplog.at_level(logging.WARNING, logger="arb.supervisor"):
+                child_log.reap(cfg, None, cap)  # None: record_exit must never be reached
             done.set()
         t = threading.Thread(target=call, daemon=True)
         t.start()
         t.join(timeout=2)
         assert done.is_set(), "reap did not return promptly on a live proc"
         assert not cap.logfile.closed
+        assert "livetest" in caplog.text and "not reaped" in caplog.text
     finally:
         cap.proc.kill()
         cap.proc.wait()

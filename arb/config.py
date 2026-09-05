@@ -124,7 +124,7 @@ SCHEMA = {
                                  "max_flagged_edge": NUM, "target_n": NUM, "halfway_n": NUM,
                                  "kill_consecutive_losses": NUM}},
     "supervisor": {"processes": MAP(BOOL), "commands": MAP(STR),
-                   "max_child_runtime_secs": MAP(NUM),
+                   "max_child_runtime_secs": MAP(NUM), "shutdown_grace_secs": NUM,
                    "schedule_catchup_grace_mins": NUM, "stagger_secs": NUM,
                    "shape_time": STR, "cadence_windows": MAP(LIST),
                    "child_log_dir": STR, "child_fail_alarm": NUM},

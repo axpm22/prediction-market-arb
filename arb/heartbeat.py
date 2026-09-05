@@ -267,11 +267,12 @@ def _shutdown(cfg, store, children: dict, scheduled: list) -> None:
     _terminate without reaping — no child_exits row, drain thread unjoined,
     log fd left open; reap is safe to call unconditionally right after
     _terminate (M5), so one helper covers both callers."""
-    for name, cap in children.items():
-        _terminate(cap.proc, _cap(cfg, name))
+    grace = float(cfg["supervisor"]["shutdown_grace_secs"])  # M9: NOT _cap (up to 900s/child)
+    for cap in children.values():
+        _terminate(cap.proc, grace)
         child_log.reap(cfg, store, cap, killed=True)
     for cap in scheduled:
-        _terminate(cap.proc, _cap(cfg, "default"))
+        _terminate(cap.proc, grace)
         child_log.reap(cfg, store, cap, killed=True)
 
 

@@ -123,8 +123,9 @@ def tail_child_errors(cfg) -> list[dict]:
     disk. Filenames are date-stamped (M8: <name>.<YYYY-MM-DD>.log, so an
     active lane's file goes inactive daily and log_retention_days' purge can
     reclaim it) — several dated files can exist for one child name within
-    retention, so read only the NEWEST per name (a plain legacy <name>.log
-    with no date component is its own single-file group)."""
+    retention, so read only the NEWEST per name, by mtime (a lexical
+    filename compare always picked a legacy undated <name>.log over
+    <name>.<date>.log — review of 70058b9, CRITICAL)."""
     from datetime import datetime, timezone
 
     from arb.logutil import redact, resolve_log_path
@@ -134,7 +135,7 @@ def tail_child_errors(cfg) -> list[dict]:
     newest: dict[str, Path] = {}
     for p in d.glob("*.log"):
         name = p.name.rsplit(".", 2)[0]  # "<name>.<date>.log" -> "<name>"
-        if name not in newest or p.name > newest[name].name:  # ISO dates sort lexically
+        if name not in newest or p.stat().st_mtime > newest[name].stat().st_mtime:
             newest[name] = p
     now_iso = datetime.now(timezone.utc).isoformat()
     out = []

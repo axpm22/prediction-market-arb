@@ -345,6 +345,11 @@ supervisor:
                whale: "whale --once", whale-backfill: "whale-backfill --once" }
   max_child_runtime_secs: { default: 600, settle: 1800, live: 120, verify: 30,
                             whale: 120, whale-backfill: 900 }
+  shutdown_grace_secs: 15            # grace before SIGKILL at shutdown (stop-all/--once);
+                                    #   distinct from max_child_runtime_secs, which is the
+                                    #   per-tick runtime cap and can be up to 900s — reusing
+                                    #   it at shutdown could hold stop-all for ~27 minutes on
+                                    #   a hung set of children (M9, review of 70058b9)
                                     # whale 120 -> 300 on 2026-09-05: score_state hit 29 s on 764k
                                     #   prints (cycle 36 s) while 2,700 wallet histories backfill;
                                     #   insurance until the per-wallet materialization lands, then
