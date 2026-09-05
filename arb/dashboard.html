@@ -585,7 +585,8 @@ function drawWhale(w){
     `${q.n} · signals 24h ${sg.evaluated_24h} evaluated, ${sg.fired_24h} fired ` +
     `(7d ${sg.fired_7d}) · collector ${esc(String(c.status))} rows ${esc(String(c.rows))} ` +
     `bad ${esc(String(c.bad_rows))}, ${c.prints_per_min}/min · tape ` +
-    `${mb(c.tape_bytes)} MB, ~${mb(c.bytes_per_day)} MB/day, ${c.prints_24h} prints/day, ` +
+    `${mb(c.tape_bytes)} MB, ~${mb(c.bytes_per_day)} MB/day (est. trailing 24h), ` +
+    `${c.prints_24h} prints/day, ` +
     `${c.holdings_24h} holdings rows/day · calibration ` +
     `${f.calibration.signal_days}/${f.calibration.calibration_days} signal days` +
     `${c.mat_stale ? ' · cache: ' + esc(String(c.mat_stale)) : ''}</div>` +

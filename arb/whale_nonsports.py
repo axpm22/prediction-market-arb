@@ -281,7 +281,7 @@ def nonsports_universe(cfg, con, now, get=get_json) -> dict:
     if not ns["enabled"]:
         res["status"] = "disabled"
         return res
-    if _backoff_active(con, now):
+    if _backoff_active(con, now, "backfill"):
         res["status"] = "backoff"
         return res
     bucket, found = _bucket(cfg), {}
@@ -305,7 +305,7 @@ def nonsports_universe(cfg, con, now, get=get_json) -> dict:
     except Exception as e:  # noqa: BLE001 — a venue outage pauses the refresh
         log.warning("whale non-sports universe aborted after %d call(s): %s",
                     res["calls"], e)
-        _set_backoff(con, cfg, now)
+        _set_backoff(con, cfg, now, "backfill")
         res["status"] = "error"
     if found:
         # first_sight_wins: an edited Gamma endDate must never rewrite a stored

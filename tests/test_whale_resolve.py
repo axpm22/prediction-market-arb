@@ -281,7 +281,7 @@ def test_settle_auto_pm_survives_a_failed_gamma_call(cfg, tmp_path):
     get = FakeGet(RuntimeError("gamma 500"))
     assert whale_resolve.settle_auto_pm(cfg, store, con, NOW, get=get) == 0
     assert _settled(store, bid) == []
-    assert whale_tape._meta(con, "backoff_until") is not None
+    assert whale_tape._meta(con, "backoff_until:resolve") is not None
     assert whale_resolve.resolution_for(con, COND) is None
 
 

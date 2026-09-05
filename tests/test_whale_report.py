@@ -802,7 +802,7 @@ def test_collector_health_reports_the_last_cycle_the_gap_and_the_backoff(cfg, tm
                                              "bad_rows": 2}))
     _set_meta(con, "last_seen_ts", int((NOW - timedelta(seconds=90)).timestamp()))
     _set_meta(con, "last_gap", json.dumps({"secs": 300, "at": NOW.isoformat()}))
-    _set_meta(con, "backoff_until", (NOW + timedelta(seconds=60)).isoformat())
+    _set_meta(con, "backoff_until:collector", (NOW + timedelta(seconds=60)).isoformat())
     con.execute("INSERT INTO prints (observed_at, ts, proxy_wallet, condition_id, "
                 "asset, outcome_index, side, price, size, notional_usd) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -820,13 +820,71 @@ def test_collector_health_reports_the_last_cycle_the_gap_and_the_backoff(cfg, tm
     assert health["prints_per_min"] == Decimal("0.016667")    # 1 print in 60 min
 
 
+def test_collector_health_surfaces_every_backoff_family(cfg, tmp_path):
+    """DEFECT (live, 2026-09-05): backoff used to be ONE shared key, so a
+    backfill 429 read, in the report, as the print collector itself being
+    down. `backoff_until` stays the collector's own pause (back-compat for
+    every existing reader of that field); `backoff` surfaces all three
+    families independently so a reader can tell them apart."""
+    from arb.whale_tape import _set_meta
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    _set_meta(con, "backoff_until:backfill", (NOW + timedelta(seconds=60)).isoformat())
+    _set_meta(con, "backoff_until:resolve", (NOW + timedelta(seconds=120)).isoformat())
+    con.commit()
+
+    c = report_whale.whale_frame(cfg, store, now=NOW, con=con)["collector"]
+
+    assert c["backoff_until"] is None                 # collector itself is fine
+    assert c["backoff"]["collector"] is None
+    assert c["backoff"]["backfill"] is not None
+    assert c["backoff"]["resolve"] is not None
+
+
+def test_prints_24h_uses_a_true_24h_window_not_a_calendar_day_string_compare(cfg, tmp_path):
+    """DEFECT hypothesis (live, 2026-09-05): SQLite's `datetime('now','-1
+    day')` is a SPACE-separated string ('2026-09-04 02:00:00'); `observed_at`
+    is T-separated ISO ('2026-09-04T...'). Compared lexicographically, 'T'
+    (0x54) sorts above ' ' (0x20), so a row would pass `observed_at >=
+    datetime('now','-1 day')` for its whole calendar day regardless of time —
+    up to 48h read as "24h". `_collector` already avoids this (a Python
+    cutoff from `now - timedelta(...)`, bound as a query parameter, same ISO
+    shape as the stored value); this locks it in with a row 25.5h old that
+    the string-compare bug would have wrongly kept."""
+    now = datetime(2026, 9, 5, 2, 0, 0, tzinfo=timezone.utc)
+    store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
+    # 25.5h before `now`: truly outside the 24h window, but dated the same
+    # calendar day as the buggy cutoff's date — the string-compare bug would
+    # have kept it (it only compares '2026-09-04T...' >= '2026-09-04 02:00:00').
+    outside = "2026-09-04T00:30:00+00:00"
+    # 6h before `now`: genuinely inside the window either way.
+    inside = "2026-09-04T20:00:00+00:00"
+    for i, at in enumerate((outside, inside)):
+        con.execute("INSERT INTO prints (observed_at, ts, proxy_wallet, condition_id, "
+                    "asset, outcome_index, side, price, size, notional_usd) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (at, i, f"w{i}", CID, "0xyes", 0, "BUY", "0.50", "1000", "500"))
+        con.execute("INSERT INTO holdings (observed_at, proxy_wallet, condition_id, "
+                    "asset, outcome_index, size) VALUES (?,?,?,?,?,?)",
+                    (at, f"w{i}", CID, "0xyes", 0, "1"))
+    con.commit()
+
+    c = report_whale.whale_frame(cfg, store, now=now, con=con)["collector"]
+
+    assert c["prints_24h"] == 1            # only `inside`
+    assert c["holdings_24h"] == 1
+
+
 def test_the_ops_line_watches_the_tape_size_and_the_rows_per_day(cfg, tmp_path):
     """Proposal §2 implementation notes (retention amendment 2026-09-04): the
     17 GB/year is watched, not discovered. prints/day and holdings rows/day are
     the 24h before `now` by `observed_at` — a function of the report day, so
-    they print in the hashed md. The file size (a stat, never an open) and the
-    MB/day it implies are LIVE facts: frame and console line only, never the md
-    (tests/test_report.py::test_write_daily_hash_ignores_collector_churn_and_future_tape_rows)."""
+    they print in the hashed md. The file size (a stat, never an open) is a
+    LIVE fact: frame and console line only, never the md
+    (tests/test_report.py::test_write_daily_hash_ignores_collector_churn_and_future_tape_rows).
+    bytes_per_day is a trailing-24h ESTIMATE (2026-09-05 fix — a lifetime
+    average used to stay wrong for a full day after any compaction): rows
+    written across prints/holdings/signals in the last 24h times the tape's
+    mean bytes/row over ALL rows of those tables."""
     import os
     store, con = Store(tmp_path / "t.sqlite"), _tape(tmp_path)
     cfg["whale"]["tape_db"] = str(tmp_path / "tape.sqlite")
@@ -852,13 +910,15 @@ def test_the_ops_line_watches_the_tape_size_and_the_rows_per_day(cfg, tmp_path):
     c = frame["collector"]
     assert c["prints_24h"] == 2 and c["holdings_24h"] == 3
     assert c["tape_bytes"] == size
-    # 25 h from the first print to now: bytes/day is the size scaled to a day
-    assert c["bytes_per_day"] == int(Decimal(size) * 86400 / (25 * 3600))
+    # 5 rows in the trailing 24h (2 prints + 3 holdings + 0 signals) out of 7
+    # total (3 prints + 4 holdings + 0 signals) across the tape's lifetime.
+    assert c["bytes_per_day"] == int(Decimal(size) * 5 / 7)
     md = "\n".join(report_whale.whale_md(frame))
     assert "- tape: 2 prints/day, 3 holdings rows/day (24h to as-of)" in md
     mb, mb_day = (f"{Decimal(b) / 1000000:.1f}" for b in (size, c["bytes_per_day"]))
     assert f"{mb} MB" not in md                # live: never in the hashed md
-    assert f"tape {mb} MB, ~{mb_day} MB/day" in report_whale.whale_line(frame)
+    assert (f"tape {mb} MB, ~{mb_day} MB/day (est. trailing 24h)"
+            in report_whale.whale_line(frame))
 
 
 def test_the_ops_line_watches_the_position_cache(cfg, tmp_path):

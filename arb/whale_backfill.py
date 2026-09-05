@@ -71,7 +71,7 @@ def snapshot_leaderboard(cfg, con, now, get=get_json) -> int:
     stopped instead of re-fetching them.
     """
     lb = cfg["whale"]["leaderboard"]
-    if not lb["enabled"] or _backoff_active(con, now):
+    if not lb["enabled"] or _backoff_active(con, now, "backfill"):
         return 0
     res, bucket, added = {}, _bucket(cfg), 0
     for period in lb["time_periods"]:
@@ -107,7 +107,7 @@ def _snapshot_window(cfg, con, now, get, bucket, res, period) -> tuple[int, bool
         try:
             body = _call(bucket, get, url, cfg, res)
         except Exception:
-            _set_backoff(con, cfg, now)
+            _set_backoff(con, cfg, now, "backfill")
             return added, False
         con.executemany(
             "INSERT INTO leaderboard_snapshots (snapshot_at, category, time_period,"
@@ -174,7 +174,7 @@ def backfill(cfg, con, now, get=get_json) -> dict:
     compact = bool(w["retention"]["backfill_compact"])
     res = {"wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0,
            "status_counts": {}, "status": "ok"}
-    if _backoff_active(con, now):
+    if _backoff_active(con, now, "backfill"):
         res["status"] = "backoff"
         return res
     wallets = [r[0] for r in con.execute(RELEVANT_WALLETS_SQL,
@@ -195,7 +195,7 @@ def backfill(cfg, con, now, get=get_json) -> dict:
             res["wallets"] += 1
     except Exception as e:
         log.warning("whale backfill aborted after %d call(s): %s", res["calls"], e)
-        _set_backoff(con, cfg, now)
+        _set_backoff(con, cfg, now, "backfill")
         res["status"] = "error"
     return res
 
@@ -242,7 +242,7 @@ def map_markets(cfg, con, now, get=get_json) -> dict:
     # both numbers.
     res = {"calls": 0, "mapped": 0, "unmappable": 0, "root_calls": 0,
            "unrooted": 0, "no_root": 0, "status_counts": {}, "status": "ok"}
-    if _backoff_active(con, now):
+    if _backoff_active(con, now, "backfill"):
         res["status"] = "backoff"
         return res
     # C1 (fix pass 2): the exclusion reaches backwards first — a row rooted
@@ -264,7 +264,7 @@ def map_markets(cfg, con, now, get=get_json) -> dict:
             _map_markets(cfg, con, todo, now, bucket, get, res)
         except Exception as e:
             log.warning("whale mapping aborted after %d call(s): %s", res["calls"], e)
-            _set_backoff(con, cfg, now)
+            _set_backoff(con, cfg, now, "backfill")
             res["status"] = "error"
     # KNOWN_ISSUES #36 census counter — logged here, after BOTH paths above,
     # regardless of whether `_map_markets` ran (fix pass 6, review of

@@ -273,20 +273,28 @@ def _set_meta(con, key, value):
     con.commit()
 
 
-def _backoff_active(con, now) -> bool:
-    until = _meta(con, "backoff_until")
+# Per CALLER FAMILY (2026-09-05): one shared `backoff_until` used to let a
+# backfill 429 pause the print collector too. No default — every call site
+# names its family.
+BACKOFF_FAMILIES = ("collector", "backfill", "resolve")
+
+
+def _backoff_active(con, now, family) -> bool:
+    assert family in BACKOFF_FAMILIES, f"unknown backoff family {family!r}"
+    until = _meta(con, f"backoff_until:{family}")
     return bool(until and datetime.fromisoformat(until) > now)
 
 
-def _set_backoff(con, cfg, now):
+def _set_backoff(con, cfg, now, family):
     """The pause runs from the WALL clock at the moment of failure, not from
     the cycle-start `now` the caller carries: a backfill cycle runs ~11 min
     against backoff_secs=300, so `now` would write an already-expired pause.
     Never earlier than `now` either, so a replayed/fixed clock still pauses."""
+    assert family in BACKOFF_FAMILIES, f"unknown backoff family {family!r}"
     wall = datetime.now(timezone.utc) if now.tzinfo else datetime.now()
     until = max(now, wall) + timedelta(seconds=int(cfg["whale"]["backoff_secs"]))
-    _set_meta(con, "backoff_until", until.isoformat())
-    log.warning("whale collector backing off until %s", until.isoformat())
+    _set_meta(con, f"backoff_until:{family}", until.isoformat())
+    log.warning("whale %s backing off until %s", family, until.isoformat())
 
 
 def _json_list(value) -> list:
@@ -312,7 +320,7 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
     w = cfg["whale"]
     res = {"calls": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "gap_secs": 0,
            "status_counts": {}, "status": "ok"}
-    if _backoff_active(con, now):
+    if _backoff_active(con, now, "collector"):
         res["status"] = "backoff"
         return res
     persist_markets(con, markets, now)
@@ -374,7 +382,7 @@ def poll_prints(cfg, con, markets, now, get=get_json) -> dict:
                 offset += size
     except Exception as e:
         log.warning("whale poll aborted after %d call(s): %s", res["calls"], e)
-        _set_backoff(con, cfg, now)
+        _set_backoff(con, cfg, now, "collector")
         res["status"] = "error"
     # ONLY on a completed poll: on an abort the pages behind the failure were
     # never fetched, and advancing the watermark would strand that gap forever.

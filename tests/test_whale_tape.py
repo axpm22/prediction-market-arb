@@ -679,7 +679,7 @@ def test_paging_stops_at_max_offset_and_records_a_gap(tmp_path):
 
     assert len(get.urls) == 2 and "offset=5" in get.urls[1]
     assert not any("offset=10" in u for u in get.urls)   # page 3 never requested
-    assert res["status"] == "ok" and whale_tape._meta(con, "backoff_until") is None
+    assert res["status"] == "ok" and whale_tape._meta(con, "backoff_until:collector") is None
     oldest = min(int(r["timestamp"]) for r in pages[1])
     assert res["gap_secs"] == oldest - last_seen > 0
     gap = json.loads(whale_tape._meta(con, "last_gap"))
@@ -761,7 +761,7 @@ def test_a_failed_call_records_a_backoff_and_the_next_poll_short_circuits(tmp_pa
     res = whale_tape.poll_prints(_cfg(), con, mk, NOW, get=boom)
     assert res["status"] == "error" and res["status_counts"]["error"] == 1
     until = datetime.fromisoformat(
-        con.execute("SELECT value FROM meta WHERE key='backoff_until'").fetchone()[0])
+        con.execute("SELECT value FROM meta WHERE key='backoff_until:collector'").fetchone()[0])
     # the pause is stamped from the WALL clock, never earlier than the cycle's
     # own `now` — so a fixed test clock still gets exactly backoff_secs
     assert until >= NOW + timedelta(seconds=300)
@@ -782,7 +782,7 @@ def test_an_abort_mid_page_does_not_advance_the_watermark(tmp_path):
     res = whale_tape.poll_prints(cfg, con, _global_markets(1), NOW, get=get)
     assert res["status"] == "error" and len(get.urls) == 2
     assert whale_tape._meta(con, "last_seen_ts") == "1"
-    assert whale_tape._meta(con, "backoff_until") is not None
+    assert whale_tape._meta(con, "backoff_until:collector") is not None
 
 
 def test_one_malformed_row_is_skipped_not_the_whole_page(tmp_path):
@@ -799,7 +799,7 @@ def test_one_malformed_row_is_skipped_not_the_whole_page(tmp_path):
     # + the 3 rows over retention.global_min_print_usd in the fixture's OTHER markets
     assert res["rows"] == len(ours) - 2 + 3
     assert con.execute("SELECT COUNT(*) FROM prints").fetchone()[0] == len(ours) - 2 + 3
-    assert whale_tape._meta(con, "backoff_until") is None
+    assert whale_tape._meta(con, "backoff_until:collector") is None
 
 
 def test_a_full_page_of_unreadable_rows_is_an_error_not_a_quiet_stop(tmp_path):
@@ -822,7 +822,7 @@ def test_a_full_page_of_unreadable_rows_is_an_error_not_a_quiet_stop(tmp_path):
     assert len(get.urls) == 2
     assert res["bad_rows"] == len(bad)
     assert whale_tape._meta(con, "last_seen_ts") == "1"
-    assert whale_tape._meta(con, "backoff_until") is not None
+    assert whale_tape._meta(con, "backoff_until:collector") is not None
 
 
 def test_batched_mode_sends_comma_csv_markets_in_groups(tmp_path):
@@ -905,7 +905,7 @@ def test_a_failure_mid_run_cannot_duplicate_the_windows_that_landed(tmp_path):
     assert len(get.urls) == 2                        # DAY kept, WEEK lost, then stop
     assert whale_tape._meta(con, "leaderboard_day:DAY") == NOW.strftime("%Y-%m-%d")
     assert whale_tape._meta(con, "leaderboard_day:WEEK") is None
-    con.execute("DELETE FROM meta WHERE key='backoff_until'")   # isolate the day guard
+    con.execute("DELETE FROM meta WHERE key='backoff_until:backfill'")   # isolate the day guard
     con.commit()
     retry = FakeGet(board)
 
@@ -929,7 +929,7 @@ def test_a_leaderboard_failure_mid_snapshot_cannot_duplicate_ranks(tmp_path):
     whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=get)
     stored = con.execute("SELECT COUNT(*) FROM leaderboard_snapshots").fetchone()[0]
     assert stored == len(board) and len(get.urls) == 2      # page 1 kept, page 2 lost
-    con.execute("DELETE FROM meta WHERE key='backoff_until'")   # isolate the day guard
+    con.execute("DELETE FROM meta WHERE key='backoff_until:backfill'")   # isolate the day guard
     con.commit()
     retry = FakeGet(board)
     assert whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=retry) == 0
@@ -946,7 +946,7 @@ def test_a_failure_on_the_first_page_does_not_burn_the_day(tmp_path):
     boom = FakeGet(VenueError("503 from https://data-api.polymarket.com/v1/leaderboard"))
     assert whale_backfill.snapshot_leaderboard(cfg, con, NOW, get=boom) == 0
     assert whale_tape._meta(con, "leaderboard_day:MONTH") is None
-    con.execute("DELETE FROM meta WHERE key='backoff_until'")
+    con.execute("DELETE FROM meta WHERE key='backoff_until:backfill'")
     con.commit()
     retry = FakeGet(_fixture("whale_leaderboard"))
     n = whale_backfill.snapshot_leaderboard(cfg, con, NOW + timedelta(minutes=5), get=retry)
@@ -1436,7 +1436,7 @@ def test_a_non_list_gamma_body_raises_instead_of_being_coerced_to_absent(tmp_pat
     assert whale_tape._meta(con, f"unmappable:{cond}") is None
     assert con.execute("SELECT * FROM markets WHERE condition_id=?",
                        (cond,)).fetchone() is None
-    assert whale_tape._meta(con, "backoff_until") is not None
+    assert whale_tape._meta(con, "backoff_until:backfill") is not None
 
 
 def test_mapper_closed_pass_records_a_resolution_and_the_sweep_ignores_it(tmp_path):
@@ -1812,7 +1812,7 @@ def test_map_markets_is_bounded_and_fifo_by_first_print(tmp_path):
 
 def test_map_markets_short_circuits_while_a_backoff_is_live(tmp_path):
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
-    con.execute("INSERT INTO meta (key, value) VALUES ('backoff_until', ?)",
+    con.execute("INSERT INTO meta (key, value) VALUES ('backoff_until:backfill', ?)",
                 ((NOW + timedelta(seconds=60)).isoformat(),))
     con.commit()
     get = FakeGet([])
@@ -1823,7 +1823,7 @@ def test_map_markets_short_circuits_while_a_backoff_is_live(tmp_path):
 def test_backfill_short_circuits_while_a_backoff_is_live(tmp_path):
     con = whale_tape.open_tape(tmp_path / "w.sqlite")
     _wallet(con, "0xw", "2026-09-01T00:00:00+00:00", source="leaderboard")
-    con.execute("INSERT INTO meta (key, value) VALUES ('backoff_until', ?)",
+    con.execute("INSERT INTO meta (key, value) VALUES ('backoff_until:backfill', ?)",
                 ((NOW + timedelta(seconds=60)).isoformat(),))
     con.commit()
     get = FakeGet([])
@@ -1840,8 +1840,67 @@ def test_a_backoff_written_late_in_a_long_cycle_is_still_in_the_future(tmp_path)
     started = datetime.now(timezone.utc) - timedelta(minutes=20)
     boom = FakeGet(VenueError("503 from https://data-api.polymarket.com/activity"))
     assert whale_backfill.backfill(_cfg(), con, started, get=boom)["status"] == "error"
-    until = datetime.fromisoformat(whale_tape._meta(con, "backoff_until"))
+    until = datetime.fromisoformat(whale_tape._meta(con, "backoff_until:backfill"))
     assert until > datetime.now(timezone.utc)
+
+
+def test_a_backfill_backoff_does_not_pause_the_print_collector(tmp_path):
+    """DEFECT (live, 2026-09-05): a single 429 on the per-wallet activity
+    backfill wrote the ONE shared `backoff_until` key, which then paused
+    `poll_prints` too — the live print collector, the input to every signal
+    and to the prints-based whale-selling exit. Backoff is now per CALLER
+    FAMILY: a backfill failure sets only `backoff_until:backfill`, and the
+    collector must keep polling."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00", source="leaderboard")
+    con.commit()
+    boom = FakeGet(VenueError("429 from https://data-api.polymarket.com/activity"))
+    res = whale_backfill.backfill(_cfg(), con, NOW, get=boom)
+    assert res["status"] == "error"
+    assert whale_tape._meta(con, "backoff_until:backfill") is not None
+    assert whale_tape._meta(con, "backoff_until:collector") is None
+
+    quiet = FakeGet([])
+    res2 = whale_tape.poll_prints(_cfg(), con, _global_markets(1), NOW, get=quiet)
+    assert res2["status"] == "ok" and quiet.urls != []
+
+
+def test_a_collector_backoff_does_not_pause_backfill(tmp_path):
+    """Mirror of the above: a print-collector failure must not pause the
+    backfill/leaderboard/mapping family either — the two feeds are unrelated
+    callers of the same venue."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    boom = FakeGet(VenueError("503 from https://data-api.polymarket.com/trades"))
+    res = whale_tape.poll_prints(_cfg(), con, _global_markets(1), NOW, get=boom)
+    assert res["status"] == "error"
+    assert whale_tape._meta(con, "backoff_until:collector") is not None
+    assert whale_tape._meta(con, "backoff_until:backfill") is None
+
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00", source="leaderboard")
+    con.commit()
+    quiet = FakeGet([])
+    res2 = whale_backfill.backfill(_cfg(), con, NOW, get=quiet)
+    assert res2["status"] == "ok" and quiet.urls != []
+
+
+def test_the_backoff_warning_names_the_family(tmp_path, caplog):
+    """The shared warning used to always say 'whale collector backing off',
+    regardless of which family actually failed — useless for telling a
+    backfill 429 apart from a print-feed outage in the logs."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    with caplog.at_level(logging.WARNING, logger="arb.whale"):
+        whale_tape.poll_prints(_cfg(), con,  _global_markets(1), NOW,
+                               get=FakeGet(VenueError(
+                                   "503 from https://data-api.polymarket.com/trades")))
+    assert any("whale collector backing off" in r.getMessage() for r in caplog.records)
+
+    _wallet(con, "0xw", "2026-09-01T00:00:00+00:00", source="leaderboard")
+    con.commit()
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="arb.whale"):
+        whale_backfill.backfill(_cfg(), con, NOW, get=FakeGet(VenueError(
+            "429 from https://data-api.polymarket.com/activity")))
+    assert any("whale backfill backing off" in r.getMessage() for r in caplog.records)
 
 
 def test_a_cold_start_takes_one_page_and_does_not_walk_the_venues_history(tmp_path):
@@ -2184,7 +2243,7 @@ def test_holdings_a_failed_wallet_costs_only_that_wallet(tmp_path):
     res = whale_holdings.poll_holdings(_cfg(), con, ["0xw0", "0xw1"], NOW, get=get)
 
     assert (res["errors"], res["wallets"], res["rows"]) == (1, 1, 1)
-    assert whale_tape._meta(con, "backoff_until") is None
+    assert whale_tape._meta(con, "backoff_until:collector") is None
     assert whale_tape._meta(con, "holdings_at:0xw0") is None   # retried next cycle
 
 
@@ -2839,7 +2898,7 @@ def test_the_no_root_marker_is_counted_on_its_own_and_never_written_when_disable
     res = whale_backfill.map_markets(_map_cfg(), con2, NOW, get=_RootGet([market], []))
     assert res["no_root"] == 1 and res["unmappable"] == 0
     assert whale_tape._meta(con2, f"no-root:{cond}") == NOW.strftime("%Y-%m-%d")
-    whale_tape._set_meta(con2, "backoff_until", "2099-01-01T00:00:00+00:00")
+    whale_tape._set_meta(con2, "backoff_until:backfill", "2099-01-01T00:00:00+00:00")
     backoff = whale_backfill.map_markets(_map_cfg(), con2, NOW, get=_RootGet([], []))
     assert backoff["status"] == "backoff"
     assert backoff["unrooted"] == 0 and backoff["no_root"] == 0

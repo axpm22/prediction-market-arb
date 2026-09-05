@@ -21,6 +21,7 @@ from pathlib import Path
 
 from arb import whale_elite, whale_mat, whale_rank
 from arb.models import q6
+from arb.whale_tape import BACKOFF_FAMILIES
 # the RENDER half, split out on size (every §12 table gained a per-root block):
 # re-exported so `report_whale.whale_md` / `.whale_line` keep working for every
 # existing caller.
@@ -227,11 +228,22 @@ def _collector(cfg, con, now) -> dict:
     `holdings` rows over the 24h before `now`, by `observed_at` like the 1h
     count — a function of the report day, printed in the md. `tape_bytes` is a
     stat of the configured file (never an open, so a WAL tape its writer holds
-    still reports), and `bytes_per_day` scales it by the age of the first
-    print — both LIVE, so the console line and the dashboard, never the md."""
+    still reports). `bytes_per_day` is an ESTIMATE (2026-09-05 fix — the prior
+    version scaled `tape_bytes` by the age of the whole tape, a lifetime
+    average that stayed wrong for a full day after any compaction): rows
+    written across prints/holdings/signals in the trailing 24h, times the
+    tape's mean bytes/row over ALL rows of those tables (`tape_bytes / total
+    rows`) — both LIVE, so the console line and the dashboard, never the md.
+
+    `backoff_until` is the COLLECTOR family's own pause (kept under this name
+    for callers that only ever cared about the print collector); `backoff`
+    surfaces all three families the tape's callers can pause independently
+    (whale_tape.BACKOFF_FAMILIES) — a backfill 429 must not read here as the
+    collector being down, and vice versa."""
     out = {"status": None, "rows": None, "bad_rows": None, "at": None,
            "duration_secs": None, "last_seen_age_secs": None, "last_gap": None,
-           "backoff_until": None, "prints_per_min": Decimal(0), "prints_24h": 0,
+           "backoff_until": None, "backoff": {f: None for f in BACKOFF_FAMILIES},
+           "prints_per_min": Decimal(0), "prints_24h": 0,
            "holdings_24h": 0, "tape_bytes": None, "bytes_per_day": None,
            "mat": {}, "mat_stale": None}
     path = Path(str(cfg["whale"]["tape_db"]))
@@ -244,7 +256,8 @@ def _collector(cfg, con, now) -> dict:
     out.update(status=last.get("status"), rows=last.get("prints"),
                bad_rows=last.get("bad_rows"), at=last.get("at"),
                duration_secs=last.get("duration_secs"),
-               backoff_until=meta.get("backoff_until"),
+               backoff_until=meta.get("backoff_until:collector"),
+               backoff={f: meta.get(f"backoff_until:{f}") for f in BACKOFF_FAMILIES},
                # matpos (2026-09-05): cached positions, wallets still queued
                # for recompute, and what the last pass cost. LIVE like every
                # other field above — off the lane's own last cycle, so the
@@ -270,10 +283,14 @@ def _collector(cfg, con, now) -> dict:
     out["holdings_24h"] = con.execute(
         "SELECT COUNT(*) c FROM holdings WHERE observed_at >= ? AND observed_at <= ?",
         (day, now.isoformat())).fetchone()["c"]
-    # the first print by rowid: observed_at is insert-ordered, MIN() would scan
-    first = con.execute("SELECT observed_at FROM prints ORDER BY id LIMIT 1").fetchone()
-    secs = int((now - datetime.fromisoformat(first[0])).total_seconds()) if first else 0
-    if out["tape_bytes"] is not None and secs > 0:
-        out["bytes_per_day"] = int(Decimal(out["tape_bytes"]) * 86400 / secs)
+    signals_24h = con.execute(
+        "SELECT COUNT(*) c FROM signals WHERE evaluated_at >= ? AND evaluated_at <= ?",
+        (day, now.isoformat())).fetchone()["c"]
+    total_rows = con.execute(
+        "SELECT (SELECT COUNT(*) FROM prints) + (SELECT COUNT(*) FROM holdings)"
+        " + (SELECT COUNT(*) FROM signals)").fetchone()[0]
+    if out["tape_bytes"] is not None and total_rows:
+        rows_24h = out["prints_24h"] + out["holdings_24h"] + signals_24h
+        out["bytes_per_day"] = int(Decimal(out["tape_bytes"]) * rows_24h / total_rows)
     return out
 

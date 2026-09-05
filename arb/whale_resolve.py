@@ -127,7 +127,7 @@ def read_resolutions(cfg, con, condition_ids, now, get=get_json) -> int:
     """Persist one `resolutions` row per market Gamma reports resolved or void.
     Open markets persist nothing, so they are simply re-read next cycle."""
     ids = _due(con, cfg, condition_ids, now)
-    if not ids or _backoff_active(con, now):
+    if not ids or _backoff_active(con, now, "resolve"):
         return 0
     bucket = _bucket(cfg)
     n = 0
@@ -140,7 +140,7 @@ def read_resolutions(cfg, con, condition_ids, now, get=get_json) -> int:
             body = _call(bucket, get, url, cfg, {})
         except Exception as e:  # noqa: BLE001
             log.warning("whale resolution read aborted: %s", e)
-            _set_backoff(con, cfg, now)
+            _set_backoff(con, cfg, now, "resolve")
             break
         for m in body:
             cond = str(m.get("conditionId") or "")
