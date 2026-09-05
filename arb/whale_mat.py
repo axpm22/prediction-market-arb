@@ -105,7 +105,19 @@ CREATE TABLE IF NOT EXISTS mat_dirty (proxy_wallet TEXT PRIMARY KEY);
 -- `pregame` for positions already cached. The WHEN clause is what keeps this
 -- cheap — `persist_markets` rewrites every universe market every 60 s cycle,
 -- and only a market whose sport/market_type/start_utc actually MOVES (`IS NOT`,
--- so NULL-safe) dirties the wallets that printed in it.
+-- so NULL-safe) dirties the wallets that printed in it. MEASURED 2026-09-05 on
+-- a synthetic 800k-print / 2,000-market tape: that no-op 60 s rewrite of 1,000
+-- markets fires nothing and costs 0.00 s.
+-- ponytail: the DISTINCT below runs on idx_prints_market(condition_id, ts),
+-- which does NOT cover proxy_wallet, so each matching print costs a rowid
+-- lookup — 46 s for a REAL re-map of 1,000 markets on that same synthetic tape
+-- (400 prints/market; the production tape averages ~55, so ~7x cheaper). That
+-- lands in the whale-backfill child (900 s cap, 600 s cadence, ~180 s margin),
+-- never in the 60 s lane, and only when a mapping actually changes. If a
+-- legacy re-map ever makes it bind, the upgrade is a covering
+-- prints(condition_id, proxy_wallet) index — deliberately NOT added now: a
+-- fifth index on the hottest write table (~1M inserts/day) to speed up a rare
+-- path is the wrong trade.
 CREATE TRIGGER IF NOT EXISTS trg_markets_mat_update AFTER UPDATE ON markets
     WHEN NEW.sport IS NOT OLD.sport OR NEW.market_type IS NOT OLD.market_type
          OR NEW.start_utc IS NOT OLD.start_utc

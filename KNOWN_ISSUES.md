@@ -347,6 +347,16 @@ cycles / 70 s of work at the shipped cap**, worst cycle 14.9 s, i.e. about 8
 minutes at `whale.poll_secs` 60. The production tape held 763,786 prints and
 ~2,700 wallets on that date, so it is the same order.
 
+The same window opens, smaller, whenever a `markets` row's `sport`,
+`market_type` or `start_utc` actually MOVES: both the root filter and
+`pregame` are functions of that row, so the tape's triggers dirty every wallet
+that printed in the market. The 60 s cycle's own no-op rewrite of the universe
+fires nothing (measured: 0.00 s for 1,000 markets), but a legacy re-map drain
+at `whale.backfill.map_per_cycle` (1,000 markets a cycle) can dirty thousands
+of wallets at once, and costs 46 s inside the whale-backfill child on that
+same synthetic tape (400 prints/market; the production tape averages ~55).
+Same consequence, same mitigation.
+
 *Mitigation:* the backlog is on the ops line every cycle (`positions <rows>,
 <n> dirty, <secs>s`, `arb report --daily` console line and the dashboard) and
 in the `whale --once` output. A backlog that does not fall cycle to cycle is
