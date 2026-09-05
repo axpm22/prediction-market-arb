@@ -10,6 +10,8 @@ a transfer-only whale, a resolved market under an exited bet).
 Nothing here touches the network or the production DBs.
 """
 import json
+import random
+import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -1218,6 +1220,136 @@ def test_score_state_matches_the_select_star_reference_on_a_mixed_tape(cfg, tmp_
     for wallet in ("0xw1", "0xw2"):
         assert (got.lookup(wallet, "baseball_mlb", "WINNER")
                 == want.lookup(wallet, "baseball_mlb", "WINNER"))
+
+
+# ------------------------------------------------- rowperf (2026-09-05): the
+# prints ROW OBJECT (not the columns — that was the 2026-09-04 pair above).
+# Profiled live 2026-09-05 08:50Z on the production tape (763,786 prints):
+# score_state 29.4s, 23.7s its own body, all of it `[dict(r) for r in ...]` —
+# a real `dict` built and hashed, 11 keys, for every print. `_PrintRow`
+# (arb/whale_state.py) wraps the row's own tuple instead — same `row["x"]`/
+# `.get`/`in`/`set(row)` surface, no dict. `_reference_score_state` below is
+# score_state's body frozen at `dict(r)` (post the 2026-09-04 column trim,
+# pre this pass) — not imported, so this can never rot into comparing the
+# real function against itself.
+
+def _reference_score_state(cfg, con, now):
+    from arb import whale_score
+    from arb.whale_hygiene import hygiene_flags
+    from arb.whale_state import (MARKET_COLS, PRINT_COLS, PRINT_ORDER,
+                                 RESOLUTION_COLS, WhaleState)
+
+    prints = [dict(r) for r in con.execute(f"SELECT {PRINT_COLS} FROM prints {PRINT_ORDER}")]
+    markets = {r["condition_id"]: dict(r)
+               for r in con.execute(f"SELECT {MARKET_COLS} FROM markets")}
+    resolutions = {r["condition_id"]: dict(r)
+                   for r in con.execute(f"SELECT {RESOLUTION_COLS} FROM resolutions")}
+    positions = whale_score.positions_from_prints(prints, markets, cfg)
+    hyg = hygiene_flags(prints, positions, cfg)
+    open_pos = [p for p in positions if not hyg.excludes(p)]
+    outcomes = whale_score.resolved_outcomes(open_pos, resolutions, now)
+    agg = whale_score.aggregate(outcomes)
+    rates, rate_n = {}, {}
+    for root in {o.root for o in outcomes} | {"sports"}:
+        rates[root], rate_n[root] = whale_score.base_rate(outcomes, root, now, cfg)
+
+    def lookup(wallet, sport, market_type):
+        return whale_score.score_for(agg, wallet, sport, market_type, cfg, rates)
+
+    return WhaleState(prints=prints, markets=markets, resolutions=resolutions,
+                      positions=positions, open_positions=open_pos,
+                      hygiene_excluded=len(positions) - len(open_pos),
+                      rates=rates, rate_n=rate_n, agg=agg, lookup=lookup)
+
+
+def _random_score_state_tape(con, rng, n_prints, n_wallets=15, n_markets=6, now=NOW):
+    """Seeded synthetic tape covering the branches score_state's callers
+    care about: resolved and unresolved markets, dust prints (below
+    min_print_usd=200), SELLs (FIFO), and enough wallet/market overlap for
+    hygiene's mm/wash/both_sides scans to actually fire on some of them."""
+    wallets = [f"0xw{i}" for i in range(n_wallets)]
+    cids = [f"0xc{i}" for i in range(n_markets)]
+    start = now - timedelta(days=5)
+    resolved_at = now - timedelta(hours=2)
+    con.executemany(
+        "INSERT INTO markets (condition_id, sport, market_type, line, start_utc,"
+        " event_key, tokens_json, slug, first_seen, last_seen, volume_24h)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        [(c, "baseball_mlb", "WINNER", None, start.isoformat(), f"pm:evt{i}",
+          "[]", f"slug{i}", start.isoformat(), start.isoformat(), "1000")
+         for i, c in enumerate(cids)])
+    con.executemany(
+        "INSERT INTO resolutions (condition_id, resolved_at, winner_outcome_index,"
+        " status, source, raw_json, fetched_at) VALUES (?,?,?,'resolved','gamma','{}',?)",
+        [(c, resolved_at.isoformat(), rng.choice((0, 1)), resolved_at.isoformat())
+         for c in cids[:max(1, n_markets // 2)]])
+
+    prices = ["0.05", "0.10", "0.35", "0.50", "0.65", "0.90"]
+    sizes = ["5", "50", "300", "2000", "8000"]        # some clear dust (< $200), some don't
+    rows = []
+    for i in range(n_prints):
+        w, c = rng.choice(wallets), rng.choice(cids)
+        idx = rng.choice((0, 1))
+        side = "SELL" if rng.random() < 0.15 else "BUY"
+        price, size = rng.choice(prices), rng.choice(sizes)
+        notional = str(round(float(price) * float(size), 6))
+        ts = int((start + timedelta(seconds=rng.randint(0, 5 * 24 * 3600))).timestamp())
+        rows.append((now.isoformat(), ts, f"0xtx{i}", w, c, f"tok{idx}",
+                     "Yes" if idx == 0 else "No", idx, side, price, size, notional,
+                     f"evt{c}", f"slug{c}-x", "Title", "tape", "{}"))
+    con.executemany(
+        "INSERT INTO prints (observed_at, ts, tx_hash, proxy_wallet, condition_id,"
+        " asset, outcome, outcome_index, side, price, size, notional_usd,"
+        " event_slug, slug, title, source, raw_json) VALUES"
+        " (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+    con.commit()
+    return wallets
+
+
+def test_score_state_printrow_matches_the_dict_reference_on_a_seeded_tape(cfg, tmp_path):
+    """Equivalence: swapping `dict(r)` for `_PrintRow(r)` in score_state's
+    own read loop must not move a single number. `_random_score_state_tape`
+    gives dust/SELL/resolved+unresolved/hygiene-triggering variety so there
+    is something for positions, open_positions, hygiene_excluded, agg, rates
+    and a per-wallet lookup to disagree on if the row object ever leaks a
+    wrong value."""
+    from arb.whale_state import score_state
+    rng = random.Random(20260905)
+    con = _tape(tmp_path)
+    wallets = _random_score_state_tape(con, rng, n_prints=3000)
+
+    got = score_state(cfg, con, NOW)
+    want = _reference_score_state(cfg, con, NOW)
+
+    assert got.positions == want.positions
+    assert got.open_positions == want.open_positions
+    assert got.hygiene_excluded == want.hygiene_excluded
+    assert got.agg == want.agg
+    assert got.rates == want.rates and got.rate_n == want.rate_n
+    for wallet in wallets:
+        assert (got.lookup(wallet, "baseball_mlb", "WINNER")
+                == want.lookup(wallet, "baseball_mlb", "WINNER"))
+
+
+def test_score_state_completes_in_bounded_time_on_a_400k_tape(cfg, tmp_path):
+    """rowperf regression guard (2026-09-05): live-profiled at 23.7s for
+    score_state's own body alone on 763,786 production prints (module
+    docstring). 15.0s is regression headroom on a 400k synthetic tape, not a
+    tight target — see arb/whale_state.py's docstring for the measured
+    before/after and the isolated-read-loop ratio this guards. Started at
+    8.0s (the ask) but flaked at 8.507s under full-`pytest -q` load on this
+    dev box, which also runs the real supervisor's `whale --once`/dashboard
+    against the 763k-row production tape concurrently — same shape of flake,
+    same fix, as positions_from_prints's own guard (11e6e01: 1.3s -> 4.0s)."""
+    from arb.whale_state import score_state
+    rng = random.Random(1)
+    con = _tape(tmp_path)
+    _random_score_state_tape(con, rng, n_prints=400_000, n_wallets=500, n_markets=2000)
+
+    t0 = time.perf_counter()
+    score_state(cfg, con, NOW)
+    dt = time.perf_counter() - t0
+    assert dt < 15.0, f"score_state took {dt:.3f}s on 400k rows"
 
 
 def test_signals_by_id_loads_only_the_ids_it_was_asked_for(cfg, tmp_path):

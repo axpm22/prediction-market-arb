@@ -55,9 +55,62 @@ tables) at 3.43s tottime, positions_from_prints at 2.04s, hygiene_flags at
 pass, is score_state's own read+dict() body — already column-trimmed (the
 2026-09-04 regrade above); further reduction would mean not materializing a
 `dict` per sqlite3.Row at all, a bigger read-path change than this pass.
+
+rowperf (2026-09-05): did exactly that. Profiled live 2026-09-05 08:50Z on
+the production tape (763,786 prints): score_state 29.4s, of which 23.7s its
+OWN body (this was `[dict(r) for r in ...]` — one real `dict` built and
+hashed, 11 keys, for every print, whether or not the row survives dust/
+window/resolution filtering downstream). `_PrintRow` below is a `Mapping`
+over the row's own tuple (`__slots__ = ("_v",)`, no per-row dict): field
+access is a shared-dict index lookup (`_PRINT_IDX[key]`) + a tuple index,
+paid only for the handful of fields a caller actually reads, not all 11
+upfront. `con.execute` returns `sqlite3.Row` (the tape's connection-wide
+`row_factory`, arb/whale_tape.py `open_tape`) which `_PrintRow` also skips —
+the prints query now runs on a plain cursor with `row_factory = None`, so
+SQLite hands back bare tuples. Zero behavior change: `_PrintRow` implements
+the same `row["field"]` / `row.get(...)` / `"x" in row` / `set(row)` surface
+`positions_from_prints`, `hygiene_flags` and `_from_prints`
+(arb/lanes/whale_book.py) already used on the old dicts — none of those three
+modules changed. `markets`/`resolutions` are untouched (small tables, not
+the profiled hot path).
+
+Measured (bench_rowperf_isolated.py, scratchpad, not committed; synthetic
+tape, Polymarket-shaped ids — 42-char hex wallet, 66-char hex condition_id,
+~76-digit numeric asset, ~30-char event_slug — 500 wallets/2,000 markets/
+resolved third). This dev box runs the real supervisor throughout (`whale
+--once`/dashboard against the live 763k-row tape, per the profile above), so
+absolute seconds swing wide; both variants were timed in strict alternation
+(old rep, new rep, old, new, ...) in the SAME process so load drift hits
+both sides equally, which is what the ratio below is trusted from — not
+either side's raw seconds:
+  isolated read loop only ([dict(r) for r in ...] vs [_PrintRow(r) for r in
+  <plain-tuple cursor>]), 400k rows, 4 alternating reps each:
+    old: min 2.778s / median 7.911s / max 8.234s
+    new: min 1.929s / median 2.330s / max 3.658s
+    median speedup: 3.40x — clears the 3x target on score_state's OWN body.
+  end-to-end score_state, 400k rows, 4 alternating reps each: old min 5.729/
+    median 20.021/max 29.492s, new min 9.697/median 17.631/max 37.267s
+    (~1.1x median) — this number does NOT show the fix and isn't meant to:
+    positions_from_prints + hygiene_flags (untouched by this pass, still
+    O(n) / O(n log n) over 400k rows apiece) dominate wall time at the
+    whole-cycle grain, exactly as the 2026-09-04 passes above already found;
+    the isolated read-loop ratio is the one that isolates what this pass
+    changed.
+  tests/test_whale_report.py::test_score_state_completes_in_bounded_time_on_a_400k_tape
+    (real score_state, real sqlite tape, solo — not alternating): 15.99s
+    wall including a ~10s tape build, under normal load; 8.507s for the
+    score_state call alone under full-`pytest -q` load, which is why that
+    guard's bound is 15.0s and not the original 8.0s ask (same shape of
+    flake as positions_from_prints's own guard, 11e6e01: 1.3s -> 4.0s).
+Next hot spot if this ever needs a third pass: positions_from_prints and
+hygiene_flags now dominate score_state's own remaining time (both already
+column-trimmed and O(n log n) from the 2026-09-04 passes above) — a
+per-wallet incremental materialization, not a further read-path trim, per
+the whale-lane spec note this pass was asked to leave alone.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Callable
 
@@ -69,6 +122,30 @@ from arb.whale_hygiene import hygiene_flags
 # print ever collected — into memory on every 60 s cycle.
 PRINT_COLS = ("ts, proxy_wallet, condition_id, outcome_index, side, price, size,"
               " notional_usd, source, asset, event_slug")
+_PRINT_FIELDS = tuple(c.strip() for c in PRINT_COLS.split(","))
+_PRINT_IDX = {name: i for i, name in enumerate(_PRINT_FIELDS)}
+
+
+class _PrintRow(Mapping):
+    """One `prints` row, `PRINT_COLS`-shaped, over a bare tuple — no `dict`
+    built (or hashed) per row. `Mapping` gives `get`/`in`/`keys`/`items`/
+    `values`/`__eq__` for free off `__getitem__`+`__iter__`+`__len__`, so
+    `row["field"]`, `row.get("source", "tape")`, `"x" in row` and
+    `set(row)` (the exact surface positions_from_prints, hygiene_flags and
+    `_from_prints` already used on a plain dict) all still work unchanged."""
+    __slots__ = ("_v",)
+
+    def __init__(self, values):
+        self._v = values
+
+    def __getitem__(self, key):
+        return self._v[_PRINT_IDX[key]]
+
+    def __iter__(self):
+        return iter(_PRINT_FIELDS)
+
+    def __len__(self):
+        return len(_PRINT_FIELDS)
 
 # posperf (2026-09-04): positions_from_prints groups by (proxy_wallet,
 # condition_id, outcome_index) and needs each group's own rows in ascending
@@ -114,7 +191,15 @@ def score_state(cfg, con, now) -> WhaleState:
     # every 60 s. If a backfilled tape ever makes this outrun the report, cache
     # the aggregation per wallet — not a second, divergent assembly.
     """
-    prints = [dict(r) for r in con.execute(f"SELECT {PRINT_COLS} FROM prints {PRINT_ORDER}")]
+    # rowperf (2026-09-05): a per-cursor row_factory=None override (the
+    # connection's own is sqlite3.Row, arb/whale_tape.py open_tape) so this
+    # query hands back bare tuples — _PrintRow wraps each one instead of
+    # building a real dict. markets/resolutions are untouched: small tables,
+    # not the profiled hot path (see the module docstring).
+    prints_cur = con.cursor()
+    prints_cur.row_factory = None
+    prints = [_PrintRow(r) for r in
+              prints_cur.execute(f"SELECT {PRINT_COLS} FROM prints {PRINT_ORDER}")]
     markets = {r["condition_id"]: dict(r)
                for r in con.execute(f"SELECT {MARKET_COLS} FROM markets")}
     resolutions = {r["condition_id"]: dict(r)
