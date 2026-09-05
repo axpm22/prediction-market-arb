@@ -731,7 +731,7 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   the strike ladders: what-price-will-bitcoin-hit-august-
                                       #   31-september-6-2026 (34 markets), -hit-in-september-2026
                                       #   (41)
-      - '^[a-z]+-(above|price)-[a-z0-9-]*on-[a-z]+-\d+(-\d+)?$'
+      - '^{coin}-(above|price)-[a-z0-9-]*on-[a-z]+-\d+(-\d+)?$'
                                       #   the daily strike ladders, event AND market slug:
                                       #   bitcoin-above-on-september-5-2026 (36),
                                       #   ethereum-above-on-september-6-2026 (23),
@@ -740,8 +740,8 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   xrp-above-2pt8-on-september-5-2026 the same events ship.
                                       #   The year is OPTIONAL because the older slugs already on
                                       #   the tape omit it (solana-above-160-on-august-9)
-      - '^will-the-price-of-[a-z]+-be-between-.*$'
-      - '^will-[a-z]+-(reach|dip-to)-\d[a-z0-9.]*-.*$'
+      - '^will-the-price-of-{coin}-be-between-.*$'
+      - '^will-{coin}-(reach|dip-to)-\d[a-z0-9.]*-.*$'
                                       #   the NESTED markets those ladder events ship, which are
                                       #   what the print mapper stores (it keeps the market slug,
                                       #   never the event's): will-the-price-of-bitcoin-be-between-
@@ -754,6 +754,62 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   shorter than `min_lifetime_hours` is excluded whatever
                                       #   its dates say, so a cadence family Gamma has not shipped
                                       #   yet cannot walk in ahead of a new pattern here.
+    coin_tokens:                      # `{coin}` in the patterns above expands to this
+                                      #   alternation, longest token first (I2, fix pass 3,
+                                      #   2026-09-05). Three of the six patterns read `[a-z]+`
+                                      #   where the family they describe is a COIN, and a probe
+                                      #   over the tape's own slugs found they excluded
+                                      #   `will-trump-reach-50-approval-in-march`,
+                                      #   `will-inflation-reach-3-percent-in-2027`,
+                                      #   `will-israel-reach-2m-refugees-by-june`,
+                                      #   `will-the-price-of-eggs-be-between-3-and-4-in-2027` and
+                                      #   `oil-price-in-london-march-3` — real politics/economy
+                                      #   markets. `no-root:` is PERMANENT, so each of those was
+                                      #   a market removed from the lane for good.
+                                      #   The shapes the 2026-09-05 tape census actually shows are
+                                      #   btc 3,180 / eth 294 / sol 84 / xrp 29 / doge 17 /
+                                      #   hype 16 / bnb 14; the rest are the majors' names and
+                                      #   tickers, registered ahead of the slug rather than after
+                                      #   a ladder family lands unexcluded. A coin missing from
+                                      #   this list fails SAFE (the market keeps its root and is
+                                      #   scored) — the opposite of the `[a-z]+` failure mode.
+      - bitcoin
+      - btc
+      - ethereum
+      - eth
+      - solana
+      - sol
+      - xrp
+      - dogecoin
+      - doge
+      - bnb
+      - hype
+      - cardano
+      - ada
+      - litecoin
+      - ltc
+      - avalanche
+      - avax
+      - chainlink
+      - link
+      - polkadot
+      - dot
+      - tron
+      - trx
+      - zcash                         # the five below are the tape's own near-misses: a
+      - hyperliquid                   #   read-only pass over all 74,049 distinct `markets`
+      - sui                           #   slugs (2026-09-05) found 525 that the un-scoped
+      - aster                         #   patterns matched and the scoped ones do not, and
+      - lighter                       #   11 of them are these coins' own ladders. The other
+                                      #   514 are EQUITY/commodity/FX ladders (`will-tsla-dip-
+                                      #   to-352-50-…`, `will-xauusd-…`, `will-wti-…`) plus
+                                      #   `will-zywoo-reach-36-hltv-mvp-awards-…`, an esports
+                                      #   market. Those are mechanical too, but they carry
+                                      #   none of the three configured `tags`, so they are
+                                      #   already unrootable and unscored — registering a
+                                      #   ticker family for them is an operator decision, not
+                                      #   this fix's, and its only effect would be to save
+                                      #   them the daily `unmappable:` revisit.
     pages: 3                          # /events?tag_slug pages per tag per refresh, 100 events a
                                       #   page, paged by `offset` (verified live 2026-09-04,
                                       #   data/verified_facts.md: offsets 0/2/4 returned 6 distinct

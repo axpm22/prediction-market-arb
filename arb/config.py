@@ -182,7 +182,7 @@ SCHEMA = {
               "retention": {"scope": STR, "global_min_print_usd": NUM, "raw_json": STR,
                             "backfill_compact": BOOL},
               "nonsports": {"enabled": BOOL, "tags": MAP(STR), "pages": NUM,
-                            "exclude_slug_patterns": LIST,
+                            "exclude_slug_patterns": LIST, "coin_tokens": LIST,
                             "min_volume_24h_usd": NUM, "min_lifetime_hours": NUM,
                             "max_days": NUM, "root_calls_per_cycle": NUM},
               "backfill": {"wallets_per_cycle": NUM, "pages_per_wallet": NUM,

@@ -50,6 +50,17 @@ def _rx(pattern: str):
     return re.compile(pattern)
 
 
+def _patterns(cfg) -> list:
+    """`exclude_slug_patterns` with `{coin}` expanded to the registered
+    `coin_tokens`, longest first so `bitcoin` is never shadowed by `btc`
+    (I2, fix pass 3: three patterns described a COIN family with a bare
+    `[a-z]+` and excluded `will-trump-reach-50-approval-in-march` and
+    `oil-price-in-london-march-3` — and `no-root:` is permanent)."""
+    ns = cfg["whale"]["nonsports"]
+    coin = "(?:%s)" % "|".join(sorted(ns["coin_tokens"], key=len, reverse=True))
+    return [p.replace("{coin}", coin) for p in ns["exclude_slug_patterns"]]
+
+
 def _when(value) -> datetime | None:
     """A Gamma timestamp as an aware UTC datetime; anything unparseable is
     None, and every caller reads None as "cannot measure" -> excluded."""
@@ -105,9 +116,8 @@ def _excluded(cfg, event, market) -> bool:
     2026-09-05, option 1: keep the crypto root, exclude the series).
 
     Called from `root_row`, the ONE shared rooting helper, so the by-tag
-    builder and the mapper's historical rooting cannot disagree about it.
-
-    No other registered filter reaches this series: the cadence events read a
+    builder and the mapper's historical rooting cannot disagree about it. No
+    other registered filter reaches this series: the cadence events read a
     23.94 h lifetime (measured 2026-09-04) so `min_lifetime_hours` cannot stop
     them, and the horizon never did either. Counts, per-pattern yields and the
     zero-collateral check on politics/geopolitics are in the config comment
@@ -115,7 +125,7 @@ def _excluded(cfg, event, market) -> bool:
     ns = cfg["whale"]["nonsports"]
     event_slug = str(event.get("slug") or "")
     slugs = [s for s in (event_slug, str(market.get("slug") or "")) if s]
-    if any(_rx(p).match(s) for p in ns["exclude_slug_patterns"] for s in slugs):
+    if any(_rx(p).match(s) for p in _patterns(cfg) for s in slugs):
         return True
     # The cadence token names the EVENT's own life, so it is read off the event
     # slug alone (and this series ships the same slug on both).

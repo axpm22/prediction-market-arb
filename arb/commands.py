@@ -1168,7 +1168,8 @@ def cmd_whale_backfill(cfg, store, args):
           f"rows={res['rows']} dupes={res['dupes']} bad_rows={res['bad_rows']}")
     mres = whale_backfill.map_markets(cfg, con, now)
     print(f"  mapping: {mres['status']} calls={mres['calls']} "
-          f"mapped={mres['mapped']} unmappable={mres['unmappable']}")
+          f"mapped={mres['mapped']} unmappable={mres['unmappable']} "
+          f"no_root={mres['no_root']} unrooted={mres['unrooted']}")
 
 
 def cmd_whale_compact(cfg, store, args):

@@ -27,7 +27,12 @@ def no_root(cfg, found, unrooted) -> set:
 
     The caller marks these `no-root:` — permanent, the `absent:` idiom — so
     the 3,669 `*-updown-*` rows in the live revisit queue stop coming back
-    every day for an answer that cannot change."""
+    every day for an answer that cannot change. That permanence is why
+    `enabled` is read here too (minor, fix pass 3): with the non-sports half
+    switched off nothing roots these rows anyway, and a PERMANENT marker is
+    not the off switch's to write — `unroot_mechanical` already reads it."""
+    if not cfg["whale"]["nonsports"]["enabled"]:
+        return set()
     return {cond for cond in unrooted
             if whale_nonsports._excluded(
                 cfg, (found[cond].get("events") or [{}])[0] or {}, found[cond])}

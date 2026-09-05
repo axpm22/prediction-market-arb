@@ -155,6 +155,7 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
     prefixes = cfg["whale"]["slug_sport_prefixes"]
     today = now.strftime("%Y-%m-%d")
     res.setdefault("root_calls", 0)
+    res.setdefault("no_root", 0)
     for i in range(0, len(todo), GAMMA_IDS_PER_CALL):
         chunk = todo[i:i + GAMMA_IDS_PER_CALL]
         found = _gamma_fetch(cfg, bucket, get, chunk, res)
@@ -191,9 +192,16 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
         # politics row can be carrying a kickoff — and COALESCE would keep it
         # forever. For a non-sports root the helper's values (the market's own
         # endDate, LADDER/BINARY off the event's negRisk) ARE the authority.
+        # I1 (fix pass 3): scoped to rows that are the helper's to write — no
+        # sport at all, or already THIS non-sports root. Unconditionally it
+        # rewrote `baseball_mlb` to `politics` on a multi-tagged event (a row
+        # with a known sport but a NULL market_type is in REVISIT_SQL, and
+        # Gamma's slug for it need not carry a league prefix) and replaced a
+        # real kickoff with an endDate, which `first_sight_wins` protects.
         if roots:
             con.executemany("UPDATE markets SET sport=?, market_type=?, start_utc=? "
-                            "WHERE condition_id=?", [(*roots[c], c) for c in roots])
+                            "WHERE condition_id=? AND (sport IS NULL OR sport=?)",
+                            [(*roots[c], c, roots[c][0]) for c in roots])
         con.commit()
         for cond in missing:
             if cond not in found:
@@ -205,7 +213,7 @@ def _map_markets(cfg, con, todo, now, bucket, get, res):
         for cond in chunk:
             row = stored[cond]
             if cond in no_root:
-                res["unmappable"] += 1
+                res["no_root"] += 1
                 _set_meta(con, f"no-root:{cond}", today)
             elif (row["sport"] and row["market_type"] and row["start_utc"]
                     and whale_nonsports.two_sided(

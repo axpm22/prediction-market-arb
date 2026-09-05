@@ -1918,7 +1918,8 @@ def test_whale_backfill_runs_leaderboard_then_sweep_then_backfill_then_mapping(
     monkeypatch.setattr(whale_backfill, "backfill", lambda *a, **k: order.append("backfill") or {
         "wallets": 0, "rows": 0, "dupes": 0, "bad_rows": 0, "calls": 0, "status": "ok"})
     monkeypatch.setattr(whale_backfill, "map_markets", lambda *a, **k: order.append("map") or {
-        "calls": 0, "mapped": 0, "unmappable": 0, "status_counts": {}, "status": "ok"})
+        "calls": 0, "mapped": 0, "unmappable": 0, "no_root": 0, "unrooted": 0,
+        "status_counts": {}, "status": "ok"})
 
     cmd_whale_backfill(cfg, Store(tmp_path / "arb.sqlite"), None)
 
@@ -2632,3 +2633,64 @@ def test_the_mapper_unroots_a_mechanical_series_row_already_in_the_tape(tmp_path
     # and it converges: a second cycle finds nothing left to do
     assert whale_backfill.map_markets(_map_cfg(), con, NOW,
                                       get=_RootGet([], []))["unrooted"] == 0
+
+
+# ---------- fix pass 3 (review of 235cf42) -----------------------------------
+
+def test_a_nonsports_root_never_clobbers_a_tag_verified_sports_row(tmp_path):
+    """I1: M4's `UPDATE markets SET sport, market_type, start_utc` ran
+    unconditionally for every id the rooting helper rooted non-sports. A row
+    whose SPORT is already known — from its own tape slug, a prefix remap, the
+    universe builder — but whose `market_type` is still NULL enters
+    REVISIT_SQL, and Gamma's answer for it can carry a slug no prefix roots
+    plus a multi-tagged event (`politics` alongside the league tag). M4 then
+    rewrote `baseball_mlb` to `politics` and replaced the real KICKOFF with
+    the market's endDate, which `first_sight_wins` exists to protect. Only a
+    row with no sport at all, or one already carrying THIS non-sports root, is
+    the rooting helper's to write."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cond, kickoff = "0xmlb", "2026-08-09T09:00:00+00:00"
+    _map_row(con, cond, sport="baseball_mlb", start_utc=kickoff,   # market_type NULL
+             slug="mlb-nyy-bos-2026-08-09")
+    con.commit()
+    get = _RootGet([_hist_market(cond, "yankees-red-sox-series-winner", 33228)],
+                   [_hist_event(33228)])
+
+    whale_backfill.map_markets(_map_cfg(), con, NOW, get=get)
+
+    row = con.execute("SELECT * FROM markets WHERE condition_id=?", (cond,)).fetchone()
+    assert row["sport"] == "baseball_mlb", "a tag-verified sports root was clobbered"
+    assert row["start_utc"] == kickoff, "first_sight_wins' start_utc was rewritten"
+
+
+def test_the_no_root_marker_is_counted_on_its_own_and_never_written_when_disabled(tmp_path):
+    """Minors, fix pass 3. (a) `no-root:` is PERMANENT and is the non-sports
+    half's verdict, so `whale.nonsports.enabled: false` must not write it —
+    `unroot_mechanical` already reads the flag and `no_root` did not, which
+    left the switch half-off. (b) it gets its own counter: a mechanical row
+    is not `unmappable` (Gamma answered fine), and the ops line conflating
+    the two hides both numbers. (c) the backoff early return reports the same
+    keys as a real pass, so a reader never has to guess whether a missing
+    `unrooted` means zero or 'never ran'."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cond, slug = "0xupdown", "btc-updown-5m-1785140700"
+    _map_row(con, cond, slug=slug)
+    con.commit()
+    market = _hist_market(cond, slug, 750976)
+    market["events"] = [{"id": 750976, "slug": slug}]
+
+    off = whale_backfill.map_markets(_map_cfg(enabled=False), con, NOW,
+                                     get=_RootGet([market], []))
+
+    assert whale_tape._meta(con, f"no-root:{cond}") is None, "wrote a PERMANENT marker while off"
+    assert off["no_root"] == 0
+    con2 = whale_tape.open_tape(tmp_path / "w2.sqlite")     # the `unmappable:` day-throttle
+    _map_row(con2, cond, slug=slug)                         # above would hide the second pass
+    con2.commit()
+    res = whale_backfill.map_markets(_map_cfg(), con2, NOW, get=_RootGet([market], []))
+    assert res["no_root"] == 1 and res["unmappable"] == 0
+    assert whale_tape._meta(con2, f"no-root:{cond}") == NOW.strftime("%Y-%m-%d")
+    whale_tape._set_meta(con2, "backoff_until", "2099-01-01T00:00:00+00:00")
+    backoff = whale_backfill.map_markets(_map_cfg(), con2, NOW, get=_RootGet([], []))
+    assert backoff["status"] == "backoff"
+    assert backoff["unrooted"] == 0 and backoff["no_root"] == 0

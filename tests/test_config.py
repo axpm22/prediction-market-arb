@@ -438,18 +438,45 @@ def test_the_mechanical_crypto_price_series_is_excluded_by_registered_pattern():
     """Fix pass 2, review C1 (operator 2026-09-05, option 1: keep the crypto
     root, exclude the mechanical price series). The patterns are anchored
     regexes in config — no magic numbers and no hard-coded slug list in code —
-    and they are what stands between the crypto base rate and 173 coin flips."""
+    and they are what stands between the crypto base rate and 173 coin flips.
+
+    I2 (fix pass 3): three of the six patterns read `[a-z]+` where the family
+    they describe is a COIN, so they swallowed `will-trump-reach-50-approval-
+    in-march`, `will-inflation-reach-3-percent-in-2027` and
+    `oil-price-in-london-march-3` — and `no-root:` is PERMANENT, so a
+    false positive is a market removed from the lane for good. They now take
+    the registered `coin_tokens` alternation through `{coin}`."""
+    from arb import whale_nonsports
     cfg = load(SHIPPED)
-    pats = cfg["whale"]["nonsports"]["exclude_slug_patterns"]
-    assert isinstance(pats, list) and pats
-    assert all(p.startswith("^") and p.endswith("$") for p in pats)
+    raw = cfg["whale"]["nonsports"]["exclude_slug_patterns"]
+    assert isinstance(raw, list) and raw
+    assert all(p.startswith("^") and p.endswith("$") for p in raw)
+    pats = whale_nonsports._patterns(cfg)
     for slug in ("btc-updown-5m-1785140700", "eth-updown-15m-1785140700",
                  "bitcoin-above-on-september-5-2026",
                  "what-price-will-bitcoin-hit-august-31-september-6-2026",
                  "bitcoin-price-on-september-5-2026",
-                 "bitcoin-up-or-down-on-september-5-2026"):
+                 "bitcoin-up-or-down-on-september-5-2026",
+                 "bitcoin-above-115k-on-september-5-2026",
+                 "xrp-above-2pt8-on-september-5-2026",
+                 "solana-above-160-on-august-9",
+                 "will-the-price-of-bitcoin-be-between-110000-115000-on-september-5-2026",
+                 "will-ethereum-reach-3000-in-october",
+                 "will-solana-reach-150-in-november",
+                 "will-solana-dip-to-130-in-october",
+                 "will-hyperliquid-reach-88-in-september-2026",   # tape slugs, 2026-09-05
+                 "will-zcash-dip-to-100-by-december-31-2026"):
         assert any(re.match(p, slug) for p in pats), slug
     for slug in ("will-base-launch-a-token-in-2026-341",
                  "which-party-will-win-the-senate-in-2026",
-                 "balance-of-power-2026-midterms", "putin-out-before-2027"):
+                 "balance-of-power-2026-midterms", "putin-out-before-2027",
+                 # I2: none of these is a coin, and every one of them matched
+                 "will-trump-reach-50-approval-in-march",
+                 "will-inflation-reach-3-percent-in-2027",
+                 "will-israel-reach-2m-refugees-by-june",
+                 "will-the-price-of-eggs-be-between-3-and-4-in-2027",
+                 "oil-price-in-london-march-3",
+                 "will-crude-oil-reach-a-new-all-time-high-by-september-30",
+                 # on the tape, and an ESPORTS market the un-scoped patterns swallowed
+                 "will-zywoo-reach-36-hltv-mvp-awards-by-december-31-2026"):
         assert not any(re.match(p, slug) for p in pats), slug

@@ -52,6 +52,7 @@ from arb import whale_score
 from arb.whale_hygiene import hygiene_flags
 from arb.whale_mat_read import (POSITION_COLS, cache_partial, freshness,  # noqa: F401
                                 load_hygiene, load_positions, warn_if_stale)
+from arb.whale_migrate import MAT_TRIGGERS
 from arb.whale_tape import _meta
 
 # Bump on ANY change to positions_from_prints / hygiene_flags semantics.
@@ -92,32 +93,22 @@ CREATE INDEX IF NOT EXISTS idx_hygiene_mat ON hygiene_mat(proxy_wallet);
 -- The work queue. rowid order IS discovery order, so draining by rowid is
 -- oldest-dirty-first with no timestamp column to keep.
 CREATE TABLE IF NOT EXISTS mat_dirty (proxy_wallet TEXT PRIMARY KEY);
--- Design §5 item 5, in SQL rather than a hook every `markets` writer would
--- have to remember: a market gaining a `sport` turns scoreless prints into
--- positions, and a moved `start_utc` changes `pregame` for cached positions.
--- The WHEN clause (`IS NOT`, NULL-safe) is what keeps `persist_markets`'
--- 60 s universe rewrite cheap: MEASURED 2026-09-05, a no-op re-check of 1,000
--- markets costs 0.00 s; a REAL re-map of 1,000 costs 46 s (uncovered DISTINCT
--- scan below) — lands in the whale-backfill child (900 s cap, 600 s cadence),
--- never the 60 s lane, and only when a mapping actually changes. ponytail: a
--- covering prints(condition_id, proxy_wallet) index would cut that, deliberately
--- not added — a 5th index on the hottest write table for a rare path.
-DROP TRIGGER IF EXISTS trg_markets_mat_update;  -- NOT EXISTS below: an upsert overrides OR IGNORE (2026-09-05)
-CREATE TRIGGER trg_markets_mat_update AFTER UPDATE ON markets
-    WHEN NEW.sport IS NOT OLD.sport OR NEW.market_type IS NOT OLD.market_type OR NEW.start_utc IS NOT OLD.start_utc
-    BEGIN
-        INSERT INTO mat_dirty (proxy_wallet) SELECT DISTINCT p.proxy_wallet FROM prints p
-         WHERE p.condition_id = NEW.condition_id
-           AND NOT EXISTS (SELECT 1 FROM mat_dirty d WHERE d.proxy_wallet = p.proxy_wallet);
-    END;
-DROP TRIGGER IF EXISTS trg_markets_mat_insert;
-CREATE TRIGGER trg_markets_mat_insert AFTER INSERT ON markets WHEN NEW.sport IS NOT NULL
-    BEGIN
-        INSERT INTO mat_dirty (proxy_wallet) SELECT DISTINCT p.proxy_wallet FROM prints p
-         WHERE p.condition_id = NEW.condition_id
-           AND NOT EXISTS (SELECT 1 FROM mat_dirty d WHERE d.proxy_wallet = p.proxy_wallet);
-    END;
 """
+# Design §5 item 5, in SQL rather than a hook every `markets` writer would
+# have to remember: a market gaining a `sport` turns scoreless prints into
+# positions, and a moved `start_utc` changes `pregame` for cached positions.
+# The WHEN clause (`IS NOT`, NULL-safe) is what keeps `persist_markets`'
+# 60 s universe rewrite cheap: MEASURED 2026-09-05, a no-op re-check of 1,000
+# markets costs 0.00 s; a REAL re-map of 1,000 costs 46 s (uncovered DISTINCT
+# scan) — lands in the whale-backfill child (900 s cap, 600 s cadence), never
+# the 60 s lane, and only when a mapping actually changes. ponytail: a covering
+# prints(condition_id, proxy_wallet) index would cut that, deliberately not
+# added — a 5th index on the hottest write table for a rare path.
+# The two bodies live in arb/whale_migrate.py: an OLD tape's copies have to be
+# REPLACED, and that one-shot belongs with the tape's other migrations rather
+# than in a script every open re-runs (C1, fix pass 3 — a `DROP TRIGGER` here
+# took sqlite's write lock at every child start-up).
+MAT_SCHEMA += "\n".join(MAT_TRIGGERS.values())
 
 # Exactly what positions_from_prints, hygiene_flags and the lane's `_from_prints`
 # read off a print. `SELECT *` also pulled `raw_json` — the venue's whole payload

@@ -20,12 +20,14 @@ real function against itself.
 """
 import copy
 import random
+import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 
-from arb import whale_mat, whale_score
+from arb import whale_mat, whale_migrate, whale_score
 from arb.config import load
 from arb.whale_hygiene import hygiene_flags
 from arb.whale_state import WhaleState, score_state
@@ -668,3 +670,119 @@ def test_markets_upsert_with_a_queued_wallet_does_not_hit_the_dirty_unique(tmp_p
                volume_24h="1000")
     persist_markets(con, [m], now, first_sight_wins=False)   # upsert -> UPDATE trigger fires
     assert con.execute("SELECT COUNT(*) FROM mat_dirty WHERE proxy_wallet='0xw'").fetchone()[0] == 1
+
+
+# --- the markets triggers' DDL lifecycle (C1, fix pass 3, 2026-09-05) --------
+#
+# df97ad3 fixed the trigger BODY by putting `DROP TRIGGER IF EXISTS` + a bare
+# `CREATE TRIGGER` into MAT_SCHEMA — the script `open_tape` runs on EVERY open.
+# That makes every process start-up a WRITER (the DROP takes sqlite's write
+# lock), and `executescript` autocommits each statement, so the trigger pair is
+# briefly absent on every open and a mid-script abort leaves the tape with no
+# triggers at all. The bodies belong in `CREATE TRIGGER IF NOT EXISTS` and the
+# replacement of an OLD tape's copies in the one-shot migration.
+
+_OLD_TRIGGERS = ("""CREATE TRIGGER trg_markets_mat_update AFTER UPDATE ON markets
+    WHEN NEW.sport IS NOT OLD.sport OR NEW.market_type IS NOT OLD.market_type
+         OR NEW.start_utc IS NOT OLD.start_utc
+    BEGIN
+        INSERT OR IGNORE INTO mat_dirty (proxy_wallet)
+            SELECT DISTINCT proxy_wallet FROM prints
+             WHERE condition_id = NEW.condition_id;
+    END;""", """CREATE TRIGGER trg_markets_mat_insert AFTER INSERT ON markets
+    WHEN NEW.sport IS NOT NULL
+    BEGIN
+        INSERT OR IGNORE INTO mat_dirty (proxy_wallet)
+            SELECT DISTINCT proxy_wallet FROM prints
+             WHERE condition_id = NEW.condition_id;
+    END;""")
+
+
+def _old_ddl_tape(path):
+    """A tape carrying the PRE-df97ad3 trigger bodies — the shape every live
+    tape opened before this fix is in."""
+    con = open_tape(path)
+    for name, ddl in zip(whale_migrate.MAT_TRIGGERS, _OLD_TRIGGERS):
+        con.execute(f"DROP TRIGGER IF EXISTS {name}")
+        con.execute(ddl)
+    con.commit()
+    con.close()
+
+
+def _trigger_rows(con):
+    return {r[0]: (r[1], r[2]) for r in con.execute(
+        "SELECT name, sql, rowid FROM sqlite_master WHERE type='trigger'"
+        " AND name LIKE 'trg_markets_mat_%'")}
+
+
+def test_an_old_ddl_tape_has_its_markets_triggers_replaced_once(tmp_path):
+    """C1(b): the replacement is a ONE-SHOT migration, not something every
+    open redoes. After the first open both triggers carry the new
+    `NOT EXISTS` body; a second open must not touch sqlite_master at all —
+    same rowid, same sql — because a DROP/CREATE there is a write."""
+    path = tmp_path / "w.sqlite"
+    _old_ddl_tape(path)
+
+    con = open_tape(path)
+
+    rows = _trigger_rows(con)
+    assert set(rows) == set(whale_migrate.MAT_TRIGGERS)
+    for name, (sql, _rowid) in rows.items():
+        assert whale_migrate.MAT_TRIGGER_MARK in sql, name
+        assert "INSERT OR IGNORE" not in sql, name
+    con.close()
+
+    again = open_tape(path)
+    assert _trigger_rows(again) == rows, "a second open re-wrote the triggers"
+
+
+def test_the_trigger_replacement_is_one_transaction(tmp_path):
+    """C1(b), the other half: `executescript` autocommits each DDL, so an
+    abort halfway through left the tape with one trigger dropped and never
+    recreated. Under a single transaction a failure leaves the OLD pair
+    intact — the tape is never trigger-less."""
+    path = tmp_path / "w.sqlite"
+    _old_ddl_tape(path)
+    con = open_tape(path)                       # migrates it
+    for name, ddl in zip(whale_migrate.MAT_TRIGGERS, _OLD_TRIGGERS):   # ... and back to old
+        con.execute(f"DROP TRIGGER IF EXISTS {name}")
+        con.execute(ddl)
+    con.commit()
+    before = _trigger_rows(con)
+    calls = []
+
+    def boom(sql, *a, **kw):
+        calls.append(sql)
+        if sql.startswith("CREATE TRIGGER") and len(
+                [c for c in calls if c.startswith("CREATE TRIGGER")]) == 2:
+            raise sqlite3.OperationalError("disk I/O error")
+        return con.execute(sql, *a, **kw)
+
+    spy = type("Spy", (), {"execute": staticmethod(boom),
+                           "commit": con.commit, "rollback": con.rollback})()
+    with pytest.raises(sqlite3.OperationalError):
+        whale_migrate._migrate_triggers(spy)
+
+    assert _trigger_rows(con) == before, "a half-applied migration left the tape"
+
+
+def test_open_tape_takes_no_write_lock_on_an_already_migrated_tape(tmp_path):
+    """C1(a), reproduced live: with the DROP in MAT_SCHEMA every child's
+    start-up asked for sqlite's write lock, and the backfill child's long
+    `persist_markets` transaction holds it — `database is locked` after the
+    busy_timeout. An open that only runs `... IF NOT EXISTS` no-ops must
+    succeed straight through a held `BEGIN IMMEDIATE`."""
+    path = tmp_path / "w.sqlite"
+    open_tape(path).close()
+    holder = sqlite3.connect(str(path), timeout=30)
+    holder.execute("PRAGMA journal_mode=WAL")
+    holder.execute("BEGIN IMMEDIATE")
+    holder.execute("INSERT INTO markets (condition_id) VALUES ('0xheld')")
+    done = []
+    t = threading.Thread(target=lambda: done.append(open_tape(path)), daemon=True)
+
+    t.start()
+    t.join(timeout=10)
+
+    assert not t.is_alive() and done, "open_tape blocked on the write lock"
+    holder.rollback()

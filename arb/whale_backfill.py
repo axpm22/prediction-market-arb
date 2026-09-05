@@ -234,8 +234,14 @@ def map_markets(cfg, con, now, get=get_json) -> dict:
     # `root_calls` belongs in the shape THIS returns (M5, fix pass 2), not
     # only in whatever dict `_map_markets` happens to have added it to: the
     # child's call budget against max_child_runtime_secs is read off here.
+    # `unrooted`/`no_root` are in the INITIAL shape, not added on the way past
+    # (minor, fix pass 3): the backoff return used to omit them, so a reader of
+    # the ops line could not tell zero from "that step never ran". `no_root` is
+    # its own counter — a mechanical price series is not `unmappable` (Gamma
+    # answered fine, and the verdict is permanent), and conflating them hid
+    # both numbers.
     res = {"calls": 0, "mapped": 0, "unmappable": 0, "root_calls": 0,
-           "status_counts": {}, "status": "ok"}
+           "unrooted": 0, "no_root": 0, "status_counts": {}, "status": "ok"}
     if _backoff_active(con, now):
         res["status"] = "backoff"
         return res
