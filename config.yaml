@@ -719,6 +719,31 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   client-side filter on markets already in those pages.
                                       #   Thresholds, roots, tags, volume floor and lifetime floor
                                       #   are all UNCHANGED by this amendment.
+    root_calls_per_cycle: 25          # HISTORICAL root mapping (amendment 2026-09-05, Opus review
+                                      #   C2): the mapper roots a market from its sport slug
+                                      #   prefix, so a politics or crypto market a whale traded in
+                                      #   the PAST stayed sport=NULL and positions_from_prints
+                                      #   dropped it — no non-sports whale could ever be scored,
+                                      #   however wide the horizon above. arb/whale_map.py now
+                                      #   roots such a row from the SAME `tags` map, through the
+                                      #   market's own event: Gamma's `markets?condition_ids=`
+                                      #   answer carries no tags and no category, and its nested
+                                      #   `events[0]` carries no tags either, but `events?id=`
+                                      #   does — for closed events too (verified live 2026-09-05,
+                                      #   data/verified_facts.md), batched 20 ids a call exactly
+                                      #   like `markets?condition_ids=` (n=25 silently returns 20).
+                                      #   This key bounds the EXTRA Gamma calls one `map_markets`
+                                      #   cycle may spend on those lookups. At most one per chunk
+                                      #   of GAMMA_IDS_PER_CALL (20) condition ids, so
+                                      #   map_per_cycle 1000 would allow 50; 25 is half that, and
+                                      #   the arithmetic against max_child_runtime_secs.
+                                      #   whale-backfill (900 s) is: leaderboard 80 + sweep 50 +
+                                      #   wallets 120 + map 100 + non-sports universe 9 = 359 calls
+                                      #   ~= 718 s at max_calls_per_min 30, plus 25 = 384 calls
+                                      #   ~= 768 s, leaving ~130 s of margin (was ~180 s). A row
+                                      #   the cap skips is not lost: it takes the ordinary
+                                      #   `unmappable:` marker and returns on the next day's
+                                      #   REVISIT_SQL queue. 0 disables the lookup entirely.
     min_lifetime_hours: 6             # market endDate minus the LATEST of its own startDate, its
                                       #   own createdAt and the event's startDate. A market that
                                       #   lives six hours cannot host a print-to-touch follow, an

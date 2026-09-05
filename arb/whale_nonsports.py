@@ -85,6 +85,54 @@ def root_of_event(cfg, event) -> str | None:
     return None
 
 
+def _market_type(event) -> str:
+    """design §5 step 1b: LADDER when the EVENT's negRisk is true (the
+    temperature and strike ladders), else BINARY. Gamma OMITS `negRisk` when
+    it is false — measured 2026-09-05 over 2,822 tag-page events, `negRisk` is
+    present on 970 and `enableNegRisk` on all 2,822, and the two never
+    disagree — so a missing key reads as false, which is what `.get` does."""
+    return "LADDER" if event.get("negRisk") else "BINARY"
+
+
+def _lifetime(event, market, end):
+    """`end` minus the LATEST of the market's own `startDate`, its `createdAt`
+    and the event's `startDate`: the shortest of the measurable spans, which
+    is the reading that admits fewer markets. None = no measurable start, and
+    every caller reads that as excluded rather than assumed long-lived."""
+    starts = [s for s in (_when(market.get("startDate")), _when(market.get("createdAt")),
+                          _when(event.get("startDate"))) if s is not None]
+    return end - max(starts) if starts else None
+
+
+def root_row(cfg, event, market) -> tuple | None:
+    """`(root, market_type, start_utc)` for a HISTORICAL non-sports market —
+    one the mapper (`arb/whale_map.py`) fetched by condition_id and could not
+    root from a sport slug — or None when the market is not ours.
+
+    The same tag map, the same `market_type` convention and the same
+    `start_utc := the MARKET's own endDate` `markets_of` applies, so a
+    politics market a whale traded last month roots exactly as the live
+    builder would have rooted it (Opus review C2: without this, every
+    historical non-sports market stayed `sport=NULL` and
+    `whale_score.positions_from_prints` dropped it, so no politics whale
+    could ever be scored).
+
+    The filters that are about BOOKING are deliberately NOT applied: `closed`,
+    the `volume24hr` floor and the `max_days` horizon all ask "can the lane
+    trade this now", which a resolved market cannot and need not answer — its
+    only use is scoring a whale's past. The lifetime floor IS applied: it is a
+    statement about the market, not about the moment.
+    """
+    root, end = root_of_event(cfg, event), _when(market.get("endDate"))
+    if root is None or end is None:
+        return None
+    life = _lifetime(event, market, end)
+    if life is None or life < timedelta(
+            hours=float(cfg["whale"]["nonsports"]["min_lifetime_hours"])):
+        return None
+    return root, _market_type(event), end.isoformat()
+
+
 def _tokens(market) -> tuple | None:
     """((token_id, label), ...) for a two-sided market, else None.
 
@@ -111,10 +159,8 @@ def markets_of(cfg, event, now) -> list[Market]:
     `arb/tracker.py` for WHALE rows, so the lane never prices a market it
     could not book.
 
-    Lifetime is `endDate` minus the LATEST of the market's `startDate`, its
-    `createdAt` and the event's `startDate`: the shortest of the measurable
-    spans, which is the reading that admits fewer markets. A market with no
-    measurable start is excluded rather than assumed long-lived.
+    Lifetime is `_lifetime` — shared with `root_row`, which the mapper uses to
+    root the same kind of market from its history rather than from a tag page.
     """
     ns = cfg["whale"]["nonsports"]
     root = root_of_event(cfg, event)
@@ -123,20 +169,16 @@ def markets_of(cfg, event, now) -> list[Market]:
     floor = Decimal(str(ns["min_volume_24h_usd"]))
     life = timedelta(hours=float(ns["min_lifetime_hours"]))
     horizon = now + timedelta(days=int(ns["max_days"]))
-    # design §5 step 1b: LADDER when the EVENT's negRisk is true (the
-    # temperature and strike ladders), else BINARY.
-    market_type = "LADDER" if event.get("negRisk") else "BINARY"
-    event_start = _when(event.get("startDate"))
+    market_type = _market_type(event)
     out = []
     for m in (event.get("markets") or []):
         cond, end = str(m.get("conditionId") or ""), _when(m.get("endDate"))
         volume = _volume(m.get("volume24hr"))
-        starts = [s for s in (_when(m.get("startDate")), _when(m.get("createdAt")),
-                              event_start) if s is not None]
+        lifetime = _lifetime(event, m, end) if end is not None else None
         tokens = _tokens(m)
-        if (not cond or m.get("closed") or end is None or not starts or tokens is None
-                or volume is None or volume < floor
-                or not (now <= end <= horizon) or end - max(starts) < life):
+        if (not cond or m.get("closed") or end is None or lifetime is None
+                or tokens is None or volume is None or volume < floor
+                or not (now <= end <= horizon) or lifetime < life):
             continue
         out.append(Market(
             condition_id=cond, sport=root, market_type=market_type, line=None,
@@ -198,24 +240,45 @@ def nonsports_universe(cfg, con, now, get=get_json) -> dict:
 
 
 def tape_universe(con, cfg, now) -> list[Market]:
-    """The 60 s cycle's non-sports half: the rows `nonsports_universe` already
-    wrote, whose resolution deadline is still ahead of us and inside
+    """The 60 s cycle's non-sports half: non-sports-rooted `markets` rows whose
+    resolution deadline is still ahead of us and inside
     `whale.nonsports.max_days` — the same horizon `arb/tracker.py` applies to a
-    WHALE row at booking, so the lane never prices a market it could not
-    book."""
+    WHALE row at booking, so the lane never prices a market it could not book —
+    and whose measured 24h volume clears `min_volume_24h_usd`.
+
+    The volume floor is applied HERE and not only in `markets_of` (amendment
+    2026-09-05): `nonsports_universe` is no longer the only writer of a
+    non-sports `markets` row. `whale_map._event_roots` roots a market from its
+    event's tags so a whale's HISTORICAL politics positions can be scored, and
+    it deliberately applies no volume floor — a resolved market's `volume24hr`
+    is no reason to refuse to score the whale who traded it. Most such rows
+    are in the past and this query's lower bound already excludes them, but
+    not all: measured on the live tape 2026-09-05, the first 100-row sample of
+    the revisit queue held a politics market with a future `endDate` and a
+    NULL `volume24hr`. This read is the one place the LANE's universe is
+    decided, so the registered floor belongs here — a null volume failing it
+    exactly as it does in `markets_of` (design §5 step 1b).
+    """
     ns = cfg["whale"]["nonsports"]
     roots = sorted(set(ns["tags"].values()))
     if not ns["enabled"] or not roots:
         return []
     hi = now + timedelta(days=int(ns["max_days"]))
+    floor = Decimal(str(ns["min_volume_24h_usd"]))
     rows = con.execute(TAPE_SQL.format(roots=",".join("?" * len(roots))),
                        (*roots, int(now.timestamp()), int(hi.timestamp())))
-    return [Market(condition_id=r["condition_id"], sport=r["sport"],
-                   market_type=r["market_type"], line=r["line"],
-                   start_utc=r["start_utc"], event_key=r["event_key"],
-                   tokens=tuple((t[0], t[1])
-                                for t in json.loads(r["tokens_json"] or "[]")),
-                   volume_24h=r["volume_24h"]) for r in rows]
+    out = []
+    for r in rows:
+        volume = _volume(r["volume_24h"])
+        if volume is None or volume < floor:
+            continue
+        out.append(Market(condition_id=r["condition_id"], sport=r["sport"],
+                          market_type=r["market_type"], line=r["line"],
+                          start_utc=r["start_utc"], event_key=r["event_key"],
+                          tokens=tuple((t[0], t[1])
+                                       for t in json.loads(r["tokens_json"] or "[]")),
+                          volume_24h=r["volume_24h"]))
+    return out
 
 
 def seed_volumes(volumes, markets) -> dict:

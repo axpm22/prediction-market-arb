@@ -170,6 +170,43 @@ Data flow per `whale --once` cycle (`whale.poll_secs`, default 60):
    does not add them. No registered filter excludes that series today; the
    `min_lifetime_hours` floor and the horizon both fail to, and that is
    stated rather than fixed here.
+   **Historical roots, added 2026-09-05 (Opus review C2).** This step roots
+   only the markets on today's tag pages, i.e. the OPEN ones. The mapper
+   (`arb/whale_map.py`, step 4) roots a market from its sport slug prefix, so
+   until now every HISTORICAL politics or crypto market a whale had traded
+   stayed `sport = NULL`, `whale_score.positions_from_prints` dropped it as
+   unmapped, and **no non-sports whale could ever be scored** — the roots
+   above were unreachable in practice, whatever the horizon. The mapper now
+   roots such a row from the SAME `whale.nonsports.tags` map through the
+   market's own EVENT: Gamma's `markets?condition_ids=` answer carries no
+   `tags` and no `category`, and its nested `events[0]` carries no `tags`
+   either, but it does carry `events[0].id`, and `events?id=` returns a
+   populated `tags` array — for closed events, with no `closed=true` needed,
+   batched 20 ids a call exactly like `markets?condition_ids=` (all verified
+   live 2026-09-05, data/verified_facts.md). `whale_nonsports.root_row` is
+   the shared helper: the same tag map, the same LADDER/BINARY convention off
+   the event's `negRisk`, the same `min_lifetime_hours` floor and the same
+   `start_utc :=` the MARKET's own `endDate`. The filters that ask "can the
+   lane trade this NOW" — `closed`, the volume floor and the horizon — are
+   deliberately NOT applied there: a resolved market's `volume24hr` is no
+   reason to refuse to score the whale who traded it. **Consequence, closed
+   in the same commit:** `nonsports_universe` is therefore no longer the only
+   writer of a non-sports `markets` row, so the registered volume floor is now
+   applied by `tape_universe` — the one read that decides the LANE's universe
+   — with a null volume failing it exactly as here. (Measured 2026-09-05: the
+   newest 100 rows of the live revisit queue contained a politics market with
+   a NULL `volume24hr` and a future `endDate`, which without that floor would
+   have entered the lane universe.) Cost: at most one extra Gamma call per
+   chunk of 20 condition ids, capped by `whale.nonsports.root_calls_per_cycle`
+   (25) a mapping cycle — 384 calls ≈ 768 s against the child's 900 s, see
+   §14. A row the cap skips takes the ordinary `unmappable:` marker and
+   returns on the next day's `REVISIT_SQL` queue, which already selects
+   `sport IS NULL` rows without an `absent:` marker and needs no change.
+   Measured on the live tape 2026-09-05, read-only: **46,287 rows are in the
+   revisit queue and 32,871 of them have `sport IS NULL`**; of a 200-row
+   sample from the head of that queue 16 root `crypto` and 184 are rejected
+   for carrying none of the three configured tags (they are the unmapped
+   esports and soccer leagues), with zero false positives.
    **Page depth is a SEPARATE, unmade decision:** politics and crypto both
    have more than 1,200 open tag events, so `pages: 3` sees 300 of them and
    yields 45 of the 158 politics markets that clear the filters platform-wide.
@@ -1075,7 +1112,19 @@ the 60 s cycle's own resolution read skips any market whose `start_utc` is
 still ahead of `now` (`whale_resolve._due`), which every market admitted by
 this horizon is by construction — so the `whale-backfill` child stays at its
 359-call / ~718 s worst case against `max_child_runtime_secs.whale-backfill`
-(900). Measured effect at the shipped page depth: 6 markets → 89. A new loader invariant: every
+(900). Measured effect at the shipped page depth: 6 markets → 89.
+
+**Amended 2026-09-05 (historical roots):** a seventh `nonsports` key,
+`root_calls_per_cycle: 25`, bounds the EXTRA Gamma calls one `map_markets`
+cycle may spend rooting non-sports markets from their events (§5 step 1b).
+At most one per chunk of `GAMMA_IDS_PER_CALL` (20) condition ids, so
+`map_per_cycle` 1000 would allow 50 and this is half that; the child's worst
+case becomes leaderboard 80 + sweep 50 + wallets 120 + map 100 + non-sports
+universe 9 + roots 25 = **384 calls ≈ 768 s** at `max_calls_per_min` 30,
+leaving ~130 s of margin under `max_child_runtime_secs.whale-backfill` (900).
+25 also matches `REVISIT_SQL`'s own guaranteed floor of `map_per_cycle // 2`
+= 500 ids a cycle at 20 ids a call, so the cap is not the binding constraint
+on draining the backlog. `0` disables the lookup entirely. A new loader invariant: every
 `whale.nonsports.tags` value must be a Polymarket fee category other than
 `sports`; a root that is not one would be priced at the venue's default
 `fee_rate`, and `sports` as a value would defeat the no-transfer decision.

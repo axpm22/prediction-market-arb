@@ -182,7 +182,7 @@ SCHEMA = {
                             "backfill_compact": BOOL},
               "nonsports": {"enabled": BOOL, "tags": MAP(STR), "pages": NUM,
                             "min_volume_24h_usd": NUM, "min_lifetime_hours": NUM,
-                            "max_days": NUM},
+                            "max_days": NUM, "root_calls_per_cycle": NUM},
               "backfill": {"wallets_per_cycle": NUM, "pages_per_wallet": NUM,
                            "page_size": NUM, "cadence_secs": NUM,
                            "resolve_per_cycle": NUM, "map_per_cycle": NUM},

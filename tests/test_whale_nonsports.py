@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from arb import whale_nonsports, whale_tape
+from arb.whale_universe import Market
 from arb.config import load
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -399,14 +400,43 @@ def _v6(cfg, tmp_path, name, volume):
 def test_the_cycle_prices_v6_off_the_tapes_own_volume_not_the_floor(cfg, tmp_path):
     """A non-sports market has no watch quote, so without `markets.volume_24h`
     V6's denominator falls to `dominance.min_volume_usd` ($5,000) — on a
-    $20M/day politics market that reads as maximal dominance and fires."""
+    $20M/day politics market that would read as maximal dominance and fire.
+    The tape's own figure is what stops that."""
+    from arb.whale_dominance import point
     cfg["whale"]["min_score_lb"] = Decimal("-0.10")
-    unknown = _v6(cfg, tmp_path, "unknown", None)
     known = _v6(cfg, tmp_path, "known", "20000000")
-    assert unknown["fired"] and Decimal(unknown["points_yes"]) >= \
-        Decimal(str(cfg["whale"]["fire"]["min_points"]["V6"]))
     assert not known["fired"]
-    assert Decimal(known["points_yes"]) < Decimal(unknown["points_yes"])
+    # ... and the denominator is the reason: the same whale over an UNKNOWN
+    # volume reads the $5,000 floor instead of the market's $20M and prices
+    # out at four orders of magnitude more dominance.
+    whale = {"lb": "0.10", "open_notional": "1000"}
+    assert point(whale, cfg, {"volume": None}) > point(whale, cfg,
+                                                       {"volume": Decimal("20000000")})
+    assert point(whale, cfg, {"volume": None}) == \
+        point(whale, cfg, {"volume": Decimal("1")})   # both read the floor
+
+
+def test_a_market_with_no_measured_volume_never_enters_the_lane_universe(cfg, con):
+    """The registered universe (design §5 step 1b) is `volume24hr` present and
+    >= `min_volume_24h_usd`, a null failing the floor. The by-tag builder has
+    always applied it — but since 2026-09-05 the MAPPER also writes non-sports
+    `markets` rows (`whale_map._event_roots`, rooting a market from its event's
+    tags so a whale's historical politics positions can be scored), and it
+    roots WITHOUT a volume floor on purpose: a resolved market's `volume24hr`
+    is not a reason to refuse to score the whale who traded it. That makes the
+    tape read the one place the lane's own universe is decided, so the floor
+    is applied HERE — measured on the live tape 2026-09-05, the very first
+    100-row sample of the revisit queue contained a politics market with a
+    future endDate and `volume24hr: null`."""
+    from arb.whale_universe import persist_markets
+    for cid, volume in (("0xnull", None), ("0xthin", "999"), ("0xfat", "1000")):
+        persist_markets(con, [Market(condition_id=cid, sport="politics",
+                                     market_type="BINARY", line=None,
+                                     start_utc=(NOW + timedelta(days=3)).isoformat(),
+                                     event_key=None, tokens=(("t0", "Yes"), ("t1", "No")),
+                                     volume_24h=volume)], NOW, first_sight_wins=True)
+    assert [m.condition_id for m in whale_nonsports.tape_universe(con, cfg, NOW)] \
+        == ["0xfat"]
 
 
 def test_a_tag_builder_market_keys_its_quotes_on_its_own_event_slug(cfg):
@@ -426,3 +456,71 @@ def test_a_tag_builder_market_keys_its_quotes_on_its_own_event_slug(cfg):
     # says never to use — that row still falls back to slug, then condition id
     assert _event_key("0xs", {}, tape) == "pm:mlb-tb-nyy-2026-09-05"
     assert _event_key("0xn", {}, {"0xn": {"slug": None, "event_key": "mlb:x"}}) == "pm:0xn"
+
+
+# ------------------------------- historical roots (amendment 2026-09-05)
+#
+# The mapper roots a market from its sport slug prefix alone, so every
+# HISTORICAL politics/crypto market a whale traded stayed `sport=NULL` and
+# `positions_from_prints` dropped it — no politics whale could ever be scored
+# (Opus review C2). Gamma's `markets?condition_ids=` answer carries no `tags`
+# and no `category` and its nested `events[0]` carries no `tags` either
+# (verified 2026-09-04, re-probed 2026-09-05); the event's OWN row does, and
+# `events?id=` batches 20 ids a call exactly as `markets?condition_ids=` does
+# (verified live 2026-09-05, data/verified_facts.md). The fixtures below are
+# shaped from those probes.
+
+def _gamma_market(cid="0xh", slug="will-x-happen", event_id=33228,
+                  end="2026-11-03T12:00:00Z", start="2026-01-01T00:00:00Z",
+                  created="2025-12-01T00:00:00Z", sports_type=None):
+    """One row of Gamma's `markets?condition_ids=` answer (probe 2026-09-05):
+    no `tags`, no `category`, a nested `events[0]` carrying `id` and `slug`
+    but NO `tags` key at all."""
+    m = {"conditionId": cid, "slug": slug, "endDate": end, "startDate": start,
+         "createdAt": created, "clobTokenIds": '["t0", "t1"]',
+         "outcomes": '["Yes", "No"]', "volume24hr": "1234",
+         "events": [{"id": event_id, "slug": "which-party-wins", "negRisk": False}]}
+    if sports_type:
+        m["sportsMarketType"] = sports_type
+    return m
+
+
+def _gamma_event(event_id=33228, tags=("politics",), neg_risk=False,
+                 start="2025-12-01T00:00:00Z"):
+    """One row of `events?id=` (probe 2026-09-05): a populated `tags` array,
+    `startDate`, and `negRisk` — which Gamma OMITS when false (measured over
+    2,822 events: `negRisk` and `enableNegRisk` never disagree)."""
+    e = {"id": event_id, "slug": "which-party-wins", "startDate": start,
+         "tags": [{"slug": t, "label": t} for t in tags]}
+    if neg_risk:
+        e["negRisk"] = True
+    return e
+
+
+def test_a_historical_politics_market_roots_from_its_events_tags(cfg):
+    """The shared helper: same tag map, same `market_type` convention, same
+    `start_utc := the market's own endDate` the by-tag builder uses."""
+    got = whale_nonsports.root_row(cfg, _gamma_event(), _gamma_market())
+    assert got == ("politics", "BINARY", "2026-11-03T12:00:00+00:00")
+    ladder = whale_nonsports.root_row(cfg, _gamma_event(neg_risk=True), _gamma_market())
+    assert ladder[1] == "LADDER"
+    # priority order is the builder's own, and an event with none of our tags
+    # is not ours at all
+    multi = _gamma_event(tags=("trump-presidency", "crypto", "politics"))
+    assert whale_nonsports.root_row(cfg, multi, _gamma_market())[0] == "politics"
+    assert whale_nonsports.root_row(cfg, _gamma_event(tags=("weather",)),
+                                    _gamma_market()) is None
+
+
+def test_a_five_minute_crypto_market_fails_the_lifetime_floor(cfg):
+    """`min_lifetime_hours` (6) is applied exactly as the builder applies it —
+    endDate minus the LATEST of the market's startDate, its createdAt and the
+    event's startDate — so a genuinely five-minute market is never rooted."""
+    short = _gamma_market(cid="0xbtc", slug="btc-updown-5m-1788596100",
+                          end="2026-09-05T08:25:00Z", start="2026-09-05T08:20:00Z",
+                          created="2026-09-05T08:00:00Z")
+    assert whale_nonsports.root_row(cfg, _gamma_event(tags=("crypto",)), short) is None
+    # ... and a market with no measurable start is excluded, never assumed
+    # long-lived (the builder's own reading)
+    nostart = _gamma_market(start=None, created=None)
+    assert whale_nonsports.root_row(cfg, _gamma_event(start=None), nostart) is None

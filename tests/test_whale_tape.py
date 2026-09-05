@@ -2349,3 +2349,120 @@ def test_holdings_persist_commits_so_a_second_connection_sees_the_rows(tmp_path)
         "SELECT asset FROM holdings WHERE proxy_wallet='0xw0'")}
     fresh.close()
     assert rows == {"tokyes", "b"}                 # page 1's rows, visible cross-connection
+
+
+# --- historical non-sports roots (amendment 2026-09-05) ---------------------
+#
+# `_gamma_row` rooted a market from its sport slug prefix alone, so every
+# historical politics/crypto market a whale had traded stayed `sport=NULL`,
+# `positions_from_prints` dropped it and no politics whale could ever be
+# scored (Opus review C2). Gamma's market row carries no `tags` and no
+# `category`, and its nested `events[0]` carries no `tags` either — only the
+# event's own row does (`events?id=`, batched 20 a call; live probes
+# 2026-09-05 in data/verified_facts.md).
+
+def _hist_market(cond, slug, event_id, end="2026-11-03T12:00:00Z"):
+    return {"conditionId": cond, "slug": slug, "endDate": end,
+            "startDate": "2026-01-01T00:00:00Z", "createdAt": "2025-12-01T00:00:00Z",
+            "clobTokenIds": '["t0", "t1"]', "outcomes": '["Yes", "No"]',
+            "volume24hr": "1234",
+            "events": [{"id": event_id, "slug": "which-party-wins"}]}
+
+
+def _hist_event(event_id, tags=("politics",)):
+    return {"id": event_id, "slug": "which-party-wins",
+            "startDate": "2025-12-01T00:00:00Z",
+            "tags": [{"slug": t, "label": t} for t in tags]}
+
+
+class _RootGet:
+    """Answers `markets?` from one list and `events?` from another, so a test
+    can see exactly which endpoint the mapper reached for."""
+
+    def __init__(self, markets, events):
+        self.markets, self.events, self.urls = markets, events, []
+
+    def __call__(self, url, cfg, **kw):
+        self.urls.append(url)
+        return list(self.events) if "/events?" in url else list(self.markets)
+
+
+def _map_cfg(**ns):
+    cfg = _cfg(backfill={"wallets_per_cycle": 3, "pages_per_wallet": 40,
+                         "page_size": 50, "map_per_cycle": 40})
+    cfg["whale"]["nonsports"].update(ns)
+    return cfg
+
+
+def test_map_markets_roots_a_historical_nonsports_market_from_its_event(tmp_path):
+    """C2: a revisit row Gamma answers for but no sport slug can root is
+    rooted from its EVENT's tags — the same `whale.nonsports.tags` map, the
+    same `market_type` convention and the same `start_utc := the market's own
+    endDate` the by-tag universe builder uses."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    cond = "0xhistpol"
+    _map_row(con, cond, slug="will-the-democrats-win-the-2028-us-presidential-election")
+    con.commit()
+    get = _RootGet([_hist_market(cond, "will-the-democrats-win", 33228)],
+                   [_hist_event(33228)])
+
+    res = whale_backfill.map_markets(_map_cfg(), con, NOW, get=get)
+
+    row = con.execute("SELECT * FROM markets WHERE condition_id=?", (cond,)).fetchone()
+    assert (row["sport"], row["market_type"]) == ("politics", "BINARY")
+    assert row["start_utc"] == "2026-11-03T12:00:00+00:00"     # the market's endDate
+    assert res["mapped"] == 1 and res["unmappable"] == 0
+    # one markets call, one events call — repeated-param `id=`, the only form
+    # verified (2026-09-05)
+    assert len(get.urls) == 2 and res["calls"] == 2
+    assert "/events?id=33228" in get.urls[1]
+    assert res["root_calls"] == 1
+
+
+def test_map_markets_spends_no_event_call_on_a_sports_row(tmp_path):
+    """A row the slug prefix already roots never reaches the event lookup, so
+    the sports path costs exactly what it did before this amendment."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    gamma = _fixture("whale_gamma_condition_ids_repeated")[0]
+    cond = gamma["conditionId"]
+    _map_row(con, cond, slug=gamma["slug"])
+    con.commit()
+    get = _RootGet([gamma], [_hist_event(1)])
+
+    res = whale_backfill.map_markets(_map_cfg(), con, NOW, get=get)
+
+    row = con.execute("SELECT * FROM markets WHERE condition_id=?", (cond,)).fetchone()
+    assert row["sport"] == "baseball_kbo" and row["market_type"] == "WINNER"
+    assert row["start_utc"] == "2026-08-09T09:00:00+00:00"     # the KICKOFF, as before
+    assert not any("/events?" in u for u in get.urls)
+    assert res["root_calls"] == 0
+
+
+def test_the_historical_root_lookup_is_bounded_by_its_own_config_key(tmp_path):
+    """`whale.nonsports.root_calls_per_cycle` bounds the EXTRA Gamma calls a
+    mapping cycle may spend on event lookups — at most one per chunk of
+    `GAMMA_IDS_PER_CALL` condition ids, and never more than the key. It counts
+    against the same `max_child_runtime_secs.whale-backfill` budget as every
+    other call the child makes."""
+    con = whale_tape.open_tape(tmp_path / "w.sqlite")
+    conds = [f"0xh{i}" for i in range(40)]
+    for cond in conds:
+        _map_row(con, cond, slug=f"will-x-{cond}")
+    con.commit()
+    markets = [_hist_market(c, f"will-x-{c}", 33228 + i) for i, c in enumerate(conds)]
+    get = _RootGet(markets, [_hist_event(33228 + i) for i in range(40)])
+
+    res = whale_backfill.map_markets(_map_cfg(root_calls_per_cycle=1), con, NOW, get=get)
+
+    assert res["root_calls"] == 1
+    assert sum("/events?" in u for u in get.urls) == 1
+    # zero disables the lookup entirely, and the rows stay exactly as they were
+    con2 = whale_tape.open_tape(tmp_path / "w2.sqlite")
+    _map_row(con2, "0xz", slug="will-x-z")
+    con2.commit()
+    get2 = _RootGet([_hist_market("0xz", "will-x-z", 33228)], [_hist_event(33228)])
+    res2 = whale_backfill.map_markets(_map_cfg(root_calls_per_cycle=0), con2, NOW,
+                                      get=get2)
+    assert res2["root_calls"] == 0 and res2["unmappable"] == 1
+    assert con2.execute("SELECT sport FROM markets WHERE condition_id='0xz'"
+                        ).fetchone()["sport"] is None

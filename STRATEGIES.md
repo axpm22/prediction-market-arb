@@ -179,7 +179,12 @@ power, $8k–$31k of 24h volume each), which a one-week horizon can never see �
 and it does NOT admit the short-horizon crypto series, which the same
 measurement shows were already inside the 7-day window. The primary metric stays the SPORTS-root V2/flat figure; each new
 root accumulates its own n against the same kill rules and is never pooled with
-sports.
+sports. **Defect fixed 2026-09-05 (Opus review C2):** the roots above were
+unreachable until that date — the tape's mapper roots a market from its sport
+slug prefix, so every historical politics or crypto market a whale had traded
+stayed unrooted and was dropped by the scorer, and no non-sports whale could
+qualify however wide the horizon. Such a market is now rooted from the same tag
+map through its own Gamma event, bounded by its own call budget.
 
 **Three paper sizings (amended 2026-09-05, PREREGISTRATION row of that date):** every fired signal books `V*/flat` ($1, the primary), `V*/conf` (linear in the whales' score from $0.10 at the qualification bar to $1.00 ten points above it) and — new — `V*/kelly`, quarter Kelly on the same edge but PRICED: `clip(0.25 x (S - min_score_lb) / (1 - ask), $0.10, $1.00)`. Conf is blind to the ask, so it stakes the same on a 0.95 contract, where a 0.05-point edge is a full Kelly bet, as on a 0.30 one, where it is 7% of a bankroll; kelly is the only sizing that can say so. The edge fed to it is already the pessimistic `score_lb`, so the quarter fraction is conservative twice. A sizing cannot change which signals fire, so the three are three measurements of one population, compared on ROI per $ at risk at day 14 and the replication month. **The primary metric is untouched: V2/flat.**
 
