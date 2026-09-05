@@ -1,69 +1,58 @@
 """L14: per-wallet materialization of positions + hygiene (matpos, 2026-09-05).
+WRITE side — DDL (`MAT_SCHEMA`), the dirty queue, `materialize`/`_wallet`.
+READ side (`load_positions`, `load_hygiene`, `freshness`/`warn_if_stale`,
+`cache_partial`) moved to `arb/whale_mat_read.py` on size (2026-09-05),
+re-exported below so every `whale_mat.load_positions` etc. caller is unaffected.
 
-`whale_state.score_state` rebuilt EVERY wallet's positions and hygiene flags
-from EVERY print on every 60 s cycle. Profiled live 2026-09-05 on the
+`whale_state.score_state` used to rebuild EVERY wallet's positions and hygiene
+flags from EVERY print on every 60 s cycle. Profiled live 2026-09-05 on the
 production tape (763,786 prints): 29.4 s, 57,290 positions — against a 60 s
-cadence and a 120 s child cap, with the tape growing ~700k rows/day while
-2,700 wallet histories backfill. Read-path trims (2026-09-04 column trim,
-2026-09-05 `_PrintRow`) bought constants; the cost is O(prints) and the fix is
-to recompute only what changed.
+cadence and a 120 s child cap, with the tape growing ~700k rows/day. Cost is
+O(prints); the fix is to recompute only what changed.
 
-What is cached, and what is not:
-  `positions_mat` mirrors `whale_score.Position` field for field, and
-  `hygiene_mat` mirrors `whale_hygiene.Hygiene` (one row per flag; a NULL
-  `condition_id` is a WALLET-level flag, a non-null one is that wallet's flag
-  in that one market). Both are DERIVED — `prints` remains the record (rule 7)
-  and this cache can be dropped and rebuilt from it at any time, which is why
-  DELETE+INSERT here is not a rule-9 concern: rule 9 binds `flat_bets`/
-  `bet_events` in the LEDGER, and this is the tape.
+What is cached: `positions_mat` mirrors `whale_score.Position` field for
+field; `hygiene_mat` mirrors `whale_hygiene.Hygiene` (one row per flag — a
+NULL `condition_id` is a WALLET-level flag, non-null is that wallet's flag in
+one market). Both are DERIVED — `prints` remains the record (rule 7) and this
+cache can be dropped and rebuilt from it at any time, so DELETE+INSERT here is
+not a rule-9 concern (that rule binds `flat_bets`/`bet_events` in the ledger).
+`positions_from_prints`/`hygiene_flags` stay the single source of the FIFO and
+hygiene logic; this module calls them once per dirty wallet.
 
-`positions_from_prints` and `hygiene_flags` stay the single source of the FIFO
-and hygiene logic. This module CALLS them, once per dirty wallet, over that
-wallet's own prints — never a second implementation.
+Why per-WALLET, never per-print: FIFO SELL matching needs a wallet's whole
+history in ts order, so a backfill inserting OLD prints changes positions it
+already had — recomputing the wallet whole (what `_wallet` does) is the only
+correct granularity.
 
-Why per-WALLET and never per-print: FIFO SELL matching and the position window
-need a wallet's whole history in ts order, so a backfill inserting OLD prints
-for a wallet changes positions the wallet already had. Recomputing that wallet
-whole is the only correct granularity, and it is what `_wallet` does.
+The dirty set (why this is O(changed), not O(prints)): `prints.id` is a
+monotonic INTEGER PRIMARY KEY on an append-only table, so every row written
+since the last pass is the rowid range `(watermark, MAX(id)]` — a scan of the
+NEW rows, never the whole tape. Wallets in that range are queued in
+`mat_dirty` and the watermark advances in the SAME transaction, so a second
+writer (the backfill child) either sees the rows itself or finds them already
+queued. `mat_dirty` drains oldest-first, `whale.mat.max_wallets_per_cycle` a
+call, so a first pass over an existing tape spreads over cycles.
 
-The dirty set (the reason this is O(changed), not O(prints)):
-  `prints.id` is a monotonic INTEGER PRIMARY KEY on an append-only table, so
-  every row written since the last pass is the rowid range `(watermark, MAX(id)]`
-  — a range scan of the NEW rows, never the whole tape. The wallets in that
-  range are queued in `mat_dirty` and the watermark advances in the SAME
-  transaction, so a second process (the backfill child writes prints too)
-  either sees the rows itself or finds them already queued. `mat_dirty` is
-  drained oldest-first (rowid order) at `whale.mat.max_wallets_per_cycle` a
-  call, so the first pass over an existing tape spreads over cycles instead of
-  stalling the lane.
+Markets change too (design §5 item 5): a market gaining a `sport` turns
+scoreless prints into positions, and a moved `start_utc` changes `pregame`.
+Handled by the two `markets` triggers in MAT_SCHEMA — any writer, any module,
+rather than a hook every market writer would remember — whose WHEN clause
+keeps `persist_markets`' 60 s universe rewrite from dirtying everything (only
+a market whose sport/market_type/start_utc actually MOVES dirties wallets).
 
-Markets change too (design §5 item 5): a market that gains a `sport` turns
-prints that scored nothing into positions, and a `start_utc` filled or moved
-later changes `pregame`. That is handled in SQL, by the two `markets` triggers
-in MAT_SCHEMA below — any writer, any module — rather than by a hook every
-market writer would have to remember. The trigger's WHEN clause is what keeps
-`persist_markets` rewriting the universe every 60 s from dirtying everything:
-only a market whose sport/market_type/start_utc actually MOVES dirties its
-wallets.
-
-`MAT_VERSION` is the escape hatch: bump it in the same commit as any change to
-the FIFO or hygiene logic and every wallet re-materializes on the next pass,
-with no operator action.
+`MAT_VERSION` is the escape hatch: bump it alongside any FIFO/hygiene logic
+change and every wallet re-materializes on the next pass, no operator action.
 """
 from __future__ import annotations
 
 import time
 from collections.abc import Mapping
-from datetime import datetime, timezone
-from decimal import Decimal
 
 from arb import whale_score
-from arb.logutil import get_logger
-from arb.whale_hygiene import Hygiene, hygiene_flags
-from arb.whale_score import Position
+from arb.whale_hygiene import hygiene_flags
+from arb.whale_mat_read import (POSITION_COLS, cache_partial, freshness,  # noqa: F401
+                                load_hygiene, load_positions, warn_if_stale)
 from arb.whale_tape import _meta
-
-log = get_logger("arb.whale", "logs/whale.log")
 
 # Bump on ANY change to positions_from_prints / hygiene_flags semantics.
 MARKETS_CHUNK = 500   # SQLite's default parameter limit is 999; PK IN(...) seeks per wallet
@@ -79,12 +68,10 @@ MAT_VERSION = 1
 MAT_SCHEMA = """
 -- matpos (2026-09-05): the DERIVED positions/hygiene cache — arb/whale_mat.py
 -- owns every read and write of these four objects, and its docstring is the
--- design. whale_tape.SCHEMA's `prints` stays the record (rule 7); this is a
--- cache and may be
--- dropped and rebuilt from it (`arb whale-mat --rebuild`), which is why
--- DELETE+INSERT here is not rule 9 (that binds flat_bets/bet_events in the
--- LEDGER, unreachable from this file).
--- positions_mat columns/INSERT: arb/whale_mat.py POSITION_COLS, which mirrors
+-- design. whale_tape.SCHEMA's `prints` stays the record (rule 7); this cache
+-- may be dropped and rebuilt from it (`arb whale-mat --rebuild`), which is
+-- why DELETE+INSERT here is not rule 9 (that binds flat_bets/bet_events).
+-- Columns/INSERT: arb/whale_mat_read.py POSITION_COLS, mirroring
 -- whale_score.Position field for field (kept in sync by hand, like `prints`).
 CREATE TABLE IF NOT EXISTS positions_mat (
     proxy_wallet TEXT, condition_id TEXT, outcome_index INTEGER, avg_price TEXT,
@@ -93,7 +80,7 @@ CREATE TABLE IF NOT EXISTS positions_mat (
     sold_size TEXT, sell_value TEXT);
 -- Serves BOTH the per-wallet DELETE materialize does and the full-table read
 -- score_state does in whale_score.positions_from_prints's own output order
--- (arb/whale_mat.py POSITION_ORDER), so one index covers the whole module.
+-- (arb/whale_mat_read.py POSITION_ORDER), so one index covers the module.
 CREATE INDEX IF NOT EXISTS idx_positions_mat
     ON positions_mat(proxy_wallet, condition_id, outcome_index, entry_ts);
 -- One row per flag. NULL condition_id = a WALLET-level flag (mm/wash);
@@ -105,25 +92,16 @@ CREATE INDEX IF NOT EXISTS idx_hygiene_mat ON hygiene_mat(proxy_wallet);
 -- The work queue. rowid order IS discovery order, so draining by rowid is
 -- oldest-dirty-first with no timestamp column to keep.
 CREATE TABLE IF NOT EXISTS mat_dirty (proxy_wallet TEXT PRIMARY KEY);
--- Design §5 item 5, in SQL rather than in a hook every `markets` writer would
--- have to remember: a market that gains a `sport` turns prints that scored
--- NOTHING into positions, and a `start_utc` filled or moved later changes
--- `pregame` for positions already cached. The WHEN clause is what keeps this
--- cheap — `persist_markets` rewrites every universe market every 60 s cycle,
--- and only a market whose sport/market_type/start_utc actually MOVES (`IS NOT`,
--- so NULL-safe) dirties the wallets that printed in it. MEASURED 2026-09-05 on
--- a synthetic 800k-print / 2,000-market tape: that no-op 60 s rewrite of 1,000
--- markets fires nothing and costs 0.00 s.
--- ponytail: the DISTINCT below runs on idx_prints_market(condition_id, ts),
--- which does NOT cover proxy_wallet, so each matching print costs a rowid
--- lookup — 46 s for a REAL re-map of 1,000 markets on that same synthetic tape
--- (400 prints/market; the production tape averages ~55, so ~7x cheaper). That
--- lands in the whale-backfill child (900 s cap, 600 s cadence, ~180 s margin),
--- never in the 60 s lane, and only when a mapping actually changes. If a
--- legacy re-map ever makes it bind, the upgrade is a covering
--- prints(condition_id, proxy_wallet) index — deliberately NOT added now: a
--- fifth index on the hottest write table (~1M inserts/day) to speed up a rare
--- path is the wrong trade.
+-- Design §5 item 5, in SQL rather than a hook every `markets` writer would
+-- have to remember: a market gaining a `sport` turns scoreless prints into
+-- positions, and a moved `start_utc` changes `pregame` for cached positions.
+-- The WHEN clause (`IS NOT`, NULL-safe) is what keeps `persist_markets`'
+-- 60 s universe rewrite cheap: MEASURED 2026-09-05, a no-op re-check of 1,000
+-- markets costs 0.00 s; a REAL re-map of 1,000 costs 46 s (uncovered DISTINCT
+-- scan below) — lands in the whale-backfill child (900 s cap, 600 s cadence),
+-- never the 60 s lane, and only when a mapping actually changes. ponytail: a
+-- covering prints(condition_id, proxy_wallet) index would cut that, deliberately
+-- not added — a 5th index on the hottest write table for a rare path.
 CREATE TRIGGER IF NOT EXISTS trg_markets_mat_update AFTER UPDATE ON markets
     WHEN NEW.sport IS NOT OLD.sport OR NEW.market_type IS NOT OLD.market_type
          OR NEW.start_utc IS NOT OLD.start_utc
@@ -163,16 +141,10 @@ PRINT_ORDER = "ORDER BY proxy_wallet, condition_id, outcome_index, ts"
 MARKET_COLS = ("condition_id, sport, market_type, line, start_utc, event_key,"
                " tokens_json, slug")
 
-# `positions_mat` IS the Position dataclass, in its field order.
-POSITION_COLS = ("proxy_wallet, condition_id, outcome_index, avg_price, size,"
-                 " notional_usd, entry_ts, last_ts, pregame, sport, market_type,"
-                 " root, source, sold_size, sell_value")
-# The order positions_from_prints itself produced: SQLite hands prints back in
-# PRINT_ORDER, so groups were visited in (wallet, cid, outcome_index) order and
-# a group's windows appended in ts order. Same collation (BINARY / UTF-8 bytes
-# == code points), so this reproduces that list exactly — order matters because
-# the equivalence tests compare `state.positions` as a LIST.
-POSITION_ORDER = "ORDER BY proxy_wallet, condition_id, outcome_index, entry_ts"
+# `POSITION_COLS` (`positions_mat` IS the Position dataclass, in its field
+# order) lives in whale_mat_read.py — imported above — since it also shapes
+# that module's `load_positions` SELECT; `_wallet` below reuses the same
+# constant for its INSERT so the two can never drift apart on column order.
 
 
 class _PrintRow(Mapping):
@@ -326,89 +298,3 @@ def materialize(con, cfg, now, cap=None) -> dict:
     con.commit()
     res["secs"] = round(time.monotonic() - t0, 3)
     return res
-
-
-def cache_partial(con) -> bool:
-    """True while a FULL rebuild is still draining — `--rebuild`, a
-    `MAT_VERSION` bump, or the first fill of an empty cache. NOT "some wallets
-    are dirty": in steady state a few always are and every other wallet is
-    present, so the population is the tape's.
-
-    It matters because V5's bar is a PERCENTILE of the materialized population
-    (arb/whale_elite.py): a partial population does not merely under-count, it
-    can ADMIT a whale the full one denies. The lane hands this to
-    `whale_signal.evaluate`, which pins V5 `cache-partial`. Measurement and
-    registration: KNOWN_ISSUES.md #34, "Correction 2026-09-05".
-    """
-    if str(_meta(con, "mat_rebuilding") or "0") != "1":
-        return False
-    return bool(con.execute("SELECT EXISTS(SELECT 1 FROM mat_dirty)").fetchone()[0])
-
-
-def freshness(con, cfg, now=None) -> dict:
-    """How CURRENT the cache is, for a reader that cannot make it current.
-
-    `open_tape_ro` probed that `positions_mat` EXISTS; the report, the
-    dashboard, `whale-score` and `whale-rank` then scored off it with no way
-    to tell a one-cycle-old cache from a day-old one (I2, review of 783301f).
-    Two numbers say it: prints above the materialization watermark, and how
-    long the queue has been non-empty (`mat_clean_at` is the last pass that
-    emptied it; never having emptied reads as stale — that is the first fill).
-    """
-    mat = cfg["whale"]["mat"]
-    now = now or datetime.now(timezone.utc)
-    if now.tzinfo is None:                      # every stamp on the tape is UTC
-        now = now.replace(tzinfo=timezone.utc)
-    behind = (con.execute("SELECT MAX(id) FROM prints").fetchone()[0] or 0) \
-        - int(_meta(con, "mat_watermark") or 0)
-    dirty = con.execute("SELECT COUNT(*) c FROM mat_dirty").fetchone()[0]
-    clean_at = _meta(con, "mat_clean_at")
-    secs = None if not clean_at else int(
-        (now - datetime.fromisoformat(clean_at)).total_seconds())
-    stale = bool(behind > int(mat["stale_prints"])
-                 or (dirty and (secs is None or secs > int(mat["stale_secs"]))))
-    return {"behind": behind, "dirty": dirty, "at": _meta(con, "mat_at"),
-            "dirty_secs": secs if dirty else 0, "stale": stale,
-            "note": f"cache: stale ({behind} behind, {dirty} dirty)" if stale else None}
-
-
-def warn_if_stale(con, cfg, now=None) -> dict:
-    """`freshness`, logged. Called from the ONE place every read-only reader
-    goes through (`report_whale.open_tape_ro`), so no reader can forget it.
-    ponytail: no throttle — a stale cache is an alarm state, not a steady one;
-    add one here if a dashboard poll ever floods the log."""
-    fresh = freshness(con, cfg, now)
-    if fresh["stale"]:
-        log.warning("whale positions cache is STALE: %s print(s) above the "
-                    "materialization watermark, %s wallet(s) queued, last pass "
-                    "%s. Scores read off it are computed over what the last "
-                    "cycle materialized — check the whale lane, or run "
-                    "`arb whale-mat --rebuild`.",
-                    fresh["behind"], fresh["dirty"], fresh["at"] or "never")
-    return fresh
-
-
-def load_positions(con) -> list[Position]:
-    """The cache, as `positions_from_prints` would have returned it."""
-    cur = con.cursor()
-    cur.row_factory = None
-    return [Position(
-        wallet=r[0], condition_id=r[1], outcome_index=r[2], avg_price=Decimal(r[3]),
-        size=Decimal(r[4]), notional_usd=Decimal(r[5]), entry_ts=r[6], last_ts=r[7],
-        pregame=bool(r[8]), sport=r[9], market_type=r[10], root=r[11], source=r[12],
-        sold_size=Decimal(r[13]), sell_value=Decimal(r[14]))
-        for r in cur.execute(f"SELECT {POSITION_COLS} FROM positions_mat {POSITION_ORDER}")]
-
-
-def load_hygiene(con) -> Hygiene:
-    """The cache, as `hygiene_flags` would have returned it. A wallet with no
-    flags simply has no row — `Hygiene.excludes` reads a missing key and an
-    empty set the same way, so this is the same object for every caller."""
-    wallets: dict[str, set[str]] = {}
-    markets: dict[tuple[str, str], set[str]] = {}
-    for wallet, cid, flag in con.execute(
-            "SELECT proxy_wallet, condition_id, flag FROM hygiene_mat"):
-        target = wallets.setdefault(wallet, set()) if cid is None \
-            else markets.setdefault((wallet, cid), set())
-        target.add(flag)
-    return Hygiene(wallets=wallets, markets=markets)

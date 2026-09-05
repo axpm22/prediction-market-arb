@@ -19,6 +19,10 @@ from decimal import Decimal
 from arb import metrics, regrade
 from arb.markout import HORIZONS
 from arb.models import q6
+# realized_pnl/exits_recent (dashboard headline strip) split out on size
+# (2026-09-05) to arb/whale_pnl.py, along with SETTLED_SQL — every existing
+# `from arb.whale_metrics import ...` caller keeps working via this re-export.
+from arb.whale_pnl import SETTLED_SQL, exits_recent, realized_pnl  # noqa: F401
 
 # The two PREGAME horizons §12 names, straight off arb/markout.py's own tuple
 # (30, 120, 600, 1800) — no second copy of the numbers to drift out of sync.
@@ -31,10 +35,6 @@ UB90, LB80 = (0.10, 0.90), (0.20, 0.80)     # one-sided percentile pairs (§12)
 # kill rules, and "rows from different roots are never pooled". Every table
 # below is therefore keyed by root before it is keyed by anything else.
 SPORTS_ROOT = "sports"
-SETTLED_SQL = """
-    SELECT b.* FROM flat_bets b WHERE b.kind='WHALE' AND EXISTS
-      (SELECT 1 FROM bet_events e WHERE e.bet_id=b.id AND e.kind='settled')
-    ORDER BY b.id"""
 
 
 def _d(v) -> Decimal:
@@ -90,40 +90,6 @@ def roi_rows(store) -> list[dict]:
         out.append({"root": bet["category"] or "-",
                     "variant": bet["variant"] or "-", "event_key": bet["event_key"],
                     "signal_id": bet["signal_id"], "roi": pnl / stake, "bet": bet})
-    return out
-
-
-def realized_pnl(store) -> dict:
-    """Σ dollar pnl over every settled WHALE bet row — every sizing variant
-    (V*/flat, V*/conf, V*/kelly) is its own real paper stake, so all three
-    count, unlike `roi_rows`' per-$1 ROI (grouped by root/variant for the CI
-    tables below). The dashboard headline strip's first tile (2026-09-05);
-    ledger-only, no tape, so deterministic per day like everything else here."""
-    total, n = Decimal(0), 0
-    for r in store.query(SETTLED_SQL):
-        pnl = metrics.bet_pnl_optimistic(store, dict(r))
-        if pnl is None:
-            continue
-        total += pnl
-        n += 1
-    return {"realized": q6(total), "realized_n": n}
-
-
-def exits_recent(store, since) -> dict:
-    """{"flip": n, "left": n} WHALE exits since `since` — the headline strip's
-    24h count. `exit_stats` below is the cumulative, per-root/reason table;
-    this is a cheap separate windowed read of the same source column (a 24h
-    count needs no root split)."""
-    out = {"flip": 0, "left": 0}
-    for r in store.query(
-            """SELECT be.payload_json FROM bet_events be JOIN flat_bets b
-                 ON b.id = be.bet_id
-                WHERE b.kind='WHALE' AND be.kind='settled' AND be.created_at >= ?""",
-            (since.isoformat(),)):
-        source = str(json.loads(r["payload_json"]).get("source") or "")
-        if source.startswith("exit:"):
-            reason = source.split(":", 1)[1]
-            out[reason] = out.get(reason, 0) + 1
     return out
 
 

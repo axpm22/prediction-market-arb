@@ -762,6 +762,23 @@ def test_whale_md_ignores_the_new_realized_pnl_frame_field(whale_cfg, tmp_path):
     assert report_whale.whale_md(frame) == report_whale.whale_md(stripped)
 
 
+def test_whale_md_ignores_the_exits_24h_frame_field(whale_cfg, tmp_path):
+    """frame['exits_24h'] (headline strip's 24h exit count, arb/whale_pnl.py
+    `exits_recent`) is a LIVE figure like `pnl` above — whale_md must keep
+    printing exactly what it printed before this field existed, so
+    write_daily's hashed markdown (rule 9's chain) is unaffected by it."""
+    store = Store(tmp_path / "t.sqlite")
+    _whale_row(store, "V2/flat", 1, "pm:a", pnl="1.50", stake="1")
+
+    frame = report_whale.whale_frame(whale_cfg, store, now=NOW)
+    # _whale_row's settled event is always source "exit:flip" (test_whale_report.py)
+    assert frame["exits_24h"] == {"flip": 1, "left": 0}   # the field really is there
+
+    stripped = dict(frame)
+    del stripped["exits_24h"]
+    assert report_whale.whale_md(frame) == report_whale.whale_md(stripped)
+
+
 def test_full_mode_keeps_todays_layout(tmp_path):
     cfg = _cfg()
     cfg["dashboard"]["mode"] = "full"
@@ -955,6 +972,24 @@ def test_whale_mode_helpers_moved_to_dashboard_mode_and_dashboard_py_stays_lean(
     assert hasattr(dashboard_mode, "WHALE_FRONT")
     assert hasattr(dashboard_mode, "whale_first")
     assert hasattr(dashboard_mode, "extract_marked")
+
+
+def test_whale_metrics_report_whale_and_whale_mat_stay_under_300_lines():
+    """Cleanup batch 2026-09-05: whale_metrics.py (330), report_whale.py
+    (309) and whale_mat.py (412) each carried a helper pair over the CLAUDE.md
+    ~300-line budget. realized_pnl/exits_recent moved to arb/whale_pnl.py,
+    open_tape_ro moved to arb/whale_tape_ro.py, and whale_mat.py's read side
+    (load_positions/load_hygiene/freshness/cache_partial/warn_if_stale) moved
+    to arb/whale_mat_read.py — each re-exported so no caller moved."""
+    for name in ("whale_metrics.py", "report_whale.py", "whale_mat.py"):
+        lines = len(Path(f"arb/{name}").read_text().splitlines())
+        assert lines <= 300, f"{name}: {lines} lines"
+    from arb import report_whale, whale_mat, whale_metrics
+    for mod, attr in ((whale_metrics, "realized_pnl"), (whale_metrics, "exits_recent"),
+                      (report_whale, "open_tape_ro"), (whale_mat, "load_positions"),
+                      (whale_mat, "load_hygiene"), (whale_mat, "freshness"),
+                      (whale_mat, "cache_partial"), (whale_mat, "warn_if_stale")):
+        assert hasattr(mod, attr)                    # re-exported, not just moved
 
 
 def test_the_page_draws_its_own_charts_and_loads_nothing_remote():
