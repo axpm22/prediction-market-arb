@@ -70,3 +70,21 @@ wallet notional decile; calendar month.
   `reports/backtest-whale-follow-2026-09-05.md`.
 - The report lists ALL 12 configs on train and test with the statistics above, the sensitivity
   tables, the diagnostics, and the limitations verbatim.
+
+## Addendum (2026-09-05 18:05Z) — descriptive read of the live-era `signals` table, NOT a test
+
+Controller query, read-only, before the historical backtest reported. 136 markets evaluated
+since 2026-09-04 14:16Z, 77 resolved (mostly MLB and tennis, one weekend). ROI/$ at the touch
+ask recorded at each (variant, market, side)'s FIRST evaluation, fees ignored, one row per pair:
+
+- everything the whales pointed at lost on average: V1 min-points −0.178 (n 83), V1 ratio
+  −0.084 (30), V6 FIRED −0.303 (11), V6 ratio +0.252 (18), V6 too-close +0.410 (5);
+- pairs that ever fired: −0.130 (n 32, 29 markets); pairs that never fired: −0.062 (92);
+- by ask band (V1): <0.30 −1.000 (7, all lost), 0.30–0.50 −0.142 (39), 0.50–0.70 −0.018 (55),
+  >0.70 −0.195 (14); by ratio band: ≥0.95 −0.168 (84), <0.60 −0.010 (19);
+- V6 by holders share: <0.67 positive on n 6, ≥0.90 −0.175 (59);
+- crude fade control (buy the other side at 1 − ask, spread ignored): +0.215 (n 115).
+
+This is 1.5 days and ≤ 69 markets: it cannot select anything. It only says the sign of
+"follow" is negative in the live era so far and "fade" is worth reading carefully in the
+historical backtest's follow-vs-fade diagnostic (already in the plan; still diagnostic-only).
