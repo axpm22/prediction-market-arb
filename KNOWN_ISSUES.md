@@ -511,6 +511,31 @@ still not re-graded.
 
 ---
 
+### 38. L14 `left` exits before 2026-09-06 were false positives — 0 of 150 backed by a sell print
+A row-level audit of **every `left` exit the lane has ever booked** (150: 110
+`left (positions)`, 40 `left (prints)`) found **not one with a SELL print
+behind it**. Median booking-to-exit was 1.0 minute and 102 of the 110 fired
+inside ten. On the 80 that have resolved the lane realised **−$2.26 against
++$23.49 had it held** (61 winners / 19 losers — broad, not a longshot
+artefact). Four independent causes, all fixed 2026-09-06 (PREREGISTRATION row
+of that date): the venue publishes a new buy ~3.9 min after the fill, so an
+absent token was read as a verified zero (82/110); a venue reading was divided
+by the PRINTS size at booking (20/110); the exit loop was not gated on
+`whale_mat.cache_partial`, so one post-rebuild cycle exited 28 bets at once
+(28/40); and `_exit` read the hygiene-FILTERED positions, so a `both_sides`
+whale that was still holding read as gone (12/40).
+
+**How to read the data:** the bet rows stand exactly as booked (rule 9,
+append-only) and are excluded from nothing — the primary metric counts an
+exited bet at its exit price either way, and the exit RULE is unchanged, so
+this is not a new population. What is not evidence is the **exit-vs-hold
+secondary comparison over 2026-09-04 → 2026-09-06**: those 150 exits say
+nothing about whales selling, and the table must be read from 2026-09-06 on.
+Two per-cycle counters now make the withheld exits visible in the cycle line —
+`exit_left_no_venue_reading` and `exit_skipped_cache_partial`.
+
+---
+
 ## The two numbers that matter most
 
 - **Tradeable P&L: $0.00/day.** Zero clean-lane positions in 49 consecutive

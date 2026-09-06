@@ -259,7 +259,46 @@ def _n_positions(con, wallet, at) -> int:
     return int(row[0] or 0) if row else 0
 
 
-def for_bet(cfg, con, ctx, now) -> dict[str, Decimal]:
+def _listed_before(con, wallet, token, at) -> bool:
+    """Did an EARLIER snapshot of this wallet list this token? (false-`left`
+    fix 2026-09-06, F1.) Only then is an absence a DISAPPEARANCE."""
+    return bool(con.execute(
+        "SELECT 1 FROM holdings WHERE proxy_wallet=? AND asset=? AND observed_at<?"
+        " LIMIT 1", (wallet, token, at)).fetchone())
+
+
+def baseline_for_bet(cfg, con, ctx, since) -> dict[str, Decimal]:
+    """`{wallet: the largest holding of the bet's token the venue has shown it
+    since `since`}` — the DENOMINATOR of the holdings `left` test, and the
+    other half of the 2026-09-06 fix (F2).
+
+    The test used to divide a venue reading by the size the PRINTS said the
+    whale held at booking. Those are two different bases and the difference
+    alone exited 20 of the 110 false `left (positions)` bets: bet 381's venue
+    reading was 400 rising to 402 for the bet's whole life against a prints
+    baseline of 1,000, bets 511/512's was 50.04 flat over eight polls against
+    550. Venue against venue, or not at all.
+
+    `since` is the bet's own `created_at`: a reading from BEFORE we booked is
+    not the position we followed (a whale that sold down and re-bought would
+    otherwise carry its old peak forever). Max rather than first reading
+    because of the same publication lag F1 exists for — the first post-booking
+    reading routinely predates the buy — and because the conservative
+    denominator is the biggest position we ever saw them hold.
+    """
+    token, out = ctx.get("token"), {}
+    if not token or not since:
+        return out
+    for wallet in wallets_of([ctx]):
+        sizes = [Decimal(r[0]) for r in con.execute(
+            "SELECT size FROM holdings WHERE proxy_wallet=? AND asset=?"
+            " AND observed_at>=?", (wallet, token, since))]
+        if sizes:
+            out[wallet] = max(sizes)
+    return out
+
+
+def for_bet(cfg, con, ctx, now, res=None) -> dict[str, Decimal]:
     """`{wallet: contracts of the bet's token it holds NOW}` for the signal
     whales on the bet's own side — what §9's second `left` test compares
     against the size they held at booking.
@@ -271,6 +310,18 @@ def for_bet(cfg, con, ctx, now) -> dict[str, Decimal]:
 
     A wallet that IS fresh but whose snapshot no longer lists the token holds
     zero of it — a reading, not an absence, and the one this rule exists for.
+    "No longer" is the whole of it (false-`left` fix 2026-09-06, F1): the
+    venue lists a new buy only after a lag — median 3.9 min, max 5.7, measured
+    over this tape's own `holdings_snapshots` against its prints — so the
+    freshest snapshot of a whale we followed a minute ago routinely PREDATES
+    that whale's own buy print, and reading its absence as a verified zero
+    exited 82 of 110 `left (positions)` bets, none of which had a SELL print
+    behind them (bet 363: booked 21:25:41Z, exited 21:26:41Z on a snapshot
+    taken 21:22:41Z, the venue showing 22,027 and RISING at 21:27:41Z). So a
+    zero needs a DISAPPEARANCE: some earlier snapshot of that same wallet must
+    have listed the token. Absent from the start is no reading, exactly like
+    the stale and never-polled cases, and is counted in `res` for the audit.
+
     Since the 2026-09-04 retention addendum "no rows stored" no longer implies
     "held nothing": rows outside `markets` are dropped, so the page's own
     `n_positions` (`holdings_snapshots`) is what separates the two readings.
@@ -306,7 +357,11 @@ def for_bet(cfg, con, ctx, now) -> dict[str, Decimal]:
             continue                                        # empty page: no reading
         if token in held:
             out[wallet] = Decimal(held[token])
-        elif _meta(con, PARTIAL + wallet) != at:
-            out[wallet] = Decimal(0)                         # fresh full read: a real zero
-        # else: partial snapshot, token may be unread — no reading, fall back to prints
+        elif (_meta(con, PARTIAL + wallet) != at
+                and _listed_before(con, wallet, token, at)):
+            out[wallet] = Decimal(0)                         # gone from a page that had it
+        elif res is not None:
+            # no reading: partial snapshot (the token may be on an unfetched
+            # page) or the venue has never listed it (the buy has not landed).
+            res["exit_left_no_venue_reading"] = res.get("exit_left_no_venue_reading", 0) + 1
     return out

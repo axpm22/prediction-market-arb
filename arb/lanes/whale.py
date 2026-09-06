@@ -98,6 +98,11 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
     res = {"status": "disabled", "markets": 0, "prints": 0, "bad_rows": 0,
            "wallets": 0, "hygiene_excluded": 0, "signals_evaluated": 0, "fired": 0,
            "suppressed": {}, "booked": 0, "exited": 0, "exit_no_bid": 0,
+           # the two `left` suppressions of the 2026-09-06 fix, on the cycle
+           # line so the audit can watch what the old rules would have exited:
+           # (bet, wallet) pairs the venue has no reading for, and bets whose
+           # `left` was not evaluated because the positions cache is partial.
+           "exit_left_no_venue_reading": 0, "exit_skipped_cache_partial": 0,
            "quotes_rows": 0, "market_errors": 0, "label_collision": 0, "poll_id": None,
            "mat": {},
            "holdings": {}}
@@ -270,12 +275,22 @@ def run_whale_cycle(cfg, store, con, now, get=get_json, fetch=fetch_books) -> di
 
     # 9: exits, on the books this cycle already fetched. A V5 bet is re-read
     # against THIS cycle's elite bar, from the same index the signals used.
+    # `partial` gates the `left` rules (false-`left` fix 2026-09-06, F3): the
+    # cycle that rebuilt this cache read the half-filled population as "every
+    # whale left" and exited 28 bets at once. `state.positions` — UNFILTERED —
+    # is what those rules read (F4): hygiene decides who votes, not who holds.
+    if partial and bets:
+        res["exit_skipped_cache_partial"] = len(bets)
+        log.warning("whale exits: `left` not evaluated for %d open bet(s) — the "
+                    "positions cache is still rebuilding, so an absent position "
+                    "is no reading", len(bets))
     for bet in bets:
         ctx = ctxs[bet["id"]]
         mk = tape_markets.get(ctx["condition_id"], {}) if ctx else {}
         _exit(cfg, store, con, bet, ctx, open_pos, lookup, books, venue_ok, now,
               res, ranked, tokens, volumes,
-              elite(mk.get("sport"), mk.get("market_type")))
+              elite(mk.get("sport"), mk.get("market_type")),
+              all_pos=state.positions, cache_partial=partial)
     whale_elite.persist(con, elite, cfg, now)
 
     # collector health for the daily report (§12): `polls` has no column for a
@@ -320,18 +335,26 @@ def _persist(cfg, store, rows, cands, on_table, venue_ok, latency_ms, now) -> in
 
 
 def _exit(cfg, store, con, bet, ctx, open_pos, lookup, books, venue_ok, now, res,
-          ranked, tokens, volumes, elite_cut=None) -> None:
+          ranked, tokens, volumes, elite_cut=None, all_pos=None,
+          cache_partial=False) -> None:
     """§9 for one open bet. `exit_reason` returns None post-start (a bet is
     held to resolution then), so there is nothing extra to re-check here. A V6
     bet is re-read against THIS cycle's market — the books just fetched and the
     volume the signals above used (§7 V6, 2026-09-04) — and a V5 bet against
-    this cycle's elite cutoff for its own bucket (§7 V5)."""
+    this cycle's elite cutoff for its own bucket (§7 V5).
+
+    The holdings `left` test reads two facts off the tape (2026-09-06): what
+    the venue says the whales hold NOW, and the most it ever showed them
+    holding SINCE THIS BET WAS BOOKED — never the prints size, which is a
+    different basis."""
     if ctx is None:
         return
     cid = ctx["condition_id"]
     decision = whale_exit.exit_reason(
         ctx, open_pos, lookup, now, cfg, ranked,
-        holdings=whale_holdings.for_bet(cfg, con, ctx, now),
+        holdings=whale_holdings.for_bet(cfg, con, ctx, now, res),
+        holdings_base=whale_holdings.baseline_for_bet(cfg, con, ctx, bet["created_at"]),
+        all_positions=all_pos, cache_partial=cache_partial,
         market_ctx={"volume": whale_dominance.market_volume(volumes, tokens, cid),
                     "elite": elite_cut,
                     "ask": {s: t.ask for s, t in _touch(books, tokens, cid).items()}})

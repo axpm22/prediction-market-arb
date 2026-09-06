@@ -21,7 +21,9 @@ class ExitDecision:
 
 
 def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
-                ranked=frozenset(), holdings=None, market_ctx=None) -> ExitDecision | None:
+                ranked=frozenset(), holdings=None, market_ctx=None,
+                holdings_base=None, all_positions=None,
+                cache_partial=False) -> ExitDecision | None:
     """`bet_ctx` is what the lane stored at booking: variant, side,
     condition_id, start_utc and the contributing `whales` (wallet, lb,
     open_size — a `Signal.whales` list is exactly this shape).
@@ -33,9 +35,27 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
 
     `holdings` is `{wallet: contracts held now}` from the venue's own
     `positions?user=` (arb/whale_holdings.for_bet), for the second `left`
-    test. A wallet absent from it has no fresh reading and keeps its
-    prints-based size; None or empty disables that test entirely. This module
-    stays pure — the tape read and the staleness bound live in the caller.
+    test, and `holdings_base` is `{wallet: the most that venue ever showed it
+    holding since we booked}` (arb/whale_holdings.baseline_for_bet) — the
+    denominator that test divides by. A wallet missing from EITHER keeps its
+    prints-based size on BOTH sides of the comparison, so the venue is never
+    weighed against the prints (false-`left` fix 2026-09-06, F2); None or
+    empty disables that test entirely. This module stays pure — the tape read
+    and the staleness bound live in the caller.
+
+    `all_positions` is the UNFILTERED positions (hygiene applied or not) and
+    is what the `left` test and the "is this whale still here" gate below
+    read; `open_positions_now` stays hygiene-filtered and is what the `flip`
+    consensus counts. Hygiene decides who VOTES, not who still HOLDS — a
+    whale whose opposite-side buy trips `both_sides` vanishes from the
+    filtered list while holding every contract we followed, and reading that
+    as a sale exited 12 of the 40 prints-path bets (F4, bet 351).
+
+    `cache_partial` is `whale_mat.cache_partial` — true while a full rebuild
+    of the positions cache is still draining. The `left` tests are then not
+    evaluated at all (F3): the first cycle after a rebuild read an unfilled
+    cache as "every whale left" and exited 28 bets at once. A partial
+    population is no reading for an exit, exactly as it is for V5's bar.
 
     `market_ctx` is the market context for THIS cycle — V6's `volume` and
     current `ask` per side from the lane's own books (arb/whale_dominance.py),
@@ -83,7 +103,8 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
     for x in bet_ctx["whales"]:
         if x.get("side", side) == side:
             booked[x["wallet"]] = booked.get(x["wallet"], Decimal(0)) + d(x["open_size"])
-    merged_now = merge_windows(cid, open_positions_now, d(cfg["whale"]["min_print_usd"]), now, cfg)
+    holders = open_positions_now if all_positions is None else all_positions
+    merged_now = merge_windows(cid, holders, d(cfg["whale"]["min_print_usd"]), now, cfg)
     open_now = {w: Decimal(0) for w in booked}
     notional_now = {}
     for (wallet, s), m in merged_now.items():
@@ -92,8 +113,8 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
             notional_now[wallet] = m["notional"]
     held_then = sum(booked.values(), Decimal(0))
     held_now = sum(open_now.values(), Decimal(0))
-    sold_out = (1 - d(ex["sold_fraction"])) * held_then
-    if held_now <= sold_out:
+    keep = 1 - d(ex["sold_fraction"])
+    if not cache_partial and held_now <= keep * held_then:
         return ExitDecision("left", {"open_now": q6(held_now),
                                      "open_at_booking": q6(held_then),
                                      "via": "prints"})
@@ -104,12 +125,20 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
     # wallet's current book. A wallet with no fresh snapshot keeps its
     # prints-based size, so a stale reading never exits a position — it just
     # leaves this test as weak as the prints-only one it extends.
-    if holdings:
-        held_venue = sum((d(holdings.get(w, open_now.get(w, Decimal(0))))
+    # Correctness fix 2026-09-06 (F2): each wallet is compared against ITS OWN
+    # basis — the venue's earlier reading if the venue has answered for it,
+    # the prints on both sides if it has not. The old sum divided a venue
+    # numerator by a prints denominator, which is not a fraction of anything.
+    base = holdings_base or {}
+    read = {w for w in booked if w in holdings and w in base} if holdings else set()
+    if read and not cache_partial:
+        held_venue = sum((d(holdings[w]) if w in read else open_now.get(w, Decimal(0))
                           for w in booked), Decimal(0))
-        if held_venue <= sold_out:
+        base_venue = sum((d(base[w]) if w in read else booked[w] for w in booked),
+                         Decimal(0))
+        if base_venue > 0 and held_venue <= keep * base_venue:
             return ExitDecision("left", {"open_now": q6(held_venue),
-                                         "open_at_booking": q6(held_then),
+                                         "open_at_booking": q6(base_venue),
                                          "via": "positions"})
 
     # confidence: the whales are still here, their scores are not. Their print
@@ -120,7 +149,7 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
         wallet = x["wallet"]
         if x.get("sybil_dropped") or open_now.get(wallet, Decimal(0)) <= 0:
             continue
-        score = score_lookup(wallet, *_bucket(open_positions_now, cid, wallet))
+        score = score_lookup(wallet, *_bucket(holders, cid, wallet))
         if score is None:
             continue
         cur = {"wallet": wallet, "lb": score.lb, "score": score,

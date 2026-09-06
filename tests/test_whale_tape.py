@@ -2267,16 +2267,66 @@ def test_holdings_a_wallet_polled_within_the_cadence_is_not_polled_again(tmp_pat
     assert (soon["calls"], due["calls"]) == (0, 1)
 
 
-def test_holdings_for_bet_reads_the_freshest_snapshot_and_zeroes_a_missing_token(tmp_path):
+def test_holdings_for_bet_reads_the_freshest_snapshot(tmp_path):
     con = _holdings_tape(tmp_path)
     get = FakeGet([_position_row("0xw0", 400)], [_position_row("0xw1", 900, asset="tokno", idx=1)])
     whale_holdings.poll_holdings(_cfg(), con, ["0xw0", "0xw1"], NOW, get=get)
 
     held = whale_holdings.for_bet(_cfg(), con, _ctx(["0xw0", "0xw1"]), NOW)
 
-    # w0 holds 400 of the bet's token; w1 was polled and no longer holds it at
-    # all — a fresh reading of zero, not an absent one.
-    assert held == {"0xw0": Decimal("400.000000"), "0xw1": Decimal(0)}
+    # w0 holds 400 of the bet's token. w1 was polled and its page does not list
+    # the token — but no page ever did, so that is the venue not having caught
+    # up with w1's buy, not w1 selling out (false-left fix 2026-09-06, below).
+    assert held == {"0xw0": Decimal("400.000000")}
+
+
+def test_holdings_a_token_no_earlier_snapshot_listed_is_no_reading(tmp_path):
+    """False-`left` investigation 2026-09-06 (F1, 82 of 110 `left (positions)`
+    exits, 0 of which had a SELL print): `positions?user=` lists a new buy only
+    after a lag — median 3.9 min, max 5.7 measured — so the freshest snapshot
+    of a whale we have just followed routinely PREDATES its own buy print. A
+    token absent from it is the venue not having caught up, not a verified
+    zero. A zero is a DISAPPEARANCE: some EARLIER snapshot of that same wallet
+    has to have listed the token."""
+    con, cfg, ctx = _holdings_tape(tmp_path), _cfg(), _ctx(["0xw0"])
+    other = [_position_row("0xw0", 10, asset="tokother", idx=1)]
+    cadence = int(cfg["whale"]["exit"]["holdings_poll_secs"])
+
+    # 1: never listed -> no reading, and the suppression is counted for the audit
+    whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW, get=FakeGet(other))
+    res = {}
+    assert whale_holdings.for_bet(cfg, con, ctx, NOW, res=res) == {}
+    assert res["exit_left_no_venue_reading"] == 1
+
+    # 2: the buy finally shows up
+    t1 = NOW + timedelta(seconds=cadence)
+    whale_holdings.poll_holdings(cfg, con, ["0xw0"], t1,
+                                 get=FakeGet([_position_row("0xw0", 400)]))
+    assert whale_holdings.for_bet(cfg, con, ctx, t1) == {"0xw0": Decimal("400.000000")}
+
+    # 3: gone from a page that listed it before — NOW it is a real zero
+    t2 = t1 + timedelta(seconds=cadence)
+    whale_holdings.poll_holdings(cfg, con, ["0xw0"], t2, get=FakeGet(other))
+    assert whale_holdings.for_bet(cfg, con, ctx, t2) == {"0xw0": Decimal(0)}
+
+
+def test_holdings_baseline_is_the_biggest_post_booking_venue_reading(tmp_path):
+    """F2 (2026-09-06): the denominator of a holdings-based `left` is the
+    VENUE's own earlier reading of the same token, never the prints size the
+    bet was booked on — the two are different bases and 20 of 110 false exits
+    were nothing but that difference. Readings from before the bet was booked
+    are not the position we followed and do not count."""
+    con, cfg, ctx = _holdings_tape(tmp_path), _cfg(), _ctx(["0xw0"])
+    cadence = int(cfg["whale"]["exit"]["holdings_poll_secs"])
+    booked_at = NOW + timedelta(seconds=cadence)
+    for i, size in enumerate([900, 400, 402]):        # pre-booking 900, then ours
+        whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW + timedelta(seconds=cadence * i),
+                                     get=FakeGet([_position_row("0xw0", size)]))
+
+    base = whale_holdings.baseline_for_bet(cfg, con, ctx, booked_at.isoformat())
+
+    assert base == {"0xw0": Decimal("402.000000")}    # max of 400/402, not 900
+    assert whale_holdings.baseline_for_bet(cfg, con, ctx, None) == {}
 
 
 def test_holdings_older_than_the_max_age_are_ignored_not_believed(tmp_path):
@@ -2374,15 +2424,24 @@ def test_holdings_a_page_holding_none_of_our_markets_is_still_a_real_zero(tmp_pa
     """The summary row is what keeps `for_bet`'s three-way reading intact once
     the rows are filtered: a wallet whose page held 300 positions, none of them
     in a market we track, has been READ and genuinely holds none of the bet's
-    token — a zero, not an absence. Only an EMPTY page is no reading."""
+    token — a zero, not an absence. Only an EMPTY page is no reading.
+
+    Since the false-`left` fix (2026-09-06) that zero also needs an earlier
+    snapshot that DID list the token, so the first poll here is the one that
+    saw it and the second is the disappearance."""
     con = _holdings_tape(tmp_path)
     page = [_position_row("0xw0", 10, asset=f"f{i}", cid=f"0xuntracked{i}")
             for i in range(300)]
+    cadence = int(_cfg()["whale"]["exit"]["holdings_poll_secs"])
+    whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW,
+                                 get=FakeGet([_position_row("0xw0", 400)]))
+    later = NOW + timedelta(seconds=cadence)
 
-    whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], NOW, get=FakeGet(page))
+    whale_holdings.poll_holdings(_cfg(), con, ["0xw0"], later, get=FakeGet(page))
 
-    assert con.execute("SELECT COUNT(*) FROM holdings").fetchone()[0] == 0
-    assert whale_holdings.for_bet(_cfg(), con, _ctx(["0xw0"]), NOW) == {"0xw0": Decimal(0)}
+    assert con.execute("SELECT COUNT(*) FROM holdings WHERE observed_at=?",
+                       (later.isoformat(),)).fetchone()[0] == 0
+    assert whale_holdings.for_bet(_cfg(), con, _ctx(["0xw0"]), later) == {"0xw0": Decimal(0)}
 
 
 # --- holdings retention fix (2026-09-05): tracked set is the LANE's, not ----
@@ -2452,13 +2511,19 @@ def test_holdings_universe_mode_a_page_with_none_of_the_tracked_set_still_summar
     cfg["whale"]["exit"] = {**cfg["whale"]["exit"], "holdings_keep": "universe"}
     page = [_position_row("0xw0", 10, asset=f"f{i}", cid=f"0xuntracked{i}")
             for i in range(300)]
+    cadence = int(cfg["whale"]["exit"]["holdings_poll_secs"])
+    whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW, {MAKER_CID},
+                                 get=FakeGet([_position_row("0xw0", 400)]))
+    later = NOW + timedelta(seconds=cadence)
 
-    whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW, {MAKER_CID}, get=FakeGet(page))
+    whale_holdings.poll_holdings(cfg, con, ["0xw0"], later, {MAKER_CID}, get=FakeGet(page))
 
-    assert con.execute("SELECT COUNT(*) FROM holdings").fetchone()[0] == 0
-    summary = con.execute("SELECT * FROM holdings_snapshots").fetchone()
+    assert con.execute("SELECT COUNT(*) FROM holdings WHERE observed_at=?",
+                       (later.isoformat(),)).fetchone()[0] == 0
+    summary = con.execute("SELECT * FROM holdings_snapshots WHERE observed_at=?",
+                          (later.isoformat(),)).fetchone()
     assert (summary["n_positions"], summary["partial"]) == (300, 0)
-    assert whale_holdings.for_bet(cfg, con, _ctx(["0xw0"]), NOW) == {"0xw0": Decimal(0)}
+    assert whale_holdings.for_bet(cfg, con, _ctx(["0xw0"]), later) == {"0xw0": Decimal(0)}
 
 
 # --- holdings paging fix (2026-09-04): a full page keeps going ---------------

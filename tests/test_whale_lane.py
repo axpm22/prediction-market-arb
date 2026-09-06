@@ -766,22 +766,89 @@ def _holding(wallet, size, asset=YES_TOK):
 def test_the_whales_holdings_falling_exits_the_bet_via_positions(cfg, tmp_path):
     """Item C of the L14 amendment (2026-09-04), end to end: no new print of
     any kind — under the tape alone the three signal whales still hold every
-    contract they bought — but data-api says they hold 400 of 1,000 each. A
-    whale that leaves through a resting order is what this rule is for."""
+    contract they bought — but data-api says they have sold three quarters of
+    what it saw them holding. A whale that leaves through a resting order is
+    what this rule is for.
+
+    Corrected 2026-09-06 (F1/F2): the FIRST venue reading after booking is the
+    baseline, never evidence of a sale. It used to be enough for this test that
+    the venue said 400 against prints of 1,000 — which is bet 381's shape, one
+    of the 110 `left (positions)` exits that had no SELL print behind it. The
+    sale has to show up as the venue's own reading FALLING."""
     store, con = _ledger(tmp_path), _tape(tmp_path)
     _run(cfg, store, con)
-    holdings = {f"w{i}": [_holding(f"w{i}", 400)] for i in range(3)}
-    res = _run(cfg, store, con, now=NOW + timedelta(seconds=60), rows=[],
-               positions=holdings)
+    cadence = int(cfg["whale"]["exit"]["holdings_poll_secs"])
+    first = _run(cfg, store, con, now=NOW + timedelta(seconds=60), rows=[],
+                 positions={f"w{i}": [_holding(f"w{i}", 400)] for i in range(3)})
+
+    assert first["exited"] == 0                      # a first reading is a baseline
+    assert first["holdings"]["wallets"] == 3 and first["holdings"]["rows"] == 3
+
+    res = _run(cfg, store, con, now=NOW + timedelta(seconds=60 + cadence), rows=[],
+               positions={f"w{i}": [_holding(f"w{i}", 100)] for i in range(3)})
 
     assert res["exited"] == 6                        # V1 and V6, three sizings each
-    assert res["holdings"]["wallets"] == 3 and res["holdings"]["rows"] == 3
     payload = json.loads(_events(store)[0]["payload_json"])
     assert payload["source"] == "exit:left"
     assert payload["detail"]["via"] == "positions"
-    assert payload["detail"]["open_now"] == "1200.000000"
-    # rule 7: the snapshot that justified the exit is on the tape
-    assert con.execute("SELECT COUNT(*) FROM holdings").fetchone()[0] == 3
+    assert payload["detail"]["open_now"] == "300.000000"
+    assert payload["detail"]["open_at_booking"] == "1200.000000"   # venue, not prints
+    # rule 7: the snapshots that justified the exit are on the tape
+    assert con.execute("SELECT COUNT(*) FROM holdings").fetchone()[0] == 6
+
+
+def test_a_token_the_venue_has_not_listed_yet_does_not_exit_the_bet(cfg, tmp_path):
+    """F1 end to end (2026-09-06): `positions?user=` lists a new buy a median
+    3.9 min after the fill, so the freshest snapshot of a whale we followed a
+    minute ago predates its own buy. The wallet IS on the page — holding
+    something else — so this is not the empty-page case; the bet's token is
+    simply not there yet, and reading that as a verified zero is what exited
+    82 of 110 bets with no SELL print behind any of them."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+    other = {f"w{i}": [_holding(f"w{i}", 900, asset=NO_TOK)] for i in range(3)}
+
+    res = _run(cfg, store, con, now=NOW + timedelta(seconds=60), rows=[],
+               positions=other)
+
+    assert res["exited"] == 0
+    assert res["exit_left_no_venue_reading"] == 18   # 6 open bets x 3 whales
+
+
+def test_no_exit_is_evaluated_while_the_positions_cache_is_still_rebuilding(cfg, tmp_path):
+    """F3 (2026-09-06): the exit loop was not gated on `whale_mat.cache_partial`
+    — the value the same cycle already computes for V5 — so the first cycle
+    after a full cache rebuild saw an empty positions cache, read it as "every
+    whale left" and exited 28 bets at once. A partial population is no reading
+    for an exit exactly as it is for a percentile bar."""
+    from arb import whale_mat
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+    cfg["whale"]["mat"]["max_wallets_per_cycle"] = 1   # 3 whales: cannot drain
+    con.execute("DELETE FROM positions_mat")           # the first fill of an empty cache
+    whale_mat.mark_all_dirty(con)
+
+    res = _run(cfg, store, con, now=NOW + timedelta(seconds=60), rows=[])
+
+    assert whale_mat.cache_partial(con)
+    assert res["exited"] == 0 and res["exit_skipped_cache_partial"] == 6
+
+
+def test_a_hygiene_excluded_whale_is_still_holding_not_gone(cfg, tmp_path):
+    """F4 (2026-09-06, bet 351): `_exit` was handed the hygiene-FILTERED
+    positions, so a whale whose opposite-outcome buy trips `both_sides` (its
+    maker legs reach the tape under `taker_only: false`) disappeared from the
+    list while it was still holding every contract we followed — and the
+    `left` test read that as a sale. Hygiene decides who VOTES, not who still
+    HOLDS."""
+    store, con = _ledger(tmp_path), _tape(tmp_path)
+    _run(cfg, store, con)
+    both = [_trade(w, idx=1, size="800", age=60, tx=f"0x{w}no") for w in ("w0", "w1")]
+
+    res = _run(cfg, store, con, now=NOW + timedelta(seconds=60), rows=both)
+
+    assert res["hygiene_excluded"] == 4               # w0/w1, both outcomes
+    assert res["exited"] == 0                         # ... and both still hold
 
 
 def test_holdings_are_polled_only_for_the_wallets_behind_an_open_bet(cfg, tmp_path):

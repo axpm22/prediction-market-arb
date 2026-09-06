@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from arb import report_whale, whale_elite, whale_exit, whale_holdings
+from arb import report_whale, whale_elite, whale_exit, whale_holdings, whale_mat
 from arb.lanes.whale_book import _bet_ctx
 from arb.whale_state import score_state
 
@@ -118,8 +118,14 @@ def whale_positions(cfg, store, bets, now, con=None, state=None) -> dict[int, di
                 # the same second `left` reading the lane runs (§9 item C,
                 # 2026-09-04) — read-only, off the snapshots the lane polled,
                 # so the panel cannot say "held" about a bet the next cycle
-                # exits on the venue's own holdings
-                holdings=whale_holdings.for_bet(cfg, con, ctx, now))
+                # exits on the venue's own holdings. Same two corrections as
+                # the lane (2026-09-06): the venue's own baseline since this
+                # bet was booked, and the UNFILTERED positions for `left`.
+                holdings=whale_holdings.for_bet(cfg, con, ctx, now),
+                holdings_base=whale_holdings.baseline_for_bet(
+                    cfg, con, ctx, bet["created_at"]),
+                all_positions=state.positions,
+                cache_partial=whale_mat.cache_partial(con))
             out[bet["id"]] = {
                 "signal_id": bet["signal_id"], "variant": ctx["variant"],
                 "side": ctx["side"], "condition_id": ctx["condition_id"],

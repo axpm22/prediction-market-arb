@@ -296,12 +296,18 @@ def test_left_exits_are_broken_down_by_the_reading_that_fired_them(cfg, tmp_path
     """Item D of the L14 amendment (2026-09-04): `left` has two readings now —
     the print tape and the venue's own `positions?user=` — and the
     pre-registered exit-vs-hold table has to say which one fired, or the two
-    can never be compared against the hold counterfactual separately."""
+    can never be compared against the hold counterfactual separately.
+
+    Two holdings polls since the false-`left` fix (2026-09-06): the first
+    reading is the venue's own baseline for these whales, the second is the
+    sale. One reading is never a sale, whatever the prints say."""
     store, con = _ledger(tmp_path), _tape(tmp_path)
     _run(cfg, store, con)
-    holdings = {f"w{i}": [_holding(f"w{i}", 400)] for i in range(3)}
+    cadence = int(cfg["whale"]["exit"]["holdings_poll_secs"])
     _run(cfg, store, con, now=NOW + timedelta(seconds=60), rows=[],
-         positions=holdings)
+         positions={f"w{i}": [_holding(f"w{i}", 400)] for i in range(3)})
+    _run(cfg, store, con, now=NOW + timedelta(seconds=60 + cadence), rows=[],
+         positions={f"w{i}": [_holding(f"w{i}", 100)] for i in range(3)})
 
     exits = report_whale.whale_frame(cfg, store, now=NOW + timedelta(hours=7),
                                      con=con)["exits"]["sports"]

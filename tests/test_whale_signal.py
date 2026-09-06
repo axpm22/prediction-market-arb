@@ -773,7 +773,8 @@ def test_exit_left_via_positions_when_the_holdings_fell_and_no_sell_printed(cfg)
     pos, scores = _held()                             # 2 x 1,000, nothing sold
     assert whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg) is None
     d = whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg,
-                               holdings={"w0": Decimal("400"), "w1": Decimal("400")})
+                               holdings={"w0": Decimal("400"), "w1": Decimal("400")},
+                               holdings_base={"w0": Decimal("1000"), "w1": Decimal("1000")})
     assert (d.reason, d.detail["via"]) == ("left", "positions")
     assert (d.detail["open_now"], d.detail["open_at_booking"]) \
         == (Decimal("800.000000"), Decimal("2000.000000"))
@@ -782,12 +783,73 @@ def test_exit_left_via_positions_when_the_holdings_fell_and_no_sell_printed(cfg)
 def test_exit_positions_rule_falls_back_to_prints_for_a_wallet_with_no_snapshot(cfg):
     """A wallet the holdings poll has not reached (or whose snapshot is older
     than the max age) is simply ABSENT from the mapping, and its prints-based
-    open size stands. Here w0 has sold down to 100 by the venue's reckoning
-    and w1 has no reading at all: 1,100 of 2,000 is not half gone, so nothing
-    exits on a mixture of one fresh fact and one stale one."""
+    open size stands ON BOTH SIDES of the comparison. Here w0 has sold down to
+    100 of the 1,000 the venue saw it hold and w1 has no reading at all: 1,100
+    of 2,000 is not half gone, so nothing exits on a mixture of one fresh fact
+    and one stale one."""
     pos, scores = _held()
     assert whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg,
-                                  holdings={"w0": Decimal("100")}) is None
+                                  holdings={"w0": Decimal("100")},
+                                  holdings_base={"w0": Decimal("1000")}) is None
+
+
+def test_exit_positions_rule_compares_the_venue_against_the_venue(cfg):
+    """F2 of the false-`left` investigation (2026-09-06, 20 of 110): the venue
+    reading was compared against the size the PRINTS said the whale held at
+    booking — a different basis. Bet 381's shape: the prints say 1,000, the
+    venue has never seen more than 402 and is RISING, and nothing was sold.
+    The denominator is the venue's own earlier reading, so this holds."""
+    pos, scores = _held(scores={"w0": _score("0.05"), "w1": _score("0.05")})
+    ctx = _ctx(whales=[{"wallet": "w0", "lb": Decimal("0.05"),
+                        "open_size": Decimal("1000"), "side": 0}])
+
+    assert whale_exit.exit_reason(ctx, pos, _lookup(scores), NOW, cfg,
+                                  holdings={"w0": Decimal("402")},
+                                  holdings_base={"w0": Decimal("402")}) is None
+    # ... and a wallet whose venue reading has no baseline at all (F1: the
+    # token has never been listed) contributes its PRINTS size to both sides,
+    # which is the prints test again — never a venue-vs-prints mixture.
+    assert whale_exit.exit_reason(ctx, pos, _lookup(scores), NOW, cfg,
+                                  holdings={"w0": Decimal("0")}) is None
+    d = whale_exit.exit_reason(ctx, pos, _lookup(scores), NOW, cfg,
+                               holdings={"w0": Decimal("100")},
+                               holdings_base={"w0": Decimal("402")})
+    assert (d.reason, d.detail["via"]) == ("left", "positions")
+    assert d.detail["open_at_booking"] == Decimal("402.000000")
+
+
+def test_exit_left_is_not_evaluated_while_the_positions_cache_is_partial(cfg):
+    """F3 (2026-09-06, 28 of the 40 prints-path exits in ONE cycle): the exit
+    loop was not gated on `whale_mat.cache_partial`, so the first cycle after
+    a full cache rebuild read "every whale left" — the positions were not
+    absent, they had not been materialized yet. A partial population is no
+    reading, exactly as it is for V5's percentile bar."""
+    pos, scores = _held()
+    empty = []                                        # the cache mid-rebuild
+
+    assert whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg,
+                                  all_positions=empty).reason == "left"
+    assert whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg,
+                                  all_positions=empty, cache_partial=True) is None
+    assert whale_exit.exit_reason(
+        _ctx(), pos, _lookup(scores), NOW, cfg, cache_partial=True,
+        holdings={"w0": Decimal(0), "w1": Decimal(0)},
+        holdings_base={"w0": Decimal("1000"), "w1": Decimal("1000")}) is None
+
+
+def test_exit_left_reads_the_unfiltered_positions_not_the_hygiene_filtered_ones(cfg):
+    """F4 (2026-09-06, 12 of 40): the lane hands `_exit` the hygiene-FILTERED
+    positions, so a whale whose opposite-outcome buy trips `both_sides`
+    disappears from the list while it is still holding — and the `left` test
+    read that as a sale (bet 351). Hygiene decides who VOTES, not who still
+    HOLDS: the `left` test reads the unfiltered positions."""
+    pos, scores = _held()                             # w0, w1, nothing sold
+    filtered = [p for p in pos if p.wallet != "w0"]   # w0 excluded by both_sides
+
+    assert whale_exit.exit_reason(_ctx(), filtered, _lookup(scores), NOW, cfg).reason \
+        == "left"                                     # what the lane used to do
+    assert whale_exit.exit_reason(_ctx(), filtered, _lookup(scores), NOW, cfg,
+                                  all_positions=pos) is None
 
 
 def test_exit_confidence_names_the_whale_and_its_levels(cfg):
