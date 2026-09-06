@@ -68,12 +68,19 @@ def test_supervisor_lock_refuses_double_run(cfg, tmp_path, monkeypatch):
 
 
 def test_supervisor_stop_flag_halts(cfg, tmp_path, monkeypatch):
+    """F1 (portability regrade, 2026-09-06): the stop flag must be checked
+    BEFORE any Store is opened — Store(db or DEFAULT_DB) used to run first,
+    so a stale/foreign-schema file at the default path (or the live ledger)
+    blew up before the flag was ever read. db= is passed explicitly here
+    AND must never be touched: no file appears at that path either."""
     import arb.heartbeat as hb
     monkeypatch.setattr(hb, "LOCK_DIR", tmp_path / "lock")
     monkeypatch.setattr(hb, "STOP_FLAG", tmp_path / "stop-all")
     (tmp_path / "stop-all").touch()
-    assert hb.run_supervisor(cfg, once=True) == 0  # exits before launching anything
+    db_path = tmp_path / "t.sqlite"
+    assert hb.run_supervisor(cfg, once=True, db=str(db_path)) == 0  # exits before launching anything
     assert not (tmp_path / "lock").exists()
+    assert not db_path.exists()  # no store opened — not even the one explicitly passed
 
 
 def test_canary_pass(cfg, tmp_path):
@@ -643,9 +650,12 @@ def test_heartbeat_module_size_is_pinned():
     shutdown paths), so pin the count rather than let it silently regrow.
     Bumped 395 -> 400 (review of 798aae6, I3): the two shutdown paths' near-
     identical terminate loops now go through one _shutdown helper too, which
-    nets a couple of lines even after removing the duplication."""
+    nets a couple of lines even after removing the duplication.
+    Bumped 400 -> 407 (F1, portability regrade 2026-09-06): the stop-flag
+    check moved above Store(db or DEFAULT_DB) so a stop-all halts cleanly
+    even with a stale/foreign ledger on disk."""
     lines = Path("arb/heartbeat.py").read_text().splitlines()
-    assert len(lines) <= 400
+    assert len(lines) <= 407
 
 
 def test_open_child_log_purges_only_stale_siblings(cfg, tmp_path):

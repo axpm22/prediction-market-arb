@@ -1021,6 +1021,70 @@ def test_tail_child_errors_ignores_a_stale_legacy_undated_file(tmp_path, monkeyp
     assert "ValueError: stale legacy" not in msgs
 
 
+def test_tail_child_errors_picks_later_date_on_identical_mtimes(tmp_path, monkeypatch):
+    """F2 (portability regrade, 2026-09-06): the Linux server's filesystem
+    gave two dated files written back-to-back the SAME mtime, so the strict
+    `>` mtime comparison kept whichever one glob() happened to visit first
+    (the older-dated file) — flipping test_tail_child_errors_reads_newest_
+    dated_file_per_name from a happens-to-pass into a real failure. Ordering
+    must key on the date embedded in the filename first, mtime only as a
+    tie-break for two files sharing one date. glob() iteration order is
+    filesystem-dependent (unlike the Linux box, this Mac happens to visit
+    the newer file first, which would mask the bug), so it's pinned here to
+    the adversarial old-first order the incident actually hit."""
+    import os
+    import time as time_mod
+    from pathlib import Path as _Path
+
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))
+    orig_glob = _Path.glob
+    monkeypatch.setattr(_Path, "glob", lambda self, pat: iter(sorted(orig_glob(self, pat))))
+    from arb.dashboard_mode import tail_child_errors
+    cfg = _cfg()
+    d = tmp_path / cfg["supervisor"]["child_log_dir"]
+    d.mkdir(parents=True, exist_ok=True)
+    old = d / "whale-backfill.2026-09-03.log"
+    new = d / "whale-backfill.2026-09-05.log"
+    old.write_text("Traceback (most recent call last):\nValueError: old day\n")
+    new.write_text("Traceback (most recent call last):\nValueError: new day\n")
+    same_time = time_mod.time()
+    os.utime(old, (same_time, same_time))
+    os.utime(new, (same_time, same_time))  # identical mtimes — date must decide
+
+    errors = tail_child_errors(cfg)
+
+    msgs = {e["msg"] for e in errors if e["source"] == "child:whale-backfill"}
+    assert "ValueError: new day" in msgs
+    assert "ValueError: old day" not in msgs
+
+
+def test_tail_child_errors_prefers_dated_file_even_when_legacy_is_newer(tmp_path, monkeypatch):
+    """F2 sibling: the fix must not merely swap which mtime wins — an
+    undated legacy <name>.log ranks below EVERY dated file regardless of
+    mtime, because a dated file is always the more recent write by
+    definition (M8 rotates <name>.log out once dating starts)."""
+    import os
+    import time as time_mod
+
+    monkeypatch.setenv("ARB_LOG_DIR", str(tmp_path))
+    from arb.dashboard_mode import tail_child_errors
+    cfg = _cfg()
+    d = tmp_path / cfg["supervisor"]["child_log_dir"]
+    d.mkdir(parents=True, exist_ok=True)
+    dated = d / "whale.2026-09-05.log"
+    dated.write_text("Traceback (most recent call last):\nValueError: dated\n")
+    legacy = d / "whale.log"
+    legacy.write_text("Traceback (most recent call last):\nValueError: legacy\n")
+    newer = time_mod.time() + 3600
+    os.utime(legacy, (newer, newer))  # legacy has a NEWER mtime than the dated file
+
+    errors = tail_child_errors(cfg)
+
+    msgs = {e["msg"] for e in errors if e["source"] == "child:whale"}
+    assert "ValueError: dated" in msgs
+    assert "ValueError: legacy" not in msgs
+
+
 def test_lanes_and_venues_stay_visible_in_whale_mode_but_scoped(tmp_path):
     """dashboard.mode: whale keeps #lanes (all lanes, disabled ones labeled)
     and #venues (watch_venues only) rather than hiding either."""
@@ -1108,7 +1172,10 @@ def test_whale_mode_helpers_moved_to_dashboard_mode_and_dashboard_py_stays_lean(
     # learned to map child:<name> onto its supervisor.processes lane
     # 160 -> 170 in the review fix pass on THAT commit (798aae6): _WHALE_CORE
     # (M6) and tail_child_errors' newest-dated-file-per-name grouping (M8)
-    assert len(Path("arb/dashboard_mode.py").read_text().splitlines()) <= 170
+    # 170 -> 180 (F2, portability regrade 2026-09-06): newest-file selection
+    # now keys on the filename's embedded date, mtime alone ties on some
+    # filesystems (_log_recency_key)
+    assert len(Path("arb/dashboard_mode.py").read_text().splitlines()) <= 180
     for name in ("_TITLES", "_WHALE_FRONT", "_whale_first", "_extract_marked"):
         assert not hasattr(dashboard, name)
     assert hasattr(dashboard_mode, "TITLES")

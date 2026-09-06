@@ -282,6 +282,13 @@ def run_supervisor(cfg, once: bool = False, db: str | None = None,
         log.critical("another supervisor is running; refusing to double-run")
         return 1
 
+    # F1 (2026-09-06): checked BEFORE Store(db or DEFAULT_DB) below — a
+    # stop-all must halt cleanly even with a stale/foreign ledger on disk.
+    if STOP_FLAG.exists():
+        log.info("stop-all flag present at startup — halting cleanly, no store opened")
+        release_lock()
+        return 0
+
     def _notify(event: str, payload: dict | None = None, key=None) -> None:
         if event not in cfg["notify"]["events"]:
             return

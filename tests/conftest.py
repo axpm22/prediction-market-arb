@@ -62,3 +62,20 @@ def _no_production_tape(tmp_path, monkeypatch, request):
         if mod is not None and getattr(mod, "load", None) is orig_load:
             monkeypatch.setattr(mod, "load", _redirected, raising=False)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_production_ledger(tmp_path, monkeypatch):
+    """F1 (portability regrade, 2026-09-06): arb.cli.DEFAULT_DB is the bare
+    relative path "data/arb.sqlite" — the live production ledger when tests
+    run from the repo root. Any Store(db or DEFAULT_DB) call that forgets to
+    pass db= (arb.heartbeat.run_supervisor did, before its stop-flag fix)
+    silently opens it: on a dev box the real 6.9GB ledger, on a fresh box
+    whatever stale file an older branch left behind — schema mismatches
+    either way. arb.cli.DEFAULT_DB is read fresh at call time everywhere it's
+    used (heartbeat's `from arb.cli import DEFAULT_DB` is a local import
+    inside the function body, and cli.main() looks it up as a module global
+    when it runs) so patching the one module attribute is enough — no
+    per-module copy to chase, unlike config.load above."""
+    import arb.cli as cli_mod
+    monkeypatch.setattr(cli_mod, "DEFAULT_DB", str(tmp_path / "unused-default.sqlite"))

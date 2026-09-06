@@ -116,6 +116,16 @@ def filter_errors(cfg, errors: list[dict]) -> list[dict]:
     return [e for e in errors if _keep_error_line(cfg, e["source"], e["msg"])]
 
 
+_DATED_LOG = re.compile(r"\.(\d{4}-\d{2}-\d{2})\.log$")
+
+
+def _log_recency_key(p: Path) -> tuple[str, float]:
+    # date first — undated legacy file has none, so "" always sorts last —
+    # mtime only breaks a tie between two files sharing one date (F2, 2026-09-06)
+    m = _DATED_LOG.search(p.name)
+    return (m.group(1) if m else "", p.stat().st_mtime)
+
+
 def tail_child_errors(cfg) -> list[dict]:
     """Traceback/Error lines from arb/heartbeat.py's per-child capture files
     (supervisor.child_log_dir) — `redact` again here too, defence in depth on
@@ -123,9 +133,9 @@ def tail_child_errors(cfg) -> list[dict]:
     disk. Filenames are date-stamped (M8: <name>.<YYYY-MM-DD>.log, so an
     active lane's file goes inactive daily and log_retention_days' purge can
     reclaim it) — several dated files can exist for one child name within
-    retention, so read only the NEWEST per name, by mtime (a lexical
-    filename compare always picked a legacy undated <name>.log over
-    <name>.<date>.log — review of 70058b9, CRITICAL)."""
+    retention, so read only the NEWEST per name, keyed on the embedded date
+    first and mtime only as a tie-break (a lexical/mtime-only compare both
+    picked the wrong file — review of 70058b9 and F2, 2026-09-06)."""
     from datetime import datetime, timezone
 
     from arb.logutil import redact, resolve_log_path
@@ -135,7 +145,7 @@ def tail_child_errors(cfg) -> list[dict]:
     newest: dict[str, Path] = {}
     for p in d.glob("*.log"):
         name = p.name.rsplit(".", 2)[0]  # "<name>.<date>.log" -> "<name>"
-        if name not in newest or p.stat().st_mtime > newest[name].stat().st_mtime:
+        if name not in newest or _log_recency_key(p) > _log_recency_key(newest[name]):
             newest[name] = p
     now_iso = datetime.now(timezone.utc).isoformat()
     out = []

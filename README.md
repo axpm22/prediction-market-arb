@@ -154,6 +154,12 @@ non-MLB score settlement only. When you add one, record a real fixture on the
 first `arb scan` and replace the synthetic `tests/fixtures/oddsapi_h2h.json`
 (see `data/verified_facts.md`).
 
+### Runtime
+
+Tested on Python 3.11+ and SQLite 3.34+ (whatever ships with your Python's
+stdlib `sqlite3` — no separate install needed). The `sqlite3` CLI binary is
+optional; nothing here shells out to it.
+
 ## Run
 
 ```bash
