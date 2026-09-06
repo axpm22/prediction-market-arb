@@ -237,6 +237,11 @@ def poll_holdings(cfg, con, wallets, now, tracked=None, get=get_json) -> dict:
             # accumulating them. Unbounded today; the retention change
             # (.superpowers/sdd/retention-brief.md) is where `holdings` gets a
             # bound, and belongs there rather than a one-off cleanup here.
+            # M5 (2026-09-06 review): whatever that bound is, it must keep the
+            # EARLIEST listing per (wallet, token) for an open bet — the venue
+            # `left` path (_listed_before) depends on a token's first
+            # post-booking listing surviving, or a real sell degrades to "no
+            # reading" instead of a verified zero.
             continue                              # cut by the budget: same as unpolled,
                                                    # retried whole next cycle
         if still_full:
@@ -259,12 +264,20 @@ def _n_positions(con, wallet, at) -> int:
     return int(row[0] or 0) if row else 0
 
 
-def _listed_before(con, wallet, token, at) -> bool:
-    """Did an EARLIER snapshot of this wallet list this token? (false-`left`
-    fix 2026-09-06, F1.) Only then is an absence a DISAPPEARANCE."""
-    return bool(con.execute(
-        "SELECT 1 FROM holdings WHERE proxy_wallet=? AND asset=? AND observed_at<?"
-        " LIMIT 1", (wallet, token, at)).fetchone())
+def _listed_before(con, wallet, token, at, since=None) -> bool:
+    """Did an earlier snapshot list this token? (false-`left` fix 2026-09-06,
+    F1.) Only then is an absence a DISAPPEARANCE. `since` (M4, 2026-09-06
+    review) is the bet's own `created_at`: without a floor, a listing from
+    BEFORE the bet even existed could stand in as that earlier snapshot — sound
+    today only because `baseline_for_bet`'s own `since` filter happens to drop
+    such a wallet downstream, not because this function is. `since=None` (a
+    caller with no booking time) keeps the old unfloored read."""
+    q = "SELECT 1 FROM holdings WHERE proxy_wallet=? AND asset=? AND observed_at<?"
+    params = [wallet, token, at]
+    if since:
+        q += " AND observed_at>=?"
+        params.append(since)
+    return bool(con.execute(q + " LIMIT 1", params).fetchone())
 
 
 def baseline_for_bet(cfg, con, ctx, since) -> dict[str, Decimal]:
@@ -298,7 +311,7 @@ def baseline_for_bet(cfg, con, ctx, since) -> dict[str, Decimal]:
     return out
 
 
-def for_bet(cfg, con, ctx, now, res=None) -> dict[str, Decimal]:
+def for_bet(cfg, con, ctx, now, res=None, since=None) -> dict[str, Decimal]:
     """`{wallet: contracts of the bet's token it holds NOW}` for the signal
     whales on the bet's own side — what §9's second `left` test compares
     against the size they held at booking.
@@ -340,6 +353,10 @@ def for_bet(cfg, con, ctx, now, res=None) -> dict[str, Decimal]:
     missing from it may simply be sitting on the page that was never
     fetched, so it too is no reading. Presence is unaffected either way — a
     token this snapshot DID capture is trusted at its real size regardless.
+
+    `since` (M4, 2026-09-06 review) is the bet's own `created_at`, passed
+    through to `_listed_before` so a pre-booking listing cannot stand in as
+    the disappearance's earlier snapshot.
     """
     ex = cfg["whale"]["exit"]
     max_age = int(ex["holdings_poll_secs"]) * int(ex["holdings_max_age_polls"])
@@ -358,7 +375,7 @@ def for_bet(cfg, con, ctx, now, res=None) -> dict[str, Decimal]:
         if token in held:
             out[wallet] = Decimal(held[token])
         elif (_meta(con, PARTIAL + wallet) != at
-                and _listed_before(con, wallet, token, at)):
+                and _listed_before(con, wallet, token, at, since)):
             out[wallet] = Decimal(0)                         # gone from a page that had it
         elif res is not None:
             # no reading: partial snapshot (the token may be on an unfetched

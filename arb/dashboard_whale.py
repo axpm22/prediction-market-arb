@@ -121,7 +121,8 @@ def whale_positions(cfg, store, bets, now, con=None, state=None) -> dict[int, di
                 # exits on the venue's own holdings. Same two corrections as
                 # the lane (2026-09-06): the venue's own baseline since this
                 # bet was booked, and the UNFILTERED positions for `left`.
-                holdings=whale_holdings.for_bet(cfg, con, ctx, now),
+                holdings=whale_holdings.for_bet(cfg, con, ctx, now,
+                                                since=bet["created_at"]),
                 holdings_base=whale_holdings.baseline_for_bet(
                     cfg, con, ctx, bet["created_at"]),
                 all_positions=state.positions,

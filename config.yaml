@@ -1278,6 +1278,11 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   Expected after: back to the `markets`-mode estimate above
                                       #   (~5,760 summary rows/day plus a live cycle's worth of
                                       #   position rows, not 14k+ markets' worth).
+                                      #   M5 (2026-09-06 review): any future pruning of `holdings`
+                                      #   must keep the EARLIEST listing per (wallet, token) for an
+                                      #   open bet's whales, or a real sell on that token degrades
+                                      #   from a verified zero to "no reading" (whale_holdings.py
+                                      #   _listed_before).
   rank: { min_n: 5, top: 15 }         # read-time trader ranking (`arb whale-rank`,
                                       #   /api/whale/traders, the daily "Top traders"
                                       #   table — design §12 "Trader profiles").

@@ -46,16 +46,25 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
     `all_positions` is the UNFILTERED positions (hygiene applied or not) and
     is what the `left` test and the "is this whale still here" gate below
     read; `open_positions_now` stays hygiene-filtered and is what the `flip`
-    consensus counts. Hygiene decides who VOTES, not who still HOLDS — a
-    whale whose opposite-side buy trips `both_sides` vanishes from the
-    filtered list while holding every contract we followed, and reading that
-    as a sale exited 12 of the 40 prints-path bets (F4, bet 351).
+    consensus counts AND what `confidence` counts its voters from (I2 fix,
+    2026-09-06). Hygiene decides who VOTES, not who still HOLDS — a whale
+    whose opposite-side buy trips `both_sides` vanishes from the filtered
+    list while holding every contract we followed. Reading the unfiltered
+    list as "still here" exited 12 of the 40 prints-path bets (F4, bet 351);
+    letting it vote in `confidence` could pull S below the bar on that one
+    excluded wallet alone (I2).
 
     `cache_partial` is `whale_mat.cache_partial` — true while a full rebuild
-    of the positions cache is still draining. The `left` tests are then not
-    evaluated at all (F3): the first cycle after a rebuild read an unfilled
-    cache as "every whale left" and exited 28 bets at once. A partial
-    population is no reading for an exit, exactly as it is for V5's bar.
+    of the positions cache is still draining. NO exit rule below is evaluated
+    at all then (I1, 2026-09-06 review of 03e8995): F3 gated only the two
+    `left` branches, leaving `flip`'s own holders tally and `confidence`'s
+    remaining-whale set to run over the same half-built cache — the first
+    cycle after a rebuild read an unfilled cache as "every whale left" and
+    exited 28 bets at once. A partial population is no reading for ANY exit,
+    exactly as it is for V5's bar; this one check at the top replaces the two
+    narrower in-function gates `left` used to carry, and covers the
+    dashboard's read-only projection for free since it calls this same
+    function with its own `cache_partial` reading.
 
     `market_ctx` is the market context for THIS cycle — V6's `volume` and
     current `ask` per side from the lane's own books (arb/whale_dominance.py),
@@ -72,6 +81,8 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
     side, cid = int(bet_ctx["side"]), bet_ctx["condition_id"]
     start = ts(bet_ctx.get("start_utc"))
     if start is None or ts(now) >= start:
+        return None
+    if cache_partial:
         return None
     market_ctx = {**(market_ctx or {}), "now_ts": ts(now)}
 
@@ -114,7 +125,7 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
     held_then = sum(booked.values(), Decimal(0))
     held_now = sum(open_now.values(), Decimal(0))
     keep = 1 - d(ex["sold_fraction"])
-    if not cache_partial and held_now <= keep * held_then:
+    if held_now <= keep * held_then:
         return ExitDecision("left", {"open_now": q6(held_now),
                                      "open_at_booking": q6(held_then),
                                      "via": "prints"})
@@ -129,9 +140,15 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
     # basis — the venue's earlier reading if the venue has answered for it,
     # the prints on both sides if it has not. The old sum divided a venue
     # numerator by a prints denominator, which is not a fraction of anything.
+    # M3 (2026-09-06 review): this test is Sigma_C h + Sigma_U n <= (1-f) *
+    # (Sigma_C b + Sigma_U p) — covered wallets (C, a venue reading) on their
+    # venue holding h / venue baseline b, uncovered wallets (U) on their
+    # prints holding n / prints-at-booking size p. An uncovered whale still
+    # fully holding has n == p, so uncovered whales strictly TIGHTEN the test:
+    # one covered zero cannot exit a bet on the back of large uncovered whales.
     base = holdings_base or {}
     read = {w for w in booked if w in holdings and w in base} if holdings else set()
-    if read and not cache_partial:
+    if read:
         held_venue = sum((d(holdings[w]) if w in read else open_now.get(w, Decimal(0))
                           for w in booked), Decimal(0))
         base_venue = sum((d(base[w]) if w in read else booked[w] for w in booked),
@@ -143,11 +160,18 @@ def exit_reason(bet_ctx, open_positions_now, score_lookup, now, cfg,
 
     # confidence: the whales are still here, their scores are not. Their print
     # may have aged out of the signal window by now, so this reads the holders
-    # directly rather than the qualifying set.
+    # directly rather than the qualifying set. `open_now` (unfiltered) still
+    # decides who HOLDS; `voting` (hygiene-filtered, I2 fix 2026-09-06) decides
+    # who VOTES — a both_sides/wash wallet the lane's hygiene pass drops from
+    # `open_positions_now` was voting here (F4) and could pull S below the bar
+    # on its own, which hygiene exists to prevent.
+    voting = merge_windows(cid, open_positions_now, d(cfg["whale"]["min_print_usd"]),
+                           now, cfg)
     remaining = []
     for x in bet_ctx["whales"]:
         wallet = x["wallet"]
-        if x.get("sybil_dropped") or open_now.get(wallet, Decimal(0)) <= 0:
+        if (x.get("sybil_dropped") or open_now.get(wallet, Decimal(0)) <= 0
+                or (wallet, side) not in voting):
             continue
         score = score_lookup(wallet, *_bucket(holders, cid, wallet))
         if score is None:

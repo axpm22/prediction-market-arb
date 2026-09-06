@@ -852,6 +852,49 @@ def test_exit_left_reads_the_unfiltered_positions_not_the_hygiene_filtered_ones(
                                   all_positions=pos) is None
 
 
+def test_exit_flip_is_not_evaluated_while_the_positions_cache_is_partial(cfg):
+    """I1 (2026-09-06 review of 03e8995): F3 gated only the two `left`
+    branches — `flip`'s own holders tally (`holders_share`) and `confidence`
+    still ran over the same half-built materialized cache that `left`'s gate
+    already refuses to trust mid-rebuild. A partial cache is no reading for
+    ANY exit rule, not just `left`."""
+    pos, scores = _held()
+    for i in range(3):                                # 2 vs 3 = 0.40 < 0.50: flips
+        pos.append(_pos(f"a{i}", idx=1, last=T0 - 60 - 30 * i))
+        scores[f"a{i}"] = _score("0.05")
+    assert whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg).reason \
+        == "flip"                                      # sanity: this population flips
+    assert whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg,
+                                  cache_partial=True) is None
+
+
+def test_exit_confidence_does_not_count_a_hygiene_excluded_wallets_vote(cfg):
+    """I2 (2026-09-06 review of 03e8995): F4 made `remaining`/`_bucket` (the
+    confidence vote's wallet set and score mean S) read the UNFILTERED
+    holders, so a both_sides/wash wallet the lane's hygiene pass drops from
+    `open_positions_now` still voted in `confidence` and could pull S below
+    the bar on its own. Hygiene decides who VOTES; the unfiltered positions
+    (`all_positions`) decide only who still HOLDS."""
+    pos, scores = _held(scores={"w0": _score("-0.05"), "w1": _score("0.02")})
+    # unfiltered baseline: mean(-0.05, 0.02) = -0.015 < -0.01 -> confidence
+    assert whale_exit.exit_reason(_ctx(), pos, _lookup(scores), NOW, cfg).reason \
+        == "confidence"
+
+    # w0 is hygiene-excluded but the venue still shows it holding everything
+    # it bought: it must not vote. w1 alone (0.02) clears the bar, so the bet
+    # must be held, not exited.
+    no_w0 = [p for p in pos if p.wallet != "w0"]
+    assert whale_exit.exit_reason(_ctx(), no_w0, _lookup(scores), NOW, cfg,
+                                  all_positions=pos) is None
+
+    # the same low score, but on a wallet that DOES still vote, must still
+    # fire: hygiene must not swallow a real confidence signal either.
+    no_w1 = [p for p in pos if p.wallet != "w1"]
+    d = whale_exit.exit_reason(_ctx(), no_w1, _lookup(scores), NOW, cfg,
+                               all_positions=pos)
+    assert d.reason == "confidence" and d.detail["wallet"] == "w0"
+
+
 def test_exit_confidence_names_the_whale_and_its_levels(cfg):
     pos, scores = _held(scores={"w0": _score("-0.05", n_bucket=11, n_sport=22,
                                              n_root=33, native=False),

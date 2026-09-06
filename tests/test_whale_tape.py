@@ -2310,6 +2310,34 @@ def test_holdings_a_token_no_earlier_snapshot_listed_is_no_reading(tmp_path):
     assert whale_holdings.for_bet(cfg, con, ctx, t2) == {"0xw0": Decimal(0)}
 
 
+def test_holdings_a_listing_from_before_booking_is_not_a_disappearance(tmp_path):
+    """M4 (2026-09-06 review of 03e8995): `_listed_before` had no time floor,
+    so a snapshot from BEFORE the bet even existed could stand in as the
+    "earlier listing" that turns a later absence into a verified zero — sound
+    today only by accident, because `baseline_for_bet`'s own `since` filter
+    happens to drop such a wallet downstream (it has no post-booking reading
+    either). `_listed_before` now takes the booking time itself, so F1 is
+    sound on its own: a listing entirely before the bet was booked is not
+    evidence about the position we followed, so its later absence is no
+    reading, not a zero."""
+    con, cfg, ctx = _holdings_tape(tmp_path), _cfg(), _ctx(["0xw0"])
+    cadence = int(cfg["whale"]["exit"]["holdings_poll_secs"])
+    other = [_position_row("0xw0", 10, asset="tokother", idx=1)]
+
+    # a listing well BEFORE the bet is booked
+    whale_holdings.poll_holdings(cfg, con, ["0xw0"], NOW,
+                                 get=FakeGet([_position_row("0xw0", 400)]))
+    since = (NOW + timedelta(seconds=cadence)).isoformat()   # the bet's created_at
+
+    # after booking, a fresh snapshot no longer lists the token
+    t1 = NOW + timedelta(seconds=cadence * 2)
+    whale_holdings.poll_holdings(cfg, con, ["0xw0"], t1, get=FakeGet(other))
+
+    res = {}
+    assert whale_holdings.for_bet(cfg, con, ctx, t1, res=res, since=since) == {}
+    assert res["exit_left_no_venue_reading"] == 1
+
+
 def test_holdings_baseline_is_the_biggest_post_booking_venue_reading(tmp_path):
     """F2 (2026-09-06): the denominator of a holdings-based `left` is the
     VENUE's own earlier reading of the same token, never the prints size the

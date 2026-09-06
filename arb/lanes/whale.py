@@ -346,13 +346,18 @@ def _exit(cfg, store, con, bet, ctx, open_pos, lookup, books, venue_ok, now, res
     The holdings `left` test reads two facts off the tape (2026-09-06): what
     the venue says the whales hold NOW, and the most it ever showed them
     holding SINCE THIS BET WAS BOOKED — never the prints size, which is a
-    different basis."""
-    if ctx is None:
+    different basis.
+
+    `cache_partial` returns here, before spending the two holdings queries
+    below on a cycle whose own `exit_reason` gate (I1, 2026-09-06 review)
+    would refuse to read them anyway — the caller already logs and counts
+    this once, over every open bet, before this loop starts."""
+    if ctx is None or cache_partial:
         return
     cid = ctx["condition_id"]
     decision = whale_exit.exit_reason(
         ctx, open_pos, lookup, now, cfg, ranked,
-        holdings=whale_holdings.for_bet(cfg, con, ctx, now, res),
+        holdings=whale_holdings.for_bet(cfg, con, ctx, now, res, since=bet["created_at"]),
         holdings_base=whale_holdings.baseline_for_bet(cfg, con, ctx, bet["created_at"]),
         all_positions=all_pos, cache_partial=cache_partial,
         market_ctx={"volume": whale_dominance.market_volume(volumes, tokens, cid),
