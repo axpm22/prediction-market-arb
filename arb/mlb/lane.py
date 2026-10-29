@@ -85,7 +85,7 @@ def find_slot(inp, side, player):
 def spec(row, inp, sides):
     """Abstract market spec (kind, role, line, k, slot) so N1 can re-apply anchors across games."""
     ser = row.series
-    role = sides.get(row.team or row.team_code)
+    role = sides.get(row.team if isinstance(row.team, str) else row.team_code)
     if ser == "KXMLBTOTAL":
         return ("total", None, row.line, None, None)
     if role is None:
@@ -209,7 +209,7 @@ def evaluate(G, anchors_from=None, mode="primary"):
     targets = [m for m in G["mkts"] if m["series"] in FAMILY]
     if len(anchors) < 2 or not targets:
         return [], [], []
-    r = simulate(G["inp"], n_sims=M["n_sims"], n_chunks=M["n_chunks"], seed=G["gamePk"])
+    r = simulate(G["inp"], n_sims=M["n_sims"], n_chunks=M["n_chunks"], seed=G["gamePk"], **SIM_KW)
     w, _, _ = fit_tilt(r.runs, [(indicator(a["spec"], r), a["q"]["mid"]) for a in anchors], r.chunk)
     mult = fee_mult(G["T"])
     sigs, fills, sanity = [], [], []
@@ -250,6 +250,7 @@ def flip(fills_rows, G_by_pk):
 
 
 EVMAP: dict = {}
+SIM_KW: dict = {}  # v1: none; v2: config mlb.sim_v2
 START: dict = {}
 
 
@@ -291,10 +292,13 @@ def run(setname: str):
     return Gs, res, pd.DataFrame(sanity)
 
 
-def main(setname: str):
+def main(setname: str, version: str = "v1"):
     from arb.mlb.score import summarize
+    if version == "v2":  # config numbers load as Decimal; numpy wants floats
+        SIM_KW.update({k: [float(x) for x in v] if isinstance(v, list) else float(v)
+                       for k, v in M["sim_v2"].items()})
     Gs, res, san = run(setname)
-    out = {"set": setname, "n_games_with_quotes": len(Gs),
+    out = {"set": setname, "version": version, "n_games_with_quotes": len(Gs),
            "n_target_quotes": int(sum(m["series"] in FAMILY for G in Gs for m in G["mkts"]))}
     for k, v in res.items():
         f = pd.DataFrame(v["fills"])
@@ -304,7 +308,7 @@ def main(setname: str):
                                    for fam, x in f.groupby("family")}
             ext = f[(f.mid <= 0.10) | (f.mid >= 0.90)]
             out[k]["extreme_band"] = summarize(ext, len(ext)) if len(ext) else None
-        f.to_csv(f"reports/mlb_corr/fills_{setname}_{k}.csv", index=False)
+        f.to_csv(f"reports/mlb_corr/fills_{setname}_{version}_{k}.csv", index=False)
     if not san.empty:
         out["sanity"] = {fam: {"n": int(len(x)),
                                "brier_market": float(((x.mid - x.y) ** 2).mean()),
@@ -315,9 +319,9 @@ def main(setname: str):
                          for fam, x in san.groupby("family")}
         for fam, s in out["sanity"].items():
             s["model_suspect"] = s["brier_untilted"] - s["brier_market"] > 0.005
-    json.dump(out, open(f"reports/mlb_corr/results_{setname}.json", "w"), indent=1, default=float)
+    json.dump(out, open(f"reports/mlb_corr/results_{setname}_{version}.json", "w"), indent=1, default=float)
     print(json.dumps(out, indent=1, default=float)[:6000])
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(*sys.argv[1:])

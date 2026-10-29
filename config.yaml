@@ -1324,3 +1324,7 @@ mlb:
   pace_secs: 2.0
   window_max: 90
   window_secs: 300
+  # PREREG_MLB_CORR_v2: simulator corrections from outcome-only calibration (fit_v2.json)
+  sim_v2:
+    form_mu: -0.05
+    starter_share: [0.915, 0.921, 0.917, 0.91, 0.874, 0.82, 0.78, 0.701, 0.629]
