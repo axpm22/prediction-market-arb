@@ -30,6 +30,15 @@ Model:
   Extras: regular_season -> automatic runner on 2nd every half from the 10th
   (unearned, no RBI to anyone unless driven in); postseason: none.
   Cap: still tied after MAX_INNINGS -> one run added to a coin-flip side (no RBI).
+
+v2 options (PREREG_MLB_CORR_v2; defaults reproduce v1 exactly):
+- form_sd=(sp, off): per-sim day-form latents. The SP's z ~ N(0, sp) multiplies the K
+  odds by e^z and BB/hit odds by e^-z while he pitches; the batting side's e ~ N(0, off)
+  multiplies BB/hit odds by e^e and K odds by e^-e for the whole game; form_mu is
+  e's mean (a global run-level correction, calibrated with the two sds). This adds the
+  game-level over-dispersion and the K <-> runs coupling the v1 calibration lacked.
+- starter_share: per-slot prob the starter (not a sub) takes the slot's 4th+ PA;
+  bat_* props count only the starter's PAs (team runs are unaffected).
 """
 from __future__ import annotations
 
@@ -90,7 +99,13 @@ def _matchup_cdf(inp, n_chunks, rng):
     return np.cumsum(out, -1)
 
 
-def simulate(inp: dict, n_sims: int = 20000, n_chunks: int = 20, seed: int = 0) -> SimResult:
+# sign of each outcome's log-odds shift under a positive pitcher / offense latent
+SGN_P = np.array([1, -1, -1, -1, -1, -1, 0.0])
+SGN_O = -SGN_P
+
+
+def simulate(inp: dict, n_sims: int = 20000, n_chunks: int = 20, seed: int = 0,
+             form_sd=(0.0, 0.0), form_mu=0.0, starter_share=None) -> SimResult:
     assert n_sims % n_chunks == 0, "n_sims must be a multiple of n_chunks"
     rng = np.random.default_rng(seed)
     cdf = _matchup_cdf(inp, n_chunks, rng)
@@ -99,6 +114,13 @@ def simulate(inp: dict, n_sims: int = 20000, n_chunks: int = 20, seed: int = 0) 
     ghost = bool(inp["regular_season"])
     exp_bf = np.array([inp["away"]["sp"]["exp_bf"], inp["home"]["sp"]["exp_bf"]])
     sp_lim = np.maximum(SP_MIN_BF, rng.poisson(exp_bf, size=(n, 2)))
+    form = any(form_sd) or form_mu != 0.0
+    if form:
+        pr = np.diff(cdf, axis=-1, prepend=0.0)
+        zp = rng.normal(0, form_sd[0], (n, 2))   # by pitching side
+        zo = rng.normal(form_mu, form_sd[1], (n, 2))   # by batting side
+    share = None if starter_share is None else np.asarray(starter_share, float)
+    slot_pa = np.zeros((n, 2, 9), int)
 
     runs = np.zeros((n, 2), int)
     bat_hr, bat_h, bat_rbi, bat_tb = (np.zeros((n, 2, 9), int) for _ in range(4))
@@ -118,7 +140,13 @@ def simulate(inp: dict, n_sims: int = 20000, n_chunks: int = 20, seed: int = 0) 
         s = slot[a, h]
         use_pen = (sp_bf[a, pit] >= sp_lim[a, pit]).astype(int)
         u = rng.random(len(a))
-        o = (u[:, None] > cdf[chunk[a], h, s, use_pen]).sum(1).clip(max=6)
+        if form:
+            lat = np.where(use_pen == 0, zp[a, pit], 0.0)[:, None] * SGN_P + zo[a, h][:, None] * SGN_O
+            p = pr[chunk[a], h, s, use_pen] * np.exp(lat)
+            c = np.cumsum(p / p.sum(1, keepdims=True), 1)
+        else:
+            c = cdf[chunk[a], h, s, use_pen]
+        o = (u[:, None] > c).sum(1).clip(max=6)
         r1, r2, r3 = rng.random((3, len(a)))
         x1, x2, x3, nout = b1[a], b2[a], b3[a], outs[a]
         roe = (o == OUT) & (r3 >= 1 - P_ROE)   # reached on error: runs like a 1B
@@ -169,10 +197,13 @@ def simulate(inp: dict, n_sims: int = 20000, n_chunks: int = 20, seed: int = 0) 
 
         # --- bookkeeping ---
         runs[a, h] += sc
-        bat_rbi[a, h, s] += np.where(roe, 0, sc)
-        bat_hr[a, h, s] += o == HR
-        bat_h[a, h, s] += (o >= S1) & (o <= HR) & ~roe
-        bat_tb[a, h, s] += np.where(roe, 0, TB[o])
+        slot_pa[a, h, s] += 1
+        cr = np.ones(len(a), bool) if share is None else \
+            (slot_pa[a, h, s] <= 3) | (rng.random(len(a)) < share[s])
+        bat_rbi[a, h, s] += np.where(roe | ~cr, 0, sc)
+        bat_hr[a, h, s] += (o == HR) & cr
+        bat_h[a, h, s] += (o >= S1) & (o <= HR) & ~roe & cr
+        bat_tb[a, h, s] += np.where(roe | ~cr, 0, TB[o])
         sp_k[a, pit] += (o == K) & (use_pen == 0)
         sp_bf[a, pit] += 1
         slot[a, h] = (s + 1) % 9
