@@ -1300,3 +1300,27 @@ whale:                                # L14 whale-consensus lane (design doc 202
                                       #   is the rolling 30-day marked-signal floor for kill rule 2
                                       #   (spec §12); min_signals_per_week_alarm is the starvation
                                       #   floor for kill rule 4 (spec §12)
+
+# MLB correlated-market lane (reports/mlb_corr/PREREG_MLB_CORR_v1.md). Frozen with the prereg.
+mlb:
+  decision_offset_min: 30          # T = scheduled first pitch - 30 min
+  stale_min: 10                    # quote candle must end in [T-10, T]
+  fill_window_min: 10              # fill proxy volume window (T, T+10]
+  contracts: 10
+  entry_band: [0.05, 0.95]
+  n_sims: 20000
+  n_chunks: 20
+  starter_bf_default: 22
+  # empirical-Bayes prior weight, in PA, per outcome (approx. stabilization points)
+  shrink_pa:
+    batter:  { K: 60, BB: 120, HR: 170, 1B: 300, 2B: 600, 3B: 600 }
+    pitcher: { K: 70, BB: 170, HR: 1000, 1B: 600, 2B: 1000, 3B: 1000 }
+  park_shrink_pa: 3000
+  fee_multiplier_schedule:         # GET /series/fee_changes, all KXMLB* in scope
+    - { from: "2025-10-04T07:00:00Z", m: 1.0 }
+    - { from: "2026-08-07T04:57:00Z", m: 0.5 }
+  discovery: { seed: 20261029, n: 300, start: "2026-04-01", end: "2026-08-29" }
+  confirmation: { start: "2026-08-30", end: "2026-09-27" }
+  pace_secs: 2.0
+  window_max: 90
+  window_secs: 300

@@ -81,3 +81,13 @@ def test_pm_tag_category_covers_config_tags():
     econ = leg_fee_cost(CFG, "polymarket", PM_TAG_CATEGORY["economy"], Decimal("0.5"))
     pol = leg_fee_cost(CFG, "polymarket", "politics", Decimal("0.5"))
     assert econ != pol
+
+
+def test_kalshi_series_multiplier_halves_fee():
+    from decimal import Decimal
+    from arb.venues.fees import leg_fee_cost
+    cfg = {"kalshi": {"fee_rate": Decimal("0.07"), "maker_fee_rate": Decimal("0.0175")}}
+    full = leg_fee_cost(cfg, "kalshi", "sports", Decimal("0.40"), Decimal(10), mode="execution")
+    half = leg_fee_cost(cfg, "kalshi", "sports", Decimal("0.40"), Decimal(10), mode="execution",
+                        multiplier=Decimal("0.5"))
+    assert full == Decimal("0.17") and half == Decimal("0.09")  # 0.084 ceils to 0.09

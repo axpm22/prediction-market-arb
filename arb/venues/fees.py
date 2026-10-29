@@ -17,9 +17,9 @@ def ceil_to_cent(x: Decimal) -> Decimal:
     return x.quantize(CENT, rounding=ROUND_CEILING)
 
 
-def _kalshi(cfg, category, price, contracts, mode, role):
+def _kalshi(cfg, category, price, contracts, mode, role, multiplier=Decimal(1)):
     rate = cfg["kalshi"]["maker_fee_rate"] if role == "maker" else cfg["kalshi"]["fee_rate"]
-    fee = rate * contracts * price * (1 - price)
+    fee = multiplier * rate * contracts * price * (1 - price)
     return ceil_to_cent(fee) if mode == "execution" else fee
 
 
@@ -54,8 +54,13 @@ PM_TAG_CATEGORY = {"politics": "politics", "economy": "econ", "weather": "weathe
 
 def leg_fee_cost(cfg, venue: str, category: str, price: Decimal,
                  contracts: Decimal = Decimal(1), mode: str = "paper",
-                 role: str = "taker") -> Decimal:
-    return FEE_BASIS[venue](cfg, category, Decimal(price), Decimal(contracts), mode, role)
+                 role: str = "taker", multiplier: Decimal | None = None) -> Decimal:
+    """multiplier: Kalshi per-series fee_multiplier (GET /series/fee_changes),
+    e.g. MLB series 0.5 from 2026-08-07. Kalshi-only; None = 1."""
+    args = (cfg, category, Decimal(price), Decimal(contracts), mode, role)
+    if multiplier is not None:
+        return FEE_BASIS[venue](*args, multiplier=Decimal(multiplier))
+    return FEE_BASIS[venue](*args)
 
 
 def fee_is_stale(cfg, venue: str, today: datetime.date | None = None) -> bool:
