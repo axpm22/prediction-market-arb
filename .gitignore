@@ -24,3 +24,4 @@ data/pm_tape.sqlite*
 # chain (that is reports/daily/*.md + HASHES.log, which ARE committed)
 reports/*.jsonl
 reports/covertest-24h-start.txt
+data/mlb/
