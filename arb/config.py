@@ -41,6 +41,7 @@ def MAP(valtype):
 
 
 SCHEMA = {
+    "mlb": dict,  # MLB correlated-market lane (arb/mlb), validated by its own prereg
     "timezone": STR, "bankroll_usd": NUM, "max_stake_pct": NUM, "ev_threshold": NUM,
     "divergence_threshold": NUM, "push_pricing": BOOL, "arb_stale_warn": NUM,
     "max_leg_skew_secs": NUM, "max_start_drift_mins": NUM, "match_suspect_prob_diff": NUM,
