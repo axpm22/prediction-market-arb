@@ -1,0 +1,458 @@
+{
+ "set": "discovery",
+ "lane": "P",
+ "inplay_check": [
+  {
+   "game_key": "26SEP14DENKC",
+   "T": 1789425900,
+   "first_inplay": 1789425120,
+   "pregame_median_vol": 1366.38,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP13ARILAC",
+   "T": 1789336500,
+   "first_inplay": 1789335840,
+   "pregame_median_vol": 836.33,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP27CINPIT",
+   "T": 1790533800,
+   "first_inplay": 1790533080,
+   "pregame_median_vol": 228.15,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP20PHITEN",
+   "T": 1789918200,
+   "first_inplay": 1789917480,
+   "pregame_median_vol": 119.27000000000001,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP21NYGLAR",
+   "T": 1790041500,
+   "first_inplay": null,
+   "pregame_median_vol": 11903.69,
+   "ok": true
+  },
+  {
+   "game_key": "26SEP20INDKC",
+   "T": 1789944600,
+   "first_inplay": 1789943760,
+   "pregame_median_vol": 314.6,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP20SEAARI",
+   "T": 1789930500,
+   "first_inplay": 1789930020,
+   "pregame_median_vol": 21.85,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP20WASDAL",
+   "T": 1789930500,
+   "first_inplay": 1789929900,
+   "pregame_median_vol": 62.91,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP27HOUIND",
+   "T": 1790533800,
+   "first_inplay": 1790532960,
+   "pregame_median_vol": 74.88,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP13TBCIN",
+   "T": 1789313400,
+   "first_inplay": 1789312860,
+   "pregame_median_vol": 228.69,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP27LARDEN",
+   "T": 1790560200,
+   "first_inplay": null,
+   "pregame_median_vol": 6680.8,
+   "ok": true
+  },
+  {
+   "game_key": "26SEP20CINHOU",
+   "T": 1789918200,
+   "first_inplay": 1789917420,
+   "pregame_median_vol": 150.81,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP20CARATL",
+   "T": 1789918200,
+   "first_inplay": 1789917660,
+   "pregame_median_vol": 100.0,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP20GBNYJ",
+   "T": 1789918200,
+   "first_inplay": 1789917660,
+   "pregame_median_vol": 100.0,
+   "ok": false
+  },
+  {
+   "game_key": "26OCT04DALHOU",
+   "T": 1791127800,
+   "first_inplay": 1791126960,
+   "pregame_median_vol": 42.64,
+   "ok": false
+  },
+  {
+   "game_key": "26OCT04MIAMIN",
+   "T": 1791138900,
+   "first_inplay": 1791138060,
+   "pregame_median_vol": 6.7,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP13MIALV",
+   "T": 1789325700,
+   "first_inplay": 1789324920,
+   "pregame_median_vol": 0.0,
+   "ok": false
+  },
+  {
+   "game_key": "26OCT01PITCLE",
+   "T": 1790894700,
+   "first_inplay": 1790894640,
+   "pregame_median_vol": 1431.4,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP13NYJTEN",
+   "T": 1789324200,
+   "first_inplay": 1789323780,
+   "pregame_median_vol": 72.0,
+   "ok": false
+  },
+  {
+   "game_key": "26SEP20JACDEN",
+   "T": 1789929300,
+   "first_inplay": 1789928700,
+   "pregame_median_vol": 8.129999999999999,
+   "ok": false
+  }
+ ],
+ "buffer_extra_min": 30,
+ "n_events": 41,
+ "dropped_T_not_pregame": [
+  "26SEP09NESEA",
+  "26SEP10SFLAR",
+  "26SEP13ARILAC",
+  "26SEP13DALNYG",
+  "26SEP13NYJTEN",
+  "26SEP21NYGLAR",
+  "26SEP24ATLGB",
+  "26SEP27ARISF",
+  "26SEP27BALDAL",
+  "26SEP27CARCLE",
+  "26SEP27CINPIT",
+  "26SEP27HOUIND",
+  "26SEP27KCMIA",
+  "26SEP27LACBUF",
+  "26SEP27LARDEN",
+  "26SEP27LVNO",
+  "26SEP27MINTB",
+  "26SEP27NEJAC",
+  "26SEP27NYJDET",
+  "26SEP27SEAWAS",
+  "26SEP27TENNYG",
+  "26SEP28PHICHI"
+ ],
+ "T_before_kickoff_min_kept": [
+  120.0,
+  120.0
+ ],
+ "n_games_with_units": 41,
+ "n_team_games": 80,
+ "n_receivers_per_unit_median": 5.0,
+ "R_bar": 0.7353028322916701,
+ "R_dispersion": {
+  "sd": 0.10129085736835106,
+  "p10": 0.5816920528205115,
+  "p90": 0.8190629750350783,
+  "min": 0.3594559521797544,
+  "max": 0.8992691156257274
+ },
+ "R_bar_boot_p5_p95": [
+  0.7072602103615949,
+  0.7548008184375241
+ ],
+ "n_target_quotes": {
+  "QB": 585,
+  "REC": 2456
+ },
+ "primary": {
+  "QB": {
+   "n_signals": 367,
+   "n_fills": 72,
+   "fill_rate": 0.19618528610354224,
+   "n_games": 26,
+   "n_dates": 6,
+   "pnl": -44.0592,
+   "cost": 305.2292,
+   "pnl_per_dollar": -0.14434791953063467,
+   "hit_rate": 0.4861111111111111,
+   "pred_hit_rate": 0.6551487324265971,
+   "max_drawdown": 42.7318,
+   "p_one_sided": 0.7988,
+   "folds": [
+    -34.06120000000001,
+    -20.116100000000003,
+    -5.1091,
+    15.2272
+   ],
+   "top5pct_games_share_of_pos": 0.6200867286900328,
+   "max_family_share_of_pos": null,
+   "family_pnl": {
+    "QB": -44.0592
+   },
+   "E1": false,
+   "E2": false,
+   "E3": false
+  },
+  "REC": {
+   "n_signals": 869,
+   "n_fills": 82,
+   "fill_rate": 0.09436133486766399,
+   "n_games": 26,
+   "n_dates": 5,
+   "pnl": -53.6367,
+   "cost": 313.2067,
+   "pnl_per_dollar": -0.1712501680200328,
+   "hit_rate": 0.3780487804878049,
+   "pred_hit_rate": 0.49070797960185897,
+   "max_drawdown": 56.2459,
+   "p_one_sided": 0.8218,
+   "folds": [
+    -2.1107999999999976,
+    -22.626999999999995,
+    -10.772400000000003,
+    -18.1265
+   ],
+   "top5pct_games_share_of_pos": 0.45787765473803366,
+   "max_family_share_of_pos": null,
+   "family_pnl": {
+    "REC": -53.6367
+   },
+   "E1": false,
+   "E2": false,
+   "E3": true
+  }
+ },
+ "N1": {
+  "QB": {
+   "n_signals": 397,
+   "n_fills": 46,
+   "fill_rate": 0.11586901763224182,
+   "n_games": 21,
+   "n_dates": 3,
+   "pnl": -11.3618,
+   "cost": 210.7318,
+   "pnl_per_dollar": -0.053915925361051324,
+   "hit_rate": 0.5217391304347826,
+   "pred_hit_rate": 0.7624979515142215,
+   "max_drawdown": 19.8708,
+   "p_one_sided": 0.58,
+   "folds": [
+    1.7819000000000038,
+    8.7971,
+    -39.129999999999995,
+    17.189200000000003
+   ],
+   "top5pct_games_share_of_pos": 0.5100393193840498,
+   "max_family_share_of_pos": null,
+   "family_pnl": {
+    "QB": -11.3618
+   },
+   "E1": false,
+   "E2": true,
+   "E3": false
+  },
+  "REC": {
+   "n_signals": 1050,
+   "n_fills": 80,
+   "fill_rate": 0.0761904761904762,
+   "n_games": 27,
+   "n_dates": 3,
+   "pnl": -56.6866,
+   "cost": 304.5066,
+   "pnl_per_dollar": -0.18615885501332322,
+   "hit_rate": 0.3875,
+   "pred_hit_rate": 0.5610566096512722,
+   "max_drawdown": 65.2881,
+   "p_one_sided": 0.8614,
+   "folds": [
+    8.601500000000001,
+    -11.726999999999999,
+    -34.8314,
+    -18.729699999999998
+   ],
+   "top5pct_games_share_of_pos": 0.5409470333893827,
+   "max_family_share_of_pos": null,
+   "family_pnl": {
+    "REC": -56.6866
+   },
+   "E1": false,
+   "E2": false,
+   "E3": false
+  }
+ },
+ "N2": {
+  "QB": {
+   "n_signals": 433,
+   "n_fills": 69,
+   "fill_rate": 0.15935334872979215,
+   "n_games": 29,
+   "n_dates": 3,
+   "pnl": 25.4116,
+   "cost": 304.8884,
+   "pnl_per_dollar": 0.08334721819524787,
+   "hit_rate": 0.5942028985507246,
+   "pred_hit_rate": 0.7122616502218542,
+   "max_drawdown": 6.4797,
+   "p_one_sided": 0.3037,
+   "folds": [
+    13.643700000000006,
+    -17.9523,
+    14.6848,
+    15.0354
+   ],
+   "top5pct_games_share_of_pos": 0.3018341037563204,
+   "max_family_share_of_pos": 1.0,
+   "family_pnl": {
+    "QB": 25.4116
+   },
+   "E1": false,
+   "E2": true,
+   "E3": true
+  },
+  "REC": {
+   "n_signals": 1150,
+   "n_fills": 106,
+   "fill_rate": 0.09217391304347826,
+   "n_games": 28,
+   "n_dates": 3,
+   "pnl": -23.1113,
+   "cost": 419.4113,
+   "pnl_per_dollar": -0.055104142401504186,
+   "hit_rate": 0.4339622641509434,
+   "pred_hit_rate": 0.5086237506240563,
+   "max_drawdown": 43.6001,
+   "p_one_sided": 0.6513,
+   "folds": [
+    20.488800000000005,
+    9.934800000000003,
+    -19.148400000000002,
+    -34.3865
+   ],
+   "top5pct_games_share_of_pos": 0.37160201550025207,
+   "max_family_share_of_pos": null,
+   "family_pnl": {
+    "REC": -23.1113
+   },
+   "E1": false,
+   "E2": false,
+   "E3": true
+  }
+ },
+ "N3": {
+  "QB": {
+   "n_signals": 367,
+   "n_fills": 48,
+   "fill_rate": 0.1307901907356948,
+   "n_games": 20,
+   "n_dates": 6,
+   "pnl": 15.528,
+   "cost": 216.122,
+   "pnl_per_dollar": 0.07184830790016758,
+   "hit_rate": 0.5625,
+   "pred_hit_rate": 0.2991835568310431,
+   "max_drawdown": 30.2945,
+   "p_one_sided": 0.337,
+   "folds": [
+    19.830500000000004,
+    2.5602000000000023,
+    12.971800000000007,
+    -19.8345
+   ],
+   "top5pct_games_share_of_pos": 0.3403818610668896,
+   "max_family_share_of_pos": 1.0,
+   "family_pnl": {
+    "QB": 15.528
+   },
+   "E1": false,
+   "E2": true,
+   "E3": true
+  },
+  "REC": {
+   "n_signals": 869,
+   "n_fills": 162,
+   "fill_rate": 0.18642117376294592,
+   "n_games": 27,
+   "n_dates": 6,
+   "pnl": 59.795,
+   "cost": 646.485,
+   "pnl_per_dollar": 0.09249247855712045,
+   "hit_rate": 0.48148148148148145,
+   "pred_hit_rate": 0.3626731825227503,
+   "max_drawdown": 18.131,
+   "p_one_sided": 0.2094,
+   "folds": [
+    59.8378,
+    -8.822799999999994,
+    4.731,
+    4.0489999999999995
+   ],
+   "top5pct_games_share_of_pos": 0.500982451033393,
+   "max_family_share_of_pos": 1.0,
+   "family_pnl": {
+    "REC": 59.795
+   },
+   "E1": false,
+   "E2": true,
+   "E3": false
+  }
+ },
+ "brier": {
+  "QB": {
+   "n": 585,
+   "market": 0.18463799145299145,
+   "model": 0.19660148424638602
+  },
+  "REC": {
+   "n": 2456,
+   "market": 0.17465137418566776,
+   "model": 0.17970764126616529
+  }
+ },
+ "outcome_check": {
+  "n": 80,
+  "identity_all_rec_minus_all_pass_mean": 0.0,
+  "identity_exact_share": 1.0,
+  "listed_qb_share_of_team_pass": 0.9609006261590144,
+  "R_realized_median": 0.8599533566550058,
+  "R_realized_mean": 0.9560926373833294,
+  "R_realized_p10_p90": [
+   0.598364312267658,
+   0.9964000000000001
+  ],
+  "R_market_median": 0.7353028322916701,
+  "corr_R_market_vs_realized": 0.15718500470405158,
+  "listed_names_missing_per_unit": 0.3125,
+  "T_before_kickoff_min": {
+   "min": 120.0,
+   "median": 120.0
+  }
+ }
+}
