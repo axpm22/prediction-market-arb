@@ -1,0 +1,973 @@
+{
+ "set": "discovery",
+ "series_dropped": [],
+ "unparsed_by_series": {},
+ "rules_quote": {
+  "BTTS": "If Sunderland and Leeds United both score a goal in the Sunderland vs Leeds United EPL match originally scheduled for Oct 25, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+  "GAME": "If Tie is the result of the Sunderland vs Leeds United professional EPL soccer game originally scheduled for Oct 25, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+  "SCORE": "If Sunderland AFC wins 5-1 in the Sunderland AFC vs Leeds United professional EPL soccer game originally scheduled for Oct 25, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+  "SPREAD": "If Leeds United wins by more than 1.5 goals in the Sunderland vs Leeds United professional EPL soccer game originally scheduled for Oct 25, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+  "TEAMTOTAL": "If Sunderland records above 0.5 goals in the Sunderland vs Leeds United professional EPL soccer game originally scheduled for Oct 25, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+  "TOTAL": "If over 5.5 goals are scored in the Sunderland vs Leeds United professional EPL soccer game originally scheduled for Oct 25, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes."
+ },
+ "inplay_check": {
+  "n": 20,
+  "n_pass": 4,
+  "buffer_extra_min": 30,
+  "rows": [
+   {
+    "game_key": "26SEP20PADTSG",
+    "league": "BUNDESLIGA",
+    "T": 1789925400,
+    "median_pregame": 0.0,
+    "first_spike_min_rel_T": -43.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP19SGESCF",
+    "league": "BUNDESLIGA",
+    "T": 1789824600,
+    "median_pregame": 75.66,
+    "first_spike_min_rel_T": -23.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP09VANLAG",
+    "league": "MLS",
+    "T": 1789007400,
+    "median_pregame": 2135.11,
+    "first_spike_min_rel_T": 7.0,
+    "pass": true
+   },
+   {
+    "game_key": "26SEP13MUNMCI",
+    "league": "EPL",
+    "T": 1789313400,
+    "median_pregame": 14942.189999999999,
+    "first_spike_min_rel_T": 20.0,
+    "pass": true
+   },
+   {
+    "game_key": "26SEP20PARGEN",
+    "league": "SERIEA",
+    "T": 1789909200,
+    "median_pregame": 14.05,
+    "first_spike_min_rel_T": -41.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP04IPSLFC",
+    "league": "EPL",
+    "T": 1788548400,
+    "median_pregame": 5363.18,
+    "first_spike_min_rel_T": 4.0,
+    "pass": true
+   },
+   {
+    "game_key": "26SEP05PADSCF",
+    "league": "BUNDESLIGA",
+    "T": 1788615000,
+    "median_pregame": 25.12,
+    "first_spike_min_rel_T": -41.0,
+    "pass": false
+   },
+   {
+    "game_key": "26AUG30FCASCH",
+    "league": "BUNDESLIGA",
+    "T": 1788103800,
+    "median_pregame": 130.34,
+    "first_spike_min_rel_T": -29.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP09SPOGAL",
+    "league": "UCL",
+    "T": 1788980400,
+    "median_pregame": 2881.75,
+    "first_spike_min_rel_T": -36.0,
+    "pass": false
+   },
+   {
+    "game_key": "26AUG30NAPCOM",
+    "league": "SERIEA",
+    "T": 1788107400,
+    "median_pregame": 1342.71,
+    "first_spike_min_rel_T": -37.0,
+    "pass": false
+   },
+   {
+    "game_key": "26AUG30CAGINT",
+    "league": "SERIEA",
+    "T": 1788115500,
+    "median_pregame": 2866.6600000000003,
+    "first_spike_min_rel_T": -41.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP12M05SGE",
+    "league": "BUNDESLIGA",
+    "T": 1789219800,
+    "median_pregame": 6.0,
+    "first_spike_min_rel_T": -41.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP26LAGCOL",
+    "league": "MLS",
+    "T": 1790476200,
+    "median_pregame": 364.0,
+    "first_spike_min_rel_T": -4.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP05PHIMTL",
+    "league": "MLS",
+    "T": 1788651000,
+    "median_pregame": 188.41,
+    "first_spike_min_rel_T": -5.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP30NYRBSTL",
+    "league": "MLS",
+    "T": 1790811000,
+    "median_pregame": 1636.43,
+    "first_spike_min_rel_T": -5.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP13LEVBAR",
+    "league": "LALIGA",
+    "T": 1789326000,
+    "median_pregame": 0.0,
+    "first_spike_min_rel_T": null,
+    "pass": true
+   },
+   {
+    "game_key": "26AUG31ATABFC",
+    "league": "SERIEA",
+    "T": 1788201900,
+    "median_pregame": 756.4399999999999,
+    "first_spike_min_rel_T": -28.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP08AEKASK",
+    "league": "UCL",
+    "T": 1788885900,
+    "median_pregame": 1138.6299999999999,
+    "first_spike_min_rel_T": -27.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP20VCFRSO",
+    "league": "LALIGA",
+    "T": 1789930800,
+    "median_pregame": 3967.71,
+    "first_spike_min_rel_T": -29.0,
+    "pass": false
+   },
+   {
+    "game_key": "26SEP12STLMIN",
+    "league": "MLS",
+    "T": 1789259400,
+    "median_pregame": 50.0,
+    "first_spike_min_rel_T": -44.0,
+    "pass": false
+   }
+  ],
+  "n_pass_after_buffer": 7
+ },
+ "n_events": 251,
+ "n_events_with_quotes": 239,
+ "n_events_with_anchors": 224,
+ "n_target_quotes": 4591,
+ "target_quotes_by_family": {
+  "SCORE": 2256,
+  "TEAMTOTAL": 1271,
+  "SPREAD": 840,
+  "BTTS": 224
+ },
+ "events_by_league": {
+  "MLS": 76,
+  "EPL": 35,
+  "LALIGA": 35,
+  "SERIEA": 31,
+  "BUNDESLIGA": 29,
+  "UCL": 18
+ },
+ "primary": {
+  "n_signals": 397,
+  "n_fills": 147,
+  "fill_rate": 0.3702770780856423,
+  "n_games": 91,
+  "n_dates": 21,
+  "pnl": -92.2953,
+  "cost": 384.2353,
+  "pnl_per_dollar": -0.2402051555388066,
+  "hit_rate": 0.20408163265306123,
+  "pred_hit_rate": 0.2835752513102865,
+  "max_drawdown": 138.9409,
+  "p_one_sided": 0.9463,
+  "folds": [
+   -25.899600000000003,
+   -95.4444,
+   -3.196499999999996,
+   32.245200000000004
+  ],
+  "top5pct_games_share_of_pos": 0.47570411637264,
+  "family_pnl": {
+   "BTTS": -51.3961,
+   "SCORE": 2.2028,
+   "SPREAD": -37.22,
+   "TEAMTOTAL": -5.882
+  },
+  "E1": false,
+  "E2": false,
+  "E3": false,
+  "league_pnl": {
+   "BUNDESLIGA": -20.18,
+   "EPL": -4.8216,
+   "LALIGA": -25.4848,
+   "MLS": 19.7851,
+   "SERIEA": -20.044,
+   "UCL": -41.55
+  },
+  "max_league_share_of_pos": 1.0,
+  "by_family": {
+   "BTTS": {
+    "n_signals": 71,
+    "n_fills": 42,
+    "fill_rate": 0.5915492957746479,
+    "n_games": 42,
+    "n_dates": 18,
+    "pnl": -51.3961,
+    "cost": 171.3961,
+    "pnl_per_dollar": -0.2998673832135037,
+    "hit_rate": 0.2857142857142857,
+    "pred_hit_rate": 0.43982549082469286,
+    "max_drawdown": 66.2508,
+    "p_one_sided": 0.9625,
+    "folds": [
+     -15.143499999999996,
+     -35.794399999999996,
+     -9.526399999999999,
+     9.068200000000001
+    ],
+    "top5pct_games_share_of_pos": 0.2824219868308045,
+    "family_pnl": {
+     "BTTS": -51.3961
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "BUNDESLIGA": -7.53,
+     "EPL": -4.8664,
+     "LALIGA": -25.8618,
+     "MLS": 15.45,
+     "SERIEA": -19.2479,
+     "UCL": -9.34
+    },
+    "max_league_share_of_pos": 1.0
+   },
+   "SPREAD": {
+    "n_signals": 152,
+    "n_fills": 73,
+    "fill_rate": 0.48026315789473684,
+    "n_games": 62,
+    "n_dates": 20,
+    "pnl": -37.22,
+    "cost": 147.22,
+    "pnl_per_dollar": -0.2528189104741205,
+    "hit_rate": 0.1506849315068493,
+    "pred_hit_rate": 0.2084065225611663,
+    "max_drawdown": 68.61,
+    "p_one_sided": 0.8718,
+    "folds": [
+     -29.5,
+     -37.67,
+     19.74999999999999,
+     10.2
+    ],
+    "top5pct_games_share_of_pos": 0.5232674505879411,
+    "family_pnl": {
+     "SPREAD": -37.22
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "BUNDESLIGA": -12.11,
+     "EPL": -8.49,
+     "LALIGA": -10.57,
+     "MLS": 17.27,
+     "SERIEA": -0.12,
+     "UCL": -23.2
+    },
+    "max_league_share_of_pos": 1.0
+   },
+   "TEAMTOTAL": {
+    "n_signals": 85,
+    "n_fills": 17,
+    "fill_rate": 0.2,
+    "n_games": 15,
+    "n_dates": 10,
+    "pnl": -5.882,
+    "cost": 45.882,
+    "pnl_per_dollar": -0.12819842203914386,
+    "hit_rate": 0.23529411764705882,
+    "pred_hit_rate": 0.30986351641942456,
+    "max_drawdown": 26.6429,
+    "p_one_sided": 0.6011,
+    "folds": [
+     2.9038999999999993,
+     -17.478,
+     12.225100000000001,
+     -3.5329999999999995
+    ],
+    "top5pct_games_share_of_pos": 0.5125049622866217,
+    "family_pnl": {
+     "TEAMTOTAL": -5.882
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "EPL": 11.442,
+     "LALIGA": 4.117,
+     "MLS": -12.3949,
+     "SERIEA": -0.0361,
+     "UCL": -9.01
+    },
+    "max_league_share_of_pos": 0.7353943055466289
+   },
+   "SCORE": {
+    "n_signals": 89,
+    "n_fills": 15,
+    "fill_rate": 0.16853932584269662,
+    "n_games": 14,
+    "n_dates": 11,
+    "pnl": 2.2028,
+    "cost": 19.7372,
+    "pnl_per_dollar": 0.11160650953529376,
+    "hit_rate": 0.2,
+    "pred_hit_rate": 0.1821023601253104,
+    "max_drawdown": 5.8772,
+    "p_one_sided": 0.2987,
+    "folds": [
+     6.679999999999998,
+     -2.1372,
+     -1.7200000000000002,
+     -0.6199999999999978
+    ],
+    "top5pct_games_share_of_pos": 0.9185909320748354,
+    "family_pnl": {
+     "SCORE": 2.2028
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "BUNDESLIGA": -0.54,
+     "EPL": -2.9072,
+     "LALIGA": 6.83,
+     "MLS": -0.54,
+     "SERIEA": -0.64
+    },
+    "max_league_share_of_pos": 1.0
+   }
+  }
+ },
+ "N1": {
+  "n_signals": 3006,
+  "n_fills": 590,
+  "fill_rate": 0.19627411842980705,
+  "n_games": 186,
+  "n_dates": 20,
+  "pnl": -60.5189,
+  "cost": 2034.6989,
+  "pnl_per_dollar": -0.029743418055614992,
+  "hit_rate": 0.376271186440678,
+  "pred_hit_rate": 0.5126482357610178,
+  "max_drawdown": 84.8757,
+  "p_one_sided": 0.6944,
+  "folds": [
+   -13.337999999999981,
+   -67.36829999999998,
+   38.79100000000001,
+   -18.6036
+  ],
+  "top5pct_games_share_of_pos": 0.3612057218583652,
+  "family_pnl": {
+   "BTTS": -101.2052,
+   "SCORE": -14.0098,
+   "SPREAD": 8.5836,
+   "TEAMTOTAL": 46.1125
+  },
+  "E1": false,
+  "E2": false,
+  "E3": false,
+  "league_pnl": {
+   "BUNDESLIGA": -8.7737,
+   "EPL": -5.9058,
+   "LALIGA": -56.189,
+   "MLS": 43.7716,
+   "SERIEA": -11.7181,
+   "UCL": -21.7039
+  },
+  "max_league_share_of_pos": 1.0,
+  "by_family": {
+   "BTTS": {
+    "n_signals": 189,
+    "n_fills": 122,
+    "fill_rate": 0.6455026455026455,
+    "n_games": 122,
+    "n_dates": 20,
+    "pnl": -101.2052,
+    "cost": 562.0152,
+    "pnl_per_dollar": -0.18007555667533542,
+    "hit_rate": 0.38524590163934425,
+    "pred_hit_rate": 0.556848362403393,
+    "max_drawdown": 99.1952,
+    "p_one_sided": 0.9781,
+    "folds": [
+     -13.369599999999995,
+     -6.4792999999999985,
+     -42.86999999999999,
+     -38.486299999999986
+    ],
+    "top5pct_games_share_of_pos": 0.19954586418335074,
+    "family_pnl": {
+     "BTTS": -101.2052
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "BUNDESLIGA": -13.7693,
+     "EPL": -20.18,
+     "LALIGA": -61.7518,
+     "MLS": -2.576,
+     "SERIEA": 19.9519,
+     "UCL": -22.88
+    },
+    "max_league_share_of_pos": 1.0
+   },
+   "SPREAD": {
+    "n_signals": 632,
+    "n_fills": 200,
+    "fill_rate": 0.31645569620253167,
+    "n_games": 136,
+    "n_dates": 20,
+    "pnl": 8.5836,
+    "cost": 733.3364,
+    "pnl_per_dollar": 0.011704860143312136,
+    "hit_rate": 0.405,
+    "pred_hit_rate": 0.5872238901738346,
+    "max_drawdown": 62.9345,
+    "p_one_sided": 0.4383,
+    "folds": [
+     -9.281999999999996,
+     -47.38489999999999,
+     36.6146,
+     28.63590000000001
+    ],
+    "top5pct_games_share_of_pos": 0.3799044572583021,
+    "family_pnl": {
+     "SPREAD": 8.5836
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "BUNDESLIGA": 1.63,
+     "EPL": 34.307,
+     "LALIGA": -4.209,
+     "MLS": 26.5563,
+     "SERIEA": -33.8058,
+     "UCL": -15.8949
+    },
+    "max_league_share_of_pos": 0.5489708496750851
+   },
+   "TEAMTOTAL": {
+    "n_signals": 1169,
+    "n_fills": 164,
+    "fill_rate": 0.14029084687767324,
+    "n_games": 92,
+    "n_dates": 19,
+    "pnl": 46.1125,
+    "cost": 627.3575,
+    "pnl_per_dollar": 0.07350274763591737,
+    "hit_rate": 0.4878048780487805,
+    "pred_hit_rate": 0.6025062599208894,
+    "max_drawdown": 17.9057,
+    "p_one_sided": 0.2264,
+    "folds": [
+     -3.9095999999999926,
+     22.661499999999997,
+     -4.9296999999999995,
+     32.290299999999995
+    ],
+    "top5pct_games_share_of_pos": 0.2669489513862834,
+    "family_pnl": {
+     "TEAMTOTAL": 46.1125
+    },
+    "E1": false,
+    "E2": false,
+    "E3": true,
+    "league_pnl": {
+     "BUNDESLIGA": 5.5056,
+     "EPL": 2.3807,
+     "LALIGA": 17.9512,
+     "MLS": -3.526,
+     "SERIEA": 5.77,
+     "UCL": 18.031
+    },
+    "max_league_share_of_pos": 0.363246270535975
+   },
+   "SCORE": {
+    "n_signals": 1016,
+    "n_fills": 104,
+    "fill_rate": 0.10236220472440945,
+    "n_games": 66,
+    "n_dates": 19,
+    "pnl": -14.0098,
+    "cost": 111.9898,
+    "pnl_per_dollar": -0.12509889293489226,
+    "hit_rate": 0.1346153846153846,
+    "pred_hit_rate": 0.17568417523070992,
+    "max_drawdown": 26.937,
+    "p_one_sided": 0.7223,
+    "folds": [
+     1.3272000000000008,
+     -10.042300000000001,
+     -9.014699999999998,
+     3.719999999999999
+    ],
+    "top5pct_games_share_of_pos": 0.8024347939915567,
+    "family_pnl": {
+     "SCORE": -14.0098
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "BUNDESLIGA": -2.14,
+     "EPL": -22.4135,
+     "LALIGA": -8.1794,
+     "MLS": 23.3173,
+     "SERIEA": -3.6342,
+     "UCL": -0.96
+    },
+    "max_league_share_of_pos": 1.0
+   }
+  }
+ },
+ "N2": {
+  "n_signals": 2620,
+  "n_fills": 551,
+  "fill_rate": 0.2103053435114504,
+  "n_games": 189,
+  "n_dates": 25,
+  "pnl": -203.2725,
+  "cost": 1770.2125,
+  "pnl_per_dollar": -0.11482943431932602,
+  "hit_rate": 0.3176043557168784,
+  "pred_hit_rate": 0.44402070115229486,
+  "max_drawdown": 186.3104,
+  "p_one_sided": 0.9786,
+  "folds": [
+   -49.47120000000001,
+   -90.2266,
+   2.6899000000000117,
+   -66.26459999999999
+  ],
+  "top5pct_games_share_of_pos": 0.3898865066220591,
+  "family_pnl": {
+   "BTTS": -134.1995,
+   "SCORE": -16.581,
+   "SPREAD": -62.3394,
+   "TEAMTOTAL": 9.8474
+  },
+  "E1": false,
+  "E2": false,
+  "E3": false,
+  "league_pnl": {
+   "BUNDESLIGA": -41.8001,
+   "EPL": 2.8071,
+   "LALIGA": -81.0602,
+   "MLS": -0.7222,
+   "SERIEA": -33.2194,
+   "UCL": -49.2777
+  },
+  "max_league_share_of_pos": 1.0,
+  "by_family": {
+   "BTTS": {
+    "n_signals": 158,
+    "n_fills": 114,
+    "fill_rate": 0.7215189873417721,
+    "n_games": 114,
+    "n_dates": 21,
+    "pnl": -134.1995,
+    "cost": 525.0095,
+    "pnl_per_dollar": -0.25561346985149797,
+    "hit_rate": 0.3508771929824561,
+    "pred_hit_rate": 0.5227715157993021,
+    "max_drawdown": 113.3195,
+    "p_one_sided": 0.9971,
+    "folds": [
+     -48.0287,
+     -24.555200000000003,
+     -8.809299999999995,
+     -52.80629999999999
+    ],
+    "top5pct_games_share_of_pos": 0.20156523865813397,
+    "family_pnl": {
+     "BTTS": -134.1995
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "BUNDESLIGA": -36.2693,
+     "EPL": -23.49,
+     "LALIGA": -23.2918,
+     "MLS": -21.7147,
+     "SERIEA": -7.2737,
+     "UCL": -22.16
+    },
+    "max_league_share_of_pos": null
+   },
+   "SPREAD": {
+    "n_signals": 614,
+    "n_fills": 205,
+    "fill_rate": 0.3338762214983713,
+    "n_games": 135,
+    "n_dates": 25,
+    "pnl": -62.3394,
+    "cost": 642.3694,
+    "pnl_per_dollar": -0.09704602990117524,
+    "hit_rate": 0.3024390243902439,
+    "pred_hit_rate": 0.45505018756937976,
+    "max_drawdown": 78.2343,
+    "p_one_sided": 0.8627,
+    "folds": [
+     2.4729999999999936,
+     -71.7603,
+     1.1759999999999993,
+     5.771900000000008
+    ],
+    "top5pct_games_share_of_pos": 0.4217722154890343,
+    "family_pnl": {
+     "SPREAD": -62.3394
+    },
+    "E1": false,
+    "E2": true,
+    "E3": false,
+    "league_pnl": {
+     "BUNDESLIGA": -5.65,
+     "EPL": 29.467,
+     "LALIGA": -35.42,
+     "MLS": 5.5923,
+     "SERIEA": -21.3,
+     "UCL": -35.0287
+    },
+    "max_league_share_of_pos": 0.8404902550821037
+   },
+   "TEAMTOTAL": {
+    "n_signals": 1057,
+    "n_fills": 148,
+    "fill_rate": 0.1400189214758751,
+    "n_games": 89,
+    "n_dates": 21,
+    "pnl": 9.8474,
+    "cost": 509.3726,
+    "pnl_per_dollar": 0.019332410106079518,
+    "hit_rate": 0.4189189189189189,
+    "pred_hit_rate": 0.5287022831177789,
+    "max_drawdown": 25.7054,
+    "p_one_sided": 0.4233,
+    "folds": [
+     4.0419,
+     17.6834,
+     -23.5866,
+     11.708699999999999
+    ],
+    "top5pct_games_share_of_pos": 0.25834815354826135,
+    "family_pnl": {
+     "TEAMTOTAL": 9.8474
+    },
+    "E1": false,
+    "E2": true,
+    "E3": false,
+    "league_pnl": {
+     "BUNDESLIGA": 0.6092,
+     "EPL": 10.3384,
+     "LALIGA": -6.588,
+     "MLS": -1.0971,
+     "SERIEA": -1.3261,
+     "UCL": 7.911
+    },
+    "max_league_share_of_pos": 0.5482061234662169
+   },
+   "SCORE": {
+    "n_signals": 791,
+    "n_fills": 84,
+    "fill_rate": 0.10619469026548672,
+    "n_games": 57,
+    "n_dates": 23,
+    "pnl": -16.581,
+    "cost": 93.461,
+    "pnl_per_dollar": -0.17741089866361365,
+    "hit_rate": 0.13095238095238096,
+    "pred_hit_rate": 0.16102651405523713,
+    "max_drawdown": 21.211,
+    "p_one_sided": 0.8333,
+    "folds": [
+     -2.6095999999999986,
+     -3.882299999999999,
+     -8.729099999999999,
+     -1.3599999999999999
+    ],
+    "top5pct_games_share_of_pos": 0.9708847456307657,
+    "family_pnl": {
+     "SCORE": -16.581
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "BUNDESLIGA": -0.49,
+     "EPL": -13.5083,
+     "LALIGA": -15.7604,
+     "MLS": 16.4973,
+     "SERIEA": -3.3196
+    },
+    "max_league_share_of_pos": 1.0
+   }
+  }
+ },
+ "N3": {
+  "n_signals": 397,
+  "n_fills": 64,
+  "fill_rate": 0.16120906801007556,
+  "n_games": 54,
+  "n_dates": 21,
+  "pnl": 48.5046,
+  "cost": 417.6854,
+  "pnl_per_dollar": 0.11612711385171715,
+  "hit_rate": 0.734375,
+  "pred_hit_rate": 0.609399195068862,
+  "max_drawdown": 21.1922,
+  "p_one_sided": 0.082,
+  "folds": [
+   22.913000000000004,
+   41.3338,
+   -5.2322,
+   -10.509999999999996
+  ],
+  "top5pct_games_share_of_pos": 0.15887545265977834,
+  "family_pnl": {
+   "BTTS": 39.59,
+   "SCORE": -0.2722,
+   "SPREAD": 10.0068,
+   "TEAMTOTAL": -0.82
+  },
+  "E1": false,
+  "E2": false,
+  "E3": true,
+  "league_pnl": {
+   "BUNDESLIGA": 3.63,
+   "EPL": 4.9008,
+   "LALIGA": 24.03,
+   "MLS": -18.61,
+   "SERIEA": 18.8,
+   "UCL": 15.7538
+  },
+  "max_league_share_of_pos": 0.35804430034597545,
+  "by_family": {
+   "BTTS": {
+    "n_signals": 71,
+    "n_fills": 39,
+    "fill_rate": 0.5492957746478874,
+    "n_games": 39,
+    "n_dates": 18,
+    "pnl": 39.59,
+    "cost": 240.41,
+    "pnl_per_dollar": 0.1646770101077326,
+    "hit_rate": 0.717948717948718,
+    "pred_hit_rate": 0.5623916409616909,
+    "max_drawdown": 13.62,
+    "p_one_sided": 0.0829,
+    "folds": [
+     10.06,
+     29.13,
+     7.209999999999999,
+     -6.8100000000000005
+    ],
+    "top5pct_games_share_of_pos": 0.10024718483932984,
+    "family_pnl": {
+     "BTTS": 39.59
+    },
+    "E1": false,
+    "E2": true,
+    "E3": true,
+    "league_pnl": {
+     "BUNDESLIGA": 3.63,
+     "EPL": 2.39,
+     "LALIGA": 22.56,
+     "MLS": -17.13,
+     "SERIEA": 20.96,
+     "UCL": 7.18
+    },
+    "max_league_share_of_pos": 0.39774330042313116
+   },
+   "SPREAD": {
+    "n_signals": 152,
+    "n_fills": 21,
+    "fill_rate": 0.13815789473684212,
+    "n_games": 20,
+    "n_dates": 14,
+    "pnl": 10.0068,
+    "cost": 156.1832,
+    "pnl_per_dollar": 0.06407091159612562,
+    "hit_rate": 0.8095238095238095,
+    "pred_hit_rate": 0.7145781736006237,
+    "max_drawdown": 15.46,
+    "p_one_sided": 0.2994,
+    "folds": [
+     15.893000000000002,
+     -11.146199999999999,
+     7.92,
+     -2.6599999999999984
+    ],
+    "top5pct_games_share_of_pos": 0.23156642700177082,
+    "family_pnl": {
+     "SPREAD": 10.0068
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "EPL": 8.063,
+     "LALIGA": -1.77,
+     "MLS": -1.48,
+     "SERIEA": -2.16,
+     "UCL": 7.3538
+    },
+    "max_league_share_of_pos": 0.5230008821545328
+   },
+   "TEAMTOTAL": {
+    "n_signals": 85,
+    "n_fills": 3,
+    "fill_rate": 0.03529411764705882,
+    "n_games": 3,
+    "n_dates": 3,
+    "pnl": -0.82,
+    "cost": 20.82,
+    "pnl_per_dollar": -0.03938520653218057,
+    "hit_rate": 0.6666666666666666,
+    "pred_hit_rate": 0.6503485682185409,
+    "max_drawdown": 5.28,
+    "p_one_sided": 0.6322,
+    "folds": [],
+    "top5pct_games_share_of_pos": 0.7264573991031389,
+    "family_pnl": {
+     "TEAMTOTAL": -0.82
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "EPL": -5.28,
+     "LALIGA": 3.24,
+     "UCL": 1.22
+    },
+    "max_league_share_of_pos": 0.7264573991031389
+   },
+   "SCORE": {
+    "n_signals": 89,
+    "n_fills": 1,
+    "fill_rate": 0.011235955056179775,
+    "n_games": 1,
+    "n_dates": 1,
+    "pnl": -0.2722,
+    "cost": 0.2722,
+    "pnl_per_dollar": -1.0,
+    "hit_rate": 0.0,
+    "pred_hit_rate": 0.11108713663250112,
+    "max_drawdown": 0.0,
+    "p_one_sided": NaN,
+    "folds": [],
+    "top5pct_games_share_of_pos": null,
+    "family_pnl": {
+     "SCORE": -0.2722
+    },
+    "E1": false,
+    "E2": false,
+    "E3": false,
+    "league_pnl": {
+     "EPL": -0.2722
+    },
+    "max_league_share_of_pos": null
+   }
+  }
+ },
+ "sanity": {
+  "BTTS": {
+   "n": 224,
+   "base_rate": 0.5982142857142857,
+   "brier_market": 0.23253292410714282,
+   "brier_model": 0.23443561760796655,
+   "mean_model_minus_mid": -0.020610237550221185,
+   "mean_abs_gap": 0.021221811021125636
+  },
+  "SCORE": {
+   "n": 2256,
+   "base_rate": 0.06028368794326241,
+   "brier_market": 0.055957646276595746,
+   "brier_model": 0.05598527909446993,
+   "mean_model_minus_mid": 0.0008773945492846436,
+   "mean_abs_gap": 0.0049305325363968935
+  },
+  "SPREAD": {
+   "n": 840,
+   "base_rate": 0.14285714285714285,
+   "brier_market": 0.09831309523809524,
+   "brier_model": 0.09913142418968211,
+   "mean_model_minus_mid": 0.010224043523151432,
+   "mean_abs_gap": 0.010894968037623015
+  },
+  "TEAMTOTAL": {
+   "n": 1271,
+   "base_rate": 0.4956726986624705,
+   "brier_market": 0.18866968922108576,
+   "brier_model": 0.18846527559593532,
+   "mean_model_minus_mid": -0.0019288567157099978,
+   "mean_abs_gap": 0.010651430028822441
+  }
+ },
+ "rho": {
+  "score_source": "unique (h,a) cell in 0..10^2 consistent with all yes/no-settled SCORE/GAME/TOTAL/SPREAD/TEAMTOTAL/BTTS results of the match",
+  "n_events": 251,
+  "n_scores_resolved": 227,
+  "mean_home_goals": 1.8458149779735682,
+  "mean_away_goals": 1.4449339207048457,
+  "outcomes_only_team_glm": {
+   "rho": -0.11225171364016713,
+   "se": 0.1280314873882413,
+   "n": 227
+  },
+  "outcomes_only_league_means": {
+   "rho": -0.05157420514238714,
+   "se": 0.07100937290285668,
+   "n": 227
+  },
+  "sensitivity_anchor_lambdas": {
+   "rho": -0.07759802734205584,
+   "se": 0.08100056348579106,
+   "n": 224
+  }
+ }
+}
