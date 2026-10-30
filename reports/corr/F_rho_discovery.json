@@ -1,0 +1,34 @@
+{
+ "buffer_min": 60,
+ "source": "integer scores feasible under every settled GAME/SPREAD/TOTAL/TEAMTOTAL result (Kalshi markets table); feasible-set mean used when not unique",
+ "NCAAF": {
+  "n": 269,
+  "rho": 0.18545753733955161,
+  "ci95": [
+   0.0673513348290105,
+   0.29843806495390635
+  ],
+  "n_exact": 157,
+  "rho_exact_only": 0.14489958176298715,
+  "median_feasible": 1.0,
+  "mean_M": 14.995341894784273,
+  "sd_M": 17.92752540376911,
+  "mean_S": 53.165083924749354,
+  "sd_S": 16.564476270414286
+ },
+ "NFL": {
+  "n": 42,
+  "rho": 0.1479802128939671,
+  "ci95": [
+   -0.16330111139114198,
+   0.432465958744373
+  ],
+  "n_exact": 23,
+  "rho_exact_only": -0.2592278830233511,
+  "median_feasible": 1.0,
+  "mean_M": 6.331349206349206,
+  "sd_M": 11.147849819037651,
+  "mean_S": 46.18055555555556,
+  "sd_S": 15.918022509257844
+ }
+}

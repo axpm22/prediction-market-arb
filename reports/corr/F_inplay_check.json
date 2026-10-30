@@ -1,0 +1,504 @@
+{
+ "NCAAF": {
+  "n": 20,
+  "n_fail": 19,
+  "events": [
+   {
+    "game_key": "26SEP12WAKEPUR",
+    "T": 1789222500,
+    "median_pre_vol": 76.305,
+    "first_spike_ts": 1789222080,
+    "spike_min_after_T": -7.0,
+    "pass": false,
+    "first_settlement_min_after_T": 179.96666666666667
+   },
+   {
+    "game_key": "26SEP25ARMYTEM",
+    "T": 1790360100,
+    "median_pre_vol": 362.325,
+    "first_spike_ts": 1790357520,
+    "spike_min_after_T": -43.0,
+    "pass": false,
+    "first_settlement_min_after_T": 242.63333333333333
+   },
+   {
+    "game_key": "26OCT03CALUNLV",
+    "T": 1791049500,
+    "median_pre_vol": 19.15,
+    "first_spike_ts": 1791047220,
+    "spike_min_after_T": -38.0,
+    "pass": false,
+    "first_settlement_min_after_T": 187.11666666666667
+   },
+   {
+    "game_key": "26SEP04INSTPUR",
+    "T": 1788556500,
+    "median_pre_vol": 2165.795,
+    "first_spike_ts": 1788556620,
+    "spike_min_after_T": 2.0,
+    "pass": true,
+    "first_settlement_min_after_T": 130.75
+   },
+   {
+    "game_key": "26SEP19LSUMISS",
+    "T": 1789854300,
+    "median_pre_vol": 4553.095,
+    "first_spike_ts": 1789853460,
+    "spike_min_after_T": -14.0,
+    "pass": false,
+    "first_settlement_min_after_T": 175.23333333333332
+   },
+   {
+    "game_key": "26SEP03UABILL",
+    "T": 1788477300,
+    "median_pre_vol": 215.18,
+    "first_spike_ts": 1788476520,
+    "spike_min_after_T": -13.0,
+    "pass": false,
+    "first_settlement_min_after_T": 160.75
+   },
+   {
+    "game_key": "26SEP19UGAARK",
+    "T": 1789827300,
+    "median_pre_vol": 467.995,
+    "first_spike_ts": 1789825680,
+    "spike_min_after_T": -27.0,
+    "pass": false,
+    "first_settlement_min_after_T": 193.23333333333332
+   },
+   {
+    "game_key": "26SEP19NEVMTU",
+    "T": 1789852500,
+    "median_pre_vol": 0.0,
+    "first_spike_ts": 1789849860,
+    "spike_min_after_T": -44.0,
+    "pass": false,
+    "first_settlement_min_after_T": 161.23333333333332
+   },
+   {
+    "game_key": "26SEP12TLSASHSU",
+    "T": 1789247700,
+    "median_pre_vol": 0.0,
+    "first_spike_ts": 1789245660,
+    "spike_min_after_T": -34.0,
+    "pass": false,
+    "first_settlement_min_after_T": 125.96666666666667
+   },
+   {
+    "game_key": "26SEP12OKLAMICH",
+    "T": 1789222500,
+    "median_pre_vol": 2131.715,
+    "first_spike_ts": 1789220340,
+    "spike_min_after_T": -36.0,
+    "pass": false,
+    "first_settlement_min_after_T": 170.46666666666667
+   },
+   {
+    "game_key": "26SEP04FRESUSC",
+    "T": 1788563700,
+    "median_pre_vol": 791.3299999999999,
+    "first_spike_ts": 1788561360,
+    "spike_min_after_T": -39.0,
+    "pass": false,
+    "first_settlement_min_after_T": 194.75
+   },
+   {
+    "game_key": "26SEP05TNSTUGA",
+    "T": 1788628500,
+    "median_pre_vol": 280.55,
+    "first_spike_ts": 1788626880,
+    "spike_min_after_T": -27.0,
+    "pass": false,
+    "first_settlement_min_after_T": 130.25
+   },
+   {
+    "game_key": "26SEP11NORFUVA",
+    "T": 1789161300,
+    "median_pre_vol": 1798.35,
+    "first_spike_ts": 1789160100,
+    "spike_min_after_T": -20.0,
+    "pass": false,
+    "first_settlement_min_after_T": 142.63333333333333
+   },
+   {
+    "game_key": "26SEP26VANAUB",
+    "T": 1790435700,
+    "median_pre_vol": 51.675,
+    "first_spike_ts": 1790433240,
+    "spike_min_after_T": -41.0,
+    "pass": false,
+    "first_settlement_min_after_T": 371.26666666666665
+   },
+   {
+    "game_key": "26SEP26UNMNMSU",
+    "T": 1790444700,
+    "median_pre_vol": 0.0,
+    "first_spike_ts": 1790442240,
+    "spike_min_after_T": -41.0,
+    "pass": false,
+    "first_settlement_min_after_T": 152.93333333333334
+   },
+   {
+    "game_key": "26SEP03EIUMINN",
+    "T": 1788473700,
+    "median_pre_vol": 368.45500000000004,
+    "first_spike_ts": 1788471300,
+    "spike_min_after_T": -40.0,
+    "pass": false,
+    "first_settlement_min_after_T": 176.91666666666666
+   },
+   {
+    "game_key": "26SEP10FAMUMIA",
+    "T": 1789078500,
+    "median_pre_vol": 1865.6799999999998,
+    "first_spike_ts": 1789077900,
+    "spike_min_after_T": -10.0,
+    "pass": false,
+    "first_settlement_min_after_T": 134.71666666666667
+   },
+   {
+    "game_key": "26SEP26COLOBAY",
+    "T": 1790435700,
+    "median_pre_vol": 280.615,
+    "first_spike_ts": 1790433600,
+    "spike_min_after_T": -35.0,
+    "pass": false,
+    "first_settlement_min_after_T": 239.76666666666668
+   },
+   {
+    "game_key": "26SEP04LIUKU",
+    "T": 1788560100,
+    "median_pre_vol": 1427.95,
+    "first_spike_ts": 1788559020,
+    "spike_min_after_T": -18.0,
+    "pass": false,
+    "first_settlement_min_after_T": 209.08333333333334
+   },
+   {
+    "game_key": "26OCT03MIACLEM",
+    "T": 1791040500,
+    "median_pre_vol": 161.65,
+    "first_spike_ts": 1791039960,
+    "spike_min_after_T": -9.0,
+    "pass": false,
+    "first_settlement_min_after_T": 559.2833333333333
+   }
+  ]
+ },
+ "NFL": {
+  "n": 20,
+  "n_fail": 18,
+  "events": [
+   {
+    "game_key": "26SEP20PITNE",
+    "T": 1789918200,
+    "median_pre_vol": 1646.9,
+    "first_spike_ts": 1789916220,
+    "spike_min_after_T": -33.0,
+    "pass": false,
+    "first_settlement_min_after_T": 124.06666666666666
+   },
+   {
+    "game_key": "26SEP27BALDAL",
+    "T": 1790546100,
+    "median_pre_vol": 51170.875,
+    "first_spike_ts": 1790546040,
+    "spike_min_after_T": -1.0,
+    "pass": false,
+    "first_settlement_min_after_T": -56.733333333333334
+   },
+   {
+    "game_key": "26SEP28PHICHI",
+    "T": 1790646300,
+    "median_pre_vol": 238479.555,
+    "first_spike_ts": 1790646000,
+    "spike_min_after_T": -5.0,
+    "pass": false,
+    "first_settlement_min_after_T": -71.23333333333333
+   },
+   {
+    "game_key": "26SEP27CINPIT",
+    "T": 1790533800,
+    "median_pre_vol": 12848.615,
+    "first_spike_ts": 1790533320,
+    "spike_min_after_T": -8.0,
+    "pass": false,
+    "first_settlement_min_after_T": -69.06666666666666
+   },
+   {
+    "game_key": "26SEP20CARATL",
+    "T": 1789918200,
+    "median_pre_vol": 1032.005,
+    "first_spike_ts": 1789916460,
+    "spike_min_after_T": -29.0,
+    "pass": false,
+    "first_settlement_min_after_T": 120.9
+   },
+   {
+    "game_key": "26SEP20CLETB",
+    "T": 1789918200,
+    "median_pre_vol": 619.615,
+    "first_spike_ts": 1789915680,
+    "spike_min_after_T": -42.0,
+    "pass": false,
+    "first_settlement_min_after_T": 129.23333333333332
+   },
+   {
+    "game_key": "26SEP13WASPHI",
+    "T": 1789325700,
+    "median_pre_vol": 921.6299999999999,
+    "first_spike_ts": 1789326240,
+    "spike_min_after_T": 9.0,
+    "pass": true,
+    "first_settlement_min_after_T": 136.46666666666667
+   },
+   {
+    "game_key": "26SEP21NYGLAR",
+    "T": 1790041500,
+    "median_pre_vol": 188431.055,
+    "first_spike_ts": 1790041320,
+    "spike_min_after_T": -3.0,
+    "pass": false,
+    "first_settlement_min_after_T": -47.36666666666667
+   },
+   {
+    "game_key": "26OCT04MIAMIN",
+    "T": 1791138900,
+    "median_pre_vol": 736.0899999999999,
+    "first_spike_ts": 1791137580,
+    "spike_min_after_T": -22.0,
+    "pass": false,
+    "first_settlement_min_after_T": 157.61666666666667
+   },
+   {
+    "game_key": "26OCT04DALHOU",
+    "T": 1791127800,
+    "median_pre_vol": 4843.3550000000005,
+    "first_spike_ts": 1791126480,
+    "spike_min_after_T": -22.0,
+    "pass": false,
+    "first_settlement_min_after_T": 109.95
+   },
+   {
+    "game_key": "26SEP13NODET",
+    "T": 1789313400,
+    "median_pre_vol": 885.435,
+    "first_spike_ts": 1789312560,
+    "spike_min_after_T": -14.0,
+    "pass": false,
+    "first_settlement_min_after_T": 131.46666666666667
+   },
+   {
+    "game_key": "26SEP27SEAWAS",
+    "T": 1790533800,
+    "median_pre_vol": 14475.125,
+    "first_spike_ts": 1790531940,
+    "spike_min_after_T": -31.0,
+    "pass": false,
+    "first_settlement_min_after_T": -57.56666666666667
+   },
+   {
+    "game_key": "26OCT04DETCAR",
+    "T": 1791154200,
+    "median_pre_vol": 2337.05,
+    "first_spike_ts": 1791155340,
+    "spike_min_after_T": 19.0,
+    "pass": true,
+    "first_settlement_min_after_T": 133.61666666666667
+   },
+   {
+    "game_key": "26OCT04LARPHI",
+    "T": 1791127800,
+    "median_pre_vol": 1779.58,
+    "first_spike_ts": 1791127140,
+    "spike_min_after_T": -11.0,
+    "pass": false,
+    "first_settlement_min_after_T": 147.78333333333333
+   },
+   {
+    "game_key": "26SEP13NYJTEN",
+    "T": 1789324200,
+    "median_pre_vol": 5905.43,
+    "first_spike_ts": 1789321500,
+    "spike_min_after_T": -45.0,
+    "pass": false,
+    "first_settlement_min_after_T": -58.86666666666667
+   },
+   {
+    "game_key": "26SEP20CINHOU",
+    "T": 1789918200,
+    "median_pre_vol": 1812.05,
+    "first_spike_ts": 1789916700,
+    "spike_min_after_T": -25.0,
+    "pass": false,
+    "first_settlement_min_after_T": 169.4
+   },
+   {
+    "game_key": "26SEP20GBNYJ",
+    "T": 1789918200,
+    "median_pre_vol": 1858.7199999999998,
+    "first_spike_ts": 1789917900,
+    "spike_min_after_T": -5.0,
+    "pass": false,
+    "first_settlement_min_after_T": 164.23333333333332
+   },
+   {
+    "game_key": "26SEP20WASDAL",
+    "T": 1789930500,
+    "median_pre_vol": 1040.825,
+    "first_spike_ts": 1789929540,
+    "spike_min_after_T": -16.0,
+    "pass": false,
+    "first_settlement_min_after_T": 110.9
+   },
+   {
+    "game_key": "26SEP13TBCIN",
+    "T": 1789313400,
+    "median_pre_vol": 673.56,
+    "first_spike_ts": 1789311120,
+    "spike_min_after_T": -38.0,
+    "pass": false,
+    "first_settlement_min_after_T": 128.63333333333333
+   },
+   {
+    "game_key": "26OCT04JACCIN",
+    "T": 1791127800,
+    "median_pre_vol": 1365.145,
+    "first_spike_ts": 1791127800,
+    "spike_min_after_T": 0.0,
+    "pass": false,
+    "first_settlement_min_after_T": 163.61666666666667
+   }
+  ]
+ },
+ "buffer_min": 60,
+ "settle_gap_min_by_league": {
+  "NCAAF": [
+   0,
+   0,
+   0,
+   0,
+   1,
+   8,
+   82,
+   229
+  ],
+  "NFL": [
+   6,
+   11,
+   4,
+   0,
+   0,
+   1,
+   34,
+   7
+  ]
+ },
+ "excluded_inplay": [
+  {
+   "league": "NFL",
+   "game_key": "26SEP10SFLAR",
+   "gap": -10.105066800117493
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP13ARILAC",
+   "gap": -35.859260483582815
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP13DALNYG",
+   "gap": -29.36002866824468
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP13NYJTEN",
+   "gap": -28.860067800680795
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP21NYGLAR",
+   "gap": -17.363300832112632
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP24ATLGB",
+   "gap": -24.19839545090993
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27ARISF",
+   "gap": -29.723083849747976
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27BALDAL",
+   "gap": -26.725805648167928
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27CARCLE",
+   "gap": 29.107645948727924
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27CINPIT",
+   "gap": -39.058306368192035
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27HOUIND",
+   "gap": 1.9412195483843486
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27KCMIA",
+   "gap": -39.05829575061798
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27LACBUF",
+   "gap": -36.72590611775716
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27LARDEN",
+   "gap": -22.393205817540487
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27LVNO",
+   "gap": -24.392585949103037
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27MINTB",
+   "gap": -35.72171253363292
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27NEJAC",
+   "gap": -7.725693349043528
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27NYJDET",
+   "gap": 4.940813251336416
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27SEAWAS",
+   "gap": -27.559215851624806
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP27TENNYG",
+   "gap": 29.107711815834044
+  },
+  {
+   "league": "NFL",
+   "game_key": "26SEP28PHICHI",
+   "gap": -41.22584553162257
+  }
+ ]
+}

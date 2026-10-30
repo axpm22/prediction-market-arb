@@ -1,0 +1,405 @@
+{
+ "set": "disc",
+ "prereg": "PREREG_CORR3_v1 Lane F",
+ "buffer_min": 60,
+ "rho_used": {
+  "NFL": 0.1479802128939671,
+  "NCAAF": 0.18545753733955161
+ },
+ "events_all": {
+  "NCAAF": 320,
+  "NFL": 63
+ },
+ "events_after_inplay_exclusion": {
+  "NCAAF": 320,
+  "NFL": 42
+ },
+ "events_modelled": {
+  "NCAAF": 268,
+  "NFL": 42
+ },
+ "target_quotes": {
+  "NCAAF": 4010,
+  "NFL": 746
+ },
+ "anchor_quotes": {
+  "NCAAF": 10606,
+  "NFL": 1870
+ },
+ "primary": {
+  "pooled": {
+   "n_signals": 937,
+   "n_fills": 63,
+   "fill_rate": 0.0672358591248666,
+   "n_games": 48,
+   "n_dates": 18,
+   "pnl": 8.4866,
+   "cost": 306.4534,
+   "pnl_per_dollar": 0.02769295429582441,
+   "hit_rate": 0.5396825396825397,
+   "pred_hit_rate": 0.5498583329068578,
+   "max_drawdown": 17.5453,
+   "p_one_sided": 0.4043,
+   "folds": [
+    -26.640500000000003,
+    31.250200000000003,
+    -0.1803000000000008,
+    4.057199999999998
+   ],
+   "top5pct_games_share_of_pos": 0.27345723427381696,
+   "max_family_share_of_pos": 1.0,
+   "family_pnl": {
+    "NCAAF": -12.4793,
+    "NFL": 20.9659
+   },
+   "E1": false,
+   "E2": false,
+   "E3": false
+  },
+  "NFL": {
+   "n_signals": 195,
+   "n_fills": 27,
+   "fill_rate": 0.13846153846153847,
+   "n_games": 17,
+   "n_dates": 7,
+   "pnl": 20.9659,
+   "cost": 128.2841,
+   "pnl_per_dollar": 0.16343334832609804,
+   "hit_rate": 0.6296296296296297,
+   "pred_hit_rate": 0.5689866622743956,
+   "max_drawdown": 1.2353,
+   "p_one_sided": 0.1313,
+   "folds": [
+    1.8139999999999992,
+    8.834699999999998,
+    7.519999999999998,
+    2.7972
+   ],
+   "top5pct_games_share_of_pos": 0.24161067671620373,
+   "max_family_share_of_pos": 1.0,
+   "family_pnl": {
+    "NFL": 20.9659
+   },
+   "E1": false,
+   "E2": true,
+   "E3": true
+  },
+  "NCAAF": {
+   "n_signals": 742,
+   "n_fills": 36,
+   "fill_rate": 0.04851752021563342,
+   "n_games": 31,
+   "n_dates": 11,
+   "pnl": -12.4793,
+   "cost": 178.1693,
+   "pnl_per_dollar": -0.07004180854950882,
+   "hit_rate": 0.4722222222222222,
+   "pred_hit_rate": 0.5355120858812045,
+   "max_drawdown": 16.31,
+   "p_one_sided": 0.6811,
+   "folds": [
+    -25.128999999999998,
+    13.510000000000002,
+    -10.450299999999999,
+    9.59
+   ],
+   "top5pct_games_share_of_pos": 0.2532448016659632,
+   "max_family_share_of_pos": null,
+   "family_pnl": {
+    "NCAAF": -12.4793
+   },
+   "E1": false,
+   "E2": false,
+   "E3": true
+  }
+ },
+ "N1": {
+  "pooled": {
+   "n_signals": 3777,
+   "n_fills": 118,
+   "fill_rate": 0.03124172623775483,
+   "n_games": 73,
+   "n_dates": 15,
+   "pnl": 11.3779,
+   "cost": 530.7621,
+   "pnl_per_dollar": 0.02143691118864745,
+   "hit_rate": 0.559322033898305,
+   "pred_hit_rate": 0.703071852267982,
+   "max_drawdown": 50.3116,
+   "p_one_sided": 0.431,
+   "folds": [
+    30.604300000000002,
+    -13.908900000000001,
+    -39.7475,
+    34.42999999999999
+   ],
+   "top5pct_games_share_of_pos": 0.2670847695062661,
+   "max_family_share_of_pos": 1.0,
+   "family_pnl": {
+    "NCAAF": 47.2757,
+    "NFL": -35.8978
+   },
+   "E1": false,
+   "E2": false,
+   "E3": false
+  },
+  "NFL": {
+   "n_signals": 468,
+   "n_fills": 30,
+   "fill_rate": 0.0641025641025641,
+   "n_games": 20,
+   "n_dates": 3,
+   "pnl": -35.8978,
+   "cost": 138.5478,
+   "pnl_per_dollar": -0.2591004692965172,
+   "hit_rate": 0.43333333333333335,
+   "pred_hit_rate": 0.6048302721304352,
+   "max_drawdown": 38.4883,
+   "p_one_sided": 0.861,
+   "folds": [
+    2.5905000000000005,
+    -29.1192,
+    -2.9794000000000036,
+    -6.389699999999999
+   ],
+   "top5pct_games_share_of_pos": 0.280932961218062,
+   "max_family_share_of_pos": null,
+   "family_pnl": {
+    "NFL": -35.8978
+   },
+   "E1": false,
+   "E2": false,
+   "E3": true
+  },
+  "NCAAF": {
+   "n_signals": 3309,
+   "n_fills": 88,
+   "fill_rate": 0.02659413720157147,
+   "n_games": 53,
+   "n_dates": 12,
+   "pnl": 47.2757,
+   "cost": 392.2143,
+   "pnl_per_dollar": 0.12053538078545327,
+   "hit_rate": 0.6022727272727273,
+   "pred_hit_rate": 0.7365633000421458,
+   "max_drawdown": 18.7849,
+   "p_one_sided": 0.1778,
+   "folds": [
+    28.529500000000002,
+    -18.3466,
+    17.932000000000006,
+    19.1608
+   ],
+   "top5pct_games_share_of_pos": 0.26408907813624327,
+   "max_family_share_of_pos": 1.0,
+   "family_pnl": {
+    "NCAAF": 47.2757
+   },
+   "E1": false,
+   "E2": true,
+   "E3": true
+  }
+ },
+ "N2": {
+  "pooled": {
+   "n_signals": 932,
+   "n_fills": 56,
+   "fill_rate": 0.060085836909871244,
+   "n_games": 46,
+   "n_dates": 18,
+   "pnl": 8.4627,
+   "cost": 303.3273,
+   "pnl_per_dollar": 0.027899565914442922,
+   "hit_rate": 0.5892857142857143,
+   "pred_hit_rate": 0.594961778457464,
+   "max_drawdown": 16.1453,
+   "p_one_sided": 0.4026,
+   "folds": [
+    -23.589000000000002,
+    15.280000000000005,
+    2.4346999999999985,
+    14.337
+   ],
+   "top5pct_games_share_of_pos": 0.17537329383784955,
+   "max_family_share_of_pos": 0.754841835348057,
+   "family_pnl": {
+    "NCAAF": 6.388,
+    "NFL": 2.0747
+   },
+   "E1": false,
+   "E2": true,
+   "E3": false
+  },
+  "NFL": {
+   "n_signals": 150,
+   "n_fills": 20,
+   "fill_rate": 0.13333333333333333,
+   "n_games": 15,
+   "n_dates": 6,
+   "pnl": 2.0747,
+   "cost": 114.6953,
+   "pnl_per_dollar": 0.01808879701260642,
+   "hit_rate": 0.6,
+   "pred_hit_rate": 0.6098058815423298,
+   "max_drawdown": 6.5953,
+   "p_one_sided": 0.4615,
+   "folds": [
+    -6.980000000000001,
+    -5.5253,
+    11.799999999999999,
+    2.7800000000000002
+   ],
+   "top5pct_games_share_of_pos": 0.15132548204240187,
+   "max_family_share_of_pos": 1.0,
+   "family_pnl": {
+    "NFL": 2.0747
+   },
+   "E1": false,
+   "E2": false,
+   "E3": true
+  },
+  "NCAAF": {
+   "n_signals": 782,
+   "n_fills": 36,
+   "fill_rate": 0.04603580562659847,
+   "n_games": 31,
+   "n_dates": 12,
+   "pnl": 6.388,
+   "cost": 188.632,
+   "pnl_per_dollar": 0.033864879765893405,
+   "hit_rate": 0.5833333333333334,
+   "pred_hit_rate": 0.5867150545214272,
+   "max_drawdown": 9.55,
+   "p_one_sided": 0.3962,
+   "folds": [
+    -16.429,
+    8.66,
+    14.82,
+    -0.6629999999999985
+   ],
+   "top5pct_games_share_of_pos": 0.17981923434862845,
+   "max_family_share_of_pos": 1.0,
+   "family_pnl": {
+    "NCAAF": 6.388
+   },
+   "E1": false,
+   "E2": false,
+   "E3": true
+  }
+ },
+ "N3": {
+  "pooled": {
+   "n_signals": 937,
+   "n_fills": 8,
+   "fill_rate": 0.008537886872998933,
+   "n_games": 3,
+   "n_dates": 3,
+   "pnl": 0.5904,
+   "cost": 29.4296,
+   "pnl_per_dollar": 0.02006143474597013,
+   "hit_rate": 0.5,
+   "pred_hit_rate": 0.36668028637202865,
+   "max_drawdown": 4.82,
+   "p_one_sided": 0.3678,
+   "folds": [],
+   "top5pct_games_share_of_pos": 0.9999260683128789,
+   "max_family_share_of_pos": 0.9993224932249323,
+   "family_pnl": {
+    "NCAAF": 0.0004,
+    "NFL": 0.59
+   },
+   "E1": false,
+   "E2": false,
+   "E3": false
+  },
+  "NFL": {
+   "n_signals": 195,
+   "n_fills": 7,
+   "fill_rate": 0.035897435897435895,
+   "n_games": 2,
+   "n_dates": 2,
+   "pnl": 0.59,
+   "cost": 29.41,
+   "pnl_per_dollar": 0.02006120367222042,
+   "hit_rate": 0.42857142857142855,
+   "pred_hit_rate": 0.3580155842623113,
+   "max_drawdown": 4.82,
+   "p_one_sided": 0.2432,
+   "folds": [],
+   "top5pct_games_share_of_pos": 1.0,
+   "max_family_share_of_pos": 1.0,
+   "family_pnl": {
+    "NFL": 0.59
+   },
+   "E1": false,
+   "E2": false,
+   "E3": false
+  },
+  "NCAAF": {
+   "n_signals": 742,
+   "n_fills": 1,
+   "fill_rate": 0.0013477088948787063,
+   "n_games": 1,
+   "n_dates": 1,
+   "pnl": 0.0004,
+   "cost": 0.0196,
+   "pnl_per_dollar": 0.020408163265306176,
+   "hit_rate": 1.0,
+   "pred_hit_rate": 0.4273332011400507,
+   "max_drawdown": 0.0,
+   "p_one_sided": NaN,
+   "folds": [],
+   "top5pct_games_share_of_pos": 1.0,
+   "max_family_share_of_pos": 1.0,
+   "family_pnl": {
+    "NCAAF": 0.0004
+   },
+   "E1": false,
+   "E2": false,
+   "E3": false
+  }
+ },
+ "brier": {
+  "pooled": {
+   "n": 4756,
+   "market_mid": 0.16883676934398653,
+   "model_fair": 0.16873827656475068,
+   "mean_abs_gap": 0.018508848831351576
+  },
+  "NCAAF": {
+   "n": 4010,
+   "market_mid": 0.1722704114713217,
+   "model_fair": 0.17225713100764878,
+   "mean_abs_gap": 0.01871943381421487
+  },
+  "NFL": {
+   "n": 746,
+   "market_mid": 0.15037979222520106,
+   "model_fair": 0.14982325469340863,
+   "mean_abs_gap": 0.017376883977086418
+  }
+ },
+ "implied_rho": {
+  "pooled": 0.13000000000000012,
+  "NFL": 0.020000000000000018,
+  "NCAAF": 0.15000000000000013
+ },
+ "realized_rho": {
+  "NFL": {
+   "n": 42,
+   "rho": 0.1479802128939671,
+   "ci95": [
+    -0.16330111139114198,
+    0.432465958744373
+   ]
+  },
+  "NCAAF": {
+   "n": 269,
+   "rho": 0.18545753733955161,
+   "ci95": [
+    0.0673513348290105,
+    0.29843806495390635
+   ]
+  }
+ }
+}
