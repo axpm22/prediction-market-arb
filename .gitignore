@@ -25,3 +25,4 @@ data/pm_tape.sqlite*
 reports/*.jsonl
 reports/covertest-24h-start.txt
 data/mlb/
+data/corr/
